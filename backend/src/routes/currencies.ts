@@ -42,10 +42,12 @@ export function registerCurrenciesRoutes(app: App) {
     const body = request.body as {
       name: string;
       symbol?: string;
+      onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
+      onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
     };
 
     app.logger.info(
-      { userId: session.user.id, name: body.name },
+      { userId: session.user.id, name: body.name, onSuccess: body.onSuccess, onFailure: body.onFailure },
       'Creating currency'
     );
 
@@ -56,6 +58,8 @@ export function registerCurrenciesRoutes(app: App) {
           userId: session.user.id,
           name: body.name,
           symbol: body.symbol || null,
+          onSuccess: body.onSuccess || 'NONE',
+          onFailure: body.onFailure || 'NONE',
         })
         .returning();
       const currency = currencies[0];
@@ -83,6 +87,8 @@ export function registerCurrenciesRoutes(app: App) {
     const body = request.body as {
       name?: string;
       symbol?: string;
+      onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
+      onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
     };
 
     app.logger.info({ userId: session.user.id, currencyId: id }, 'Updating currency');
@@ -111,6 +117,8 @@ export function registerCurrenciesRoutes(app: App) {
       const updateData: Record<string, unknown> = {};
       if (body.name !== undefined) updateData.name = body.name;
       if (body.symbol !== undefined) updateData.symbol = body.symbol || null;
+      if (body.onSuccess !== undefined) updateData.onSuccess = body.onSuccess;
+      if (body.onFailure !== undefined) updateData.onFailure = body.onFailure;
       updateData.updatedAt = new Date();
 
       const updatedCurrencies = await app.db

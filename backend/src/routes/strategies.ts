@@ -42,10 +42,12 @@ export function registerStrategiesRoutes(app: App) {
     const body = request.body as {
       name: string;
       description?: string;
+      isSuccessful?: boolean;
+      linkedGoalIds?: string[];
     };
 
     app.logger.info(
-      { userId: session.user.id, name: body.name },
+      { userId: session.user.id, name: body.name, isSuccessful: body.isSuccessful },
       'Creating strategy'
     );
 
@@ -56,6 +58,8 @@ export function registerStrategiesRoutes(app: App) {
           userId: session.user.id,
           name: body.name,
           description: body.description || null,
+          isSuccessful: body.isSuccessful || null,
+          linkedGoalIds: (body.linkedGoalIds?.length ? body.linkedGoalIds : null) as string[] | null,
         })
         .returning();
       const strategy = strategies[0];
@@ -83,6 +87,8 @@ export function registerStrategiesRoutes(app: App) {
     const body = request.body as {
       name?: string;
       description?: string;
+      isSuccessful?: boolean;
+      linkedGoalIds?: string[];
     };
 
     app.logger.info({ userId: session.user.id, strategyId: id }, 'Updating strategy');
@@ -111,6 +117,8 @@ export function registerStrategiesRoutes(app: App) {
       const updateData: Record<string, unknown> = {};
       if (body.name !== undefined) updateData.name = body.name;
       if (body.description !== undefined) updateData.description = body.description || null;
+      if (body.isSuccessful !== undefined) updateData.isSuccessful = body.isSuccessful;
+      if (body.linkedGoalIds !== undefined) updateData.linkedGoalIds = (body.linkedGoalIds?.length ? body.linkedGoalIds : null) as string[] | null;
       updateData.updatedAt = new Date();
 
       const updatedStrategies = await app.db

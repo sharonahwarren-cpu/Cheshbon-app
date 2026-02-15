@@ -25,6 +25,8 @@ export const strategies = pgTable('strategies', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   description: text('description'),
+  isSuccessful: boolean('is_successful'),
+  linkedGoalIds: uuid('linked_goal_ids').array(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -34,6 +36,8 @@ export const currencies = pgTable('currencies', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   symbol: text('symbol'),
+  onSuccess: text('on_success').default('NONE'),
+  onFailure: text('on_failure').default('NONE'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -59,6 +63,17 @@ export const goals = pgTable('goals', {
   consequenceCurrencyId: uuid('consequence_currency_id').references(() => currencies.id, { onDelete: 'set null' }),
   consequenceFailures: integer('consequence_failures'),
   consequenceAmount: integer('consequence_amount'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const userPreferences = pgTable('user_preferences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().unique().references(() => user.id, { onDelete: 'cascade' }),
+  notificationsEnabled: boolean('notifications_enabled').default(false).notNull(),
+  notificationFrequency: text('notification_frequency'),
+  notificationTime: text('notification_time'),
+  notificationDays: text('notification_days').array(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
