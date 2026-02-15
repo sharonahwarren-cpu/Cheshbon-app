@@ -84,6 +84,7 @@ export default function SettingsScreen() {
   }, []);
 
   const loadData = async () => {
+    console.log('Loading settings data...');
     setLoading(true);
     try {
       const [lifeAreasRes, strategiesRes, currenciesRes, goalsRes, prefsRes] = await Promise.all([
@@ -102,11 +103,29 @@ export default function SettingsScreen() {
       console.log('Preferences response:', prefsRes);
       
       // Handle both direct array and { data: array } response formats
-      const lifeAreasData = Array.isArray(lifeAreasRes) ? lifeAreasRes : (lifeAreasRes?.data || []);
-      const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
-      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
-      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      // Ensure we always have an array, even if empty
+      const lifeAreasData = Array.isArray(lifeAreasRes) 
+        ? lifeAreasRes 
+        : (Array.isArray(lifeAreasRes?.data) ? lifeAreasRes.data : []);
+      
+      const strategiesData = Array.isArray(strategiesRes) 
+        ? strategiesRes 
+        : (Array.isArray(strategiesRes?.data) ? strategiesRes.data : []);
+      
+      const currenciesData = Array.isArray(currenciesRes) 
+        ? currenciesRes 
+        : (Array.isArray(currenciesRes?.data) ? currenciesRes.data : []);
+      
+      const goalsData = Array.isArray(goalsRes) 
+        ? goalsRes 
+        : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
+      
       const prefsData = prefsRes?.data || prefsRes || { notificationsEnabled: false };
+      
+      console.log('Processed life areas data:', lifeAreasData);
+      console.log('Processed strategies data:', strategiesData);
+      console.log('Processed currencies data:', currenciesData);
+      console.log('Processed goals data:', goalsData);
       
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
       setStrategies(strategiesData);
@@ -122,6 +141,19 @@ export default function SettingsScreen() {
   };
 
   const buildLifeAreaHierarchy = (areas: LifeArea[]): LifeArea[] => {
+    console.log('Building life area hierarchy from:', areas);
+    
+    // Safety check: ensure areas is an array
+    if (!Array.isArray(areas)) {
+      console.warn('buildLifeAreaHierarchy received non-array:', areas);
+      return [];
+    }
+    
+    if (areas.length === 0) {
+      console.log('No life areas to build hierarchy from');
+      return [];
+    }
+    
     const areaMap = new Map<string, LifeArea>();
     areas.forEach(area => {
       areaMap.set(area.id, { ...area, children: [] });
@@ -140,6 +172,7 @@ export default function SettingsScreen() {
       }
     });
 
+    console.log('Built hierarchy with root areas:', rootAreas);
     return rootAreas;
   };
 

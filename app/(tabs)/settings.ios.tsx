@@ -83,6 +83,7 @@ export default function SettingsScreen() {
   }, []);
 
   const loadData = async () => {
+    console.log('Loading settings data...');
     setLoading(true);
     try {
       const [lifeAreasRes, strategiesRes, currenciesRes, goalsRes, prefsRes] = await Promise.all([
@@ -94,11 +95,42 @@ export default function SettingsScreen() {
       ]);
 
       console.log('Settings data loaded successfully');
-      setLifeAreas(buildLifeAreaHierarchy(lifeAreasRes.data));
-      setStrategies(strategiesRes.data);
-      setCurrencies(currenciesRes.data);
-      setGoals(goalsRes.data);
-      setPreferences(prefsRes.data || { notificationsEnabled: false });
+      console.log('Life areas response:', lifeAreasRes);
+      console.log('Strategies response:', strategiesRes);
+      console.log('Currencies response:', currenciesRes);
+      console.log('Goals response:', goalsRes);
+      console.log('Preferences response:', prefsRes);
+      
+      // Handle both direct array and { data: array } response formats
+      // Ensure we always have an array, even if empty
+      const lifeAreasData = Array.isArray(lifeAreasRes) 
+        ? lifeAreasRes 
+        : (Array.isArray(lifeAreasRes?.data) ? lifeAreasRes.data : []);
+      
+      const strategiesData = Array.isArray(strategiesRes) 
+        ? strategiesRes 
+        : (Array.isArray(strategiesRes?.data) ? strategiesRes.data : []);
+      
+      const currenciesData = Array.isArray(currenciesRes) 
+        ? currenciesRes 
+        : (Array.isArray(currenciesRes?.data) ? currenciesRes.data : []);
+      
+      const goalsData = Array.isArray(goalsRes) 
+        ? goalsRes 
+        : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
+      
+      const prefsData = prefsRes?.data || prefsRes || { notificationsEnabled: false };
+      
+      console.log('Processed life areas data:', lifeAreasData);
+      console.log('Processed strategies data:', strategiesData);
+      console.log('Processed currencies data:', currenciesData);
+      console.log('Processed goals data:', goalsData);
+      
+      setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
+      setStrategies(strategiesData);
+      setCurrencies(currenciesData);
+      setGoals(goalsData);
+      setPreferences(prefsData);
     } catch (error) {
       console.error('Error loading settings data:', error);
       showError('Failed to load settings data');
@@ -108,6 +140,19 @@ export default function SettingsScreen() {
   };
 
   const buildLifeAreaHierarchy = (areas: LifeArea[]): LifeArea[] => {
+    console.log('Building life area hierarchy from:', areas);
+    
+    // Safety check: ensure areas is an array
+    if (!Array.isArray(areas)) {
+      console.warn('buildLifeAreaHierarchy received non-array:', areas);
+      return [];
+    }
+    
+    if (areas.length === 0) {
+      console.log('No life areas to build hierarchy from');
+      return [];
+    }
+    
     const areaMap = new Map<string, LifeArea>();
     areas.forEach(area => {
       areaMap.set(area.id, { ...area, children: [] });
@@ -126,6 +171,7 @@ export default function SettingsScreen() {
       }
     });
 
+    console.log('Built hierarchy with root areas:', rootAreas);
     return rootAreas;
   };
 
@@ -334,7 +380,13 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.listContainer}>
-          {lifeAreas.map(area => renderLifeAreaItem(area))}
+          {lifeAreas.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
+            </View>
+          ) : (
+            lifeAreas.map(area => renderLifeAreaItem(area))
+          )}
         </ScrollView>
       </View>
     );
@@ -363,50 +415,56 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.listContainer}>
-          {strategies.map((strategy, index) => {
-            const successText = strategy.isSuccessful === true ? 'Successful' : strategy.isSuccessful === false ? 'Not Successful' : 'Not Set';
-            const linkedGoalsCount = strategy.linkedGoalIds?.length || 0;
-            const linkedGoalsText = `${linkedGoalsCount} linked goals`;
-            
-            return (
-              <React.Fragment key={index}>
-                <View style={styles.listItem}>
-                  <View style={styles.listItemContent}>
-                    <Text style={styles.listItemTitle}>{strategy.name}</Text>
-                    {strategy.description && (
-                      <Text style={styles.listItemSubtitle}>{strategy.description}</Text>
-                    )}
-                    <Text style={styles.listItemSubtitle}>{successText}</Text>
-                    <Text style={styles.listItemSubtitle}>{linkedGoalsText}</Text>
+          {strategies.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No strategies yet. Create one to help achieve your goals!</Text>
+            </View>
+          ) : (
+            strategies.map((strategy, index) => {
+              const successText = strategy.isSuccessful === true ? 'Successful' : strategy.isSuccessful === false ? 'Not Successful' : 'Not Set';
+              const linkedGoalsCount = strategy.linkedGoalIds?.length || 0;
+              const linkedGoalsText = `${linkedGoalsCount} linked goals`;
+              
+              return (
+                <React.Fragment key={index}>
+                  <View style={styles.listItem}>
+                    <View style={styles.listItemContent}>
+                      <Text style={styles.listItemTitle}>{strategy.name}</Text>
+                      {strategy.description && (
+                        <Text style={styles.listItemSubtitle}>{strategy.description}</Text>
+                      )}
+                      <Text style={styles.listItemSubtitle}>{successText}</Text>
+                      <Text style={styles.listItemSubtitle}>{linkedGoalsText}</Text>
+                    </View>
+                    <View style={styles.listItemActions}>
+                      <TouchableOpacity
+                        onPress={() => openEditModal('strategy', strategy)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteItem('strategy', strategy.id)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={20}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <View style={styles.listItemActions}>
-                    <TouchableOpacity
-                      onPress={() => openEditModal('strategy', strategy)}
-                      style={styles.iconButton}
-                    >
-                      <IconSymbol
-                        ios_icon_name="pencil"
-                        android_material_icon_name="edit"
-                        size={20}
-                        color={colors.primary}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteItem('strategy', strategy.id)}
-                      style={styles.iconButton}
-                    >
-                      <IconSymbol
-                        ios_icon_name="trash"
-                        android_material_icon_name="delete"
-                        size={20}
-                        color={colors.error}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </React.Fragment>
-            );
-          })}
+                </React.Fragment>
+              );
+            })
+          )}
         </ScrollView>
       </View>
     );
@@ -435,50 +493,56 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.listContainer}>
-          {currencies.map((currency, index) => {
-            const symbolText = currency.symbol || '';
-            const onSuccessText = `Reward: ${currency.onSuccess || 'NONE'}`;
-            const onFailureText = `Consequence: ${currency.onFailure || 'NONE'}`;
-            
-            return (
-              <React.Fragment key={index}>
-                <View style={styles.listItem}>
-                  <View style={styles.listItemContent}>
-                    <View style={styles.currencyHeader}>
-                      <Text style={styles.listItemTitle}>{currency.name}</Text>
-                      {symbolText && <Text style={styles.currencySymbol}>{symbolText}</Text>}
+          {currencies.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No currencies yet. Create one to get started!</Text>
+            </View>
+          ) : (
+            currencies.map((currency, index) => {
+              const symbolText = currency.symbol || '';
+              const onSuccessText = `Reward: ${currency.onSuccess || 'NONE'}`;
+              const onFailureText = `Consequence: ${currency.onFailure || 'NONE'}`;
+              
+              return (
+                <React.Fragment key={index}>
+                  <View style={styles.listItem}>
+                    <View style={styles.listItemContent}>
+                      <View style={styles.currencyHeader}>
+                        <Text style={styles.listItemTitle}>{currency.name}</Text>
+                        {symbolText && <Text style={styles.currencySymbol}>{symbolText}</Text>}
+                      </View>
+                      <Text style={styles.listItemSubtitle}>{onSuccessText}</Text>
+                      <Text style={styles.listItemSubtitle}>{onFailureText}</Text>
                     </View>
-                    <Text style={styles.listItemSubtitle}>{onSuccessText}</Text>
-                    <Text style={styles.listItemSubtitle}>{onFailureText}</Text>
+                    <View style={styles.listItemActions}>
+                      <TouchableOpacity
+                        onPress={() => openEditModal('currency', currency)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteItem('currency', currency.id)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={20}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <View style={styles.listItemActions}>
-                    <TouchableOpacity
-                      onPress={() => openEditModal('currency', currency)}
-                      style={styles.iconButton}
-                    >
-                      <IconSymbol
-                        ios_icon_name="pencil"
-                        android_material_icon_name="edit"
-                        size={20}
-                        color={colors.primary}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteItem('currency', currency.id)}
-                      style={styles.iconButton}
-                    >
-                      <IconSymbol
-                        ios_icon_name="trash"
-                        android_material_icon_name="delete"
-                        size={20}
-                        color={colors.error}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </React.Fragment>
-            );
-          })}
+                </React.Fragment>
+              );
+            })
+          )}
         </ScrollView>
       </View>
     );
@@ -1203,5 +1267,15 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontSize: 16,
     fontWeight: '600',
+  },
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
 });
