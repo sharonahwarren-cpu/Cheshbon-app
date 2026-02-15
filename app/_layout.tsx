@@ -7,15 +7,14 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { useColorScheme, Alert } from "react-native";
+import { useColorScheme } from "react-native";
 import {
   DarkTheme,
   DefaultTheme,
-  Theme,
   ThemeProvider,
 } from "@react-navigation/native";
 import "react-native-reanimated";
-import { Stack } from "expo-router";
+import { Stack, Redirect } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 SplashScreen.preventAutoHideAsync();
@@ -52,7 +51,8 @@ export default function RootLayout() {
             <SystemBars style="auto" />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="auth" options={{ headerShown: false }} />
+              {/* Auth screens hidden temporarily - uncomment when ready to publish */}
+              {/* <Stack.Screen name="auth" options={{ headerShown: false }} /> */}
               <Stack.Screen name="auth-popup" options={{ headerShown: false }} />
               <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
               <Stack.Screen name="+not-found" />

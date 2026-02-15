@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
@@ -45,6 +45,10 @@ interface Currency {
 interface Goal {
   id: string;
   title: string;
+  description?: string;
+  type?: 'RESTRAINING' | 'PROACTIVE';
+  progress?: number;
+  completed?: boolean;
 }
 
 interface NotificationAlarm {
@@ -88,17 +92,18 @@ interface ReflectionWorthItTallies {
   total: number;
 }
 
-type SettingsSection = 'main' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'reflectionPrefs' | 'notifications' | 'reports';
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'reflectionPrefs' | 'notifications' | 'reports';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
   const [loading, setLoading] = useState(false);
   
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     notificationsEnabled: false,
     notificationAlarms: [],
@@ -119,7 +124,6 @@ export default function SettingsScreen() {
 
   const [formData, setFormData] = useState<any>({});
   
-  // Time picker state
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState(new Date());
 
@@ -137,16 +141,20 @@ export default function SettingsScreen() {
     console.log('Loading settings data...');
     setLoading(true);
     try {
-      const [lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, goalsRes, prefsRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes] = await Promise.all([
+        authenticatedGet('/api/goals'),
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
-        authenticatedGet('/api/goals'),
         authenticatedGet('/api/user-preferences'),
       ]);
 
       console.log('Settings data loaded successfully');
+      
+      const goalsData = Array.isArray(goalsRes) 
+        ? goalsRes 
+        : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
       
       const lifeAreasData = Array.isArray(lifeAreasRes) 
         ? lifeAreasRes 
@@ -164,10 +172,6 @@ export default function SettingsScreen() {
         ? gainsLossesRes 
         : (Array.isArray(gainsLossesRes?.data) ? gainsLossesRes.data : []);
       
-      const goalsData = Array.isArray(goalsRes) 
-        ? goalsRes 
-        : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
-      
       const prefsData = prefsRes?.data || prefsRes || { 
         notificationsEnabled: false, 
         notificationAlarms: [],
@@ -175,11 +179,11 @@ export default function SettingsScreen() {
         reflectionCategories: ['Action', 'Speech', 'Thought'],
       };
       
+      setGoals(goalsData);
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
-      setGoals(goalsData);
       setPreferences(prefsData);
     } catch (error) {
       console.error('Error loading settings data:', error);
@@ -380,6 +384,20 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleDeleteGoal = async (id: string) => {
+    try {
+      setLoading(true);
+      await authenticatedDelete(`/api/goals/${id}`);
+      showSuccess('Goal deleted successfully');
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting goal:', error);
+      showError('Failed to delete goal');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSavePreferences = async () => {
     try {
       setLoading(true);
@@ -414,6 +432,7 @@ export default function SettingsScreen() {
 
   const renderMainMenu = () => {
     const menuItems = [
+      { title: 'Goals', icon: 'flag', section: 'goals' as SettingsSection },
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
@@ -450,6 +469,89 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </React.Fragment>
         ))}
+      </View>
+    );
+  };
+
+  const renderGoals = () => {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Goals</Text>
+          <TouchableOpacity onPress={() => router.push('/create-goal')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.listContainer}>
+          {goals.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No goals yet. Create one to get started!</Text>
+            </View>
+          ) : (
+            goals.map((goal, index) => {
+              const typeText = goal.type || 'Goal';
+              const progressText = goal.progress !== undefined ? `${goal.progress}%` : '';
+              const statusText = goal.completed ? 'Completed' : 'In Progress';
+              
+              return (
+                <React.Fragment key={index}>
+                  <View style={styles.listItem}>
+                    <View style={styles.listItemContent}>
+                      <Text style={styles.listItemTitle}>{goal.title}</Text>
+                      {goal.description && (
+                        <Text style={styles.listItemSubtitle}>{goal.description}</Text>
+                      )}
+                      <View style={styles.goalMeta}>
+                        <Text style={styles.listItemSubtitle}>{typeText}</Text>
+                        {progressText && (
+                          <Text style={styles.listItemSubtitle}> • {progressText}</Text>
+                        )}
+                        <Text style={styles.listItemSubtitle}> • {statusText}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.listItemActions}>
+                      <TouchableOpacity
+                        onPress={() => router.push(`/create-goal?id=${goal.id}`)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteGoal(goal.id)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={20}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </React.Fragment>
+              );
+            })
+          )}
+        </ScrollView>
       </View>
     );
   };
@@ -1498,6 +1600,7 @@ export default function SettingsScreen() {
       ) : (
         <>
           {currentSection === 'main' && renderMainMenu()}
+          {currentSection === 'goals' && renderGoals()}
           {currentSection === 'lifeAreas' && renderLifeAreas()}
           {currentSection === 'strategies' && renderStrategies()}
           {currentSection === 'currencies' && renderCurrencies()}
@@ -1636,6 +1739,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  goalMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   listItemActions: {
     flexDirection: 'row',
