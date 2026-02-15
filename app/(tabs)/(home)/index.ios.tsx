@@ -566,7 +566,24 @@ export default function HomeScreen() {
             />
 
             <TouchableOpacity style={styles.submitButton} onPress={handleAddGoal}>
-              <Text style={styles.submitButtonText}>Create Goal</Text>
+              <Text style={styles.submitButtonText}>Create Quick Goal</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.advancedButton}
+              onPress={() => {
+                console.log("Navigating to advanced goal creation form");
+                setShowGoalModal(false);
+                router.push('/create-goal');
+              }}
+            >
+              <Text style={styles.advancedButtonText}>Create Advanced Goal</Text>
+              <IconSymbol
+                ios_icon_name="chevron.right"
+                android_material_icon_name="arrow-forward"
+                size={20}
+                color={colors.primary}
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -921,6 +938,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  advancedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    gap: 8,
+  },
+  advancedButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
   },
   confirmModal: {
     backgroundColor: colors.backgroundAlt,
