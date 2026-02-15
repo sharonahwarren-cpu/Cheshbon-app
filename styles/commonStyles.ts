@@ -13,9 +13,11 @@ export const colors = {
   card: '#FFFFFF',         // White cards
   cardBorder: '#E5E7EB',   // Light border
   success: '#10B981',      // Green for completed goals
+  error: '#EF4444',        // Red for errors and negative balances
   warning: '#F59E0B',      // Orange for in-progress
   muted: '#9CA3AF',        // Muted gray
   highlight: '#FEF3C7',    // Light yellow highlight
+  border: '#E5E7EB',       // Border color
 };
 
 export const buttonStyles = StyleSheet.create({

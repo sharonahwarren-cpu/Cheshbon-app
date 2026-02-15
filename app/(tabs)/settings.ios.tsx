@@ -16,6 +16,7 @@ import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface LifeArea {
   id: string;
@@ -29,7 +30,6 @@ interface Strategy {
   id: string;
   name: string;
   description?: string;
-  isSuccessful?: boolean;
   linkedGoalIds?: string[];
 }
 
@@ -46,14 +46,32 @@ interface Goal {
   title: string;
 }
 
-interface UserPreferences {
-  notificationsEnabled: boolean;
-  notificationFrequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
-  notificationTime?: string;
-  notificationDays?: string[];
+interface NotificationAlarm {
+  id: string;
+  name: string;
+  time: string;
+  frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+  dayOfWeek?: string;
+  dayOfMonth?: number;
 }
 
-type SettingsSection = 'main' | 'lifeAreas' | 'strategies' | 'currencies' | 'notifications';
+interface UserPreferences {
+  notificationsEnabled: boolean;
+  notificationAlarms?: NotificationAlarm[];
+}
+
+interface CurrencyBalance {
+  currencyId: string;
+  currencyName: string;
+  symbol: string;
+  earned: number;
+  lost: number;
+  debtAdded: number;
+  debtReduced: number;
+  netBalance: number;
+}
+
+type SettingsSection = 'main' | 'lifeAreas' | 'strategies' | 'currencies' | 'notifications' | 'reports';
 
 export default function SettingsScreen() {
   const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
@@ -65,10 +83,12 @@ export default function SettingsScreen() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     notificationsEnabled: false,
+    notificationAlarms: [],
   });
+  const [currencyBalances, setCurrencyBalances] = useState<CurrencyBalance[]>([]);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | null>(null);
+  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'alarm' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
   
   const [errorMessage, setErrorMessage] = useState('');
@@ -77,10 +97,20 @@ export default function SettingsScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const [formData, setFormData] = useState<any>({});
+  
+  // Time picker state
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [selectedTime, setSelectedTime] = useState(new Date());
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (currentSection === 'reports') {
+      loadCurrencyBalances();
+    }
+  }, [currentSection]);
 
   const loadData = async () => {
     console.log('Loading settings data...');
@@ -95,14 +125,7 @@ export default function SettingsScreen() {
       ]);
 
       console.log('Settings data loaded successfully');
-      console.log('Life areas response:', lifeAreasRes);
-      console.log('Strategies response:', strategiesRes);
-      console.log('Currencies response:', currenciesRes);
-      console.log('Goals response:', goalsRes);
-      console.log('Preferences response:', prefsRes);
       
-      // Handle both direct array and { data: array } response formats
-      // Ensure we always have an array, even if empty
       const lifeAreasData = Array.isArray(lifeAreasRes) 
         ? lifeAreasRes 
         : (Array.isArray(lifeAreasRes?.data) ? lifeAreasRes.data : []);
@@ -119,12 +142,7 @@ export default function SettingsScreen() {
         ? goalsRes 
         : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
       
-      const prefsData = prefsRes?.data || prefsRes || { notificationsEnabled: false };
-      
-      console.log('Processed life areas data:', lifeAreasData);
-      console.log('Processed strategies data:', strategiesData);
-      console.log('Processed currencies data:', currenciesData);
-      console.log('Processed goals data:', goalsData);
+      const prefsData = prefsRes?.data || prefsRes || { notificationsEnabled: false, notificationAlarms: [] };
       
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
       setStrategies(strategiesData);
@@ -139,10 +157,21 @@ export default function SettingsScreen() {
     }
   };
 
+  const loadCurrencyBalances = async () => {
+    console.log('Loading currency balances...');
+    try {
+      const balancesRes = await authenticatedGet('/api/reports/currency-balances');
+      const balancesData = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || []);
+      setCurrencyBalances(balancesData);
+    } catch (error) {
+      console.error('Error loading currency balances:', error);
+      showError('Failed to load currency balances');
+    }
+  };
+
   const buildLifeAreaHierarchy = (areas: LifeArea[]): LifeArea[] => {
     console.log('Building life area hierarchy from:', areas);
     
-    // Safety check: ensure areas is an array
     if (!Array.isArray(areas)) {
       console.warn('buildLifeAreaHierarchy received non-array:', areas);
       return [];
@@ -185,14 +214,24 @@ export default function SettingsScreen() {
     setShowSuccessModal(true);
   };
 
-  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency') => {
+  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm') => {
     setModalType(type);
     setEditingItem(null);
-    setFormData({});
+    if (type === 'alarm') {
+      setFormData({ 
+        name: '', 
+        time: '09:00', 
+        frequency: 'daily',
+        dayOfWeek: undefined,
+        dayOfMonth: undefined,
+      });
+    } else {
+      setFormData({});
+    }
     setShowModal(true);
   };
 
-  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency', item: any) => {
+  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm', item: any) => {
     setModalType(type);
     setEditingItem(item);
     setFormData(item);
@@ -229,6 +268,19 @@ export default function SettingsScreen() {
           await authenticatedPost('/api/currencies', formData);
           showSuccess('Currency created successfully');
         }
+      } else if (modalType === 'alarm') {
+        const alarms = preferences.notificationAlarms || [];
+        if (editingItem) {
+          const updatedAlarms = alarms.map(a => a.id === editingItem.id ? formData : a);
+          await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+          setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
+        } else {
+          const newAlarm = { ...formData, id: Date.now().toString() };
+          const updatedAlarms = [...alarms, newAlarm];
+          await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+          setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
+        }
+        showSuccess('Notification alarm saved successfully');
       }
 
       setShowModal(false);
@@ -241,7 +293,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleDeleteItem = async (type: 'lifeArea' | 'strategy' | 'currency', id: string) => {
+  const handleDeleteItem = async (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm', id: string) => {
     try {
       setLoading(true);
       
@@ -254,6 +306,12 @@ export default function SettingsScreen() {
       } else if (type === 'currency') {
         await authenticatedDelete(`/api/currencies/${id}`);
         showSuccess('Currency deleted successfully');
+      } else if (type === 'alarm') {
+        const alarms = preferences.notificationAlarms || [];
+        const updatedAlarms = alarms.filter(a => a.id !== id);
+        await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+        setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
+        showSuccess('Notification alarm deleted successfully');
       }
 
       await loadData();
@@ -278,12 +336,32 @@ export default function SettingsScreen() {
     }
   };
 
+  const formatTime = (time: string) => {
+    const [hours, minutes] = time.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+  };
+
+  const onTimeChange = (event: any, selectedDate?: Date) => {
+    setShowTimePicker(false);
+    if (selectedDate) {
+      setSelectedTime(selectedDate);
+      const hours = selectedDate.getHours().toString().padStart(2, '0');
+      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+      const timeString = `${hours}:${minutes}`;
+      setFormData({ ...formData, time: timeString });
+    }
+  };
+
   const renderMainMenu = () => {
     const menuItems = [
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Notifications', icon: 'notifications', section: 'notifications' as SettingsSection },
+      { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
     ];
 
     return (
@@ -421,7 +499,6 @@ export default function SettingsScreen() {
             </View>
           ) : (
             strategies.map((strategy, index) => {
-              const successText = strategy.isSuccessful === true ? 'Successful' : strategy.isSuccessful === false ? 'Not Successful' : 'Not Set';
               const linkedGoalsCount = strategy.linkedGoalIds?.length || 0;
               const linkedGoalsText = `${linkedGoalsCount} linked goals`;
               
@@ -433,7 +510,6 @@ export default function SettingsScreen() {
                       {strategy.description && (
                         <Text style={styles.listItemSubtitle}>{strategy.description}</Text>
                       )}
-                      <Text style={styles.listItemSubtitle}>{successText}</Text>
                       <Text style={styles.listItemSubtitle}>{linkedGoalsText}</Text>
                     </View>
                     <View style={styles.listItemActions}>
@@ -500,8 +576,8 @@ export default function SettingsScreen() {
           ) : (
             currencies.map((currency, index) => {
               const symbolText = currency.symbol || '';
-              const onSuccessText = `Reward: ${currency.onSuccess || 'NONE'}`;
-              const onFailureText = `Consequence: ${currency.onFailure || 'NONE'}`;
+              const onSuccessText = `On Success: ${currency.onSuccess || 'NONE'}`;
+              const onFailureText = `On Failure: ${currency.onFailure || 'NONE'}`;
               
               return (
                 <React.Fragment key={index}>
@@ -549,8 +625,7 @@ export default function SettingsScreen() {
   };
 
   const renderNotifications = () => {
-    const frequencyOptions = ['daily', 'weekly', 'biweekly', 'monthly'];
-    const dayOptions = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const alarms = preferences.notificationAlarms || [];
 
     return (
       <View style={styles.container}>
@@ -564,7 +639,14 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Notifications</Text>
-          <View style={{ width: 24 }} />
+          <TouchableOpacity onPress={() => openAddModal('alarm')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
         </View>
         <ScrollView style={styles.formContainer}>
           <View style={styles.formGroup}>
@@ -572,7 +654,10 @@ export default function SettingsScreen() {
               <Text style={styles.label}>Enable Notifications</Text>
               <Switch
                 value={preferences.notificationsEnabled}
-                onValueChange={(value) => setPreferences({ ...preferences, notificationsEnabled: value })}
+                onValueChange={(value) => {
+                  setPreferences({ ...preferences, notificationsEnabled: value });
+                  handleSavePreferences();
+                }}
                 trackColor={{ false: colors.border, true: colors.primary }}
                 thumbColor={colors.background}
               />
@@ -581,83 +666,120 @@ export default function SettingsScreen() {
 
           {preferences.notificationsEnabled && (
             <>
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Frequency</Text>
-                <View style={styles.optionsGrid}>
-                  {frequencyOptions.map((freq, index) => {
-                    const isSelected = preferences.notificationFrequency === freq;
-                    const capitalizedFreq = freq.charAt(0).toUpperCase() + freq.slice(1);
-                    
-                    return (
-                      <React.Fragment key={index}>
-                        <TouchableOpacity
-                          style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                          onPress={() => setPreferences({ ...preferences, notificationFrequency: freq as any })}
-                        >
-                          <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                            {capitalizedFreq}
-                          </Text>
-                        </TouchableOpacity>
-                      </React.Fragment>
-                    );
-                  })}
+              <Text style={styles.sectionSubtitle}>Notification Alarms</Text>
+              {alarms.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No notification alarms set. Tap + to add one.</Text>
                 </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Time</Text>
-                <TextInput
-                  style={styles.input}
-                  value={preferences.notificationTime || ''}
-                  onChangeText={(value) => setPreferences({ ...preferences, notificationTime: value })}
-                  placeholder="09:00"
-                  placeholderTextColor={colors.textSecondary}
-                />
-              </View>
-
-              {(preferences.notificationFrequency === 'weekly' || preferences.notificationFrequency === 'biweekly') && (
-                <View style={styles.formGroup}>
-                  <Text style={styles.label}>Days</Text>
-                  <View style={styles.optionsGrid}>
-                    {dayOptions.map((day, index) => {
-                      const isSelected = preferences.notificationDays?.includes(day);
-                      const capitalizedDay = day.charAt(0).toUpperCase() + day.slice(1);
-                      
-                      return (
-                        <React.Fragment key={index}>
+              ) : (
+                alarms.map((alarm, index) => {
+                  const frequencyText = alarm.frequency.charAt(0).toUpperCase() + alarm.frequency.slice(1);
+                  const timeText = formatTime(alarm.time);
+                  let scheduleText = frequencyText;
+                  if (alarm.dayOfWeek) {
+                    scheduleText += ` - ${alarm.dayOfWeek}`;
+                  }
+                  if (alarm.dayOfMonth) {
+                    scheduleText += ` - Day ${alarm.dayOfMonth}`;
+                  }
+                  
+                  return (
+                    <React.Fragment key={index}>
+                      <View style={styles.alarmItem}>
+                        <View style={styles.alarmContent}>
+                          <Text style={styles.alarmName}>{alarm.name}</Text>
+                          <Text style={styles.alarmTime}>{timeText}</Text>
+                          <Text style={styles.alarmSchedule}>{scheduleText}</Text>
+                        </View>
+                        <View style={styles.listItemActions}>
                           <TouchableOpacity
-                            style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                            onPress={() => {
-                              const currentDays = preferences.notificationDays || [];
-                              const newDays = isSelected
-                                ? currentDays.filter(d => d !== day)
-                                : [...currentDays, day];
-                              setPreferences({ ...preferences, notificationDays: newDays });
-                            }}
+                            onPress={() => openEditModal('alarm', alarm)}
+                            style={styles.iconButton}
                           >
-                            <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                              {capitalizedDay}
-                            </Text>
+                            <IconSymbol
+                              ios_icon_name="pencil"
+                              android_material_icon_name="edit"
+                              size={20}
+                              color={colors.primary}
+                            />
                           </TouchableOpacity>
-                        </React.Fragment>
-                      );
-                    })}
-                  </View>
-                </View>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteItem('alarm', alarm.id)}
+                            style={styles.iconButton}
+                          >
+                            <IconSymbol
+                              ios_icon_name="trash"
+                              android_material_icon_name="delete"
+                              size={20}
+                              color={colors.error}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </React.Fragment>
+                  );
+                })
               )}
-
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSavePreferences}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save Preferences</Text>
-                )}
-              </TouchableOpacity>
             </>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderReports = () => {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Reports</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ScrollView style={styles.listContainer}>
+          <Text style={styles.sectionSubtitle}>Currency Balances</Text>
+          {currencyBalances.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No currency data yet. Complete some goals to see your balances!</Text>
+            </View>
+          ) : (
+            currencyBalances.map((balance, index) => {
+              const symbolText = balance.symbol || '';
+              const earnedText = `Earned: ${balance.earned}`;
+              const lostText = `Lost: ${balance.lost}`;
+              const debtAddedText = `Debt Added: ${balance.debtAdded}`;
+              const debtReducedText = `Debt Reduced: ${balance.debtReduced}`;
+              const netBalanceText = `Net Balance: ${balance.netBalance}`;
+              const netBalanceColor = balance.netBalance >= 0 ? colors.success : colors.error;
+              
+              return (
+                <React.Fragment key={index}>
+                  <View style={styles.reportCard}>
+                    <View style={styles.reportHeader}>
+                      <Text style={styles.reportTitle}>{balance.currencyName}</Text>
+                      {symbolText && <Text style={styles.reportSymbol}>{symbolText}</Text>}
+                    </View>
+                    <View style={styles.reportStats}>
+                      <Text style={styles.reportStat}>{earnedText}</Text>
+                      <Text style={styles.reportStat}>{lostText}</Text>
+                      <Text style={styles.reportStat}>{debtAddedText}</Text>
+                      <Text style={styles.reportStat}>{debtReducedText}</Text>
+                    </View>
+                    <View style={styles.reportNetBalance}>
+                      <Text style={[styles.reportNetBalanceText, { color: netBalanceColor }]}>
+                        {netBalanceText}
+                      </Text>
+                    </View>
+                  </View>
+                </React.Fragment>
+              );
+            })
           )}
         </ScrollView>
       </View>
@@ -780,32 +902,6 @@ export default function SettingsScreen() {
                   </View>
 
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Success Status</Text>
-                    <View style={styles.optionsGrid}>
-                      {[
-                        { label: 'Not Set', value: null },
-                        { label: 'Successful', value: true },
-                        { label: 'Not Successful', value: false },
-                      ].map((option, index) => {
-                        const isSelected = formData.isSuccessful === option.value;
-                        
-                        return (
-                          <React.Fragment key={index}>
-                            <TouchableOpacity
-                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                              onPress={() => setFormData({ ...formData, isSuccessful: option.value })}
-                            >
-                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                                {option.label}
-                              </Text>
-                            </TouchableOpacity>
-                          </React.Fragment>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  <View style={styles.formGroup}>
                     <Text style={styles.label}>Linked Goals</Text>
                     <ScrollView style={styles.pickerContainer}>
                       {goals.map((goal, index) => {
@@ -904,6 +1000,114 @@ export default function SettingsScreen() {
                   </View>
                 </>
               )}
+
+              {modalType === 'alarm' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Alarm Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name || ''}
+                      onChangeText={(value) => setFormData({ ...formData, name: value })}
+                      placeholder="e.g., Morning Journal Reminder"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Time</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        const [hours, minutes] = (formData.time || '09:00').split(':');
+                        const date = new Date();
+                        date.setHours(parseInt(hours));
+                        date.setMinutes(parseInt(minutes));
+                        setSelectedTime(date);
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <Text style={styles.timePickerText}>{formatTime(formData.time || '09:00')}</Text>
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="access-time"
+                        size={24}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    {showTimePicker && (
+                      <DateTimePicker
+                        value={selectedTime}
+                        mode="time"
+                        is24Hour={false}
+                        display="spinner"
+                        onChange={onTimeChange}
+                      />
+                    )}
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Frequency</Text>
+                    <View style={styles.optionsGrid}>
+                      {['daily', 'weekly', 'biweekly', 'monthly'].map((freq, index) => {
+                        const isSelected = formData.frequency === freq;
+                        const capitalizedFreq = freq.charAt(0).toUpperCase() + freq.slice(1);
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, frequency: freq })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {capitalizedFreq}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {(formData.frequency === 'weekly' || formData.frequency === 'biweekly') && (
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>Day of Week</Text>
+                      <View style={styles.optionsGrid}>
+                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, index) => {
+                          const isSelected = formData.dayOfWeek === day;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                                onPress={() => setFormData({ ...formData, dayOfWeek: day })}
+                              >
+                                <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                  {day}
+                                </Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+
+                  {formData.frequency === 'monthly' && (
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>Day of Month</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={formData.dayOfMonth?.toString() || ''}
+                        onChangeText={(value) => setFormData({ ...formData, dayOfMonth: parseInt(value) || undefined })}
+                        placeholder="1-31"
+                        placeholderTextColor={colors.textSecondary}
+                        keyboardType="number-pad"
+                      />
+                    </View>
+                  )}
+                </>
+              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -946,6 +1150,7 @@ export default function SettingsScreen() {
           {currentSection === 'strategies' && renderStrategies()}
           {currentSection === 'currencies' && renderCurrencies()}
           {currentSection === 'notifications' && renderNotifications()}
+          {currentSection === 'reports' && renderReports()}
         </>
       )}
 
@@ -1013,6 +1218,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
     marginBottom: 24,
+  },
+  sectionSubtitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 16,
   },
   menuItem: {
     flexDirection: 'row',
@@ -1144,17 +1355,88 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontWeight: '600',
   },
-  saveButton: {
-    backgroundColor: colors.primary,
+  timePickerButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  timePickerText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  alarmItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
     padding: 16,
     borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 20,
+    marginBottom: 12,
   },
-  saveButtonText: {
-    color: colors.background,
+  alarmContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  alarmName: {
     fontSize: 16,
     fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  alarmTime: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  alarmSchedule: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  reportCard: {
+    backgroundColor: colors.card,
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  reportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  reportTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  reportSymbol: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  reportStats: {
+    marginBottom: 12,
+  },
+  reportStat: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  reportNetBalance: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 12,
+  },
+  reportNetBalanceText: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   modalOverlay: {
     flex: 1,
