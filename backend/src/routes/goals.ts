@@ -6,6 +6,46 @@ import * as schema from '../db/schema.js';
 export function registerGoalRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
+  // GET /api/goals/hierarchy - Get goals organized in parent-child hierarchy
+  app.fastify.get('/api/goals/hierarchy', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Fetching goal hierarchy');
+
+    try {
+      const goals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.userId, session.user.id))
+        .orderBy(desc(schema.goals.createdAt));
+
+      // Build hierarchy structure
+      const goalMap = new Map(goals.map(g => [g.id, { ...g, children: [] }]));
+      const rootGoals = [];
+
+      for (const goal of goals) {
+        if (goal.parentGoalId) {
+          const parent = goalMap.get(goal.parentGoalId);
+          if (parent) {
+            parent.children.push(goalMap.get(goal.id)!);
+          }
+        } else {
+          rootGoals.push(goalMap.get(goal.id)!);
+        }
+      }
+
+      app.logger.info({ userId: session.user.id, count: rootGoals.length }, 'Goal hierarchy fetched successfully');
+      return rootGoals;
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch goal hierarchy');
+      throw error;
+    }
+  });
+
   // GET /api/goals - Get all goals for authenticated user
   app.fastify.get('/api/goals', async (
     request: FastifyRequest,
@@ -42,17 +82,26 @@ export function registerGoalRoutes(app: App) {
     const body = request.body as {
       title: string;
       description?: string;
+      parentGoalId?: string;
+      lifeAreaId?: string;
+      behaviorCategories?: string[];
+      type?: 'Restraining' | 'Proactive';
+      strategyIds?: string[];
+      scheduleType?: string;
+      scheduleTimesPerDay?: number;
       targetDate?: string;
       progress?: number;
+      reward?: { currencyId: string; successes: number; amount: number };
+      consequence?: { currencyId: string; failures: number; amount: number };
     };
 
     app.logger.info(
-      { userId: session.user.id, title: body.title, progress: body.progress },
+      { userId: session.user.id, title: body.title, type: body.type },
       'Creating goal'
     );
 
     try {
-      const [goal] = await app.db
+      const goals = await app.db
         .insert(schema.goals)
         .values({
           userId: session.user.id,
@@ -60,8 +109,22 @@ export function registerGoalRoutes(app: App) {
           description: body.description || null,
           targetDate: body.targetDate ? new Date(body.targetDate) : null,
           progress: body.progress || 0,
+          parentGoalId: body.parentGoalId || null,
+          lifeAreaId: body.lifeAreaId || null,
+          behaviorCategories: (body.behaviorCategories?.length ? body.behaviorCategories : null) as string[] | null,
+          type: body.type || 'Proactive',
+          strategyIds: (body.strategyIds?.length ? body.strategyIds : null) as string[] | null,
+          scheduleType: body.scheduleType || 'Always Active',
+          scheduleTimesPerDay: body.scheduleTimesPerDay || null,
+          rewardCurrencyId: body.reward?.currencyId || null,
+          rewardSuccesses: body.reward?.successes || null,
+          rewardAmount: body.reward?.amount || null,
+          consequenceCurrencyId: body.consequence?.currencyId || null,
+          consequenceFailures: body.consequence?.failures || null,
+          consequenceAmount: body.consequence?.amount || null,
         })
         .returning();
+      const goal = goals[0];
 
       app.logger.info({ userId: session.user.id, goalId: goal.id }, 'Goal created successfully');
       return goal;
@@ -86,9 +149,18 @@ export function registerGoalRoutes(app: App) {
     const body = request.body as {
       title?: string;
       description?: string;
+      parentGoalId?: string;
+      lifeAreaId?: string;
+      behaviorCategories?: string[];
+      type?: 'Restraining' | 'Proactive';
+      strategyIds?: string[];
+      scheduleType?: string;
+      scheduleTimesPerDay?: number;
       targetDate?: string;
       completed?: boolean;
       progress?: number;
+      reward?: { currencyId: string; successes: number; amount: number };
+      consequence?: { currencyId: string; failures: number; amount: number };
     };
 
     app.logger.info({ userId: session.user.id, goalId: id }, 'Updating goal');
@@ -117,16 +189,34 @@ export function registerGoalRoutes(app: App) {
       const updateData: Record<string, unknown> = {};
       if (body.title !== undefined) updateData.title = body.title;
       if (body.description !== undefined) updateData.description = body.description || null;
+      if (body.parentGoalId !== undefined) updateData.parentGoalId = body.parentGoalId || null;
+      if (body.lifeAreaId !== undefined) updateData.lifeAreaId = body.lifeAreaId || null;
+      if (body.behaviorCategories !== undefined) updateData.behaviorCategories = (body.behaviorCategories?.length ? body.behaviorCategories : null) as string[] | null;
+      if (body.type !== undefined) updateData.type = body.type;
+      if (body.strategyIds !== undefined) updateData.strategyIds = (body.strategyIds?.length ? body.strategyIds : null) as string[] | null;
+      if (body.scheduleType !== undefined) updateData.scheduleType = body.scheduleType;
+      if (body.scheduleTimesPerDay !== undefined) updateData.scheduleTimesPerDay = body.scheduleTimesPerDay || null;
       if (body.targetDate !== undefined) updateData.targetDate = body.targetDate ? new Date(body.targetDate) : null;
       if (body.completed !== undefined) updateData.completed = body.completed;
       if (body.progress !== undefined) updateData.progress = body.progress;
+      if (body.reward !== undefined) {
+        updateData.rewardCurrencyId = body.reward?.currencyId || null;
+        updateData.rewardSuccesses = body.reward?.successes || null;
+        updateData.rewardAmount = body.reward?.amount || null;
+      }
+      if (body.consequence !== undefined) {
+        updateData.consequenceCurrencyId = body.consequence?.currencyId || null;
+        updateData.consequenceFailures = body.consequence?.failures || null;
+        updateData.consequenceAmount = body.consequence?.amount || null;
+      }
       updateData.updatedAt = new Date();
 
-      const [updatedGoal] = await app.db
+      const updatedGoals = await app.db
         .update(schema.goals)
         .set(updateData)
         .where(eq(schema.goals.id, id))
         .returning();
+      const updatedGoal = updatedGoals[0];
 
       app.logger.info({ userId: session.user.id, goalId: id }, 'Goal updated successfully');
       return updatedGoal;

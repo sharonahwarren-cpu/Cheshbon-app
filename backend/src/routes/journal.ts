@@ -47,7 +47,7 @@ export function registerJournalRoutes(app: App) {
     );
 
     try {
-      const [entry] = await app.db
+      const entries = await app.db
         .insert(schema.journalEntries)
         .values({
           userId: session.user.id,
@@ -55,6 +55,7 @@ export function registerJournalRoutes(app: App) {
           mood: body.mood || null,
         })
         .returning();
+      const entry = entries[0];
 
       app.logger.info({ userId: session.user.id, entryId: entry.id }, 'Journal entry created successfully');
       return entry;
@@ -109,11 +110,12 @@ export function registerJournalRoutes(app: App) {
       if (body.mood !== undefined) updateData.mood = body.mood || null;
       updateData.updatedAt = new Date();
 
-      const [updatedEntry] = await app.db
+      const updatedEntries = await app.db
         .update(schema.journalEntries)
         .set(updateData)
         .where(eq(schema.journalEntries.id, id))
         .returning();
+      const updatedEntry = updatedEntries[0];
 
       app.logger.info({ userId: session.user.id, entryId: id }, 'Journal entry updated successfully');
       return updatedEntry;

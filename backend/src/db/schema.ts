@@ -10,6 +10,34 @@ export const journalEntries = pgTable('journal_entries', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
+export const lifeAreas = pgTable('life_areas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  parentId: uuid('parent_id').references(() => lifeAreas.id, { onDelete: 'cascade' }),
+  level: integer('level').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const strategies = pgTable('strategies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const currencies = pgTable('currencies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  symbol: text('symbol'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
 export const goals = pgTable('goals', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
@@ -18,6 +46,19 @@ export const goals = pgTable('goals', {
   targetDate: timestamp('target_date', { withTimezone: true }),
   completed: boolean('completed').default(false).notNull(),
   progress: integer('progress').default(0).notNull(),
+  parentGoalId: uuid('parent_goal_id').references(() => goals.id, { onDelete: 'cascade' }),
+  lifeAreaId: uuid('life_area_id').references(() => lifeAreas.id, { onDelete: 'set null' }),
+  behaviorCategories: text('behavior_categories').array(),
+  type: text('type').default('Proactive').notNull(),
+  strategyIds: text('strategy_ids').array(),
+  scheduleType: text('schedule_type').default('Always Active').notNull(),
+  scheduleTimesPerDay: integer('schedule_times_per_day'),
+  rewardCurrencyId: uuid('reward_currency_id').references(() => currencies.id, { onDelete: 'set null' }),
+  rewardSuccesses: integer('reward_successes'),
+  rewardAmount: integer('reward_amount'),
+  consequenceCurrencyId: uuid('consequence_currency_id').references(() => currencies.id, { onDelete: 'set null' }),
+  consequenceFailures: integer('consequence_failures'),
+  consequenceAmount: integer('consequence_amount'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
