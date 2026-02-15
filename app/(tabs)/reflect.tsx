@@ -26,6 +26,14 @@ interface JournalEntry {
   updatedAt: string;
 }
 
+interface GainLoss {
+  id: string;
+  name: string;
+  type: 'Gain' | 'Loss';
+  category?: string;
+  subCategory?: string;
+}
+
 interface Reflection {
   id: string;
   entryDate: string;
@@ -41,8 +49,14 @@ interface Reflection {
     currencyName?: string;
     currencySymbol?: string;
   };
-  lookupField1?: string;
-  lookupField2?: string;
+  gainedIds?: string[];
+  lostIds?: string[];
+  wasWorthIt?: boolean;
+  additionalThoughts?: string;
+  strategyEffectiveness?: Array<{
+    strategyId: string;
+    worked: boolean;
+  }>;
   createdAt: string;
 }
 
@@ -76,6 +90,7 @@ export default function ReflectScreen() {
 
   const [goals, setGoals] = useState<Goal[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
+  const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -92,23 +107,26 @@ export default function ReflectScreen() {
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
       
-      const [journalRes, reflectionsRes, goalsRes, prefsRes] = await Promise.all([
+      const [journalRes, reflectionsRes, goalsRes, prefsRes, gainsLossesRes] = await Promise.all([
         authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
         authenticatedGet('/api/goals'),
         authenticatedGet('/api/user-preferences'),
+        authenticatedGet('/api/gains-losses'),
       ]);
 
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
+      const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
 
       setJournalEntry(journalData);
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       setGoals(goalsData);
       setUserPreferences(prefsData);
+      setGainsLosses(gainsLossesData);
 
       console.log('Reflect data loaded successfully');
     } catch (error) {
@@ -397,14 +415,60 @@ export default function ReflectScreen() {
                         </View>
                       )}
 
-                      {(reflection.lookupField1 || reflection.lookupField2) && (
-                        <View style={styles.lookupFields}>
-                          {reflection.lookupField1 && (
-                            <Text style={styles.lookupFieldText}>Field 1: {reflection.lookupField1}</Text>
-                          )}
-                          {reflection.lookupField2 && (
-                            <Text style={styles.lookupFieldText}>Field 2: {reflection.lookupField2}</Text>
-                          )}
+                      {(reflection.gainedIds && reflection.gainedIds.length > 0) && (
+                        <View style={styles.gainsLossesSection}>
+                          <Text style={styles.gainsLossesTitle}>What was Gained:</Text>
+                          {reflection.gainedIds.map((gainId, idx) => {
+                            const gain = gainsLosses.find(gl => gl.id === gainId);
+                            return gain ? (
+                              <Text key={idx} style={styles.gainsLossesItem}>• {gain.name}</Text>
+                            ) : null;
+                          })}
+                        </View>
+                      )}
+
+                      {(reflection.lostIds && reflection.lostIds.length > 0) && (
+                        <View style={styles.gainsLossesSection}>
+                          <Text style={styles.gainsLossesTitle}>What was Lost:</Text>
+                          {reflection.lostIds.map((lossId, idx) => {
+                            const loss = gainsLosses.find(gl => gl.id === lossId);
+                            return loss ? (
+                              <Text key={idx} style={styles.gainsLossesItem}>• {loss.name}</Text>
+                            ) : null;
+                          })}
+                        </View>
+                      )}
+
+                      {reflection.wasWorthIt !== undefined && (
+                        <View style={styles.worthItSection}>
+                          <Text style={styles.worthItLabel}>Was it worth it?</Text>
+                          <Text style={[styles.worthItValue, reflection.wasWorthIt ? styles.worthItYes : styles.worthItNo]}>
+                            {reflection.wasWorthIt ? 'Yes, worth it' : 'No, not worth it'}
+                          </Text>
+                        </View>
+                      )}
+
+                      {reflection.additionalThoughts && (
+                        <View style={styles.additionalThoughtsSection}>
+                          <Text style={styles.additionalThoughtsLabel}>Additional Thoughts:</Text>
+                          <Text style={styles.additionalThoughtsText}>{reflection.additionalThoughts}</Text>
+                        </View>
+                      )}
+
+                      {(reflection.strategyEffectiveness && reflection.strategyEffectiveness.length > 0) && (
+                        <View style={styles.strategiesSection}>
+                          <Text style={styles.strategiesTitle}>Strategies Used:</Text>
+                          {reflection.strategyEffectiveness.map((se, idx) => {
+                            const strategy = goals.flatMap(g => g.strategyIds || []).find(sid => sid === se.strategyId);
+                            return (
+                              <View key={idx} style={styles.strategyItem}>
+                                <Text style={styles.strategyName}>• Strategy</Text>
+                                <Text style={[styles.strategyStatus, se.worked ? styles.strategyWorked : styles.strategyDidntWork]}>
+                                  {se.worked ? 'Worked' : "Didn't work"}
+                                </Text>
+                              </View>
+                            );
+                          })}
                         </View>
                       )}
                     </View>
@@ -425,6 +489,7 @@ export default function ReflectScreen() {
           goals={goals}
           userPreferences={userPreferences}
           editingReflection={editingReflection}
+          gainsLosses={gainsLosses}
         />
       )}
 
@@ -479,6 +544,7 @@ interface AddReflectionModalProps {
   goals: Goal[];
   userPreferences: UserPreferences;
   editingReflection: Reflection | null;
+  gainsLosses: GainLoss[];
 }
 
 function AddReflectionModal({
@@ -489,17 +555,23 @@ function AddReflectionModal({
   goals,
   userPreferences,
   editingReflection,
+  gainsLosses,
 }: AddReflectionModalProps) {
   const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
   const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Proactive');
   const [description, setDescription] = useState(editingReflection?.description || '');
   const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId);
   const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(editingReflection?.outcome);
-  const [lookupField1, setLookupField1] = useState(editingReflection?.lookupField1 || '');
-  const [lookupField2, setLookupField2] = useState(editingReflection?.lookupField2 || '');
+  const [gainedIds, setGainedIds] = useState<string[]>(editingReflection?.gainedIds || []);
+  const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
+  const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(editingReflection?.wasWorthIt);
+  const [additionalThoughts, setAdditionalThoughts] = useState(editingReflection?.additionalThoughts || '');
+  const [strategyEffectiveness, setStrategyEffectiveness] = useState<Array<{strategyId: string; worked: boolean}>>(editingReflection?.strategyEffectiveness || []);
   const [loading, setLoading] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [goalSearchQuery, setGoalSearchQuery] = useState('');
+  const [showGainsPicker, setShowGainsPicker] = useState(false);
+  const [showLossesPicker, setShowLossesPicker] = useState(false);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
@@ -553,8 +625,11 @@ function AddReflectionModal({
         description,
         linkedGoalId: linkedGoalId || undefined,
         outcome: linkedGoalId ? outcome : undefined,
-        lookupField1: lookupField1 || undefined,
-        lookupField2: lookupField2 || undefined,
+        gainedIds: gainedIds.length > 0 ? gainedIds : undefined,
+        lostIds: lostIds.length > 0 ? lostIds : undefined,
+        wasWorthIt: wasWorthIt !== undefined ? wasWorthIt : undefined,
+        additionalThoughts: additionalThoughts.trim() || undefined,
+        strategyEffectiveness: strategyEffectiveness.length > 0 ? strategyEffectiveness : undefined,
       };
 
       let savedReflection;
@@ -743,27 +818,143 @@ function AddReflectionModal({
               </View>
             )}
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Lookup Field 1 (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={lookupField1}
-                onChangeText={setLookupField1}
-                placeholder="Enter value..."
-                placeholderTextColor={colors.textSecondary}
-              />
-            </View>
+            {linkedGoalId && (
+              <>
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>What was Gained (Optional)</Text>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowGainsPicker(!showGainsPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {gainedIds.length > 0 ? `${gainedIds.length} gains selected` : 'Select gains...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Lookup Field 2 (Optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={lookupField2}
-                onChangeText={setLookupField2}
-                placeholder="Enter value..."
-                placeholderTextColor={colors.textSecondary}
-              />
-            </View>
+                  {showGainsPicker && (
+                    <View style={styles.goalPickerContainer}>
+                      <ScrollView style={styles.goalList}>
+                        {gainsLosses.filter(gl => gl.type === 'Gain').map((gain, index) => {
+                          const isSelected = gainedIds.includes(gain.id);
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  if (isSelected) {
+                                    setGainedIds(gainedIds.filter(id => id !== gain.id));
+                                  } else {
+                                    setGainedIds([...gainedIds, gain.id]);
+                                  }
+                                }}
+                              >
+                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                  {gain.name}
+                                  {gain.category && ` (${gain.category})`}
+                                </Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>What was Lost (Optional)</Text>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowLossesPicker(!showLossesPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {lostIds.length > 0 ? `${lostIds.length} losses selected` : 'Select losses...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+
+                  {showLossesPicker && (
+                    <View style={styles.goalPickerContainer}>
+                      <ScrollView style={styles.goalList}>
+                        {gainsLosses.filter(gl => gl.type === 'Loss').map((loss, index) => {
+                          const isSelected = lostIds.includes(loss.id);
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  if (isSelected) {
+                                    setLostIds(lostIds.filter(id => id !== loss.id));
+                                  } else {
+                                    setLostIds([...lostIds, loss.id]);
+                                  }
+                                }}
+                              >
+                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                  {loss.name}
+                                  {loss.category && ` (${loss.category})`}
+                                </Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Was it worth it?</Text>
+                  <View style={styles.optionsGrid}>
+                    {[
+                      { label: 'Yes, worth it', value: true },
+                      { label: 'No, not worth it', value: false },
+                    ].map((option, index) => {
+                      const isSelected = wasWorthIt === option.value;
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <TouchableOpacity
+                            style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                            onPress={() => setWasWorthIt(option.value)}
+                          >
+                            <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        </React.Fragment>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>Additional Thoughts (Optional)</Text>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    value={additionalThoughts}
+                    onChangeText={setAdditionalThoughts}
+                    placeholder="Any additional reflections..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+              </>
+            )}
           </ScrollView>
 
           <View style={styles.modalFooter}>
@@ -972,16 +1163,100 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.success,
   },
-  lookupFields: {
-    marginTop: 8,
-    paddingTop: 8,
+  gainsLossesSection: {
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  lookupFieldText: {
+  gainsLossesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  gainsLossesItem: {
     fontSize: 14,
     color: colors.textSecondary,
     marginBottom: 4,
+  },
+  worthItSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  worthItLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  worthItValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  worthItYes: {
+    color: colors.success,
+  },
+  worthItNo: {
+    color: colors.error,
+  },
+  additionalThoughtsSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  additionalThoughtsLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  additionalThoughtsText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  strategiesSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  strategiesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  strategyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  strategyName: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  strategyStatus: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  strategyWorked: {
+    color: colors.success,
+    backgroundColor: colors.success + '20',
+  },
+  strategyDidntWork: {
+    color: colors.error,
+    backgroundColor: colors.error + '20',
   },
   modalOverlay: {
     flex: 1,

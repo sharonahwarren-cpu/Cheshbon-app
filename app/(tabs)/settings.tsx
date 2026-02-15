@@ -74,7 +74,21 @@ interface CurrencyBalance {
   netBalance: number;
 }
 
-type SettingsSection = 'main' | 'lifeAreas' | 'strategies' | 'currencies' | 'reflectionPrefs' | 'notifications' | 'reports';
+interface GainLoss {
+  id: string;
+  name: string;
+  type: 'Gain' | 'Loss';
+  category?: string;
+  subCategory?: string;
+}
+
+interface ReflectionWorthItTallies {
+  worthIt: number;
+  notWorthIt: number;
+  total: number;
+}
+
+type SettingsSection = 'main' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'reflectionPrefs' | 'notifications' | 'reports';
 
 export default function SettingsScreen() {
   const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
@@ -83,6 +97,7 @@ export default function SettingsScreen() {
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     notificationsEnabled: false,
@@ -91,9 +106,10 @@ export default function SettingsScreen() {
     reflectionCategories: ['Action', 'Speech', 'Thought'],
   });
   const [currencyBalances, setCurrencyBalances] = useState<CurrencyBalance[]>([]);
+  const [worthItTallies, setWorthItTallies] = useState<ReflectionWorthItTallies | null>(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'alarm' | null>(null);
+  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
   
   const [errorMessage, setErrorMessage] = useState('');
@@ -121,10 +137,11 @@ export default function SettingsScreen() {
     console.log('Loading settings data...');
     setLoading(true);
     try {
-      const [lifeAreasRes, strategiesRes, currenciesRes, goalsRes, prefsRes] = await Promise.all([
+      const [lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, goalsRes, prefsRes] = await Promise.all([
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/currencies'),
+        authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/goals'),
         authenticatedGet('/api/user-preferences'),
       ]);
@@ -143,6 +160,10 @@ export default function SettingsScreen() {
         ? currenciesRes 
         : (Array.isArray(currenciesRes?.data) ? currenciesRes.data : []);
       
+      const gainsLossesData = Array.isArray(gainsLossesRes) 
+        ? gainsLossesRes 
+        : (Array.isArray(gainsLossesRes?.data) ? gainsLossesRes.data : []);
+      
       const goalsData = Array.isArray(goalsRes) 
         ? goalsRes 
         : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
@@ -157,6 +178,7 @@ export default function SettingsScreen() {
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
+      setGainsLosses(gainsLossesData);
       setGoals(goalsData);
       setPreferences(prefsData);
     } catch (error) {
@@ -168,14 +190,21 @@ export default function SettingsScreen() {
   };
 
   const loadCurrencyBalances = async () => {
-    console.log('Loading currency balances...');
+    console.log('Loading currency balances and reflection tallies...');
     try {
-      const balancesRes = await authenticatedGet('/api/reports/currency-balances');
+      const [balancesRes, talliesRes] = await Promise.all([
+        authenticatedGet('/api/reports/currency-balances'),
+        authenticatedGet('/api/reports/reflection-worth-it-tallies'),
+      ]);
+      
       const balancesData = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || []);
+      const talliesData = talliesRes?.data || talliesRes || null;
+      
       setCurrencyBalances(balancesData);
+      setWorthItTallies(talliesData);
     } catch (error) {
-      console.error('Error loading currency balances:', error);
-      showError('Failed to load currency balances');
+      console.error('Error loading reports data:', error);
+      showError('Failed to load reports data');
     }
   };
 
@@ -224,7 +253,7 @@ export default function SettingsScreen() {
     setShowSuccessModal(true);
   };
 
-  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm') => {
+  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
     setModalType(type);
     setEditingItem(null);
     if (type === 'alarm') {
@@ -235,13 +264,20 @@ export default function SettingsScreen() {
         dayOfWeek: undefined,
         dayOfMonth: undefined,
       });
+    } else if (type === 'gainLoss') {
+      setFormData({ 
+        name: '', 
+        type: 'Gain',
+        category: undefined,
+        subCategory: undefined,
+      });
     } else {
       setFormData({});
     }
     setShowModal(true);
   };
 
-  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm', item: any) => {
+  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', item: any) => {
     setModalType(type);
     setEditingItem(item);
     setFormData(item);
@@ -278,6 +314,14 @@ export default function SettingsScreen() {
           await authenticatedPost('/api/currencies', formData);
           showSuccess('Currency created successfully');
         }
+      } else if (modalType === 'gainLoss') {
+        if (editingItem) {
+          await authenticatedPut(`/api/gains-losses/${editingItem.id}`, formData);
+          showSuccess('Gain/Loss updated successfully');
+        } else {
+          await authenticatedPost('/api/gains-losses', formData);
+          showSuccess('Gain/Loss created successfully');
+        }
       } else if (modalType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         if (editingItem) {
@@ -303,7 +347,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleDeleteItem = async (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm', id: string) => {
+  const handleDeleteItem = async (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', id: string) => {
     try {
       setLoading(true);
       
@@ -316,6 +360,9 @@ export default function SettingsScreen() {
       } else if (type === 'currency') {
         await authenticatedDelete(`/api/currencies/${id}`);
         showSuccess('Currency deleted successfully');
+      } else if (type === 'gainLoss') {
+        await authenticatedDelete(`/api/gains-losses/${id}`);
+        showSuccess('Gain/Loss deleted successfully');
       } else if (type === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         const updatedAlarms = alarms.filter(a => a.id !== id);
@@ -370,6 +417,7 @@ export default function SettingsScreen() {
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
+      { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
       { title: 'Reflection Preferences', icon: 'edit-note', section: 'reflectionPrefs' as SettingsSection },
       { title: 'Notifications', icon: 'notifications', section: 'notifications' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
@@ -635,6 +683,132 @@ export default function SettingsScreen() {
     );
   };
 
+  const renderGainsLosses = () => {
+    const gains = gainsLosses.filter(gl => gl.type === 'Gain');
+    const losses = gainsLosses.filter(gl => gl.type === 'Loss');
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Gains and Losses</Text>
+          <TouchableOpacity onPress={() => openAddModal('gainLoss')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.listContainer}>
+          {gainsLosses.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No gains or losses yet. Create some to track in reflections!</Text>
+            </View>
+          ) : (
+            <>
+              {gains.length > 0 && (
+                <>
+                  <Text style={styles.sectionSubtitle}>Gains</Text>
+                  {gains.map((gain, index) => {
+                    const categoryText = gain.category ? `${gain.category}${gain.subCategory ? ` > ${gain.subCategory}` : ''}` : '';
+                    
+                    return (
+                      <React.Fragment key={index}>
+                        <View style={styles.listItem}>
+                          <View style={styles.listItemContent}>
+                            <Text style={styles.listItemTitle}>{gain.name}</Text>
+                            {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                          </View>
+                          <View style={styles.listItemActions}>
+                            <TouchableOpacity
+                              onPress={() => openEditModal('gainLoss', gain)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="pencil"
+                                android_material_icon_name="edit"
+                                size={20}
+                                color={colors.primary}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteItem('gainLoss', gain.id)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="trash"
+                                android_material_icon_name="delete"
+                                size={20}
+                                color={colors.error}
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              )}
+
+              {losses.length > 0 && (
+                <>
+                  <Text style={styles.sectionSubtitle}>Losses</Text>
+                  {losses.map((loss, index) => {
+                    const categoryText = loss.category ? `${loss.category}${loss.subCategory ? ` > ${loss.subCategory}` : ''}` : '';
+                    
+                    return (
+                      <React.Fragment key={index}>
+                        <View style={styles.listItem}>
+                          <View style={styles.listItemContent}>
+                            <Text style={styles.listItemTitle}>{loss.name}</Text>
+                            {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                          </View>
+                          <View style={styles.listItemActions}>
+                            <TouchableOpacity
+                              onPress={() => openEditModal('gainLoss', loss)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="pencil"
+                                android_material_icon_name="edit"
+                                size={20}
+                                color={colors.primary}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteItem('gainLoss', loss.id)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="trash"
+                                android_material_icon_name="delete"
+                                size={20}
+                                color={colors.error}
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              )}
+            </>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
   const renderNotifications = () => {
     const alarms = preferences.notificationAlarms || [];
 
@@ -842,6 +1016,26 @@ export default function SettingsScreen() {
           <View style={{ width: 24 }} />
         </View>
         <ScrollView style={styles.listContainer}>
+          {worthItTallies && worthItTallies.total > 0 && (
+            <>
+              <Text style={styles.sectionSubtitle}>Reflection Worth It Analysis</Text>
+              <View style={styles.reportCard}>
+                <View style={styles.reportHeader}>
+                  <Text style={styles.reportTitle}>Was it worth it?</Text>
+                </View>
+                <View style={styles.reportStats}>
+                  <Text style={styles.reportStat}>Total Reflections: {worthItTallies.total}</Text>
+                  <Text style={[styles.reportStat, { color: colors.success }]}>
+                    Worth It: {worthItTallies.worthIt} ({worthItTallies.total > 0 ? Math.round((worthItTallies.worthIt / worthItTallies.total) * 100) : 0}%)
+                  </Text>
+                  <Text style={[styles.reportStat, { color: colors.error }]}>
+                    Not Worth It: {worthItTallies.notWorthIt} ({worthItTallies.total > 0 ? Math.round((worthItTallies.notWorthIt / worthItTallies.total) * 100) : 0}%)
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
+
           <Text style={styles.sectionSubtitle}>Currency Balances</Text>
           {currencyBalances.length === 0 ? (
             <View style={styles.emptyState}>
@@ -1100,6 +1294,65 @@ export default function SettingsScreen() {
                 </>
               )}
 
+              {modalType === 'gainLoss' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name || ''}
+                      onChangeText={(value) => setFormData({ ...formData, name: value })}
+                      placeholder="Enter gain or loss name"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Type</Text>
+                    <View style={styles.optionsGrid}>
+                      {['Gain', 'Loss'].map((option, index) => {
+                        const isSelected = formData.type === option;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, type: option })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {option}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Category (Optional)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.category || ''}
+                      onChangeText={(value) => setFormData({ ...formData, category: value })}
+                      placeholder="e.g., Emotional, Physical, Spiritual"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Sub-Category (Optional)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.subCategory || ''}
+                      onChangeText={(value) => setFormData({ ...formData, subCategory: value })}
+                      placeholder="e.g., Confidence, Energy"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+                </>
+              )}
+
               {modalType === 'alarm' && (
                 <>
                   <View style={styles.formGroup}>
@@ -1248,6 +1501,7 @@ export default function SettingsScreen() {
           {currentSection === 'lifeAreas' && renderLifeAreas()}
           {currentSection === 'strategies' && renderStrategies()}
           {currentSection === 'currencies' && renderCurrencies()}
+          {currentSection === 'gainsLosses' && renderGainsLosses()}
           {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
           {currentSection === 'notifications' && renderNotifications()}
           {currentSection === 'reports' && renderReports()}
