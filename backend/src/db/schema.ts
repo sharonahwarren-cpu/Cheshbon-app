@@ -1,9 +1,10 @@
-import { pgTable, uuid, text, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, boolean, timestamp, jsonb, date } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.js';
 
 export const journalEntries = pgTable('journal_entries', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  entryDate: date('entry_date').notNull(),
   content: text('content').notNull(),
   mood: text('mood'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -74,6 +75,8 @@ export const userPreferences = pgTable('user_preferences', {
   notificationTime: text('notification_time'),
   notificationDays: text('notification_days').array(),
   notificationAlarms: jsonb('notification_alarms'),
+  reflectionCategoriesEnabled: boolean('reflection_categories_enabled').default(true).notNull(),
+  reflectionCategories: jsonb('reflection_categories'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -85,4 +88,20 @@ export const goalCompletions = pgTable('goal_completions', {
   isSuccess: boolean('is_success').notNull(),
   completedAt: timestamp('completed_at', { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const reflections = pgTable('reflections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  entryDate: date('entry_date').notNull(),
+  category: text('category'),
+  type: text('type').notNull(),
+  description: text('description').notNull(),
+  linkedGoalId: uuid('linked_goal_id').references(() => goals.id, { onDelete: 'set null' }),
+  outcome: text('outcome'),
+  currencyChange: jsonb('currency_change'),
+  lookupField1: text('lookup_field_1'),
+  lookupField2: text('lookup_field_2'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });

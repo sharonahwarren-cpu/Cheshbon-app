@@ -34,6 +34,8 @@ export function registerPreferencesRoutes(app: App) {
             notificationFrequency: null,
             notificationTime: null,
             notificationDays: null,
+            reflectionCategoriesEnabled: true,
+            reflectionCategories: JSON.stringify(['Action', 'Speech', 'Thought']),
           })
           .returning();
         preferences = newPreferences;
@@ -68,6 +70,8 @@ export function registerPreferencesRoutes(app: App) {
         dayOfWeek?: string;
         dayOfMonth?: number;
       }>;
+      reflectionCategoriesEnabled?: boolean;
+      reflectionCategories?: string[];
     };
 
     app.logger.info(
@@ -94,6 +98,8 @@ export function registerPreferencesRoutes(app: App) {
             notificationTime: body.notificationTime || null,
             notificationDays: (body.notificationDays?.length ? body.notificationDays : null) as string[] | null,
             notificationAlarms: body.notificationAlarms ? JSON.stringify(body.notificationAlarms) : null,
+            reflectionCategoriesEnabled: body.reflectionCategoriesEnabled ?? true,
+            reflectionCategories: body.reflectionCategories ? JSON.stringify(body.reflectionCategories) : JSON.stringify(['Action', 'Speech', 'Thought']),
           })
           .returning();
         app.logger.info({ userId: session.user.id }, 'User preferences created successfully');
@@ -106,6 +112,8 @@ export function registerPreferencesRoutes(app: App) {
       if (body.notificationTime !== undefined) updateData.notificationTime = body.notificationTime || null;
       if (body.notificationDays !== undefined) updateData.notificationDays = (body.notificationDays?.length ? body.notificationDays : null) as string[] | null;
       if (body.notificationAlarms !== undefined) updateData.notificationAlarms = body.notificationAlarms ? JSON.stringify(body.notificationAlarms) : null;
+      if (body.reflectionCategoriesEnabled !== undefined) updateData.reflectionCategoriesEnabled = body.reflectionCategoriesEnabled;
+      if (body.reflectionCategories !== undefined) updateData.reflectionCategories = body.reflectionCategories ? JSON.stringify(body.reflectionCategories) : null;
       updateData.updatedAt = new Date();
 
       const updatedPreferences = await app.db

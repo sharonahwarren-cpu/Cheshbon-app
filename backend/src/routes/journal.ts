@@ -39,10 +39,15 @@ export function registerJournalRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    const body = request.body as { content: string; mood?: string };
+    const body = request.body as { date: string; content: string; mood?: string };
+
+    if (!body.date || !body.content) {
+      app.logger.warn({ userId: session.user.id }, 'Missing required fields in POST journal');
+      return reply.status(400).send({ error: 'Missing required fields: date and content' });
+    }
 
     app.logger.info(
-      { userId: session.user.id, contentLength: body.content?.length, mood: body.mood },
+      { userId: session.user.id, date: body.date, contentLength: body.content?.length, mood: body.mood },
       'Creating journal entry'
     );
 
@@ -51,6 +56,7 @@ export function registerJournalRoutes(app: App) {
         .insert(schema.journalEntries)
         .values({
           userId: session.user.id,
+          entryDate: body.date,
           content: body.content,
           mood: body.mood || null,
         })

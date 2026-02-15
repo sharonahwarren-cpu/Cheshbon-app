@@ -2,12 +2,14 @@ import { createApplication } from "@specific-dev/framework";
 import * as appSchema from './db/schema.js';
 import * as authSchema from './db/auth-schema.js';
 import { registerJournalRoutes } from './routes/journal.js';
+import { registerJournalsRoutes } from './routes/journals.js';
 import { registerGoalRoutes } from './routes/goals.js';
 import { registerLifeAreasRoutes } from './routes/life-areas.js';
 import { registerStrategiesRoutes } from './routes/strategies.js';
 import { registerCurrenciesRoutes } from './routes/currencies.js';
 import { registerPreferencesRoutes } from './routes/preferences.js';
 import { registerReportsRoutes } from './routes/reports.js';
+import { registerReflectionsRoutes } from './routes/reflections.js';
 
 // Combine both schemas
 const schema = { ...appSchema, ...authSchema };
@@ -24,12 +26,14 @@ app.withAuth();
 // Register routes - add your route modules here
 // IMPORTANT: Always use registration functions to avoid circular dependency issues
 registerJournalRoutes(app);
+registerJournalsRoutes(app);
 registerGoalRoutes(app);
 registerLifeAreasRoutes(app);
 registerStrategiesRoutes(app);
 registerCurrenciesRoutes(app);
 registerPreferencesRoutes(app);
 registerReportsRoutes(app);
+registerReflectionsRoutes(app);
 
 await app.run();
 app.logger.info('Application running');
