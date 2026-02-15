@@ -59,6 +59,8 @@ interface NotificationAlarm {
 interface UserPreferences {
   notificationsEnabled: boolean;
   notificationAlarms?: NotificationAlarm[];
+  reflectionCategoriesEnabled?: boolean;
+  reflectionCategories?: string[];
 }
 
 interface CurrencyBalance {
@@ -72,7 +74,7 @@ interface CurrencyBalance {
   netBalance: number;
 }
 
-type SettingsSection = 'main' | 'lifeAreas' | 'strategies' | 'currencies' | 'notifications' | 'reports';
+type SettingsSection = 'main' | 'lifeAreas' | 'strategies' | 'currencies' | 'reflectionPrefs' | 'notifications' | 'reports';
 
 export default function SettingsScreen() {
   const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
@@ -85,6 +87,8 @@ export default function SettingsScreen() {
   const [preferences, setPreferences] = useState<UserPreferences>({
     notificationsEnabled: false,
     notificationAlarms: [],
+    reflectionCategoriesEnabled: true,
+    reflectionCategories: ['Action', 'Speech', 'Thought'],
   });
   const [currencyBalances, setCurrencyBalances] = useState<CurrencyBalance[]>([]);
 
@@ -143,7 +147,12 @@ export default function SettingsScreen() {
         ? goalsRes 
         : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
       
-      const prefsData = prefsRes?.data || prefsRes || { notificationsEnabled: false, notificationAlarms: [] };
+      const prefsData = prefsRes?.data || prefsRes || { 
+        notificationsEnabled: false, 
+        notificationAlarms: [],
+        reflectionCategoriesEnabled: true,
+        reflectionCategories: ['Action', 'Speech', 'Thought'],
+      };
       
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
       setStrategies(strategiesData);
@@ -361,6 +370,7 @@ export default function SettingsScreen() {
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
+      { title: 'Reflection Preferences', icon: 'edit-note', section: 'reflectionPrefs' as SettingsSection },
       { title: 'Notifications', icon: 'notifications', section: 'notifications' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
     ];
@@ -723,6 +733,94 @@ export default function SettingsScreen() {
               )}
             </>
           )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderReflectionPreferences = () => {
+    const allCategories = ['Action', 'Speech', 'Thought', 'Feeling'];
+    const selectedCategories = preferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+
+    const toggleCategory = (category: string) => {
+      const currentCategories = preferences.reflectionCategories || [];
+      const newCategories = currentCategories.includes(category)
+        ? currentCategories.filter(c => c !== category)
+        : [...currentCategories, category];
+      
+      setPreferences({ ...preferences, reflectionCategories: newCategories });
+    };
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Reflection Preferences</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ScrollView style={styles.formContainer}>
+          <View style={styles.formGroup}>
+            <View style={styles.switchRow}>
+              <Text style={styles.label}>Enable Categories in Reflections</Text>
+              <Switch
+                value={preferences.reflectionCategoriesEnabled !== false}
+                onValueChange={(value) => {
+                  setPreferences({ ...preferences, reflectionCategoriesEnabled: value });
+                }}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.background}
+              />
+            </View>
+            <Text style={styles.helperText}>
+              When enabled, you can categorize reflections as Action, Speech, Thought, or Feeling
+            </Text>
+          </View>
+
+          {preferences.reflectionCategoriesEnabled !== false && (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Available Categories</Text>
+              <Text style={styles.helperText}>
+                Select which categories you want to use in your reflections
+              </Text>
+              <View style={styles.optionsGrid}>
+                {allCategories.map((category, index) => {
+                  const isSelected = selectedCategories.includes(category);
+                  
+                  return (
+                    <React.Fragment key={index}>
+                      <TouchableOpacity
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => toggleCategory(category)}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {category}
+                        </Text>
+                      </TouchableOpacity>
+                    </React.Fragment>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.savePreferencesButton}
+            onPress={handleSavePreferences}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.background} />
+            ) : (
+              <Text style={styles.savePreferencesButtonText}>Save Preferences</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </View>
     );
@@ -1150,6 +1248,7 @@ export default function SettingsScreen() {
           {currentSection === 'lifeAreas' && renderLifeAreas()}
           {currentSection === 'strategies' && renderStrategies()}
           {currentSection === 'currencies' && renderCurrencies()}
+          {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
           {currentSection === 'notifications' && renderNotifications()}
           {currentSection === 'reports' && renderReports()}
         </>
@@ -1561,5 +1660,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  helperText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  savePreferencesButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  savePreferencesButtonText: {
+    color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

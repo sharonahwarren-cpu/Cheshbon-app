@@ -9,6 +9,10 @@ export default function TabLayout() {
         <Icon sf="house.fill" />
         <Label>Home</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger key="reflect" name="reflect">
+        <Icon sf="square.and.pencil" />
+        <Label>Reflect</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger key="settings" name="settings">
         <Icon sf="gear" />
         <Label>Settings</Label>

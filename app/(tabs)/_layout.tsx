@@ -12,6 +12,12 @@ export default function TabLayout() {
       label: 'Home',
     },
     {
+      name: 'reflect',
+      route: '/(tabs)/reflect',
+      icon: 'edit-note',
+      label: 'Reflect',
+    },
+    {
       name: 'settings',
       route: '/(tabs)/settings',
       icon: 'settings',
@@ -34,6 +40,7 @@ export default function TabLayout() {
         }}
       >
         <Stack.Screen key="home" name="(home)" />
+        <Stack.Screen key="reflect" name="reflect" />
         <Stack.Screen key="settings" name="settings" />
         <Stack.Screen key="profile" name="profile" />
       </Stack>
