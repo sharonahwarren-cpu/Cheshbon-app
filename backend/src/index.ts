@@ -7,6 +7,7 @@ import { registerLifeAreasRoutes } from './routes/life-areas.js';
 import { registerStrategiesRoutes } from './routes/strategies.js';
 import { registerCurrenciesRoutes } from './routes/currencies.js';
 import { registerPreferencesRoutes } from './routes/preferences.js';
+import { registerReportsRoutes } from './routes/reports.js';
 
 // Combine both schemas
 const schema = { ...appSchema, ...authSchema };
@@ -28,6 +29,7 @@ registerLifeAreasRoutes(app);
 registerStrategiesRoutes(app);
 registerCurrenciesRoutes(app);
 registerPreferencesRoutes(app);
+registerReportsRoutes(app);
 
 await app.run();
 app.logger.info('Application running');

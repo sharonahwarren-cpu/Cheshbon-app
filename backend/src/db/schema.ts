@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, boolean, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.js';
 
 export const journalEntries = pgTable('journal_entries', {
@@ -25,7 +25,6 @@ export const strategies = pgTable('strategies', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   description: text('description'),
-  isSuccessful: boolean('is_successful'),
   linkedGoalIds: uuid('linked_goal_ids').array(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
@@ -74,6 +73,16 @@ export const userPreferences = pgTable('user_preferences', {
   notificationFrequency: text('notification_frequency'),
   notificationTime: text('notification_time'),
   notificationDays: text('notification_days').array(),
+  notificationAlarms: jsonb('notification_alarms'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const goalCompletions = pgTable('goal_completions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  goalId: uuid('goal_id').notNull().references(() => goals.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  isSuccess: boolean('is_success').notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });

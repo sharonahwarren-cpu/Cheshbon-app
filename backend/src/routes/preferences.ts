@@ -60,10 +60,18 @@ export function registerPreferencesRoutes(app: App) {
       notificationFrequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
       notificationTime?: string;
       notificationDays?: string[];
+      notificationAlarms?: Array<{
+        id?: string;
+        name: string;
+        time: string;
+        frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+        dayOfWeek?: string;
+        dayOfMonth?: number;
+      }>;
     };
 
     app.logger.info(
-      { userId: session.user.id, notificationsEnabled: body.notificationsEnabled },
+      { userId: session.user.id, notificationsEnabled: body.notificationsEnabled, alarmCount: body.notificationAlarms?.length },
       'Updating user preferences'
     );
 
@@ -85,6 +93,7 @@ export function registerPreferencesRoutes(app: App) {
             notificationFrequency: body.notificationFrequency || null,
             notificationTime: body.notificationTime || null,
             notificationDays: (body.notificationDays?.length ? body.notificationDays : null) as string[] | null,
+            notificationAlarms: body.notificationAlarms ? JSON.stringify(body.notificationAlarms) : null,
           })
           .returning();
         app.logger.info({ userId: session.user.id }, 'User preferences created successfully');
@@ -96,6 +105,7 @@ export function registerPreferencesRoutes(app: App) {
       if (body.notificationFrequency !== undefined) updateData.notificationFrequency = body.notificationFrequency || null;
       if (body.notificationTime !== undefined) updateData.notificationTime = body.notificationTime || null;
       if (body.notificationDays !== undefined) updateData.notificationDays = (body.notificationDays?.length ? body.notificationDays : null) as string[] | null;
+      if (body.notificationAlarms !== undefined) updateData.notificationAlarms = body.notificationAlarms ? JSON.stringify(body.notificationAlarms) : null;
       updateData.updatedAt = new Date();
 
       const updatedPreferences = await app.db
