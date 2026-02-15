@@ -109,8 +109,11 @@ export function registerReflectionsRoutes(app: App) {
       description: string;
       linkedGoalId?: string;
       outcome?: string;
-      lookupField1?: string;
-      lookupField2?: string;
+      gainedIds?: string[];
+      lostIds?: string[];
+      wasWorthIt?: boolean;
+      additionalThoughts?: string;
+      strategyEffectiveness?: Array<{ strategyId: string; worked: boolean }>;
     };
 
     if (!body.date || !body.type || !body.description) {
@@ -138,11 +141,42 @@ export function registerReflectionsRoutes(app: App) {
           linkedGoalId: body.linkedGoalId || null,
           outcome: body.outcome || null,
           currencyChange: currencyChange ? JSON.stringify(currencyChange) : null,
-          lookupField1: body.lookupField1 || null,
-          lookupField2: body.lookupField2 || null,
+          gainedIds: (body.gainedIds?.length ? body.gainedIds : null) as string[] | null,
+          lostIds: (body.lostIds?.length ? body.lostIds : null) as string[] | null,
+          wasWorthIt: body.wasWorthIt || null,
+          additionalThoughts: body.additionalThoughts || null,
+          strategyEffectiveness: body.strategyEffectiveness ? JSON.stringify(body.strategyEffectiveness) : null,
         })
         .returning();
       const reflection = reflections[0];
+
+      // Update strategy effectiveness counts if provided
+      if (body.strategyEffectiveness && body.strategyEffectiveness.length > 0) {
+        for (const strategy of body.strategyEffectiveness) {
+          const strategyRecord = await app.db
+            .select()
+            .from(schema.strategies)
+            .where(eq(schema.strategies.id, strategy.strategyId))
+            .limit(1);
+
+          if (strategyRecord.length) {
+            const updateData: Record<string, unknown> = {
+              timesUsed: (strategyRecord[0].timesUsed || 0) + 1,
+            };
+            if (strategy.worked) {
+              updateData.successCount = (strategyRecord[0].successCount || 0) + 1;
+            } else {
+              updateData.failureCount = (strategyRecord[0].failureCount || 0) + 1;
+            }
+            updateData.updatedAt = new Date();
+
+            await app.db
+              .update(schema.strategies)
+              .set(updateData)
+              .where(eq(schema.strategies.id, strategy.strategyId));
+          }
+        }
+      }
 
       app.logger.info({ userId: session.user.id, reflectionId: reflection.id, date: body.date }, 'Reflection created');
       return reflection;
@@ -167,8 +201,11 @@ export function registerReflectionsRoutes(app: App) {
       description?: string;
       linkedGoalId?: string;
       outcome?: string;
-      lookupField1?: string;
-      lookupField2?: string;
+      gainedIds?: string[];
+      lostIds?: string[];
+      wasWorthIt?: boolean;
+      additionalThoughts?: string;
+      strategyEffectiveness?: Array<{ strategyId: string; worked: boolean }>;
     };
 
     app.logger.info({ userId: session.user.id, reflectionId: id }, 'Updating reflection');
@@ -211,8 +248,11 @@ export function registerReflectionsRoutes(app: App) {
       if (body.description !== undefined) updateData.description = body.description;
       if (body.linkedGoalId !== undefined) updateData.linkedGoalId = body.linkedGoalId || null;
       if (body.outcome !== undefined) updateData.outcome = body.outcome || null;
-      if (body.lookupField1 !== undefined) updateData.lookupField1 = body.lookupField1 || null;
-      if (body.lookupField2 !== undefined) updateData.lookupField2 = body.lookupField2 || null;
+      if (body.gainedIds !== undefined) updateData.gainedIds = (body.gainedIds?.length ? body.gainedIds : null) as string[] | null;
+      if (body.lostIds !== undefined) updateData.lostIds = (body.lostIds?.length ? body.lostIds : null) as string[] | null;
+      if (body.wasWorthIt !== undefined) updateData.wasWorthIt = body.wasWorthIt;
+      if (body.additionalThoughts !== undefined) updateData.additionalThoughts = body.additionalThoughts || null;
+      if (body.strategyEffectiveness !== undefined) updateData.strategyEffectiveness = body.strategyEffectiveness ? JSON.stringify(body.strategyEffectiveness) : null;
       updateData.currencyChange = currencyChange;
       updateData.updatedAt = new Date();
 

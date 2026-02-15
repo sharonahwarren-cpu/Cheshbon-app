@@ -92,4 +92,43 @@ export function registerReportsRoutes(app: App) {
       throw error;
     }
   });
+
+  // GET /api/reports/reflection-worth-it-tallies - Get reflection worth-it tallies
+  app.fastify.get('/api/reports/reflection-worth-it-tallies', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Fetching reflection worth-it tallies');
+
+    try {
+      // Get all reflections for the user with wasWorthIt value
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(eq(schema.reflections.userId, session.user.id));
+
+      // Count worth it vs not worth it
+      let worthIt = 0;
+      let notWorthIt = 0;
+
+      for (const reflection of reflections) {
+        if (reflection.wasWorthIt === true) {
+          worthIt++;
+        } else if (reflection.wasWorthIt === false) {
+          notWorthIt++;
+        }
+      }
+
+      const total = worthIt + notWorthIt;
+
+      app.logger.info({ userId: session.user.id, worthIt, notWorthIt, total }, 'Reflection worth-it tallies generated successfully');
+      return { worthIt, notWorthIt, total };
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to generate reflection worth-it tallies');
+      throw error;
+    }
+  });
 }

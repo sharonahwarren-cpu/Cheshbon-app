@@ -23,8 +23,14 @@ export function registerStrategiesRoutes(app: App) {
         .where(eq(schema.strategies.userId, session.user.id))
         .orderBy(desc(schema.strategies.createdAt));
 
-      app.logger.info({ userId: session.user.id, count: strategies.length }, 'Strategies fetched successfully');
-      return strategies;
+      // Calculate success rate for each strategy
+      const strategiesWithRate = strategies.map(strategy => ({
+        ...strategy,
+        successRate: strategy.timesUsed > 0 ? (strategy.successCount / strategy.timesUsed * 100) : 0,
+      }));
+
+      app.logger.info({ userId: session.user.id, count: strategiesWithRate.length }, 'Strategies fetched successfully');
+      return strategiesWithRate;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch strategies');
       throw error;
@@ -42,11 +48,12 @@ export function registerStrategiesRoutes(app: App) {
     const body = request.body as {
       name: string;
       description?: string;
+      category?: string;
       linkedGoalIds?: string[];
     };
 
     app.logger.info(
-      { userId: session.user.id, name: body.name },
+      { userId: session.user.id, name: body.name, category: body.category },
       'Creating strategy'
     );
 
@@ -57,6 +64,7 @@ export function registerStrategiesRoutes(app: App) {
           userId: session.user.id,
           name: body.name,
           description: body.description || null,
+          category: body.category || null,
           linkedGoalIds: (body.linkedGoalIds?.length ? body.linkedGoalIds : null) as string[] | null,
         })
         .returning();
@@ -85,6 +93,7 @@ export function registerStrategiesRoutes(app: App) {
     const body = request.body as {
       name?: string;
       description?: string;
+      category?: string;
       linkedGoalIds?: string[];
     };
 
@@ -114,6 +123,7 @@ export function registerStrategiesRoutes(app: App) {
       const updateData: Record<string, unknown> = {};
       if (body.name !== undefined) updateData.name = body.name;
       if (body.description !== undefined) updateData.description = body.description || null;
+      if (body.category !== undefined) updateData.category = body.category || null;
       if (body.linkedGoalIds !== undefined) updateData.linkedGoalIds = (body.linkedGoalIds?.length ? body.linkedGoalIds : null) as string[] | null;
       updateData.updatedAt = new Date();
 

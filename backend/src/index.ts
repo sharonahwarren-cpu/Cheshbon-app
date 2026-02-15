@@ -10,6 +10,7 @@ import { registerCurrenciesRoutes } from './routes/currencies.js';
 import { registerPreferencesRoutes } from './routes/preferences.js';
 import { registerReportsRoutes } from './routes/reports.js';
 import { registerReflectionsRoutes } from './routes/reflections.js';
+import { registerGainsLossesRoutes } from './routes/gains-losses.js';
 
 // Combine both schemas
 const schema = { ...appSchema, ...authSchema };
@@ -34,6 +35,7 @@ registerCurrenciesRoutes(app);
 registerPreferencesRoutes(app);
 registerReportsRoutes(app);
 registerReflectionsRoutes(app);
+registerGainsLossesRoutes(app);
 
 await app.run();
 app.logger.info('Application running');
