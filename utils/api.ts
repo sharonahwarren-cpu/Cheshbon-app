@@ -78,9 +78,16 @@ export const apiCall = async <T = any>(
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
-      const text = await response.text();
-      console.error("[API] Error response:", response.status, text);
-      throw new Error(`API error: ${response.status} - ${text}`);
+      let errorMessage = `API error: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch {
+        const text = await response.text();
+        errorMessage = text || errorMessage;
+      }
+      console.error("[API] Error response:", response.status, errorMessage);
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();

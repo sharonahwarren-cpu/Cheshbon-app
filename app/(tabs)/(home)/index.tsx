@@ -93,15 +93,21 @@ export default function HomeScreen() {
     try {
       // Fetch journal entries
       console.log("[API] Fetching journal entries from /api/journal");
-      const journalData = await authenticatedGet<JournalEntry[]>("/api/journal");
+      const journalData = await authenticatedGet<any>("/api/journal");
       console.log("[API] Journal entries received:", journalData);
-      setJournalEntries(journalData || []);
+      
+      // Handle both direct array and { data: array } response formats
+      const entries = Array.isArray(journalData) ? journalData : (journalData?.data || []);
+      setJournalEntries(entries);
       
       // Fetch goals
       console.log("[API] Fetching goals from /api/goals");
-      const goalsData = await authenticatedGet<Goal[]>("/api/goals");
+      const goalsData = await authenticatedGet<any>("/api/goals");
       console.log("[API] Goals received:", goalsData);
-      setGoals(goalsData || []);
+      
+      // Handle both direct array and { data: array } response formats
+      const goals = Array.isArray(goalsData) ? goalsData : (goalsData?.data || []);
+      setGoals(goals);
     } catch (error: any) {
       console.error("[API] Error loading data:", error);
       showError(error.message || "Failed to load data");

@@ -103,10 +103,10 @@ export default function CreateGoalScreen() {
     try {
       // Load all data in parallel for better performance
       const [goalsData, lifeAreasData, strategiesData, currenciesData] = await Promise.all([
-        authenticatedGet<Goal[]>('/api/goals'),
-        authenticatedGet<LifeArea[]>('/api/life-areas'),
-        authenticatedGet<Strategy[]>('/api/strategies'),
-        authenticatedGet<Currency[]>('/api/currencies'),
+        authenticatedGet<any>('/api/goals'),
+        authenticatedGet<any>('/api/life-areas'),
+        authenticatedGet<any>('/api/strategies'),
+        authenticatedGet<any>('/api/currencies'),
       ]);
       
       console.log('[API] Goals loaded:', goalsData);
@@ -114,10 +114,16 @@ export default function CreateGoalScreen() {
       console.log('[API] Strategies loaded:', strategiesData);
       console.log('[API] Currencies loaded:', currenciesData);
       
-      setGoals(goalsData || []);
-      setLifeAreas(lifeAreasData || []);
-      setStrategies(strategiesData || []);
-      setCurrencies(currenciesData || []);
+      // Handle both direct array and { data: array } response formats
+      const goals = Array.isArray(goalsData) ? goalsData : (goalsData?.data || []);
+      const lifeAreas = Array.isArray(lifeAreasData) ? lifeAreasData : (lifeAreasData?.data || []);
+      const strategies = Array.isArray(strategiesData) ? strategiesData : (strategiesData?.data || []);
+      const currencies = Array.isArray(currenciesData) ? currenciesData : (currenciesData?.data || []);
+      
+      setGoals(goals);
+      setLifeAreas(lifeAreas);
+      setStrategies(strategies);
+      setCurrencies(currencies);
     } catch (error: any) {
       console.error('[API] Error loading form data:', error);
       showError(error.message || 'Failed to load form data');

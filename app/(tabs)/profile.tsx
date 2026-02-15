@@ -56,23 +56,27 @@ export default function ProfileScreen() {
     try {
       // Fetch journal entries
       console.log("[API] Fetching journal entries for stats");
-      const journalData = await authenticatedGet<JournalEntry[]>("/api/journal");
+      const journalData = await authenticatedGet<any>("/api/journal");
       
       // Fetch goals
       console.log("[API] Fetching goals for stats");
-      const goalsData = await authenticatedGet<Goal[]>("/api/goals");
+      const goalsData = await authenticatedGet<any>("/api/goals");
       
-      const completedGoals = goalsData.filter(g => g.completed).length;
+      // Handle both direct array and { data: array } response formats
+      const entries = Array.isArray(journalData) ? journalData : (journalData?.data || []);
+      const goals = Array.isArray(goalsData) ? goalsData : (goalsData?.data || []);
+      
+      const completedGoals = goals.filter((g: Goal) => g.completed).length;
       
       setStats({
-        journalCount: journalData.length,
-        goalCount: goalsData.length,
+        journalCount: entries.length,
+        goalCount: goals.length,
         completedCount: completedGoals,
       });
       
       console.log("[API] Stats loaded:", {
-        journalCount: journalData.length,
-        goalCount: goalsData.length,
+        journalCount: entries.length,
+        goalCount: goals.length,
         completedCount: completedGoals,
       });
     } catch (error: any) {
