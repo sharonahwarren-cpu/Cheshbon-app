@@ -41,6 +41,8 @@ interface Currency {
   id: string;
   name: string;
   symbol?: string;
+  onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
+  onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
 
 type BehaviorCategory = 'Action' | 'Speech' | 'Thought';
@@ -49,7 +51,7 @@ type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Mont
 
 export default function CreateGoalScreen() {
   const router = useRouter();
-  const { id: editingGoalId } = useLocalSearchParams<{ id?: string }>();
+  const { id: editingGoalId, fromReflection } = useLocalSearchParams<{ id?: string; fromReflection?: string }>();
 
   // Form state
   const [title, setTitle] = useState('');
@@ -250,7 +252,12 @@ export default function CreateGoalScreen() {
       }
       
       setTimeout(() => {
-        router.back();
+        if (fromReflection === 'true') {
+          // Navigate back to reflection screen to continue the reflection
+          router.push('/(tabs)/reflect');
+        } else {
+          router.back();
+        }
       }, 1500);
     } catch (error: any) {
       console.error('[API] Error saving goal:', error);
@@ -284,6 +291,28 @@ export default function CreateGoalScreen() {
     const currency = currencies.find(c => c.id === currencyId);
     const displayName = currency ? currency.name : 'Select Currency';
     return displayName;
+  };
+
+  // Get the action verb for reward based on currency's onSuccess setting
+  const getRewardActionText = () => {
+    if (!rewardCurrencyId) return 'earn';
+    const currency = currencies.find(c => c.id === rewardCurrencyId);
+    if (!currency || !currency.onSuccess) return 'earn';
+    
+    if (currency.onSuccess === 'ADD') return 'earn';
+    if (currency.onSuccess === 'SUBTRACT') return 'lose';
+    return 'earn';
+  };
+
+  // Get the action verb for consequence based on currency's onFailure setting
+  const getConsequenceActionText = () => {
+    if (!consequenceCurrencyId) return 'lose';
+    const currency = currencies.find(c => c.id === consequenceCurrencyId);
+    if (!currency || !currency.onFailure) return 'lose';
+    
+    if (currency.onFailure === 'ADD') return 'gain';
+    if (currency.onFailure === 'SUBTRACT') return 'lose';
+    return 'lose';
   };
 
   const renderLifeAreaHierarchy = (areas: LifeArea[], depth: number = 0) => {
@@ -334,6 +363,8 @@ export default function CreateGoalScreen() {
 
   const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
   const submitButtonTitle = editingGoalId ? 'Update Goal' : 'Create Goal';
+  const rewardActionText = getRewardActionText();
+  const consequenceActionText = getConsequenceActionText();
 
   if (loading) {
     return (
@@ -557,7 +588,7 @@ export default function CreateGoalScreen() {
                   placeholderTextColor={colors.textSecondary}
                   keyboardType="number-pad"
                 />
-                <Text style={styles.subLabel}>successes, earn</Text>
+                <Text style={styles.subLabel}>successes, {rewardActionText}</Text>
                 <TextInput
                   style={styles.smallInput}
                   value={rewardAmount}
@@ -602,7 +633,7 @@ export default function CreateGoalScreen() {
                   placeholderTextColor={colors.textSecondary}
                   keyboardType="number-pad"
                 />
-                <Text style={styles.subLabel}>failures, lose</Text>
+                <Text style={styles.subLabel}>failures, {consequenceActionText}</Text>
                 <TextInput
                   style={styles.smallInput}
                   value={consequenceAmount}
