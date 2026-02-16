@@ -84,6 +84,14 @@ interface Goal {
   consequenceAmount?: number;
 }
 
+interface Currency {
+  id: string;
+  name: string;
+  symbol?: string;
+  onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
+  onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
+}
+
 interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
@@ -104,6 +112,7 @@ export default function ReflectScreen() {
   const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
 
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -123,10 +132,11 @@ export default function ReflectScreen() {
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
       
-      const [journalRes, reflectionsRes, goalsRes, prefsRes, gainsLossesRes, strategiesRes] = await Promise.all([
+      const [journalRes, reflectionsRes, goalsRes, currenciesRes, prefsRes, gainsLossesRes, strategiesRes] = await Promise.all([
         authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
         authenticatedGet('/api/goals'),
+        authenticatedGet('/api/currencies'),
         authenticatedGet('/api/user-preferences'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
@@ -135,6 +145,7 @@ export default function ReflectScreen() {
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
@@ -143,6 +154,7 @@ export default function ReflectScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       setGoals(goalsData);
+      setCurrencies(currenciesData);
       setUserPreferences(prefsData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
@@ -645,6 +657,7 @@ export default function ReflectScreen() {
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
           goals={goals}
+          currencies={currencies}
           userPreferences={userPreferences}
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
@@ -701,6 +714,7 @@ interface AddReflectionModalProps {
   onSave: (reflection: Reflection) => void;
   selectedDate: Date;
   goals: Goal[];
+  currencies: Currency[];
   userPreferences: UserPreferences;
   editingReflection: Reflection | null;
   gainsLosses: GainLoss[];
@@ -713,6 +727,7 @@ function AddReflectionModal({
   onSave,
   selectedDate,
   goals,
+  currencies,
   userPreferences,
   editingReflection,
   gainsLosses,
@@ -720,6 +735,9 @@ function AddReflectionModal({
 }: AddReflectionModalProps) {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
+  const descriptionInputRef = useRef<TextInput>(null);
+  const additionalThoughtsInputRef = useRef<TextInput>(null);
+  
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
   const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Proactive');
@@ -757,6 +775,33 @@ function AddReflectionModal({
   });
 
   const selectedGoal = goals.find(g => g.id === linkedGoalId);
+  
+  const currencyBalanceInfo = (() => {
+    if (!linkedGoalId || !outcome || !selectedGoal) return null;
+    
+    const isSuccess = outcome === 'success';
+    const currencyId = isSuccess ? selectedGoal.rewardCurrencyId : selectedGoal.consequenceCurrencyId;
+    const amount = isSuccess ? selectedGoal.rewardAmount : selectedGoal.consequenceAmount;
+    
+    if (!currencyId || !amount) return null;
+    
+    const currency = currencies.find(c => c.id === currencyId);
+    if (!currency) return null;
+    
+    const operation = isSuccess ? currency.onSuccess : currency.onFailure;
+    if (!operation || operation === 'NONE') return null;
+    
+    const isAdding = operation === 'ADD';
+    const displayAmount = amount;
+    const displaySymbol = currency.symbol || currency.name;
+    
+    return {
+      operation: isAdding ? 'add' : 'subtract',
+      amount: displayAmount,
+      symbol: displaySymbol,
+      name: currency.name,
+    };
+  })();
 
   const getDescriptionPlaceholder = () => {
     if (!category) {
@@ -1075,13 +1120,14 @@ function AddReflectionModal({
                     <Text style={styles.label}>Description</Text>
                   </View>
                   <TextInput
+                    ref={descriptionInputRef}
                     style={[styles.input, styles.textArea]}
                     value={description}
                     onChangeText={setDescription}
                     placeholder={getDescriptionPlaceholder()}
                     placeholderTextColor={colors.textSecondary}
                     multiline
-                    numberOfLines={4}
+                    numberOfLines={6}
                     onFocus={() => {
                       setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -1205,6 +1251,34 @@ function AddReflectionModal({
                         );
                       })}
                     </View>
+                    
+                    {currencyBalanceInfo && (
+                      <View style={styles.currencyBalanceInfo}>
+                        <View style={styles.currencyBalanceHeader}>
+                          <IconSymbol
+                            ios_icon_name="dollarsign.circle.fill"
+                            android_material_icon_name="account-balance-wallet"
+                            size={20}
+                            color={currencyBalanceInfo.operation === 'add' ? colors.success : colors.error}
+                          />
+                          <Text style={styles.currencyBalanceTitle}>Currency Impact</Text>
+                        </View>
+                        <View style={styles.currencyBalanceAmount}>
+                          <Text style={[
+                            styles.currencyBalanceText,
+                            currencyBalanceInfo.operation === 'add' ? styles.currencyBalancePositive : styles.currencyBalanceNegative
+                          ]}>
+                            {currencyBalanceInfo.operation === 'add' ? '+' : '-'}
+                            {currencyBalanceInfo.amount} {currencyBalanceInfo.symbol}
+                          </Text>
+                        </View>
+                        <Text style={styles.currencyBalanceDescription}>
+                          {currencyBalanceInfo.operation === 'add' 
+                            ? `You will gain ${currencyBalanceInfo.amount} ${currencyBalanceInfo.name}` 
+                            : `You will lose ${currencyBalanceInfo.amount} ${currencyBalanceInfo.name}`}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 )}
               </React.Fragment>
@@ -1412,13 +1486,14 @@ function AddReflectionModal({
                     <Text style={styles.label}>Additional Thoughts (Optional)</Text>
                   </View>
                   <TextInput
+                    ref={additionalThoughtsInputRef}
                     style={[styles.input, styles.textArea]}
                     value={additionalThoughts}
                     onChangeText={setAdditionalThoughts}
                     placeholder="Any additional reflections..."
                     placeholderTextColor={colors.textSecondary}
                     multiline
-                    numberOfLines={3}
+                    numberOfLines={6}
                     onFocus={() => {
                       setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -2203,12 +2278,13 @@ const styles = StyleSheet.create({
   },
   modalBodyContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   modalFooter: {
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    backgroundColor: colors.background,
   },
   formGroup: {
     marginBottom: 20,
@@ -2239,8 +2315,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   textArea: {
-    minHeight: 100,
-    maxHeight: 150,
+    minHeight: 140,
+    maxHeight: 200,
     textAlignVertical: 'top',
   },
   optionsGrid: {
@@ -2348,6 +2424,42 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.primary,
     fontWeight: '600',
+  },
+  currencyBalanceInfo: {
+    marginTop: 12,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 2,
+    borderColor: colors.primary + '40',
+  },
+  currencyBalanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  currencyBalanceTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  currencyBalanceAmount: {
+    marginBottom: 6,
+  },
+  currencyBalanceText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  currencyBalancePositive: {
+    color: colors.success,
+  },
+  currencyBalanceNegative: {
+    color: colors.error,
+  },
+  currencyBalanceDescription: {
+    fontSize: 13,
+    color: colors.textSecondary,
   },
   strategyListItem: {
     padding: 14,
