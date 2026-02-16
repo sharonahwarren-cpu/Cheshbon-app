@@ -14,7 +14,7 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import "react-native-reanimated";
-import { Stack, Redirect } from "expo-router";
+import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 SplashScreen.preventAutoHideAsync();
@@ -51,8 +51,7 @@ export default function RootLayout() {
             <SystemBars style="auto" />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              {/* Auth screens hidden temporarily - uncomment when ready to publish */}
-              {/* <Stack.Screen name="auth" options={{ headerShown: false }} /> */}
+              <Stack.Screen name="auth" options={{ headerShown: false }} />
               <Stack.Screen name="auth-popup" options={{ headerShown: false }} />
               <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
               <Stack.Screen name="+not-found" />
