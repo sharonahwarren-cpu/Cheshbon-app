@@ -301,6 +301,13 @@ export default function SettingsScreen() {
         category: undefined,
         subCategory: undefined,
       });
+    } else if (type === 'currency') {
+      setFormData({
+        name: '',
+        symbol: '',
+        onSuccess: 'ADD',
+        onFailure: 'ADD',
+      });
     } else {
       setFormData({});
     }
@@ -536,6 +543,17 @@ export default function SettingsScreen() {
       showError(error.message || 'Failed to claim currency');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getCurrencyActionText = (currency: Currency, isSuccess: boolean): string => {
+    const action = isSuccess ? currency.onSuccess : currency.onFailure;
+    if (action === 'ADD') {
+      return isSuccess ? 'Gain' : 'Increase Debt';
+    } else if (action === 'SUBTRACT') {
+      return isSuccess ? 'Reduce Debt' : 'Lose';
+    } else {
+      return 'No Change';
     }
   };
 
@@ -844,8 +862,10 @@ export default function SettingsScreen() {
           ) : (
             currencies.map((currency, index) => {
               const symbolText = currency.symbol || '';
-              const onSuccessText = `On Success: ${currency.onSuccess || 'NONE'}`;
-              const onFailureText = `On Failure: ${currency.onFailure || 'NONE'}`;
+              const onSuccessAction = getCurrencyActionText(currency, true);
+              const onFailureAction = getCurrencyActionText(currency, false);
+              const onSuccessText = `On Success: ${onSuccessAction}`;
+              const onFailureText = `On Failure: ${onFailureAction}`;
               
               return (
                 <React.Fragment key={index}>
@@ -1459,18 +1479,23 @@ export default function SettingsScreen() {
 
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>On Success (Reward)</Text>
+                    <Text style={styles.helperText}>How does this currency change when a goal succeeds?</Text>
                     <View style={styles.optionsGrid}>
-                      {['ADD', 'SUBTRACT', 'NONE'].map((option, index) => {
-                        const isSelected = formData.onSuccess === option;
+                      {[
+                        { value: 'ADD', label: 'Add (Gain Currency)' },
+                        { value: 'SUBTRACT', label: 'Subtract (Reduce Debt)' },
+                        { value: 'NONE', label: 'None (No Reward)' }
+                      ].map((option, index) => {
+                        const isSelected = formData.onSuccess === option.value;
                         
                         return (
                           <React.Fragment key={index}>
                             <TouchableOpacity
                               style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                              onPress={() => setFormData({ ...formData, onSuccess: option })}
+                              onPress={() => setFormData({ ...formData, onSuccess: option.value })}
                             >
                               <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                                {option}
+                                {option.label}
                               </Text>
                             </TouchableOpacity>
                           </React.Fragment>
@@ -1481,18 +1506,23 @@ export default function SettingsScreen() {
 
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>On Failure (Consequence)</Text>
+                    <Text style={styles.helperText}>How does this currency change when a goal is struggled with?</Text>
                     <View style={styles.optionsGrid}>
-                      {['ADD', 'SUBTRACT', 'NONE'].map((option, index) => {
-                        const isSelected = formData.onFailure === option;
+                      {[
+                        { value: 'ADD', label: 'Add (Increase Debt)' },
+                        { value: 'SUBTRACT', label: 'Subtract (Lose Currency)' },
+                        { value: 'NONE', label: 'None (No Consequence)' }
+                      ].map((option, index) => {
+                        const isSelected = formData.onFailure === option.value;
                         
                         return (
                           <React.Fragment key={index}>
                             <TouchableOpacity
                               style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                              onPress={() => setFormData({ ...formData, onFailure: option })}
+                              onPress={() => setFormData({ ...formData, onFailure: option.value })}
                             >
                               <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                                {option}
+                                {option.label}
                               </Text>
                             </TouchableOpacity>
                           </React.Fragment>
