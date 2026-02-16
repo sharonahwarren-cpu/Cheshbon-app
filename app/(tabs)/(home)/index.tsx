@@ -318,7 +318,14 @@ export default function HomeScreen() {
                   const netBalanceColor = balance.netBalance >= 0 ? colors.success : colors.error;
                   
                   return (
-                    <View key={index} style={styles.reportCard}>
+                    <TouchableOpacity 
+                      key={index} 
+                      style={styles.reportCard}
+                      onPress={() => {
+                        console.log("Navigating to reflections for currency:", balance.currencyId);
+                        router.push('/reflect');
+                      }}
+                    >
                       <View style={styles.reportHeader}>
                         <Text style={styles.reportTitle}>{balance.currencyName}</Text>
                         {symbolText && <Text style={styles.reportSymbol}>{symbolText}</Text>}
@@ -329,7 +336,16 @@ export default function HomeScreen() {
                           {netBalanceText}
                         </Text>
                       </View>
-                    </View>
+                      <View style={styles.drillDownHint}>
+                        <IconSymbol
+                          ios_icon_name="chevron.right"
+                          android_material_icon_name="arrow-forward"
+                          size={16}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.drillDownText}>Tap to view reflections</Text>
+                      </View>
+                    </TouchableOpacity>
                   );
                 })}
               </>
@@ -338,7 +354,13 @@ export default function HomeScreen() {
             {winsVsLosses && (
               <>
                 <Text style={styles.sectionTitle}>Wins vs Losses</Text>
-                <View style={styles.reportCard}>
+                <TouchableOpacity 
+                  style={styles.reportCard}
+                  onPress={() => {
+                    console.log("Navigating to reflections");
+                    router.push('/reflect');
+                  }}
+                >
                   <View style={styles.reportRow}>
                     <Text style={styles.reportLabel}>Wins:</Text>
                     <Text style={[styles.reportValue, { color: colors.success }]}>
@@ -351,14 +373,29 @@ export default function HomeScreen() {
                       {winsVsLosses.losses}
                     </Text>
                   </View>
-                </View>
+                  <View style={styles.drillDownHint}>
+                    <IconSymbol
+                      ios_icon_name="chevron.right"
+                      android_material_icon_name="arrow-forward"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.drillDownText}>Tap to view reflections</Text>
+                  </View>
+                </TouchableOpacity>
               </>
             )}
 
             {successVsStruggles && (
               <>
                 <Text style={styles.sectionTitle}>Success vs Struggles</Text>
-                <View style={styles.reportCard}>
+                <TouchableOpacity 
+                  style={styles.reportCard}
+                  onPress={() => {
+                    console.log("Navigating to reflections");
+                    router.push('/reflect');
+                  }}
+                >
                   <View style={styles.reportRow}>
                     <Text style={styles.reportLabel}>Successes:</Text>
                     <Text style={[styles.reportValue, { color: colors.success }]}>
@@ -371,14 +408,29 @@ export default function HomeScreen() {
                       {successVsStruggles.struggles}
                     </Text>
                   </View>
-                </View>
+                  <View style={styles.drillDownHint}>
+                    <IconSymbol
+                      ios_icon_name="chevron.right"
+                      android_material_icon_name="arrow-forward"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.drillDownText}>Tap to view reflections</Text>
+                  </View>
+                </TouchableOpacity>
               </>
             )}
 
             {reflectionStats && (
               <>
                 <Text style={styles.sectionTitle}>Reflection Statistics</Text>
-                <View style={styles.reportCard}>
+                <TouchableOpacity 
+                  style={styles.reportCard}
+                  onPress={() => {
+                    console.log("Navigating to reflections");
+                    router.push('/reflect');
+                  }}
+                >
                   <View style={styles.reportRow}>
                     <Text style={styles.reportLabel}>Total Reflections:</Text>
                     <Text style={styles.reportValue}>{reflectionStats.totalReflections}</Text>
@@ -397,7 +449,16 @@ export default function HomeScreen() {
                       {reflectionStats.worthItPercentage}%
                     </Text>
                   </View>
-                </View>
+                  <View style={styles.drillDownHint}>
+                    <IconSymbol
+                      ios_icon_name="chevron.right"
+                      android_material_icon_name="arrow-forward"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.drillDownText}>Tap to view reflections</Text>
+                  </View>
+                </TouchableOpacity>
               </>
             )}
 
@@ -416,7 +477,13 @@ export default function HomeScreen() {
             {gainsLossesSummary && (
               <>
                 <Text style={styles.sectionTitle}>Gains and Losses</Text>
-                <View style={styles.reportCard}>
+                <TouchableOpacity 
+                  style={styles.reportCard}
+                  onPress={() => {
+                    console.log("Navigating to reflections");
+                    router.push('/reflect');
+                  }}
+                >
                   <View style={styles.reportRow}>
                     <Text style={styles.reportLabel}>Total Gains:</Text>
                     <Text style={[styles.reportValue, { color: colors.success }]}>
@@ -461,14 +528,29 @@ export default function HomeScreen() {
                       })}
                     </>
                   )}
-                </View>
+                  <View style={styles.drillDownHint}>
+                    <IconSymbol
+                      ios_icon_name="chevron.right"
+                      android_material_icon_name="arrow-forward"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.drillDownText}>Tap to view reflections</Text>
+                  </View>
+                </TouchableOpacity>
               </>
             )}
 
             {behaviorCounts && (
               <>
                 <Text style={styles.sectionTitle}>Behavior Entries</Text>
-                <View style={styles.reportCard}>
+                <TouchableOpacity 
+                  style={styles.reportCard}
+                  onPress={() => {
+                    console.log("Navigating to reflections");
+                    router.push('/reflect');
+                  }}
+                >
                   <View style={styles.reportRow}>
                     <Text style={styles.reportLabel}>Action Entries:</Text>
                     <Text style={styles.reportValue}>{behaviorCounts.actionEntries}</Text>
@@ -481,7 +563,16 @@ export default function HomeScreen() {
                     <Text style={styles.reportLabel}>Thought Entries:</Text>
                     <Text style={styles.reportValue}>{behaviorCounts.thoughtEntries}</Text>
                   </View>
-                </View>
+                  <View style={styles.drillDownHint}>
+                    <IconSymbol
+                      ios_icon_name="chevron.right"
+                      android_material_icon_name="arrow-forward"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.drillDownText}>Tap to view reflections</Text>
+                  </View>
+                </TouchableOpacity>
               </>
             )}
 
@@ -494,7 +585,17 @@ export default function HomeScreen() {
                   const struggleText = `${goal.struggleCount} struggles`;
                   
                   return (
-                    <View key={index} style={styles.reportCard}>
+                    <TouchableOpacity 
+                      key={index} 
+                      style={styles.reportCard}
+                      onPress={() => {
+                        console.log("Navigating to reflections for goal:", goal.goalId);
+                        router.push({
+                          pathname: '/reflect',
+                          params: { goalId: goal.goalId },
+                        });
+                      }}
+                    >
                       <Text style={styles.goalTitle}>{goal.goalTitle}</Text>
                       <View style={styles.progressBar}>
                         <View style={[styles.progressFill, { width: progressText }]} />
@@ -515,7 +616,16 @@ export default function HomeScreen() {
                           {goal.struggleCount}
                         </Text>
                       </View>
-                    </View>
+                      <View style={styles.drillDownHint}>
+                        <IconSymbol
+                          ios_icon_name="chevron.right"
+                          android_material_icon_name="arrow-forward"
+                          size={16}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.drillDownText}>Tap to view reflections</Text>
+                      </View>
+                    </TouchableOpacity>
                   );
                 })}
               </>
@@ -814,6 +924,21 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: colors.primary,
     borderRadius: 4,
+  },
+  drillDownHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  drillDownText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',

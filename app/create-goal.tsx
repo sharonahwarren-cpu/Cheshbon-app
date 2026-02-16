@@ -11,12 +11,12 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { LoadingButton } from '@/components/LoadingButton';
-import { authenticatedGet, authenticatedPost } from '@/utils/api';
+import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
 
 interface Goal {
   id: string;
@@ -49,6 +49,7 @@ type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Mont
 
 export default function CreateGoalScreen() {
   const router = useRouter();
+  const { id: editingGoalId } = useLocalSearchParams<{ id?: string }>();
 
   // Form state
   const [title, setTitle] = useState('');
@@ -98,16 +99,24 @@ export default function CreateGoalScreen() {
   }, []);
 
   const loadData = async () => {
-    console.log('Loading form data for goal creation');
+    console.log('Loading form data for goal creation/editing');
     setLoading(true);
     try {
       // Load all data in parallel for better performance
-      const [goalsData, lifeAreasData, strategiesData, currenciesData] = await Promise.all([
+      const promises = [
         authenticatedGet<any>('/api/goals'),
         authenticatedGet<any>('/api/life-areas'),
         authenticatedGet<any>('/api/strategies'),
         authenticatedGet<any>('/api/currencies'),
-      ]);
+      ];
+
+      // If editing, also load the goal details
+      if (editingGoalId) {
+        promises.push(authenticatedGet<any>(`/api/goals/${editingGoalId}`));
+      }
+
+      const results = await Promise.all(promises);
+      const [goalsData, lifeAreasData, strategiesData, currenciesData, goalDetailsData] = results;
       
       console.log('[API] Goals loaded:', goalsData);
       console.log('[API] Life areas loaded:', lifeAreasData);
@@ -124,6 +133,36 @@ export default function CreateGoalScreen() {
       setLifeAreas(lifeAreas);
       setStrategies(strategies);
       setCurrencies(currencies);
+
+      // If editing, populate the form with existing goal data
+      if (editingGoalId && goalDetailsData) {
+        const goalDetails = goalDetailsData?.data || goalDetailsData;
+        console.log('[API] Goal details loaded for editing:', goalDetails);
+        
+        setTitle(goalDetails.title || '');
+        setDescription(goalDetails.description || '');
+        setParentGoalId(goalDetails.parentGoalId);
+        setLifeAreaId(goalDetails.lifeAreaId);
+        setBehaviorCategories(goalDetails.behaviorCategories || []);
+        setType(goalDetails.type || 'Proactive');
+        setStrategyIds(goalDetails.strategyIds || []);
+        setScheduleType(goalDetails.scheduleType || 'Always Active');
+        setScheduleTimesPerDay(goalDetails.scheduleTimesPerDay?.toString() || '');
+        
+        // Load reward data
+        if (goalDetails.rewardCurrencyId) {
+          setRewardCurrencyId(goalDetails.rewardCurrencyId);
+          setRewardSuccesses(goalDetails.rewardSuccesses?.toString() || '');
+          setRewardAmount(goalDetails.rewardAmount?.toString() || '');
+        }
+        
+        // Load consequence data
+        if (goalDetails.consequenceCurrencyId) {
+          setConsequenceCurrencyId(goalDetails.consequenceCurrencyId);
+          setConsequenceFailures(goalDetails.consequenceFailures?.toString() || '');
+          setConsequenceAmount(goalDetails.consequenceAmount?.toString() || '');
+        }
+      }
     } catch (error: any) {
       console.error('[API] Error loading form data:', error);
       showError(error.message || 'Failed to load form data');
@@ -163,7 +202,7 @@ export default function CreateGoalScreen() {
   };
 
   const handleSubmit = async () => {
-    console.log('Submitting goal creation form');
+    console.log(editingGoalId ? 'Submitting goal update form' : 'Submitting goal creation form');
     
     if (!title.trim()) {
       showError('Goal title is required');
@@ -186,33 +225,36 @@ export default function CreateGoalScreen() {
 
       // Add reward if all fields are filled
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
-        goalData.reward = {
-          currencyId: rewardCurrencyId,
-          successes: parseInt(rewardSuccesses),
-          amount: parseInt(rewardAmount),
-        };
+        goalData.rewardCurrencyId = rewardCurrencyId;
+        goalData.rewardSuccesses = parseInt(rewardSuccesses);
+        goalData.rewardAmount = parseInt(rewardAmount);
       }
 
       // Add consequence if all fields are filled
       if (consequenceCurrencyId && consequenceFailures && consequenceAmount) {
-        goalData.consequence = {
-          currencyId: consequenceCurrencyId,
-          failures: parseInt(consequenceFailures),
-          amount: parseInt(consequenceAmount),
-        };
+        goalData.consequenceCurrencyId = consequenceCurrencyId;
+        goalData.consequenceFailures = parseInt(consequenceFailures);
+        goalData.consequenceAmount = parseInt(consequenceAmount);
       }
 
-      console.log('[API] Creating goal with data:', goalData);
-      const createdGoal = await authenticatedPost('/api/goals', goalData);
-      console.log('[API] Goal created successfully:', createdGoal);
+      if (editingGoalId) {
+        console.log('[API] Updating goal with data:', goalData);
+        const updatedGoal = await authenticatedPut(`/api/goals/${editingGoalId}`, goalData);
+        console.log('[API] Goal updated successfully:', updatedGoal);
+        showSuccess('Goal updated successfully!');
+      } else {
+        console.log('[API] Creating goal with data:', goalData);
+        const createdGoal = await authenticatedPost('/api/goals', goalData);
+        console.log('[API] Goal created successfully:', createdGoal);
+        showSuccess('Goal created successfully!');
+      }
       
-      showSuccess('Goal created successfully!');
       setTimeout(() => {
         router.back();
       }, 1500);
     } catch (error: any) {
-      console.error('[API] Error creating goal:', error);
-      showError(error.message || 'Failed to create goal');
+      console.error('[API] Error saving goal:', error);
+      showError(error.message || 'Failed to save goal');
     } finally {
       setSubmitting(false);
     }
@@ -290,12 +332,15 @@ export default function CreateGoalScreen() {
     'Yearly',
   ];
 
+  const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
+  const submitButtonTitle = editingGoalId ? 'Update Goal' : 'Create Goal';
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <Stack.Screen
           options={{
-            title: 'Create Goal',
+            title: screenTitle,
             headerShown: true,
           }}
         />
@@ -310,7 +355,7 @@ export default function CreateGoalScreen() {
     <SafeAreaView style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Create Goal',
+          title: screenTitle,
           headerShown: true,
         }}
       />
@@ -577,7 +622,7 @@ export default function CreateGoalScreen() {
         {/* Submit Button */}
         <View style={styles.buttonContainer}>
           <LoadingButton
-            title="Create Goal"
+            title={submitButtonTitle}
             onPress={handleSubmit}
             loading={submitting}
             style={styles.submitButton}
