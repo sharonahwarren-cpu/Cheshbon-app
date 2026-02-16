@@ -53,6 +53,7 @@ interface Reflection {
   type: 'Restraint' | 'Proactive';
   description: string;
   linkedGoalId?: string;
+  linkedGoalTitle?: string;
   outcome?: 'success' | 'struggled';
   currencyChange?: {
     currencyId: string;
@@ -252,6 +253,28 @@ export default function ReflectScreen() {
 
   const dateDisplay = formatDate(selectedDate);
 
+  const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
+  const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+
+  const groupedReflections: Record<string, Reflection[]> = {};
+  if (categoriesEnabled) {
+    availableCategories.forEach(cat => {
+      groupedReflections[cat] = reflections.filter(r => r.category === cat);
+    });
+    groupedReflections['Other'] = reflections.filter(r => !r.category || !availableCategories.includes(r.category));
+  } else {
+    groupedReflections['All'] = reflections;
+  }
+
+  const getCategoryIcon = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -326,7 +349,6 @@ export default function ReflectScreen() {
               placeholder="Write your thoughts for today..."
               placeholderTextColor={colors.textSecondary}
               multiline
-              numberOfLines={8}
               textAlignVertical="top"
               returnKeyType="done"
               blurOnSubmit={true}
@@ -393,137 +415,203 @@ export default function ReflectScreen() {
                 </Text>
               </View>
             ) : (
-              reflections.map((reflection, index) => {
-                const categoryText = reflection.category || 'General';
-                const typeText = reflection.type;
-                const outcomeText = reflection.outcome ? 
-                  (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
-                  'No outcome';
+              Object.entries(groupedReflections).map(([category, categoryReflections], catIndex) => {
+                if (categoryReflections.length === 0) return null;
+                
+                const categoryIcon = getCategoryIcon(category);
                 
                 return (
-                  <React.Fragment key={index}>
-                    <View style={styles.reflectionCard}>
-                      <View style={styles.reflectionHeader}>
-                        <View style={styles.reflectionBadges}>
-                          {reflection.category && (
-                            <View style={styles.badge}>
-                              <Text style={styles.badgeText}>{categoryText}</Text>
-                            </View>
-                          )}
-                          <View style={[styles.badge, styles.badgeType]}>
-                            <Text style={styles.badgeText}>{typeText}</Text>
-                          </View>
-                        </View>
-                        <View style={styles.reflectionActions}>
-                          <TouchableOpacity
-                            onPress={() => openEditReflectionModal(reflection)}
-                            style={styles.iconButton}
-                          >
-                            <IconSymbol
-                              ios_icon_name="pencil"
-                              android_material_icon_name="edit"
-                              size={20}
-                              color={colors.primary}
-                            />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => handleDeleteReflection(reflection.id)}
-                            style={styles.iconButton}
-                          >
-                            <IconSymbol
-                              ios_icon_name="trash"
-                              android_material_icon_name="delete"
-                              size={20}
-                              color={colors.error}
-                            />
-                          </TouchableOpacity>
+                  <React.Fragment key={catIndex}>
+                    {categoriesEnabled && category !== 'All' && (
+                      <View style={styles.categoryHeader}>
+                        <IconSymbol
+                          ios_icon_name={categoryIcon.ios}
+                          android_material_icon_name={categoryIcon.android}
+                          size={20}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.categoryTitle}>{category}</Text>
+                        <View style={styles.categoryBadge}>
+                          <Text style={styles.categoryBadgeText}>{categoryReflections.length}</Text>
                         </View>
                       </View>
+                    )}
+                    
+                    {categoryReflections.map((reflection, index) => {
+                      const typeText = reflection.type;
+                      const outcomeText = reflection.outcome ? 
+                        (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
+                        null;
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <View style={styles.reflectionCard}>
+                            <View style={styles.reflectionHeader}>
+                              <View style={styles.reflectionBadges}>
+                                <View style={[styles.badge, reflection.type === 'Proactive' ? styles.badgeProactive : styles.badgeRestraint]}>
+                                  <Text style={styles.badgeText}>{typeText}</Text>
+                                </View>
+                                {reflection.outcome && (
+                                  <View style={[styles.badge, reflection.outcome === 'success' ? styles.badgeSuccess : styles.badgeStruggle]}>
+                                    <Text style={styles.badgeText}>{outcomeText}</Text>
+                                  </View>
+                                )}
+                              </View>
+                              <View style={styles.reflectionActions}>
+                                <TouchableOpacity
+                                  onPress={() => openEditReflectionModal(reflection)}
+                                  style={styles.iconButton}
+                                >
+                                  <IconSymbol
+                                    ios_icon_name="pencil"
+                                    android_material_icon_name="edit"
+                                    size={20}
+                                    color={colors.primary}
+                                  />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => handleDeleteReflection(reflection.id)}
+                                  style={styles.iconButton}
+                                >
+                                  <IconSymbol
+                                    ios_icon_name="trash"
+                                    android_material_icon_name="delete"
+                                    size={20}
+                                    color={colors.error}
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
 
-                      <Text style={styles.reflectionDescription}>{reflection.description}</Text>
+                            <Text style={styles.reflectionDescription}>{reflection.description}</Text>
 
-                      {reflection.linkedGoalId && (
-                        <View style={styles.reflectionMeta}>
-                          <IconSymbol
-                            ios_icon_name="target"
-                            android_material_icon_name="flag"
-                            size={16}
-                            color={colors.primary}
-                          />
-                          <Text style={styles.reflectionMetaText}>
-                            Linked to goal • {outcomeText}
-                          </Text>
-                        </View>
-                      )}
-
-                      {reflection.currencyChange && (
-                        <View style={styles.currencyChange}>
-                          <Text style={styles.currencyChangeText}>
-                            {reflection.currencyChange.operation === 'add' ? '+' : '-'}
-                            {reflection.currencyChange.amount} {reflection.currencyChange.currencySymbol || ''}
-                          </Text>
-                        </View>
-                      )}
-
-                      {(reflection.gainedIds && reflection.gainedIds.length > 0) && (
-                        <View style={styles.gainsLossesSection}>
-                          <Text style={styles.gainsLossesTitle}>What was Gained:</Text>
-                          {reflection.gainedIds.map((gainId, idx) => {
-                            const gain = gainsLosses.find(gl => gl.id === gainId);
-                            return gain ? (
-                              <Text key={idx} style={styles.gainsLossesItem}>• {gain.name}</Text>
-                            ) : null;
-                          })}
-                        </View>
-                      )}
-
-                      {(reflection.lostIds && reflection.lostIds.length > 0) && (
-                        <View style={styles.gainsLossesSection}>
-                          <Text style={styles.gainsLossesTitle}>What was Lost:</Text>
-                          {reflection.lostIds.map((lossId, idx) => {
-                            const loss = gainsLosses.find(gl => gl.id === lossId);
-                            return loss ? (
-                              <Text key={idx} style={styles.gainsLossesItem}>• {loss.name}</Text>
-                            ) : null;
-                          })}
-                        </View>
-                      )}
-
-                      {reflection.wasWorthIt !== undefined && (
-                        <View style={styles.worthItSection}>
-                          <Text style={styles.worthItLabel}>Was it worth it?</Text>
-                          <Text style={[styles.worthItValue, reflection.wasWorthIt ? styles.worthItYes : styles.worthItNo]}>
-                            {reflection.wasWorthIt ? 'Yes, worth it' : 'No, not worth it'}
-                          </Text>
-                        </View>
-                      )}
-
-                      {reflection.additionalThoughts && (
-                        <View style={styles.additionalThoughtsSection}>
-                          <Text style={styles.additionalThoughtsLabel}>Additional Thoughts:</Text>
-                          <Text style={styles.additionalThoughtsText}>{reflection.additionalThoughts}</Text>
-                        </View>
-                      )}
-
-                      {(reflection.strategyEffectiveness && reflection.strategyEffectiveness.length > 0) && (
-                        <View style={styles.strategiesSection}>
-                          <Text style={styles.strategiesTitle}>Strategies Used:</Text>
-                          {reflection.strategyEffectiveness.map((se, idx) => {
-                            const strategy = strategies.find(s => s.id === se.strategyId);
-                            const strategyName = strategy?.name || 'Unknown Strategy';
-                            
-                            return (
-                              <View key={idx} style={styles.strategyItem}>
-                                <Text style={styles.strategyName}>• {strategyName}</Text>
-                                <Text style={[styles.strategyStatus, se.worked ? styles.strategyWorked : styles.strategyDidntWork]}>
-                                  {se.worked ? 'Worked' : "Didn't work"}
+                            {reflection.linkedGoalId && (
+                              <View style={styles.linkedGoalSection}>
+                                <View style={styles.linkedGoalHeader}>
+                                  <IconSymbol
+                                    ios_icon_name="target"
+                                    android_material_icon_name="flag"
+                                    size={16}
+                                    color={colors.primary}
+                                  />
+                                  <Text style={styles.linkedGoalLabel}>Linked Goal</Text>
+                                </View>
+                                <Text style={styles.linkedGoalTitle}>
+                                  {reflection.linkedGoalTitle || goals.find(g => g.id === reflection.linkedGoalId)?.title || 'Unknown Goal'}
                                 </Text>
                               </View>
-                            );
-                          })}
-                        </View>
-                      )}
-                    </View>
+                            )}
+
+                            {reflection.currencyChange && (
+                              <View style={styles.currencyChange}>
+                                <Text style={styles.currencyChangeText}>
+                                  {reflection.currencyChange.operation === 'add' ? '+' : '-'}
+                                  {reflection.currencyChange.amount} {reflection.currencyChange.currencySymbol || ''}
+                                </Text>
+                              </View>
+                            )}
+
+                            {(reflection.gainedIds && reflection.gainedIds.length > 0) && (
+                              <View style={styles.gainsLossesSection}>
+                                <View style={styles.gainsLossesHeader}>
+                                  <IconSymbol
+                                    ios_icon_name="arrow.up.circle.fill"
+                                    android_material_icon_name="trending-up"
+                                    size={16}
+                                    color={colors.success}
+                                  />
+                                  <Text style={styles.gainsLossesTitle}>Gained</Text>
+                                </View>
+                                <View style={styles.gainsLossesList}>
+                                  {reflection.gainedIds.map((gainId, idx) => {
+                                    const gain = gainsLosses.find(gl => gl.id === gainId);
+                                    const gainName = gain?.name || 'Unknown';
+                                    return gain ? (
+                                      <View key={idx} style={styles.gainLossBadge}>
+                                        <Text style={styles.gainLossBadgeText}>{gainName}</Text>
+                                      </View>
+                                    ) : null;
+                                  })}
+                                </View>
+                              </View>
+                            )}
+
+                            {(reflection.lostIds && reflection.lostIds.length > 0) && (
+                              <View style={styles.gainsLossesSection}>
+                                <View style={styles.gainsLossesHeader}>
+                                  <IconSymbol
+                                    ios_icon_name="arrow.down.circle.fill"
+                                    android_material_icon_name="trending-down"
+                                    size={16}
+                                    color={colors.error}
+                                  />
+                                  <Text style={styles.gainsLossesTitle}>Lost</Text>
+                                </View>
+                                <View style={styles.gainsLossesList}>
+                                  {reflection.lostIds.map((lossId, idx) => {
+                                    const loss = gainsLosses.find(gl => gl.id === lossId);
+                                    const lossName = loss?.name || 'Unknown';
+                                    return loss ? (
+                                      <View key={idx} style={[styles.gainLossBadge, styles.lossBadge]}>
+                                        <Text style={styles.gainLossBadgeText}>{lossName}</Text>
+                                      </View>
+                                    ) : null;
+                                  })}
+                                </View>
+                              </View>
+                            )}
+
+                            {reflection.wasWorthIt !== undefined && (
+                              <View style={styles.worthItSection}>
+                                <IconSymbol
+                                  ios_icon_name={reflection.wasWorthIt ? "checkmark.circle.fill" : "xmark.circle.fill"}
+                                  android_material_icon_name={reflection.wasWorthIt ? "check-circle" : "cancel"}
+                                  size={16}
+                                  color={reflection.wasWorthIt ? colors.success : colors.error}
+                                />
+                                <Text style={[styles.worthItValue, reflection.wasWorthIt ? styles.worthItYes : styles.worthItNo]}>
+                                  {reflection.wasWorthIt ? 'Worth it' : 'Not worth it'}
+                                </Text>
+                              </View>
+                            )}
+
+                            {reflection.additionalThoughts && (
+                              <View style={styles.additionalThoughtsSection}>
+                                <Text style={styles.additionalThoughtsLabel}>Additional Thoughts</Text>
+                                <Text style={styles.additionalThoughtsText}>{reflection.additionalThoughts}</Text>
+                              </View>
+                            )}
+
+                            {(reflection.strategyEffectiveness && reflection.strategyEffectiveness.length > 0) && (
+                              <View style={styles.strategiesSection}>
+                                <View style={styles.strategiesHeader}>
+                                  <IconSymbol
+                                    ios_icon_name="lightbulb.fill"
+                                    android_material_icon_name="lightbulb"
+                                    size={16}
+                                    color={colors.primary}
+                                  />
+                                  <Text style={styles.strategiesTitle}>Strategies</Text>
+                                </View>
+                                <View style={styles.strategiesList}>
+                                  {reflection.strategyEffectiveness.map((se, idx) => {
+                                    const strategy = strategies.find(s => s.id === se.strategyId);
+                                    const strategyName = strategy?.name || 'Unknown Strategy';
+                                    
+                                    return (
+                                      <View key={idx} style={styles.strategyBadge}>
+                                        <Text style={styles.strategyBadgeText}>{strategyName}</Text>
+                                        <View style={[styles.strategyStatusDot, se.worked ? styles.strategyWorkedDot : styles.strategyDidntWorkDot]} />
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                              </View>
+                            )}
+                          </View>
+                        </React.Fragment>
+                      );
+                    })}
                   </React.Fragment>
                 );
               })
@@ -630,7 +718,6 @@ function AddReflectionModal({
   const [showGainsPicker, setShowGainsPicker] = useState(false);
   const [showLossesPicker, setShowLossesPicker] = useState(false);
   const [showStrategyPicker, setShowStrategyPicker] = useState(false);
-  const [showCreateGoalModal, setShowCreateGoalModal] = useState(false);
   const [showCreateGainModal, setShowCreateGainModal] = useState(false);
   const [showCreateLossModal, setShowCreateLossModal] = useState(false);
   const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
@@ -676,11 +763,13 @@ function AddReflectionModal({
       alert('Please enter a description');
       return;
     }
+    Keyboard.dismiss();
     setStep(step + 1);
   };
 
   const handleBack = () => {
     if (step > 1) {
+      Keyboard.dismiss();
       setStep(step - 1);
     }
   };
@@ -727,7 +816,6 @@ function AddReflectionModal({
   };
 
   const handleCreateGoal = () => {
-    setShowCreateGoalModal(false);
     onClose();
     router.push('/create-goal');
   };
@@ -837,6 +925,7 @@ function AddReflectionModal({
       <KeyboardAvoidingView 
         behavior="padding"
         style={styles.modalOverlay}
+        keyboardVerticalOffset={0}
       >
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -859,7 +948,11 @@ function AddReflectionModal({
             <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
           </View>
 
-          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            style={styles.modalBody} 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {step === 1 && (
               <React.Fragment>
                 {categoriesEnabled && (
@@ -1018,7 +1111,7 @@ function AddReflectionModal({
                         })}
                         <TouchableOpacity
                           style={styles.createNewButton}
-                          onPress={() => setShowCreateGoalModal(true)}
+                          onPress={handleCreateGoal}
                         >
                           <IconSymbol
                             ios_icon_name="plus.circle.fill"
@@ -1481,36 +1574,6 @@ function AddReflectionModal({
       </KeyboardAvoidingView>
 
       <Modal
-        visible={showCreateGoalModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCreateGoalModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
-            <Text style={styles.alertTitle}>Create New Goal</Text>
-            <Text style={styles.alertMessage}>
-              You'll be redirected to the goal creation screen. Your current reflection will be saved as a draft.
-            </Text>
-            <View style={styles.alertButtons}>
-              <TouchableOpacity
-                style={[styles.alertButton, styles.alertButtonSecondary]}
-                onPress={() => setShowCreateGoalModal(false)}
-              >
-                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.alertButton}
-                onPress={handleCreateGoal}
-              >
-                <Text style={styles.alertButtonText}>Continue</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
         visible={showCreateGainModal}
         transparent
         animationType="fade"
@@ -1787,11 +1850,38 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
   },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  categoryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    flex: 1,
+  },
+  categoryBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  categoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.background,
+  },
   reflectionCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: '#000',
@@ -1808,22 +1898,30 @@ const styles = StyleSheet.create({
   },
   reflectionBadges: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     flex: 1,
     flexWrap: 'wrap',
   },
   badge: {
-    backgroundColor: colors.primary + '20',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  badgeType: {
+  badgeProactive: {
+    backgroundColor: colors.primary + '20',
+  },
+  badgeRestraint: {
     backgroundColor: colors.secondary + '20',
   },
+  badgeSuccess: {
+    backgroundColor: colors.success + '20',
+  },
+  badgeStruggle: {
+    backgroundColor: colors.error + '20',
+  },
   badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
     color: colors.primary,
   },
   reflectionActions: {
@@ -1834,67 +1932,94 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   reflectionDescription: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text,
     marginBottom: 12,
-    lineHeight: 24,
+    lineHeight: 22,
   },
-  reflectionMeta: {
+  linkedGoalSection: {
+    backgroundColor: colors.primary + '10',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  linkedGoalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  reflectionMetaText: {
+  linkedGoalLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  linkedGoalTitle: {
     fontSize: 14,
-    color: colors.textSecondary,
+    fontWeight: '600',
+    color: colors.text,
   },
   currencyChange: {
     backgroundColor: colors.success + '20',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 8,
     alignSelf: 'flex-start',
     marginBottom: 8,
   },
   currencyChangeText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.success,
   },
   gainsLossesSection: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  gainsLossesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
   gainsLossesTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 6,
   },
-  gainsLossesItem: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 4,
+  gainsLossesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  gainLossBadge: {
+    backgroundColor: colors.success + '20',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  lossBadge: {
+    backgroundColor: colors.error + '20',
+  },
+  gainLossBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
   },
   worthItSection: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  worthItLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
+    gap: 6,
   },
   worthItValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   worthItYes: {
@@ -1904,58 +2029,68 @@ const styles = StyleSheet.create({
     color: colors.error,
   },
   additionalThoughtsSection: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   additionalThoughtsLabel: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: colors.text,
-    marginBottom: 6,
+    color: colors.textSecondary,
+    marginBottom: 4,
   },
   additionalThoughtsText: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: colors.text,
     lineHeight: 20,
   },
   strategiesSection: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 8,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  strategiesTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 6,
-  },
-  strategyItem: {
+  strategiesHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 6,
+    marginBottom: 8,
   },
-  strategyName: {
-    fontSize: 14,
-    color: colors.textSecondary,
+  strategiesTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
   },
-  strategyStatus: {
+  strategiesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  strategyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary + '10',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  strategyBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    color: colors.text,
+  },
+  strategyStatusDot: {
+    width: 8,
+    height: 8,
     borderRadius: 4,
   },
-  strategyWorked: {
-    color: colors.success,
-    backgroundColor: colors.success + '20',
+  strategyWorkedDot: {
+    backgroundColor: colors.success,
   },
-  strategyDidntWork: {
-    color: colors.error,
-    backgroundColor: colors.error + '20',
+  strategyDidntWorkDot: {
+    backgroundColor: colors.error,
   },
   modalOverlay: {
     flex: 1,
