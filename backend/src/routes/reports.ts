@@ -29,14 +29,14 @@ export function registerReportsRoutes(app: App) {
         .from(schema.goals)
         .where(eq(schema.goals.userId, session.user.id));
 
-      // Get all completions for the user
-      const completions = await app.db
-        .select()
-        .from(schema.goalCompletions)
-        .where(eq(schema.goalCompletions.userId, session.user.id));
-
       // Build a map of goals for quick lookup
       const goalMap = new Map(userGoals.map(g => [g.id, g]));
+
+      // Get all reflections for the user
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(eq(schema.reflections.userId, session.user.id));
 
       // Calculate balances for each currency
       const balances = userCurrencies.map(currency => {
@@ -44,13 +44,14 @@ export function registerReportsRoutes(app: App) {
         let lost = 0;
         let debtAdded = 0;
         let debtReduced = 0;
+        const reflectionIds = [];
 
-        // Process all completions
-        for (const completion of completions) {
-          const goal = goalMap.get(completion.goalId);
+        // Process all reflections
+        for (const reflection of reflections) {
+          const goal = goalMap.get(reflection.linkedGoalId);
           if (!goal) continue;
 
-          if (completion.isSuccess) {
+          if (reflection.outcome === 'success') {
             // Success: check reward currency
             if (goal.rewardCurrencyId === currency.id && goal.rewardAmount) {
               if (currency.onSuccess === 'ADD') {
@@ -58,8 +59,9 @@ export function registerReportsRoutes(app: App) {
               } else if (currency.onSuccess === 'SUBTRACT') {
                 lost += goal.rewardAmount;
               }
+              reflectionIds.push(reflection.id);
             }
-          } else {
+          } else if (reflection.outcome === 'struggled') {
             // Failure: check consequence currency
             if (goal.consequenceCurrencyId === currency.id && goal.consequenceAmount) {
               if (currency.onFailure === 'ADD') {
@@ -67,6 +69,7 @@ export function registerReportsRoutes(app: App) {
               } else if (currency.onFailure === 'SUBTRACT') {
                 debtReduced += goal.consequenceAmount;
               }
+              reflectionIds.push(reflection.id);
             }
           }
         }
@@ -82,6 +85,7 @@ export function registerReportsRoutes(app: App) {
           debtAdded,
           debtReduced,
           netBalance,
+          reflectionIds,
         };
       });
 
@@ -166,7 +170,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/success-vs-struggles - Get success vs struggle counts from goal completions
+  // GET /api/reports/success-vs-struggles - Get success vs struggle counts from reflections
   app.fastify.get('/api/reports/success-vs-struggles', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -177,23 +181,29 @@ export function registerReportsRoutes(app: App) {
     app.logger.info({ userId: session.user.id }, 'Fetching success vs struggles report');
 
     try {
-      const completions = await app.db
+      const reflections = await app.db
         .select()
-        .from(schema.goalCompletions)
-        .where(eq(schema.goalCompletions.userId, session.user.id));
+        .from(schema.reflections)
+        .where(eq(schema.reflections.userId, session.user.id));
 
       let successes = 0;
       let struggles = 0;
+      const reflectionIds = [];
 
-      for (const completion of completions) {
-        if (completion.isSuccess) successes++;
-        else struggles++;
+      for (const reflection of reflections) {
+        if (reflection.outcome === 'success') {
+          successes++;
+          reflectionIds.push(reflection.id);
+        } else if (reflection.outcome === 'struggled') {
+          struggles++;
+          reflectionIds.push(reflection.id);
+        }
       }
 
       const total = successes + struggles;
 
       app.logger.info({ userId: session.user.id, successes, struggles, total }, 'Success vs struggles report generated');
-      return { successes, struggles, total };
+      return { successes, struggles, total, reflectionIds };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to generate success vs struggles report');
       throw error;
@@ -388,11 +398,18 @@ export function registerReportsRoutes(app: App) {
       const result = goals.map(goal => {
         let successCount = 0;
         let struggleCount = 0;
+        const successReflectionIds: string[] = [];
+        const struggleReflectionIds: string[] = [];
 
         for (const reflection of reflections) {
           if (reflection.linkedGoalId === goal.id) {
-            if (reflection.outcome === 'success') successCount++;
-            else if (reflection.outcome === 'struggled') struggleCount++;
+            if (reflection.outcome === 'success') {
+              successCount++;
+              successReflectionIds.push(reflection.id);
+            } else if (reflection.outcome === 'struggled') {
+              struggleCount++;
+              struggleReflectionIds.push(reflection.id);
+            }
           }
         }
 
@@ -402,6 +419,8 @@ export function registerReportsRoutes(app: App) {
           progress: goal.progress,
           successCount,
           struggleCount,
+          successReflectionIds,
+          struggleReflectionIds,
         };
       });
 

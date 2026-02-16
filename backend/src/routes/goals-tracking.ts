@@ -156,7 +156,27 @@ export function registerGoalsTrackingRoutes(app: App) {
       // Get today's date
       const today = new Date().toISOString().split('T')[0];
 
-      // Count today's successes
+      // Create a new reflection entry for this success
+      const reflections = await app.db
+        .insert(schema.reflections)
+        .values({
+          userId: session.user.id,
+          entryDate: today,
+          linkedGoalId: id,
+          outcome: 'success',
+          type: 'Proactive',
+          category: 'Action',
+          description: 'Quick success entry',
+        })
+        .returning();
+
+      if (!reflections.length) {
+        throw new Error('Failed to create reflection entry');
+      }
+
+      app.logger.info({ userId: session.user.id, goalId: id, reflectionId: reflections[0].id }, 'Reflection entry created for success');
+
+      // Count today's successes after creating the new entry
       const todayReflections = await app.db
         .select()
         .from(schema.reflections)
@@ -214,7 +234,27 @@ export function registerGoalsTrackingRoutes(app: App) {
       // Get today's date
       const today = new Date().toISOString().split('T')[0];
 
-      // Count today's struggles
+      // Create a new reflection entry for this struggle
+      const reflections = await app.db
+        .insert(schema.reflections)
+        .values({
+          userId: session.user.id,
+          entryDate: today,
+          linkedGoalId: id,
+          outcome: 'struggled',
+          type: 'Restraint',
+          category: 'Action',
+          description: 'Quick struggle entry',
+        })
+        .returning();
+
+      if (!reflections.length) {
+        throw new Error('Failed to create reflection entry');
+      }
+
+      app.logger.info({ userId: session.user.id, goalId: id, reflectionId: reflections[0].id }, 'Reflection entry created for struggle');
+
+      // Count today's struggles after creating the new entry
       const todayReflections = await app.db
         .select()
         .from(schema.reflections)

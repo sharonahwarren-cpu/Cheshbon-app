@@ -313,4 +313,44 @@ export function registerReflectionsRoutes(app: App) {
       throw error;
     }
   });
+
+  // GET /api/reflections/:id - Get a single reflection by ID
+  app.fastify.get('/api/reflections/:id', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { id } = request.params as { id: string };
+
+    app.logger.info({ userId: session.user.id, reflectionId: id }, 'Fetching reflection');
+
+    try {
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(eq(schema.reflections.id, id))
+        .limit(1);
+
+      if (!reflections.length) {
+        app.logger.warn({ userId: session.user.id, reflectionId: id }, 'Reflection not found');
+        return reply.status(404).send({ error: 'Reflection not found' });
+      }
+
+      if (reflections[0].userId !== session.user.id) {
+        app.logger.warn(
+          { userId: session.user.id, reflectionId: id, ownerId: reflections[0].userId },
+          'Unauthorized access to reflection'
+        );
+        return reply.status(403).send({ error: 'Unauthorized' });
+      }
+
+      app.logger.info({ userId: session.user.id, reflectionId: id }, 'Reflection retrieved');
+      return reflections[0];
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, reflectionId: id }, 'Failed to fetch reflection');
+      throw error;
+    }
+  });
 }
