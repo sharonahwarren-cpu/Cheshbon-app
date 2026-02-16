@@ -70,6 +70,10 @@ interface GoalProgress {
   progress: number;
   successCount: number;
   struggleCount: number;
+  rewardCurrencyBalance?: number;
+  rewardCurrencySymbol?: string;
+  consequenceCurrencyBalance?: number;
+  consequenceCurrencySymbol?: string;
 }
 
 interface ActivatedGoal {
@@ -514,6 +518,27 @@ export default function HomeScreen() {
                           {goal.struggleCount}
                         </Text>
                       </View>
+                      
+                      {(goal.rewardCurrencyBalance !== undefined || goal.consequenceCurrencyBalance !== undefined) && (
+                        <View style={styles.currencySection}>
+                          {goal.rewardCurrencyBalance !== undefined && (
+                            <View style={styles.reportRow}>
+                              <Text style={styles.reportLabel}>Reward Balance:</Text>
+                              <Text style={[styles.reportValue, { color: colors.success }]}>
+                                {goal.rewardCurrencyBalance} {goal.rewardCurrencySymbol || ''}
+                              </Text>
+                            </View>
+                          )}
+                          {goal.consequenceCurrencyBalance !== undefined && (
+                            <View style={styles.reportRow}>
+                              <Text style={styles.reportLabel}>Consequence Balance:</Text>
+                              <Text style={[styles.reportValue, { color: colors.error }]}>
+                                {goal.consequenceCurrencyBalance} {goal.consequenceCurrencySymbol || ''}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
                     </View>
                   );
                 })}
@@ -953,5 +978,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     textAlign: 'center',
+  },
+  currencySection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
 });

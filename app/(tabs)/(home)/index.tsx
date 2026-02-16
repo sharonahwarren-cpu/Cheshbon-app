@@ -71,6 +71,10 @@ interface GoalProgress {
   progress: number;
   successCount: number;
   struggleCount: number;
+  rewardCurrencyBalance?: number;
+  rewardCurrencySymbol?: string;
+  consequenceCurrencyBalance?: number;
+  consequenceCurrencySymbol?: string;
 }
 
 interface ActivatedGoal {
@@ -152,6 +156,8 @@ export default function HomeScreen() {
         gainsLossesRes,
         behaviorCountsRes,
         goalProgressRes,
+        goalsRes,
+        currenciesRes,
       ] = await Promise.all([
         authenticatedGet('/api/reports/currency-balances'),
         authenticatedGet('/api/reports/wins-vs-losses'),
@@ -161,6 +167,8 @@ export default function HomeScreen() {
         authenticatedGet('/api/reports/gains-losses-summary'),
         authenticatedGet('/api/reports/behavior-counts'),
         authenticatedGet('/api/reports/goal-progress'),
+        authenticatedGet('/api/goals'),
+        authenticatedGet('/api/currencies'),
       ]);
 
       const currencyData = Array.isArray(currencyRes) ? currencyRes : (currencyRes?.data || []);
@@ -171,6 +179,49 @@ export default function HomeScreen() {
       const gainsLossesData = gainsLossesRes?.data || gainsLossesRes || null;
       const behaviorCountsData = behaviorCountsRes?.data || behaviorCountsRes || null;
       const goalProgressData = Array.isArray(goalProgressRes) ? goalProgressRes : (goalProgressRes?.data || []);
+      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
+
+      // Create a map of currency balances by currency ID
+      const currencyBalanceMap = new Map(
+        currencyData.map((cb: CurrencyBalance) => [cb.currencyId, cb])
+      );
+
+      // Create a map of currencies by ID for symbol lookup
+      const currencyMap = new Map(
+        currenciesData.map((c: any) => [c.id, c])
+      );
+
+      // Create a map of goals by ID
+      const goalMap = new Map(
+        goalsData.map((g: any) => [g.id, g])
+      );
+
+      // Enhance goal progress data with currency balance information
+      const enhancedGoalProgress = goalProgressData.map((gp: any) => {
+        const goal = goalMap.get(gp.goalId);
+        if (!goal) return gp;
+
+        const result: any = { ...gp };
+
+        // Add reward currency balance if goal has a reward currency
+        if (goal.rewardCurrencyId) {
+          const currencyBalance = currencyBalanceMap.get(goal.rewardCurrencyId);
+          const currency = currencyMap.get(goal.rewardCurrencyId);
+          result.rewardCurrencyBalance = currencyBalance?.netBalance || 0;
+          result.rewardCurrencySymbol = currency?.symbol || '';
+        }
+
+        // Add consequence currency balance if goal has a consequence currency
+        if (goal.consequenceCurrencyId) {
+          const currencyBalance = currencyBalanceMap.get(goal.consequenceCurrencyId);
+          const currency = currencyMap.get(goal.consequenceCurrencyId);
+          result.consequenceCurrencyBalance = currencyBalance?.netBalance || 0;
+          result.consequenceCurrencySymbol = currency?.symbol || '';
+        }
+
+        return result;
+      });
 
       setCurrencyBalances(currencyData);
       setWinsVsLosses(winsLossesData);
@@ -179,9 +230,9 @@ export default function HomeScreen() {
       setJournalCount(journalCountData);
       setGainsLossesSummary(gainsLossesData);
       setBehaviorCounts(behaviorCountsData);
-      setGoalProgress(goalProgressData);
+      setGoalProgress(enhancedGoalProgress);
 
-      console.log("Reports data loaded successfully");
+      console.log("Reports data loaded successfully with currency balances");
     } catch (error) {
       console.error("Error loading reports data:", error);
       throw error;
@@ -580,9 +631,13 @@ export default function HomeScreen() {
               <>
                 <Text style={styles.sectionTitle}>Goal Progress</Text>
                 {goalProgress.map((goal, index) => {
-                  const progressText = `${goal.progress}%`;
+                  const progressText = `${goal.progress || 0}%`;
                   const successText = `${goal.successCount} successes`;
                   const struggleText = `${goal.struggleCount} struggles`;
+                  
+                  // Check if goal has currency balances
+                  const hasRewardBalance = goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null;
+                  const hasConsequenceBalance = goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null;
                   
                   return (
                     <TouchableOpacity 
@@ -616,6 +671,28 @@ export default function HomeScreen() {
                           {goal.struggleCount}
                         </Text>
                       </View>
+                      
+                      {(hasRewardBalance || hasConsequenceBalance) && (
+                        <View style={styles.currencySection}>
+                          {hasRewardBalance && (
+                            <View style={styles.reportRow}>
+                              <Text style={styles.reportLabel}>Reward Balance:</Text>
+                              <Text style={[styles.reportValue, { color: colors.success }]}>
+                                {goal.rewardCurrencyBalance} {goal.rewardCurrencySymbol || ''}
+                              </Text>
+                            </View>
+                          )}
+                          {hasConsequenceBalance && (
+                            <View style={styles.reportRow}>
+                              <Text style={styles.reportLabel}>Consequence Balance:</Text>
+                              <Text style={[styles.reportValue, { color: colors.error }]}>
+                                {goal.consequenceCurrencyBalance} {goal.consequenceCurrencySymbol || ''}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                      
                       <View style={styles.drillDownHint}>
                         <IconSymbol
                           ios_icon_name="chevron.right"
@@ -1079,5 +1156,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     textAlign: 'center',
+  },
+  currencySection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
 });

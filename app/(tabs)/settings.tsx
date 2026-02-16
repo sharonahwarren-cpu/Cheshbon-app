@@ -49,6 +49,12 @@ interface Goal {
   type?: 'RESTRAINING' | 'PROACTIVE';
   progress?: number;
   completed?: boolean;
+  rewardCurrencyId?: string;
+  rewardCurrencyBalance?: number;
+  rewardCurrencySymbol?: string;
+  consequenceCurrencyId?: string;
+  consequenceCurrencyBalance?: number;
+  consequenceCurrencySymbol?: string;
 }
 
 interface NotificationAlarm {
@@ -141,13 +147,14 @@ export default function SettingsScreen() {
     console.log('Loading settings data...');
     setLoading(true);
     try {
-      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes, goalProgressRes] = await Promise.all([
         authenticatedGet('/api/goals'),
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/user-preferences'),
+        authenticatedGet('/api/reports/goal-progress'),
       ]);
 
       console.log('Settings data loaded successfully');
@@ -178,8 +185,27 @@ export default function SettingsScreen() {
         reflectionCategoriesEnabled: true,
         reflectionCategories: ['Action', 'Speech', 'Thought'],
       };
+
+      const goalProgressData = Array.isArray(goalProgressRes) 
+        ? goalProgressRes 
+        : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
+
+      // Merge goal progress data (which includes currency balances) with goals
+      const goalsWithBalances = goalsData.map((goal: Goal) => {
+        const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
+        if (progressInfo) {
+          return {
+            ...goal,
+            rewardCurrencyBalance: progressInfo.rewardCurrencyBalance,
+            rewardCurrencySymbol: progressInfo.rewardCurrencySymbol,
+            consequenceCurrencyBalance: progressInfo.consequenceCurrencyBalance,
+            consequenceCurrencySymbol: progressInfo.consequenceCurrencySymbol,
+          };
+        }
+        return goal;
+      });
       
-      setGoals(goalsData);
+      setGoals(goalsWithBalances);
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
@@ -473,6 +499,46 @@ export default function SettingsScreen() {
     );
   };
 
+  const handlePayCurrency = async (currencyId: string, amount: number) => {
+    try {
+      setLoading(true);
+      console.log(`[API] Paying ${amount} of currency ${currencyId}`);
+      const result = await authenticatedPost(`/api/currencies/${currencyId}/pay`, { amount });
+      console.log('[API] Pay currency result:', result);
+      showSuccess(`Paid ${amount} successfully`);
+      // Reload data to reflect the updated balance
+      await loadData();
+      if (currentSection === 'reports') {
+        await loadCurrencyBalances();
+      }
+    } catch (error: any) {
+      console.error('[API] Error paying currency:', error);
+      showError(error.message || 'Failed to pay currency');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClaimCurrency = async (currencyId: string, amount: number) => {
+    try {
+      setLoading(true);
+      console.log(`[API] Claiming ${amount} of currency ${currencyId}`);
+      const result = await authenticatedPost(`/api/currencies/${currencyId}/claim`, { amount });
+      console.log('[API] Claim currency result:', result);
+      showSuccess(`Claimed ${amount} successfully`);
+      // Reload data to reflect the updated balance
+      await loadData();
+      if (currentSection === 'reports') {
+        await loadCurrencyBalances();
+      }
+    } catch (error: any) {
+      console.error('[API] Error claiming currency:', error);
+      showError(error.message || 'Failed to claim currency');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderGoals = () => {
     return (
       <View style={styles.container}>
@@ -508,7 +574,7 @@ export default function SettingsScreen() {
               
               return (
                 <React.Fragment key={index}>
-                  <View style={styles.listItem}>
+                  <View style={styles.goalCardExpanded}>
                     <View style={styles.listItemContent}>
                       <Text style={styles.listItemTitle}>{goal.title}</Text>
                       {goal.description && (
@@ -521,6 +587,47 @@ export default function SettingsScreen() {
                         )}
                         <Text style={styles.listItemSubtitle}> • {statusText}</Text>
                       </View>
+                      
+                      {(goal.rewardCurrencyId || goal.consequenceCurrencyId) && (
+                        <View style={styles.currencyBalances}>
+                          {goal.rewardCurrencyId && (
+                            <View style={styles.currencyBalanceItem}>
+                              <Text style={styles.currencyBalanceLabel}>Reward:</Text>
+                              <Text style={[styles.currencyBalanceValue, { color: colors.success }]}>
+                                {goal.rewardCurrencyBalance || 0} {goal.rewardCurrencySymbol || ''}
+                              </Text>
+                              <TouchableOpacity
+                                style={[styles.currencyActionButton, { backgroundColor: colors.success }]}
+                                onPress={() => {
+                                  if (goal.rewardCurrencyId) {
+                                    handleClaimCurrency(goal.rewardCurrencyId, 1);
+                                  }
+                                }}
+                              >
+                                <Text style={styles.currencyActionButtonText}>Claim</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                          {goal.consequenceCurrencyId && (
+                            <View style={styles.currencyBalanceItem}>
+                              <Text style={styles.currencyBalanceLabel}>Consequence:</Text>
+                              <Text style={[styles.currencyBalanceValue, { color: colors.error }]}>
+                                {goal.consequenceCurrencyBalance || 0} {goal.consequenceCurrencySymbol || ''}
+                              </Text>
+                              <TouchableOpacity
+                                style={[styles.currencyActionButton, { backgroundColor: colors.error }]}
+                                onPress={() => {
+                                  if (goal.consequenceCurrencyId) {
+                                    handlePayCurrency(goal.consequenceCurrencyId, 1);
+                                  }
+                                }}
+                              >
+                                <Text style={styles.currencyActionButtonText}>Pay</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                      )}
                     </View>
                     <View style={styles.listItemActions}>
                       <TouchableOpacity
@@ -2038,6 +2145,44 @@ const styles = StyleSheet.create({
   savePreferencesButtonText: {
     color: colors.background,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  goalCardExpanded: {
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  currencyBalances: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  currencyBalanceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  currencyBalanceLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    minWidth: 100,
+  },
+  currencyBalanceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  currencyActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  currencyActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '600',
   },
 });

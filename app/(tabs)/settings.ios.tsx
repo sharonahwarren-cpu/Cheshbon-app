@@ -44,6 +44,16 @@ interface Currency {
 interface Goal {
   id: string;
   title: string;
+  description?: string;
+  type?: 'RESTRAINING' | 'PROACTIVE';
+  progress?: number;
+  completed?: boolean;
+  rewardCurrencyId?: string;
+  rewardCurrencyBalance?: number;
+  rewardCurrencySymbol?: string;
+  consequenceCurrencyId?: string;
+  consequenceCurrencyBalance?: number;
+  consequenceCurrencySymbol?: string;
 }
 
 interface NotificationAlarm {
