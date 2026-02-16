@@ -395,6 +395,47 @@ export function registerReportsRoutes(app: App) {
         .from(schema.reflections)
         .where(eq(schema.reflections.userId, session.user.id));
 
+      const currencies = await app.db
+        .select()
+        .from(schema.currencies)
+        .where(eq(schema.currencies.userId, session.user.id));
+
+      // Calculate currency balances
+      const currencyBalances = new Map<string, { earned: number; lost: number; debtAdded: number; debtReduced: number }>();
+
+      for (const currency of currencies) {
+        let earned = 0;
+        let lost = 0;
+        let debtAdded = 0;
+        let debtReduced = 0;
+
+        for (const reflection of reflections) {
+          const goal = goals.find(g => g.id === reflection.linkedGoalId);
+          if (!goal) continue;
+
+          if (reflection.outcome === 'success') {
+            if (goal.rewardCurrencyId === currency.id && goal.rewardAmount) {
+              if (currency.onSuccess === 'ADD') {
+                earned += goal.rewardAmount;
+              } else if (currency.onSuccess === 'SUBTRACT') {
+                lost += goal.rewardAmount;
+              }
+            }
+          } else if (reflection.outcome === 'struggled') {
+            if (goal.consequenceCurrencyId === currency.id && goal.consequenceAmount) {
+              if (currency.onFailure === 'ADD') {
+                debtAdded += goal.consequenceAmount;
+              } else if (currency.onFailure === 'SUBTRACT') {
+                debtReduced += goal.consequenceAmount;
+              }
+            }
+          }
+        }
+
+        const netBalance = earned - lost - debtAdded + debtReduced;
+        currencyBalances.set(currency.id, { earned, lost, debtAdded, debtReduced });
+      }
+
       const result = goals.map(goal => {
         let successCount = 0;
         let struggleCount = 0;
@@ -413,6 +454,34 @@ export function registerReportsRoutes(app: App) {
           }
         }
 
+        // Get currency balances for this goal
+        let rewardCurrencyBalance = 0;
+        let rewardCurrencySymbol = '';
+        let consequenceCurrencyBalance = 0;
+        let consequenceCurrencySymbol = '';
+
+        if (goal.rewardCurrencyId) {
+          const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
+          if (rewardCurrency) {
+            const balance = currencyBalances.get(goal.rewardCurrencyId);
+            if (balance) {
+              rewardCurrencyBalance = balance.earned - balance.lost - balance.debtAdded + balance.debtReduced;
+            }
+            rewardCurrencySymbol = rewardCurrency.symbol || '';
+          }
+        }
+
+        if (goal.consequenceCurrencyId) {
+          const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+          if (consequenceCurrency) {
+            const balance = currencyBalances.get(goal.consequenceCurrencyId);
+            if (balance) {
+              consequenceCurrencyBalance = balance.earned - balance.lost - balance.debtAdded + balance.debtReduced;
+            }
+            consequenceCurrencySymbol = consequenceCurrency.symbol || '';
+          }
+        }
+
         return {
           goalId: goal.id,
           goalTitle: goal.title,
@@ -421,6 +490,10 @@ export function registerReportsRoutes(app: App) {
           struggleCount,
           successReflectionIds,
           struggleReflectionIds,
+          rewardCurrencyBalance,
+          rewardCurrencySymbol,
+          consequenceCurrencyBalance,
+          consequenceCurrencySymbol,
         };
       });
 

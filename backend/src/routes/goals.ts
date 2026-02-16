@@ -46,6 +46,46 @@ export function registerGoalRoutes(app: App) {
     }
   });
 
+  // GET /api/goals/:id - Get a single goal by ID
+  app.fastify.get('/api/goals/:id', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { id } = request.params as { id: string };
+
+    app.logger.info({ userId: session.user.id, goalId: id }, 'Fetching goal');
+
+    try {
+      const goals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.id, id))
+        .limit(1);
+
+      if (!goals.length) {
+        app.logger.warn({ userId: session.user.id, goalId: id }, 'Goal not found');
+        return reply.status(404).send({ error: 'Goal not found' });
+      }
+
+      if (goals[0].userId !== session.user.id) {
+        app.logger.warn(
+          { userId: session.user.id, goalId: id, ownerId: goals[0].userId },
+          'Unauthorized access to goal'
+        );
+        return reply.status(403).send({ error: 'Unauthorized' });
+      }
+
+      app.logger.info({ userId: session.user.id, goalId: id }, 'Goal retrieved successfully');
+      return goals[0];
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to fetch goal');
+      throw error;
+    }
+  });
+
   // GET /api/goals - Get all goals for authenticated user
   app.fastify.get('/api/goals', async (
     request: FastifyRequest,
