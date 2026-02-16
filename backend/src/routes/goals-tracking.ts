@@ -156,6 +156,37 @@ export function registerGoalsTrackingRoutes(app: App) {
       // Get today's date
       const today = new Date().toISOString().split('T')[0];
 
+      // Calculate currency change based on goal and currency settings
+      let currencyChange = null;
+      if (goals[0].rewardCurrencyId && goals[0].rewardAmount) {
+        const currencies = await app.db
+          .select()
+          .from(schema.currencies)
+          .where(eq(schema.currencies.id, goals[0].rewardCurrencyId))
+          .limit(1);
+
+        if (currencies.length) {
+          const currency = currencies[0];
+          let operation = 'add'; // Default
+
+          if (currency.onSuccess === 'SUBTRACT') {
+            operation = 'subtract';
+          } else if (currency.onSuccess === 'NONE') {
+            currencyChange = null;
+          } else {
+            operation = 'add';
+          }
+
+          if (currency.onSuccess !== 'NONE') {
+            currencyChange = {
+              currencyId: goals[0].rewardCurrencyId,
+              amount: goals[0].rewardAmount,
+              operation,
+            };
+          }
+        }
+      }
+
       // Create a new reflection entry for this success
       const reflections = await app.db
         .insert(schema.reflections)
@@ -167,6 +198,7 @@ export function registerGoalsTrackingRoutes(app: App) {
           type: 'Proactive',
           category: 'Action',
           description: 'Quick success entry',
+          currencyChange: currencyChange ? JSON.stringify(currencyChange) : null,
         })
         .returning();
 
@@ -174,7 +206,7 @@ export function registerGoalsTrackingRoutes(app: App) {
         throw new Error('Failed to create reflection entry');
       }
 
-      app.logger.info({ userId: session.user.id, goalId: id, reflectionId: reflections[0].id }, 'Reflection entry created for success');
+      app.logger.info({ userId: session.user.id, goalId: id, reflectionId: reflections[0].id, currencyChange }, 'Reflection entry created for success');
 
       // Count today's successes after creating the new entry
       const todayReflections = await app.db
@@ -234,6 +266,37 @@ export function registerGoalsTrackingRoutes(app: App) {
       // Get today's date
       const today = new Date().toISOString().split('T')[0];
 
+      // Calculate currency change based on goal and currency settings
+      let currencyChange = null;
+      if (goals[0].consequenceCurrencyId && goals[0].consequenceAmount) {
+        const currencies = await app.db
+          .select()
+          .from(schema.currencies)
+          .where(eq(schema.currencies.id, goals[0].consequenceCurrencyId))
+          .limit(1);
+
+        if (currencies.length) {
+          const currency = currencies[0];
+          let operation = 'add'; // Default for debt
+
+          if (currency.onFailure === 'SUBTRACT') {
+            operation = 'subtract';
+          } else if (currency.onFailure === 'NONE') {
+            currencyChange = null;
+          } else {
+            operation = 'add';
+          }
+
+          if (currency.onFailure !== 'NONE') {
+            currencyChange = {
+              currencyId: goals[0].consequenceCurrencyId,
+              amount: goals[0].consequenceAmount,
+              operation,
+            };
+          }
+        }
+      }
+
       // Create a new reflection entry for this struggle
       const reflections = await app.db
         .insert(schema.reflections)
@@ -245,6 +308,7 @@ export function registerGoalsTrackingRoutes(app: App) {
           type: 'Restraint',
           category: 'Action',
           description: 'Quick struggle entry',
+          currencyChange: currencyChange ? JSON.stringify(currencyChange) : null,
         })
         .returning();
 
@@ -252,7 +316,7 @@ export function registerGoalsTrackingRoutes(app: App) {
         throw new Error('Failed to create reflection entry');
       }
 
-      app.logger.info({ userId: session.user.id, goalId: id, reflectionId: reflections[0].id }, 'Reflection entry created for struggle');
+      app.logger.info({ userId: session.user.id, goalId: id, reflectionId: reflections[0].id, currencyChange }, 'Reflection entry created for struggle');
 
       // Count today's struggles after creating the new entry
       const todayReflections = await app.db

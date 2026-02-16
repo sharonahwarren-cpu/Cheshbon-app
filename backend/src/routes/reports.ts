@@ -6,7 +6,7 @@ import * as schema from '../db/schema.js';
 export function registerReportsRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
-  // GET /api/reports/currency-balances - Calculate currency balances based on goal completions
+  // GET /api/reports/currency-balances - Calculate currency balances from reflection currencyChange
   app.fastify.get('/api/reports/currency-balances', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -23,58 +23,42 @@ export function registerReportsRoutes(app: App) {
         .from(schema.currencies)
         .where(eq(schema.currencies.userId, session.user.id));
 
-      // Get all goals for the user
-      const userGoals = await app.db
-        .select()
-        .from(schema.goals)
-        .where(eq(schema.goals.userId, session.user.id));
-
-      // Build a map of goals for quick lookup
-      const goalMap = new Map(userGoals.map(g => [g.id, g]));
-
       // Get all reflections for the user
       const reflections = await app.db
         .select()
         .from(schema.reflections)
         .where(eq(schema.reflections.userId, session.user.id));
 
-      // Calculate balances for each currency
+      // Calculate balances for each currency from reflection currencyChange
       const balances = userCurrencies.map(currency => {
         let earned = 0;
         let lost = 0;
-        let debtAdded = 0;
-        let debtReduced = 0;
-        const reflectionIds = [];
+        const reflectionIds: string[] = [];
 
-        // Process all reflections
+        // Process all reflections with currencyChange
         for (const reflection of reflections) {
-          const goal = goalMap.get(reflection.linkedGoalId);
-          if (!goal) continue;
+          if (!reflection.currencyChange) continue;
 
-          if (reflection.outcome === 'success') {
-            // Success: check reward currency
-            if (goal.rewardCurrencyId === currency.id && goal.rewardAmount) {
-              if (currency.onSuccess === 'ADD') {
-                earned += goal.rewardAmount;
-              } else if (currency.onSuccess === 'SUBTRACT') {
-                lost += goal.rewardAmount;
-              }
+          try {
+            const change = typeof reflection.currencyChange === 'string'
+              ? JSON.parse(reflection.currencyChange)
+              : reflection.currencyChange;
+
+            if (change.currencyId === currency.id) {
               reflectionIds.push(reflection.id);
-            }
-          } else if (reflection.outcome === 'struggled') {
-            // Failure: check consequence currency
-            if (goal.consequenceCurrencyId === currency.id && goal.consequenceAmount) {
-              if (currency.onFailure === 'ADD') {
-                debtAdded += goal.consequenceAmount;
-              } else if (currency.onFailure === 'SUBTRACT') {
-                debtReduced += goal.consequenceAmount;
+              if (change.operation === 'add') {
+                earned += change.amount;
+              } else if (change.operation === 'subtract') {
+                lost += change.amount;
               }
-              reflectionIds.push(reflection.id);
             }
+          } catch (e) {
+            // Skip invalid currencyChange entries
+            continue;
           }
         }
 
-        const netBalance = earned - lost - debtAdded + debtReduced;
+        const netBalance = earned - lost;
 
         return {
           currencyId: currency.id,
@@ -82,8 +66,6 @@ export function registerReportsRoutes(app: App) {
           symbol: currency.symbol,
           earned,
           lost,
-          debtAdded,
-          debtReduced,
           netBalance,
           reflectionIds,
         };
@@ -400,40 +382,35 @@ export function registerReportsRoutes(app: App) {
         .from(schema.currencies)
         .where(eq(schema.currencies.userId, session.user.id));
 
-      // Calculate currency balances
-      const currencyBalances = new Map<string, { earned: number; lost: number; debtAdded: number; debtReduced: number }>();
+      // Calculate currency balances from reflection currencyChange field
+      const currencyBalances = new Map<string, { earned: number; lost: number }>();
 
       for (const currency of currencies) {
         let earned = 0;
         let lost = 0;
-        let debtAdded = 0;
-        let debtReduced = 0;
 
         for (const reflection of reflections) {
-          const goal = goals.find(g => g.id === reflection.linkedGoalId);
-          if (!goal) continue;
+          if (!reflection.currencyChange) continue;
 
-          if (reflection.outcome === 'success') {
-            if (goal.rewardCurrencyId === currency.id && goal.rewardAmount) {
-              if (currency.onSuccess === 'ADD') {
-                earned += goal.rewardAmount;
-              } else if (currency.onSuccess === 'SUBTRACT') {
-                lost += goal.rewardAmount;
+          try {
+            const change = typeof reflection.currencyChange === 'string'
+              ? JSON.parse(reflection.currencyChange)
+              : reflection.currencyChange;
+
+            if (change.currencyId === currency.id) {
+              if (change.operation === 'add') {
+                earned += change.amount;
+              } else if (change.operation === 'subtract') {
+                lost += change.amount;
               }
             }
-          } else if (reflection.outcome === 'struggled') {
-            if (goal.consequenceCurrencyId === currency.id && goal.consequenceAmount) {
-              if (currency.onFailure === 'ADD') {
-                debtAdded += goal.consequenceAmount;
-              } else if (currency.onFailure === 'SUBTRACT') {
-                debtReduced += goal.consequenceAmount;
-              }
-            }
+          } catch (e) {
+            // Skip invalid currencyChange entries
+            continue;
           }
         }
 
-        const netBalance = earned - lost - debtAdded + debtReduced;
-        currencyBalances.set(currency.id, { earned, lost, debtAdded, debtReduced });
+        currencyBalances.set(currency.id, { earned, lost });
       }
 
       const result = goals.map(goal => {
@@ -465,7 +442,7 @@ export function registerReportsRoutes(app: App) {
           if (rewardCurrency) {
             const balance = currencyBalances.get(goal.rewardCurrencyId);
             if (balance) {
-              rewardCurrencyBalance = balance.earned - balance.lost - balance.debtAdded + balance.debtReduced;
+              rewardCurrencyBalance = balance.earned - balance.lost;
             }
             rewardCurrencySymbol = rewardCurrency.symbol || '';
           }
@@ -476,7 +453,7 @@ export function registerReportsRoutes(app: App) {
           if (consequenceCurrency) {
             const balance = currencyBalances.get(goal.consequenceCurrencyId);
             if (balance) {
-              consequenceCurrencyBalance = balance.earned - balance.lost - balance.debtAdded + balance.debtReduced;
+              consequenceCurrencyBalance = balance.earned - balance.lost;
             }
             consequenceCurrencySymbol = consequenceCurrency.symbol || '';
           }
