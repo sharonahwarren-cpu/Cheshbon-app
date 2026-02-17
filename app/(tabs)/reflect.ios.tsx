@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -79,18 +79,8 @@ interface Goal {
   behaviorCategories?: string[];
   rewardCurrencyId?: string;
   rewardAmount?: number;
-  rewardSuccesses?: number;
   consequenceCurrencyId?: string;
   consequenceAmount?: number;
-  consequenceFailures?: number;
-}
-
-interface Currency {
-  id: string;
-  name: string;
-  symbol?: string;
-  onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
-  onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
 
 interface UserPreferences {
@@ -100,7 +90,6 @@ interface UserPreferences {
 
 export default function ReflectScreen() {
   const router = useRouter();
-  const scrollViewRef = useRef<ScrollView>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -113,7 +102,6 @@ export default function ReflectScreen() {
   const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
 
   const [goals, setGoals] = useState<Goal[]>([]);
-  const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -133,11 +121,10 @@ export default function ReflectScreen() {
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
       
-      const [journalRes, reflectionsRes, goalsRes, currenciesRes, prefsRes, gainsLossesRes, strategiesRes] = await Promise.all([
+      const [journalRes, reflectionsRes, goalsRes, prefsRes, gainsLossesRes, strategiesRes] = await Promise.all([
         authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
         authenticatedGet('/api/goals'),
-        authenticatedGet('/api/currencies'),
         authenticatedGet('/api/user-preferences'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
@@ -146,7 +133,6 @@ export default function ReflectScreen() {
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
-      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
@@ -155,7 +141,6 @@ export default function ReflectScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       setGoals(goalsData);
-      setCurrencies(currenciesData);
       setUserPreferences(prefsData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
@@ -294,11 +279,7 @@ export default function ReflectScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <KeyboardAvoidingView 
-        style={styles.container}
-        behavior="padding"
-        keyboardVerticalOffset={0}
-      >
+      <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reflect</Text>
           <TouchableOpacity onPress={() => router.push('/search-journals')}>
@@ -350,20 +331,13 @@ export default function ReflectScreen() {
           />
         )}
 
-        <ScrollView 
-          ref={scrollViewRef}
-          style={styles.content} 
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-        >
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <IconSymbol
                 ios_icon_name="book.fill"
                 android_material_icon_name="menu-book"
-                size={20}
+                size={24}
                 color={colors.primary}
               />
               <Text style={styles.sectionTitle}>Daily Journal</Text>
@@ -376,13 +350,8 @@ export default function ReflectScreen() {
               placeholderTextColor={colors.textSecondary}
               multiline
               textAlignVertical="top"
-              blurOnSubmit={false}
-              returnKeyType="default"
-              onFocus={() => {
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-                }, 100);
-              }}
+              returnKeyType="done"
+              blurOnSubmit={true}
             />
             <TouchableOpacity
               style={styles.saveButton}
@@ -418,7 +387,7 @@ export default function ReflectScreen() {
                 <IconSymbol
                   ios_icon_name="lightbulb.fill"
                   android_material_icon_name="lightbulb"
-                  size={20}
+                  size={24}
                   color={colors.primary}
                 />
                 <Text style={styles.sectionTitle}>Reflections</Text>
@@ -649,7 +618,7 @@ export default function ReflectScreen() {
             )}
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
 
       {showAddReflectionModal && (
         <AddReflectionModal
@@ -658,7 +627,6 @@ export default function ReflectScreen() {
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
           goals={goals}
-          currencies={currencies}
           userPreferences={userPreferences}
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
@@ -715,7 +683,6 @@ interface AddReflectionModalProps {
   onSave: (reflection: Reflection) => void;
   selectedDate: Date;
   goals: Goal[];
-  currencies: Currency[];
   userPreferences: UserPreferences;
   editingReflection: Reflection | null;
   gainsLosses: GainLoss[];
@@ -728,21 +695,12 @@ function AddReflectionModal({
   onSave,
   selectedDate,
   goals,
-  currencies,
   userPreferences,
   editingReflection,
   gainsLosses,
   strategies,
 }: AddReflectionModalProps) {
   const router = useRouter();
-  const scrollViewRef = useRef<ScrollView>(null);
-  const descriptionInputRef = useRef<TextInput>(null);
-  const additionalThoughtsInputRef = useRef<TextInput>(null);
-  const gainNameInputRef = useRef<TextInput>(null);
-  const lossNameInputRef = useRef<TextInput>(null);
-  const strategyNameInputRef = useRef<TextInput>(null);
-  const strategyDescInputRef = useRef<TextInput>(null);
-  
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
   const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Proactive');
@@ -753,7 +711,7 @@ function AddReflectionModal({
   const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
   const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(editingReflection?.wasWorthIt);
   const [additionalThoughts, setAdditionalThoughts] = useState(editingReflection?.additionalThoughts || '');
-  const [strategyEffectiveness, setStrategyEffectiveness] = useState<{strategyId: string; worked: boolean}[]>(editingReflection?.strategyEffectiveness || []);
+  const [strategyEffectiveness, setStrategyEffectiveness] = useState<Array<{strategyId: string; worked: boolean}>>(editingReflection?.strategyEffectiveness || []);
   const [loading, setLoading] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [goalSearchQuery, setGoalSearchQuery] = useState('');
@@ -779,41 +737,6 @@ function AddReflectionModal({
   });
 
   const selectedGoal = goals.find(g => g.id === linkedGoalId);
-  
-  const currencyBalanceInfo = (() => {
-    if (!linkedGoalId || !outcome || !selectedGoal) return null;
-    
-    const isSuccess = outcome === 'success';
-    const currencyId = isSuccess ? selectedGoal.rewardCurrencyId : selectedGoal.consequenceCurrencyId;
-    const amount = isSuccess ? selectedGoal.rewardAmount : selectedGoal.consequenceAmount;
-    const threshold = isSuccess ? selectedGoal.rewardSuccesses : selectedGoal.consequenceFailures;
-    
-    if (!currencyId || !amount) return null;
-    
-    const currency = currencies.find(c => c.id === currencyId);
-    if (!currency) return null;
-    
-    const operation = isSuccess ? currency.onSuccess : currency.onFailure;
-    if (!operation || operation === 'NONE') return null;
-    
-    const actionText = isSuccess 
-      ? (operation === 'ADD' ? 'earn' : 'lose')
-      : (operation === 'ADD' ? 'gain' : 'lose');
-    
-    const displayAmount = amount;
-    const displaySymbol = currency.symbol || currency.name;
-    const displayThreshold = threshold || 1;
-    
-    return {
-      operation: operation === 'ADD' ? 'add' : 'subtract',
-      amount: displayAmount,
-      symbol: displaySymbol,
-      name: currency.name,
-      threshold: displayThreshold,
-      actionText,
-      isSuccess,
-    };
-  })();
 
   const getDescriptionPlaceholder = () => {
     if (!category) {
@@ -842,18 +765,12 @@ function AddReflectionModal({
     }
     Keyboard.dismiss();
     setStep(step + 1);
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-    }, 100);
   };
 
   const handleBack = () => {
     if (step > 1) {
       Keyboard.dismiss();
       setStep(step - 1);
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-      }, 100);
     }
   };
 
@@ -899,6 +816,7 @@ function AddReflectionModal({
   };
 
   const handleCreateGoal = () => {
+    onClose();
     router.push('/create-goal');
   };
 
@@ -1031,12 +949,9 @@ function AddReflectionModal({
           </View>
 
           <ScrollView 
-            ref={scrollViewRef}
             style={styles.modalBody} 
-            contentContainerStyle={styles.modalBodyContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
           >
             {step === 1 && (
               <React.Fragment>
@@ -1046,7 +961,7 @@ function AddReflectionModal({
                       <IconSymbol
                         ios_icon_name="tag.fill"
                         android_material_icon_name="label"
-                        size={18}
+                        size={20}
                         color={colors.primary}
                       />
                       <Text style={styles.label}>Category (Optional)</Text>
@@ -1077,7 +992,7 @@ function AddReflectionModal({
                     <IconSymbol
                       ios_icon_name="arrow.triangle.2.circlepath"
                       android_material_icon_name="sync"
-                      size={18}
+                      size={20}
                       color={colors.primary}
                     />
                     <Text style={styles.label}>Type</Text>
@@ -1110,28 +1025,19 @@ function AddReflectionModal({
                     <IconSymbol
                       ios_icon_name="text.alignleft"
                       android_material_icon_name="description"
-                      size={18}
+                      size={20}
                       color={colors.primary}
                     />
                     <Text style={styles.label}>Description</Text>
                   </View>
                   <TextInput
-                    ref={descriptionInputRef}
                     style={[styles.input, styles.textArea]}
                     value={description}
                     onChangeText={setDescription}
                     placeholder={getDescriptionPlaceholder()}
                     placeholderTextColor={colors.textSecondary}
                     multiline
-                    numberOfLines={6}
-                    blurOnSubmit={false}
-                    returnKeyType="default"
-                    autoFocus={true}
-                    onFocus={() => {
-                      setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                      }, 300);
-                    }}
+                    numberOfLines={4}
                   />
                 </View>
               </React.Fragment>
@@ -1144,7 +1050,7 @@ function AddReflectionModal({
                     <IconSymbol
                       ios_icon_name="target"
                       android_material_icon_name="flag"
-                      size={18}
+                      size={20}
                       color={colors.primary}
                     />
                     <Text style={styles.label}>Link to a Goal (Optional)</Text>
@@ -1226,7 +1132,7 @@ function AddReflectionModal({
                       <IconSymbol
                         ios_icon_name="chart.bar.fill"
                         android_material_icon_name="bar-chart"
-                        size={18}
+                        size={20}
                         color={colors.primary}
                       />
                       <Text style={styles.label}>Outcome</Text>
@@ -1235,21 +1141,14 @@ function AddReflectionModal({
                       {(['success', 'struggled'] as const).map((o, index) => {
                         const isSelected = outcome === o;
                         const displayText = o === 'success' ? 'Success' : 'Struggled';
-                        const iconName = o === 'success' ? 'check-circle' : 'cancel';
                         
                         return (
                           <React.Fragment key={index}>
                             <TouchableOpacity
-                              style={[styles.outcomeButton, isSelected && (o === 'success' ? styles.outcomeButtonSuccess : styles.outcomeButtonStruggled)]}
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
                               onPress={() => setOutcome(o)}
                             >
-                              <IconSymbol
-                                ios_icon_name={o === 'success' ? "checkmark.circle.fill" : "xmark.circle.fill"}
-                                android_material_icon_name={iconName}
-                                size={20}
-                                color={isSelected ? colors.background : (o === 'success' ? colors.success : colors.error)}
-                              />
-                              <Text style={[styles.outcomeButtonText, isSelected && styles.outcomeButtonTextSelected]}>
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                                 {displayText}
                               </Text>
                             </TouchableOpacity>
@@ -1257,35 +1156,6 @@ function AddReflectionModal({
                         );
                       })}
                     </View>
-                    
-                    {currencyBalanceInfo && (
-                      <View style={[
-                        styles.currencyBalanceInfo,
-                        currencyBalanceInfo.isSuccess ? styles.currencyBalanceInfoSuccess : styles.currencyBalanceInfoStruggled
-                      ]}>
-                        <View style={styles.currencyBalanceHeader}>
-                          <IconSymbol
-                            ios_icon_name="dollarsign.circle.fill"
-                            android_material_icon_name="account-balance-wallet"
-                            size={20}
-                            color={currencyBalanceInfo.isSuccess ? colors.success : colors.error}
-                          />
-                          <Text style={styles.currencyBalanceTitle}>Currency Impact</Text>
-                        </View>
-                        <View style={styles.currencyBalanceAmount}>
-                          <Text style={[
-                            styles.currencyBalanceText,
-                            currencyBalanceInfo.operation === 'add' ? styles.currencyBalancePositive : styles.currencyBalanceNegative
-                          ]}>
-                            {currencyBalanceInfo.operation === 'add' ? '+' : '-'}
-                            {currencyBalanceInfo.amount} {currencyBalanceInfo.symbol}
-                          </Text>
-                        </View>
-                        <Text style={styles.currencyBalanceDescription}>
-                          After {currencyBalanceInfo.threshold} {currencyBalanceInfo.isSuccess ? 'successes' : 'struggles'}, {currencyBalanceInfo.actionText} {currencyBalanceInfo.amount} {currencyBalanceInfo.name}
-                        </Text>
-                      </View>
-                    )}
                   </View>
                 )}
               </React.Fragment>
@@ -1298,7 +1168,7 @@ function AddReflectionModal({
                     <IconSymbol
                       ios_icon_name="arrow.up.circle.fill"
                       android_material_icon_name="trending-up"
-                      size={18}
+                      size={20}
                       color={colors.success}
                     />
                     <Text style={styles.label}>What was Gained (Optional)</Text>
@@ -1319,8 +1189,8 @@ function AddReflectionModal({
                   </TouchableOpacity>
 
                   {showGainsPicker && (
-                    <View style={styles.pickerContainer}>
-                      <ScrollView style={styles.pickerList}>
+                    <View style={styles.goalPickerContainer}>
+                      <ScrollView style={styles.goalList}>
                         {gainsLosses.filter(gl => gl.type === 'Gain').map((gain, index) => {
                           const isSelected = gainedIds.includes(gain.id);
                           
@@ -1374,7 +1244,7 @@ function AddReflectionModal({
                     <IconSymbol
                       ios_icon_name="arrow.down.circle.fill"
                       android_material_icon_name="trending-down"
-                      size={18}
+                      size={20}
                       color={colors.error}
                     />
                     <Text style={styles.label}>What was Lost (Optional)</Text>
@@ -1395,8 +1265,8 @@ function AddReflectionModal({
                   </TouchableOpacity>
 
                   {showLossesPicker && (
-                    <View style={styles.pickerContainer}>
-                      <ScrollView style={styles.pickerList}>
+                    <View style={styles.goalPickerContainer}>
+                      <ScrollView style={styles.goalList}>
                         {gainsLosses.filter(gl => gl.type === 'Loss').map((loss, index) => {
                           const isSelected = lostIds.includes(loss.id);
                           
@@ -1454,7 +1324,7 @@ function AddReflectionModal({
                     <IconSymbol
                       ios_icon_name="questionmark.circle.fill"
                       android_material_icon_name="help"
-                      size={18}
+                      size={20}
                       color={colors.primary}
                     />
                     <Text style={styles.label}>Was it worth it?</Text>
@@ -1487,27 +1357,19 @@ function AddReflectionModal({
                     <IconSymbol
                       ios_icon_name="text.bubble.fill"
                       android_material_icon_name="chat-bubble"
-                      size={18}
+                      size={20}
                       color={colors.primary}
                     />
                     <Text style={styles.label}>Additional Thoughts (Optional)</Text>
                   </View>
                   <TextInput
-                    ref={additionalThoughtsInputRef}
                     style={[styles.input, styles.textArea]}
                     value={additionalThoughts}
                     onChangeText={setAdditionalThoughts}
                     placeholder="Any additional reflections..."
                     placeholderTextColor={colors.textSecondary}
                     multiline
-                    numberOfLines={6}
-                    blurOnSubmit={false}
-                    returnKeyType="default"
-                    onFocus={() => {
-                      setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                      }, 300);
-                    }}
+                    numberOfLines={3}
                   />
                 </View>
               </React.Fragment>
@@ -1520,7 +1382,7 @@ function AddReflectionModal({
                     <IconSymbol
                       ios_icon_name="lightbulb.fill"
                       android_material_icon_name="lightbulb"
-                      size={18}
+                      size={20}
                       color={colors.primary}
                     />
                     <Text style={styles.label}>Strategies (Optional)</Text>
@@ -1544,8 +1406,8 @@ function AddReflectionModal({
                   </TouchableOpacity>
 
                   {showStrategyPicker && (
-                    <View style={styles.pickerContainer}>
-                      <ScrollView style={styles.pickerList}>
+                    <View style={styles.goalPickerContainer}>
+                      <ScrollView style={styles.goalList}>
                         {strategies.map((strategy, index) => {
                           const isSelected = strategyEffectiveness.some(se => se.strategyId === strategy.id);
                           const successRateText = `${Math.round(strategy.successRate)}%`;
@@ -1717,49 +1579,40 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateGainModal(false)}
       >
-        <KeyboardAvoidingView 
-          behavior="padding"
-          style={styles.modalOverlay}
-        >
-          <View style={styles.createItemModalContainer}>
-            <View style={styles.createItemModal}>
-              <Text style={styles.alertTitle}>Add New Gain</Text>
-              <TextInput
-                ref={gainNameInputRef}
-                style={styles.input}
-                value={newItemName}
-                onChangeText={setNewItemName}
-                placeholder="Gain name..."
-                placeholderTextColor={colors.textSecondary}
-                blurOnSubmit={false}
-                returnKeyType="done"
-                autoFocus
-              />
-              <View style={styles.alertButtons}>
-                <TouchableOpacity
-                  style={[styles.alertButton, styles.alertButtonSecondary]}
-                  onPress={() => {
-                    setNewItemName('');
-                    setShowCreateGainModal(false);
-                  }}
-                >
-                  <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.alertButton}
-                  onPress={handleCreateGain}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color={colors.background} />
-                  ) : (
-                    <Text style={styles.alertButtonText}>Add</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Add New Gain</Text>
+            <TextInput
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Gain name..."
+              placeholderTextColor={colors.textSecondary}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setShowCreateGainModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateGain}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       <Modal
@@ -1768,49 +1621,40 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateLossModal(false)}
       >
-        <KeyboardAvoidingView 
-          behavior="padding"
-          style={styles.modalOverlay}
-        >
-          <View style={styles.createItemModalContainer}>
-            <View style={styles.createItemModal}>
-              <Text style={styles.alertTitle}>Add New Loss</Text>
-              <TextInput
-                ref={lossNameInputRef}
-                style={styles.input}
-                value={newItemName}
-                onChangeText={setNewItemName}
-                placeholder="Loss name..."
-                placeholderTextColor={colors.textSecondary}
-                blurOnSubmit={false}
-                returnKeyType="done"
-                autoFocus
-              />
-              <View style={styles.alertButtons}>
-                <TouchableOpacity
-                  style={[styles.alertButton, styles.alertButtonSecondary]}
-                  onPress={() => {
-                    setNewItemName('');
-                    setShowCreateLossModal(false);
-                  }}
-                >
-                  <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.alertButton}
-                  onPress={handleCreateLoss}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color={colors.background} />
-                  ) : (
-                    <Text style={styles.alertButtonText}>Add</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Add New Loss</Text>
+            <TextInput
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Loss name..."
+              placeholderTextColor={colors.textSecondary}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setShowCreateLossModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateLoss}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       <Modal
@@ -1819,62 +1663,50 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateStrategyModal(false)}
       >
-        <KeyboardAvoidingView 
-          behavior="padding"
-          style={styles.modalOverlay}
-        >
-          <View style={styles.createItemModalContainer}>
-            <View style={styles.createItemModal}>
-              <Text style={styles.alertTitle}>Add New Strategy</Text>
-              <TextInput
-                ref={strategyNameInputRef}
-                style={styles.input}
-                value={newItemName}
-                onChangeText={setNewItemName}
-                placeholder="Strategy name..."
-                placeholderTextColor={colors.textSecondary}
-                blurOnSubmit={false}
-                returnKeyType="next"
-                autoFocus
-              />
-              <TextInput
-                ref={strategyDescInputRef}
-                style={[styles.input, styles.textArea]}
-                value={newItemDescription}
-                onChangeText={setNewItemDescription}
-                placeholder="Description (optional)..."
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                numberOfLines={3}
-                blurOnSubmit={false}
-                returnKeyType="default"
-              />
-              <View style={styles.alertButtons}>
-                <TouchableOpacity
-                  style={[styles.alertButton, styles.alertButtonSecondary]}
-                  onPress={() => {
-                    setNewItemName('');
-                    setNewItemDescription('');
-                    setShowCreateStrategyModal(false);
-                  }}
-                >
-                  <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.alertButton}
-                  onPress={handleCreateStrategy}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color={colors.background} />
-                  ) : (
-                    <Text style={styles.alertButtonText}>Add</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Add New Strategy</Text>
+            <TextInput
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Strategy name..."
+              placeholderTextColor={colors.textSecondary}
+            />
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={newItemDescription}
+              onChangeText={setNewItemDescription}
+              placeholder="Description (optional)..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={3}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setNewItemDescription('');
+                  setShowCreateStrategyModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateStrategy}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
     </Modal>
   );
@@ -1893,10 +1725,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -1905,11 +1737,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: colors.card,
     marginHorizontal: 20,
     borderRadius: 16,
-    marginBottom: 16,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -1927,34 +1759,31 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dateText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
   },
   content: {
     flex: 1,
-  },
-  contentContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 12,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -1964,11 +1793,10 @@ const styles = StyleSheet.create({
   journalInput: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 16,
+    padding: 20,
     fontSize: 16,
     color: colors.text,
-    minHeight: 120,
-    maxHeight: 200,
+    minHeight: 150,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: colors.border,
@@ -1981,7 +1809,7 @@ const styles = StyleSheet.create({
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
-    padding: 14,
+    padding: 16,
     alignItems: 'center',
     marginTop: 12,
     flexDirection: 'row',
@@ -2026,14 +1854,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     backgroundColor: colors.card,
     borderRadius: 12,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   categoryTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
     flex: 1,
@@ -2052,8 +1880,8 @@ const styles = StyleSheet.create({
   reflectionCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: '#000',
@@ -2066,7 +1894,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   reflectionBadges: {
     flexDirection: 'row',
@@ -2106,12 +1934,12 @@ const styles = StyleSheet.create({
   reflectionDescription: {
     fontSize: 15,
     color: colors.text,
-    marginBottom: 10,
+    marginBottom: 12,
     lineHeight: 22,
   },
   linkedGoalSection: {
     backgroundColor: colors.primary + '10',
-    padding: 10,
+    padding: 12,
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -2273,13 +2101,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: '92%',
+    maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -2294,7 +2122,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -2312,17 +2140,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   modalBody: {
-    flex: 1,
-  },
-  modalBodyContent: {
     padding: 20,
-    paddingBottom: 40,
+    maxHeight: '70%',
   },
   modalFooter: {
-    padding: 16,
+    padding: 20,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    backgroundColor: colors.background,
   },
   formGroup: {
     marginBottom: 24,
@@ -2330,31 +2154,30 @@ const styles = StyleSheet.create({
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
+    gap: 8,
+    marginBottom: 12,
   },
   label: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
   },
   helperText: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.textSecondary,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   input: {
     backgroundColor: colors.card,
     borderRadius: 12,
-    padding: 14,
+    padding: 16,
     fontSize: 16,
     color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
   },
   textArea: {
-    minHeight: 140,
-    maxHeight: 200,
+    minHeight: 100,
     textAlignVertical: 'top',
   },
   optionsGrid: {
@@ -2363,19 +2186,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   optionsColumn: {
-    gap: 10,
+    gap: 12,
   },
   optionButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 12,
     backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: colors.border,
   },
   optionButtonLarge: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderRadius: 12,
     backgroundColor: colors.card,
     borderWidth: 2,
@@ -2394,39 +2217,10 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontWeight: '600',
   },
-  outcomeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.border,
-  },
-  outcomeButtonSuccess: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
-  },
-  outcomeButtonStruggled: {
-    backgroundColor: colors.error,
-    borderColor: colors.error,
-  },
-  outcomeButtonText: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: '600',
-  },
-  outcomeButtonTextSelected: {
-    color: colors.background,
-  },
   goalPickerButton: {
     backgroundColor: colors.card,
     borderRadius: 12,
-    padding: 14,
+    padding: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -2434,18 +2228,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   goalPickerText: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.text,
   },
   goalPickerContainer: {
-    marginTop: 8,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    maxHeight: 250,
-  },
-  pickerContainer: {
     marginTop: 8,
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -2457,20 +2243,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderRadius: 8,
     padding: 12,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.text,
     margin: 8,
     borderWidth: 1,
     borderColor: colors.border,
   },
   goalList: {
-    maxHeight: 200,
-  },
-  pickerList: {
-    maxHeight: 280,
+    maxHeight: 240,
   },
   goalItem: {
-    padding: 14,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     flexDirection: 'row',
@@ -2481,7 +2264,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary + '20',
   },
   goalItemText: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.text,
     flex: 1,
   },
@@ -2490,7 +2273,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   createNewButton: {
-    padding: 14,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -2499,55 +2282,12 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   createNewText: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.primary,
     fontWeight: '600',
   },
-  currencyBalanceInfo: {
-    marginTop: 12,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 2,
-  },
-  currencyBalanceInfoSuccess: {
-    borderColor: colors.success + '60',
-    backgroundColor: colors.success + '10',
-  },
-  currencyBalanceInfoStruggled: {
-    borderColor: colors.error + '60',
-    backgroundColor: colors.error + '10',
-  },
-  currencyBalanceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  currencyBalanceTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  currencyBalanceAmount: {
-    marginBottom: 6,
-  },
-  currencyBalanceText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  currencyBalancePositive: {
-    color: colors.success,
-  },
-  currencyBalanceNegative: {
-    color: colors.error,
-  },
-  currencyBalanceDescription: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
   strategyListItem: {
-    padding: 14,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     flexDirection: 'row',
@@ -2569,8 +2309,8 @@ const styles = StyleSheet.create({
   strategyEffectivenessCard: {
     backgroundColor: colors.card,
     borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -2581,20 +2321,20 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   strategyEffectivenessName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
     flex: 1,
   },
   strategyEffectivenessRate: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.primary,
     fontWeight: '600',
   },
   strategyEffectivenessDescription: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.textSecondary,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   strategyEffectivenessButtons: {
     flexDirection: 'row',
@@ -2606,7 +2346,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    padding: 10,
+    padding: 12,
     borderRadius: 8,
     backgroundColor: colors.background,
     borderWidth: 2,
@@ -2621,7 +2361,7 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   strategyEffectivenessButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
   },
@@ -2629,7 +2369,7 @@ const styles = StyleSheet.create({
     color: colors.background,
   },
   button: {
-    padding: 14,
+    padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     flexDirection: 'row',
@@ -2649,44 +2389,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  createItemModalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  createItemModal: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    padding: 20,
-    margin: 20,
-    width: '90%',
-  },
   alertModal: {
     backgroundColor: colors.background,
     borderRadius: 16,
-    padding: 20,
+    padding: 24,
     margin: 20,
   },
   alertTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   alertMessage: {
-    fontSize: 15,
+    fontSize: 16,
     color: colors.textSecondary,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   alertButtons: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
+    gap: 12,
   },
   alertButton: {
     flex: 1,
     backgroundColor: colors.primary,
-    padding: 14,
+    padding: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
@@ -2697,12 +2424,12 @@ const styles = StyleSheet.create({
   },
   alertButtonText: {
     color: colors.background,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   alertButtonSecondaryText: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
 });
