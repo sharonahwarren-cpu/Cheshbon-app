@@ -3,6 +3,41 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 
+// Helper function to calculate current balance for a currency
+async function calculateCurrencyBalance(
+  app: any,
+  userId: string,
+  currencyId: string
+): Promise<number> {
+  const reflections = await app.db
+    .select()
+    .from(schema.reflections)
+    .where(eq(schema.reflections.userId, userId));
+
+  let balance = 0;
+  for (const reflection of reflections) {
+    if (!reflection.currencyChange) continue;
+
+    try {
+      const change = typeof reflection.currencyChange === 'string'
+        ? JSON.parse(reflection.currencyChange)
+        : reflection.currencyChange;
+
+      if (change.currencyId === currencyId) {
+        if (change.operation === 'add') {
+          balance += change.amount;
+        } else if (change.operation === 'subtract') {
+          balance -= change.amount;
+        }
+      }
+    } catch (e) {
+      // Skip invalid currencyChange entries
+      continue;
+    }
+  }
+  return balance;
+}
+
 export function registerCurrenciesTransactionsRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
@@ -71,8 +106,11 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
         throw new Error('Failed to create transaction reflection');
       }
 
-      app.logger.info({ userId: session.user.id, currencyId: id, amount: body.amount, reflectionId: reflections[0].id }, 'Currency claimed successfully');
-      return { success: true, amount: body.amount, transactionId: reflections[0].id };
+      // Calculate updated balance
+      const updatedBalance = await calculateCurrencyBalance(app, session.user.id, id);
+
+      app.logger.info({ userId: session.user.id, currencyId: id, amount: body.amount, reflectionId: reflections[0].id, updatedBalance }, 'Currency claimed successfully');
+      return { success: true, amount: body.amount, transactionId: reflections[0].id, balance: updatedBalance };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, currencyId: id }, 'Failed to claim currency');
       throw error;
@@ -144,8 +182,11 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
         throw new Error('Failed to create transaction reflection');
       }
 
-      app.logger.info({ userId: session.user.id, currencyId: id, amount: body.amount, reflectionId: reflections[0].id }, 'Currency paid successfully');
-      return { success: true, amount: body.amount, transactionId: reflections[0].id };
+      // Calculate updated balance
+      const updatedBalance = await calculateCurrencyBalance(app, session.user.id, id);
+
+      app.logger.info({ userId: session.user.id, currencyId: id, amount: body.amount, reflectionId: reflections[0].id, updatedBalance }, 'Currency paid successfully');
+      return { success: true, amount: body.amount, transactionId: reflections[0].id, balance: updatedBalance };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, currencyId: id }, 'Failed to pay currency');
       throw error;

@@ -1,6 +1,6 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, asc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 
 export function registerGoalRoutes(app: App) {
@@ -97,11 +97,20 @@ export function registerGoalRoutes(app: App) {
     app.logger.info({ userId: session.user.id }, 'Fetching goals');
 
     try {
-      const goals = await app.db
+      const goalsData = await app.db
         .select()
         .from(schema.goals)
-        .where(eq(schema.goals.userId, session.user.id))
-        .orderBy(desc(schema.goals.createdAt));
+        .where(eq(schema.goals.userId, session.user.id));
+
+      // Sort by status (ACTIVE first) then by title
+      const goals = goalsData.sort((a, b) => {
+        const statusA = a.status || 'ACTIVE';
+        const statusB = b.status || 'ACTIVE';
+        if (statusA !== statusB) {
+          return statusA === 'ACTIVE' ? -1 : 1;
+        }
+        return (a.title || '').localeCompare(b.title || '');
+      });
 
       app.logger.info({ userId: session.user.id, count: goals.length }, 'Goals fetched successfully');
       return goals;
@@ -240,14 +249,28 @@ export function registerGoalRoutes(app: App) {
       if (body.completed !== undefined) updateData.completed = body.completed;
       if (body.progress !== undefined) updateData.progress = body.progress;
       if (body.reward !== undefined) {
-        updateData.rewardCurrencyId = body.reward?.currencyId || null;
-        updateData.rewardSuccesses = body.reward?.successes || null;
-        updateData.rewardAmount = body.reward?.amount || null;
+        if (body.reward) {
+          updateData.rewardCurrencyId = body.reward.currencyId || null;
+          updateData.rewardSuccesses = body.reward.successes || null;
+          updateData.rewardAmount = body.reward.amount || null;
+        } else {
+          // If reward is explicitly set to null/falsy, clear all reward fields
+          updateData.rewardCurrencyId = null;
+          updateData.rewardSuccesses = null;
+          updateData.rewardAmount = null;
+        }
       }
       if (body.consequence !== undefined) {
-        updateData.consequenceCurrencyId = body.consequence?.currencyId || null;
-        updateData.consequenceFailures = body.consequence?.failures || null;
-        updateData.consequenceAmount = body.consequence?.amount || null;
+        if (body.consequence) {
+          updateData.consequenceCurrencyId = body.consequence.currencyId || null;
+          updateData.consequenceFailures = body.consequence.failures || null;
+          updateData.consequenceAmount = body.consequence.amount || null;
+        } else {
+          // If consequence is explicitly set to null/falsy, clear all consequence fields
+          updateData.consequenceCurrencyId = null;
+          updateData.consequenceFailures = null;
+          updateData.consequenceAmount = null;
+        }
       }
       updateData.updatedAt = new Date();
 
@@ -310,6 +333,62 @@ export function registerGoalRoutes(app: App) {
       app.logger.error(
         { err: error, userId: session.user.id, goalId: id },
         'Failed to delete goal'
+      );
+      throw error;
+    }
+  });
+
+  // POST /api/goals/:id/deactivate - Toggle goal status between ACTIVE and DEACTIVATED
+  app.fastify.post('/api/goals/:id/deactivate', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { id } = request.params as { id: string };
+
+    app.logger.info({ userId: session.user.id, goalId: id }, 'Toggling goal deactivation');
+
+    try {
+      // Check if goal exists and belongs to user
+      const existingGoals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.id, id))
+        .limit(1);
+
+      if (!existingGoals.length) {
+        app.logger.warn({ userId: session.user.id, goalId: id }, 'Goal not found');
+        return reply.status(404).send({ error: 'Goal not found' });
+      }
+
+      if (existingGoals[0].userId !== session.user.id) {
+        app.logger.warn(
+          { userId: session.user.id, goalId: id, ownerId: existingGoals[0].userId },
+          'Unauthorized access to goal'
+        );
+        return reply.status(403).send({ error: 'Unauthorized' });
+      }
+
+      const currentStatus = existingGoals[0].status || 'ACTIVE';
+      const newStatus = currentStatus === 'ACTIVE' ? 'DEACTIVATED' : 'ACTIVE';
+
+      const updatedGoals = await app.db
+        .update(schema.goals)
+        .set({ status: newStatus, updatedAt: new Date() })
+        .where(eq(schema.goals.id, id))
+        .returning();
+
+      app.logger.info(
+        { userId: session.user.id, goalId: id, newStatus },
+        'Goal status toggled successfully'
+      );
+      return updatedGoals[0];
+    } catch (error) {
+      app.logger.error(
+        { err: error, userId: session.user.id, goalId: id },
+        'Failed to toggle goal deactivation'
       );
       throw error;
     }
