@@ -286,7 +286,7 @@ export default function ReflectScreen() {
     const categoryLower = category.toLowerCase();
     if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
     if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
-    if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
+    if (categoryLower === 'thought') return { ios: 'cloud.fill', android: 'cloud' };
     if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
     return { ios: 'sparkles', android: 'auto-awesome' };
   };
@@ -593,7 +593,7 @@ export default function ReflectScreen() {
 
                             {reflection.additionalThoughts && (
                               <View style={styles.additionalThoughtsSection}>
-                                <Text style={styles.additionalThoughtsLabel}>Additional Thoughts</Text>
+                                <Text style={styles.additionalThoughtsLabel}>Notes on weighing up gains and losses</Text>
                                 <Text style={styles.additionalThoughtsText}>{reflection.additionalThoughts}</Text>
                               </View>
                             )}
@@ -764,6 +764,15 @@ function AddReflectionModal({
   });
 
   const selectedGoal = goals.find(g => g.id === linkedGoalId);
+
+  const getCategoryIcon = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'cloud.fill', android: 'cloud' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
+  };
 
   const getDescriptionPlaceholder = () => {
     if (!category) {
@@ -1055,6 +1064,7 @@ function AddReflectionModal({
                     <View style={styles.optionsGrid}>
                       {availableCategories.map((cat, index) => {
                         const isSelected = category === cat;
+                        const catIcon = getCategoryIcon(cat);
                         
                         return (
                           <React.Fragment key={index}>
@@ -1062,6 +1072,12 @@ function AddReflectionModal({
                               style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
                               onPress={() => setCategory(isSelected ? undefined : cat)}
                             >
+                              <IconSymbol
+                                ios_icon_name={catIcon.ios}
+                                android_material_icon_name={catIcon.android}
+                                size={16}
+                                color={isSelected ? colors.background : colors.primary}
+                              />
                               <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                                 {cat}
                               </Text>
@@ -1480,7 +1496,7 @@ function AddReflectionModal({
                       size={20}
                       color={colors.primary}
                     />
-                    <Text style={styles.label}>Additional Thoughts (Optional)</Text>
+                    <Text style={styles.label}>Notes on weighing up gains and losses (Optional)</Text>
                   </View>
                   <TextInput
                     ref={additionalThoughtsInputRef}
@@ -2351,6 +2367,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   optionButtonLarge: {
     paddingHorizontal: 20,
