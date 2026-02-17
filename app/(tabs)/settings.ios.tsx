@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -46,6 +46,7 @@ interface Goal {
   title: string;
   description?: string;
   type?: 'RESTRAINING' | 'PROACTIVE';
+  status?: 'ACTIVE' | 'DEACTIVATED';
   progress?: number;
   completed?: boolean;
   rewardCurrencyId?: string;
@@ -54,6 +55,8 @@ interface Goal {
   consequenceCurrencyId?: string;
   consequenceCurrencyBalance?: number;
   consequenceCurrencySymbol?: string;
+  successCount?: number;
+  struggleCount?: number;
 }
 
 interface NotificationAlarm {
@@ -127,6 +130,13 @@ export default function SettingsScreen() {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  // Currency claim/pay modal state
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [currencyModalType, setCurrencyModalType] = useState<'claim' | 'pay'>('claim');
+  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string>('');
+  const [selectedCurrencyBalance, setSelectedCurrencyBalance] = useState<number>(0);
+  const [currencyAmount, setCurrencyAmount] = useState<string>('');
+
   const [formData, setFormData] = useState<any>({});
   
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -189,7 +199,7 @@ export default function SettingsScreen() {
         ? goalProgressRes 
         : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
 
-      // Merge goal progress data (which includes currency balances) with goals
+      // Merge goal progress data (which includes currency balances and success/struggle counts) with goals
       const goalsWithBalances = goalsData.map((goal: Goal) => {
         const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
         if (progressInfo) {
@@ -199,9 +209,12 @@ export default function SettingsScreen() {
             rewardCurrencySymbol: progressInfo.rewardCurrencySymbol,
             consequenceCurrencyBalance: progressInfo.consequenceCurrencyBalance,
             consequenceCurrencySymbol: progressInfo.consequenceCurrencySymbol,
+            successCount: progressInfo.successCount || 0,
+            struggleCount: progressInfo.struggleCount || 0,
+            status: progressInfo.status || goal.status || 'ACTIVE',
           };
         }
-        return goal;
+        return { ...goal, status: goal.status || 'ACTIVE' };
       });
       
       setGoals(goalsWithBalances);
@@ -430,6 +443,21 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleDeactivateGoal = async (id: string) => {
+    try {
+      setLoading(true);
+      console.log(`[API] Toggling goal status for goal ${id}`);
+      await authenticatedPost(`/api/goals/${id}/deactivate`, {});
+      showSuccess('Goal status updated successfully');
+      await loadData();
+    } catch (error: any) {
+      console.error('[API] Error toggling goal status:', error);
+      showError(error.message || 'Failed to update goal status');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSavePreferences = async () => {
     try {
       setLoading(true);
@@ -505,39 +533,42 @@ export default function SettingsScreen() {
     );
   };
 
-  const handlePayCurrency = async (currencyId: string, amount: number) => {
-    try {
-      setLoading(true);
-      console.log(`[API] Paying ${amount} of currency ${currencyId}`);
-      const result = await authenticatedPost(`/api/currencies/${currencyId}/pay`, { amount });
-      console.log('[API] Pay currency result:', result);
-      showSuccess(`Paid ${amount} successfully`);
-      await loadData();
-      if (currentSection === 'reports') {
-        await loadCurrencyBalances();
-      }
-    } catch (error: any) {
-      console.error('[API] Error paying currency:', error);
-      showError(error.message || 'Failed to pay currency');
-    } finally {
-      setLoading(false);
-    }
+  const openCurrencyModal = (type: 'claim' | 'pay', currencyId: string, balance: number) => {
+    setCurrencyModalType(type);
+    setSelectedCurrencyId(currencyId);
+    setSelectedCurrencyBalance(balance);
+    setCurrencyAmount(Math.abs(balance).toString());
+    setShowCurrencyModal(true);
   };
 
-  const handleClaimCurrency = async (currencyId: string, amount: number) => {
+  const handleCurrencyAction = async () => {
     try {
       setLoading(true);
-      console.log(`[API] Claiming ${amount} of currency ${currencyId}`);
-      const result = await authenticatedPost(`/api/currencies/${currencyId}/claim`, { amount });
-      console.log('[API] Claim currency result:', result);
-      showSuccess(`Claimed ${amount} successfully`);
+      const amount = parseInt(currencyAmount);
+      
+      if (isNaN(amount) || amount <= 0) {
+        showError('Please enter a valid amount');
+        return;
+      }
+
+      if (currencyModalType === 'claim') {
+        console.log(`[API] Claiming ${amount} of currency ${selectedCurrencyId}`);
+        await authenticatedPost(`/api/currencies/${selectedCurrencyId}/claim`, { amount });
+        showSuccess(`Claimed ${amount} successfully`);
+      } else {
+        console.log(`[API] Paying ${amount} of currency ${selectedCurrencyId}`);
+        await authenticatedPost(`/api/currencies/${selectedCurrencyId}/pay`, { amount });
+        showSuccess(`Paid ${amount} successfully`);
+      }
+
+      setShowCurrencyModal(false);
       await loadData();
       if (currentSection === 'reports') {
         await loadCurrencyBalances();
       }
     } catch (error: any) {
-      console.error('[API] Error claiming currency:', error);
-      showError(error.message || 'Failed to claim currency');
+      console.error('[API] Error with currency action:', error);
+      showError(error.message || 'Failed to process currency action');
     } finally {
       setLoading(false);
     }
@@ -553,6 +584,17 @@ export default function SettingsScreen() {
       return 'No Change';
     }
   };
+
+  // Sort goals: Active first (alphabetically), then Deactivated (alphabetically)
+  const sortedGoals = useMemo(() => {
+    const activeGoals = goals.filter(g => g.status === 'ACTIVE');
+    const deactivatedGoals = goals.filter(g => g.status === 'DEACTIVATED');
+
+    activeGoals.sort((a, b) => a.title.localeCompare(b.title));
+    deactivatedGoals.sort((a, b) => a.title.localeCompare(b.title));
+
+    return [...activeGoals, ...deactivatedGoals];
+  }, [goals]);
 
   const renderGoals = () => {
     return (
@@ -577,97 +619,186 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.listContainer}>
-          {goals.length === 0 ? (
+          {sortedGoals.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No goals yet. Create one to get started!</Text>
             </View>
           ) : (
-            goals.map((goal, index) => {
-              const typeText = goal.type || 'Goal';
-              const progressText = goal.progress !== undefined ? `${goal.progress}%` : '';
-              const statusText = goal.completed ? 'Completed' : 'In Progress';
+            sortedGoals.map((goal, index) => {
+              const successCount = goal.successCount || 0;
+              const struggleCount = goal.struggleCount || 0;
+              const isDeactivated = goal.status === 'DEACTIVATED';
+              
+              // Determine net result for reward currency
+              const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
+              const rewardBalance = goal.rewardCurrencyBalance || 0;
+              const showRewardClaim = rewardCurrency && rewardBalance > 0;
+              const showRewardPay = rewardCurrency && rewardBalance < 0;
+              
+              // Determine net result for consequence currency
+              const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+              const consequenceBalance = goal.consequenceCurrencyBalance || 0;
+              const showConsequenceClaim = consequenceCurrency && consequenceBalance > 0;
+              const showConsequencePay = consequenceCurrency && consequenceBalance < 0;
               
               return (
                 <React.Fragment key={index}>
-                  <View style={styles.goalCardExpanded}>
-                    <View style={styles.listItemContent}>
-                      <Text style={styles.listItemTitle}>{goal.title}</Text>
-                      {goal.description && (
-                        <Text style={styles.listItemSubtitle}>{goal.description}</Text>
-                      )}
-                      <View style={styles.goalMeta}>
-                        <Text style={styles.listItemSubtitle}>{typeText}</Text>
-                        {progressText && (
-                          <Text style={styles.listItemSubtitle}> • {progressText}</Text>
+                  <View style={[styles.goalCardExpanded, isDeactivated && styles.goalCardDeactivated]}>
+                    <View style={styles.goalHeader}>
+                      <View style={styles.goalTitleRow}>
+                        {goal.type === 'PROACTIVE' && (
+                          <IconSymbol
+                            ios_icon_name="checkmark.circle.fill"
+                            android_material_icon_name="check-circle"
+                            size={20}
+                            color={colors.success}
+                          />
                         )}
-                        <Text style={styles.listItemSubtitle}> • {statusText}</Text>
+                        {goal.type === 'RESTRAINING' && (
+                          <IconSymbol
+                            ios_icon_name="stop.circle.fill"
+                            android_material_icon_name="cancel"
+                            size={20}
+                            color={colors.error}
+                          />
+                        )}
+                        <Text style={styles.listItemTitle}>{goal.title}</Text>
                       </View>
-                      
-                      {(goal.rewardCurrencyId || goal.consequenceCurrencyId) && (
-                        <View style={styles.currencyBalances}>
-                          {goal.rewardCurrencyId && (
-                            <View style={styles.currencyBalanceItem}>
-                              <Text style={styles.currencyBalanceLabel}>Reward:</Text>
-                              <Text style={[styles.currencyBalanceValue, { color: colors.success }]}>
-                                {goal.rewardCurrencyBalance || 0} {goal.rewardCurrencySymbol || ''}
-                              </Text>
+                      <View style={styles.listItemActions}>
+                        <TouchableOpacity
+                          onPress={() => handleDeactivateGoal(goal.id)}
+                          style={styles.iconButton}
+                        >
+                          <IconSymbol
+                            ios_icon_name="power"
+                            android_material_icon_name="power-settings-new"
+                            size={20}
+                            color={isDeactivated ? colors.textSecondary : colors.primary}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => router.push(`/create-goal?id=${goal.id}`)}
+                          style={styles.iconButton}
+                        >
+                          <IconSymbol
+                            ios_icon_name="pencil"
+                            android_material_icon_name="edit"
+                            size={20}
+                            color={colors.primary}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleDeleteGoal(goal.id)}
+                          style={styles.iconButton}
+                        >
+                          <IconSymbol
+                            ios_icon_name="trash"
+                            android_material_icon_name="delete"
+                            size={20}
+                            color={colors.error}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    
+                    {goal.description && (
+                      <Text style={styles.listItemSubtitle}>{goal.description}</Text>
+                    )}
+                    
+                    {/* Success/Struggle counts with icons */}
+                    <View style={styles.goalStats}>
+                      <View style={styles.goalStatItem}>
+                        <IconSymbol
+                          ios_icon_name="checkmark.circle"
+                          android_material_icon_name="check-circle"
+                          size={16}
+                          color={colors.success}
+                        />
+                        <Text style={[styles.goalStatText, { color: colors.success }]}>
+                          {successCount}
+                        </Text>
+                      </View>
+                      <View style={styles.goalStatItem}>
+                        <IconSymbol
+                          ios_icon_name="xmark.circle"
+                          android_material_icon_name="cancel"
+                          size={16}
+                          color={colors.error}
+                        />
+                        <Text style={[styles.goalStatText, { color: colors.error }]}>
+                          {struggleCount}
+                        </Text>
+                      </View>
+                    </View>
+                    
+                    {(goal.rewardCurrencyId || goal.consequenceCurrencyId) && (
+                      <View style={styles.currencyBalances}>
+                        {goal.rewardCurrencyId && (
+                          <View style={styles.currencyBalanceItem}>
+                            <Text style={styles.currencyBalanceLabel}>Reward:</Text>
+                            <Text style={[styles.currencyBalanceValue, { color: rewardBalance >= 0 ? colors.success : colors.error }]}>
+                              {rewardBalance} {goal.rewardCurrencySymbol || ''}
+                            </Text>
+                            {showRewardClaim && (
                               <TouchableOpacity
                                 style={[styles.currencyActionButton, { backgroundColor: colors.success }]}
                                 onPress={() => {
                                   if (goal.rewardCurrencyId) {
-                                    handleClaimCurrency(goal.rewardCurrencyId, 1);
+                                    openCurrencyModal('claim', goal.rewardCurrencyId, rewardBalance);
                                   }
                                 }}
                               >
                                 <Text style={styles.currencyActionButtonText}>Claim</Text>
                               </TouchableOpacity>
-                            </View>
-                          )}
-                          {goal.consequenceCurrencyId && (
-                            <View style={styles.currencyBalanceItem}>
-                              <Text style={styles.currencyBalanceLabel}>Consequence:</Text>
-                              <Text style={[styles.currencyBalanceValue, { color: colors.error }]}>
-                                {goal.consequenceCurrencyBalance || 0} {goal.consequenceCurrencySymbol || ''}
-                              </Text>
+                            )}
+                            {showRewardPay && (
                               <TouchableOpacity
                                 style={[styles.currencyActionButton, { backgroundColor: colors.error }]}
                                 onPress={() => {
-                                  if (goal.consequenceCurrencyId) {
-                                    handlePayCurrency(goal.consequenceCurrencyId, 1);
+                                  if (goal.rewardCurrencyId) {
+                                    openCurrencyModal('pay', goal.rewardCurrencyId, rewardBalance);
                                   }
                                 }}
                               >
                                 <Text style={styles.currencyActionButtonText}>Pay</Text>
                               </TouchableOpacity>
-                            </View>
-                          )}
-                        </View>
-                      )}
-                    </View>
-                    <View style={styles.listItemActions}>
-                      <TouchableOpacity
-                        onPress={() => router.push(`/create-goal?id=${goal.id}`)}
-                        style={styles.iconButton}
-                      >
-                        <IconSymbol
-                          ios_icon_name="pencil"
-                          android_material_icon_name="edit"
-                          size={20}
-                          color={colors.primary}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleDeleteGoal(goal.id)}
-                        style={styles.iconButton}
-                      >
-                        <IconSymbol
-                          ios_icon_name="trash"
-                          android_material_icon_name="delete"
-                          size={20}
-                          color={colors.error}
-                        />
-                      </TouchableOpacity>
-                    </View>
+                            )}
+                          </View>
+                        )}
+                        {goal.consequenceCurrencyId && (
+                          <View style={styles.currencyBalanceItem}>
+                            <Text style={styles.currencyBalanceLabel}>Consequence:</Text>
+                            <Text style={[styles.currencyBalanceValue, { color: consequenceBalance >= 0 ? colors.success : colors.error }]}>
+                              {consequenceBalance} {goal.consequenceCurrencySymbol || ''}
+                            </Text>
+                            {showConsequenceClaim && (
+                              <TouchableOpacity
+                                style={[styles.currencyActionButton, { backgroundColor: colors.success }]}
+                                onPress={() => {
+                                  if (goal.consequenceCurrencyId) {
+                                    openCurrencyModal('claim', goal.consequenceCurrencyId, consequenceBalance);
+                                  }
+                                }}
+                              >
+                                <Text style={styles.currencyActionButtonText}>Claim</Text>
+                              </TouchableOpacity>
+                            )}
+                            {showConsequencePay && (
+                              <TouchableOpacity
+                                style={[styles.currencyActionButton, { backgroundColor: colors.error }]}
+                                onPress={() => {
+                                  if (goal.consequenceCurrencyId) {
+                                    openCurrencyModal('pay', goal.consequenceCurrencyId, consequenceBalance);
+                                  }
+                                }}
+                              >
+                                <Text style={styles.currencyActionButtonText}>Pay</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </View>
                 </React.Fragment>
               );
@@ -1227,6 +1358,10 @@ export default function SettingsScreen() {
   };
 
   const renderReports = () => {
+    const worthItPercentage = worthItTallies && worthItTallies.total > 0 
+      ? Math.round((worthItTallies.worthIt / worthItTallies.total) * 100)
+      : 0;
+
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -1252,10 +1387,10 @@ export default function SettingsScreen() {
                 <View style={styles.reportStats}>
                   <Text style={styles.reportStat}>Total Reflections: {worthItTallies.total}</Text>
                   <Text style={[styles.reportStat, { color: colors.success }]}>
-                    Worth It: {worthItTallies.worthIt} ({worthItTallies.total > 0 ? Math.round((worthItTallies.worthIt / worthItTallies.total) * 100) : 0}%)
+                    Worth It: {worthItTallies.worthIt} ({worthItPercentage}%)
                   </Text>
                   <Text style={[styles.reportStat, { color: colors.error }]}>
-                    Not Worth It: {worthItTallies.notWorthIt} ({worthItTallies.total > 0 ? Math.round((worthItTallies.notWorthIt / worthItTallies.total) * 100) : 0}%)
+                    Not Worth It: {worthItTallies.notWorthIt} ({100 - worthItPercentage}%)
                   </Text>
                 </View>
               </View>
@@ -1747,6 +1882,52 @@ export default function SettingsScreen() {
 
       {renderEditModal()}
 
+      {/* Currency Claim/Pay Modal */}
+      <Modal
+        visible={showCurrencyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCurrencyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>
+              {currencyModalType === 'claim' ? 'Claim Currency' : 'Pay Currency'}
+            </Text>
+            <Text style={styles.alertMessage}>
+              {currencyModalType === 'claim' 
+                ? `You have ${Math.abs(selectedCurrencyBalance)} to claim. Enter amount:`
+                : `You owe ${Math.abs(selectedCurrencyBalance)}. Enter amount to pay:`
+              }
+            </Text>
+            <TextInput
+              style={styles.currencyInput}
+              value={currencyAmount}
+              onChangeText={setCurrencyAmount}
+              keyboardType="number-pad"
+              placeholder="Enter amount"
+              placeholderTextColor={colors.textSecondary}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => setShowCurrencyModal(false)}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCurrencyAction}
+              >
+                <Text style={styles.alertButtonText}>
+                  {currencyModalType === 'claim' ? 'Claim' : 'Pay'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={showErrorModal}
         transparent
@@ -1873,16 +2054,80 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-  goalMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
   listItemActions: {
     flexDirection: 'row',
     gap: 8,
   },
   iconButton: {
     padding: 8,
+  },
+  goalCardExpanded: {
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  goalCardDeactivated: {
+    opacity: 0.6,
+  },
+  goalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  goalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  goalStats: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  goalStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  goalStatText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  currencyBalances: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  currencyBalanceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  currencyBalanceLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    minWidth: 100,
+  },
+  currencyBalanceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  currencyActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  currencyActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   currencyHeader: {
     flexDirection: 'row',
@@ -2134,14 +2379,40 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 20,
   },
+  currencyInput: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 18,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  alertButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   alertButton: {
+    flex: 1,
     backgroundColor: colors.primary,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
+  alertButtonSecondary: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   alertButtonText: {
     color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  alertButtonSecondaryText: {
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -2171,44 +2442,6 @@ const styles = StyleSheet.create({
   savePreferencesButtonText: {
     color: colors.background,
     fontSize: 16,
-    fontWeight: '600',
-  },
-  goalCardExpanded: {
-    backgroundColor: colors.card,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  currencyBalances: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  currencyBalanceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
-  currencyBalanceLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    minWidth: 100,
-  },
-  currencyBalanceValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-  },
-  currencyActionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  currencyActionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
     fontWeight: '600',
   },
 });

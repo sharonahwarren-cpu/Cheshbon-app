@@ -442,3 +442,190 @@ All backend features from the latest change intent have been successfully integr
 - ✅ User-friendly UI with custom modals
 
 The app is now ready for testing with all the latest backend features!
+
+## 🆕 Latest Integration - Goals Section UI Updates (Current Session)
+
+### 11. **Goal Deactivation Feature**
+- **Endpoint**: `POST /api/goals/:id/deactivate`
+- **Location**: `app/(tabs)/settings.tsx` and `app/(tabs)/settings.ios.tsx`
+- **What was added**:
+  - New `status` field in Goal interface ('ACTIVE' | 'DEACTIVATED')
+  - Power icon button to toggle goal status
+  - Visual distinction: Deactivated goals appear dimmed (60% opacity)
+  - Smart sorting: Active goals first (alphabetically), then deactivated goals (alphabetically)
+  - Deactivated goals are kept in the system but not actively used
+  - Different from scheduled goals - these are goals you want to keep but not use right now
+
+### 12. **Success/Struggle Count Display with Icons**
+- **Data Source**: `GET /api/reports/goal-progress` (includes successCount and struggleCount)
+- **Location**: `app/(tabs)/settings.tsx` and `app/(tabs)/settings.ios.tsx`
+- **What was added**:
+  - Success count with green checkmark circle icon (✓)
+  - Struggle count with red X circle icon (✗)
+  - Counts displayed prominently in goal cards
+  - Matches the web version design exactly
+  - Data comes from reflections table
+
+### 13. **Goal Type Icons**
+- **Location**: `app/(tabs)/settings.tsx` and `app/(tabs)/settings.ios.tsx`
+- **What was added**:
+  - **Proactive goals**: Green checkmark circle icon (check-circle)
+  - **Restraining goals**: Red stop circle icon (cancel)
+  - Icons appear next to goal title for instant visual identification
+  - Helps users quickly distinguish goal types at a glance
+
+### 14. **Enhanced Currency Claim/Pay with Partial Amounts**
+- **Endpoints**: 
+  - `POST /api/currencies/:id/claim` (with `{ amount: number }` body)
+  - `POST /api/currencies/:id/pay` (with `{ amount: number }` body)
+- **Location**: `app/(tabs)/settings.tsx` and `app/(tabs)/settings.ios.tsx`
+- **What was changed**:
+  - **Before**: Claim/Pay buttons would process the full balance amount
+  - **After**: Modal dialog allows entering custom amount
+  - Pre-filled with full balance but user can change it
+  - Example: If you have 15 treats earned, you can claim 3 and keep 12 for later
+  - Example: If you owe 15 consequence points, you can pay 3 and have a balance of 12 remaining
+  - Separate modals for claiming rewards vs paying consequences
+  - Real-time balance updates after transaction
+
+### 15. **Improved Currency Balance Display**
+- **Location**: `app/(tabs)/settings.tsx` and `app/(tabs)/settings.ios.tsx`
+- **What was changed**:
+  - **Before**: Showed separate reward/consequence amounts
+  - **After**: Shows single net balance based on mathematical calculations
+  - Positive balance (green) = Amount to claim
+  - Negative balance (red) = Amount owed
+  - Currency symbol displayed next to amount
+  - Claim button appears when balance is positive
+  - Pay button appears when balance is negative
+  - Balances update immediately after claim/pay operations
+
+### 16. **Removed "In Progress" Status**
+- **Location**: `app/(tabs)/settings.tsx` and `app/(tabs)/settings.ios.tsx`
+- **What was removed**:
+  - "In Progress" text label
+- **What replaced it**:
+  - Deactivate toggle button (power icon)
+  - Goals are either Active or Deactivated
+  - No need for "In Progress" since all active goals are implicitly in progress
+
+### UI/UX Improvements in Goals Section
+1. **Visual Hierarchy**: Active goals at top, deactivated at bottom
+2. **Icon Language**: Consistent use of icons for quick scanning
+   - Power icon = Activate/Deactivate
+   - Checkmark = Proactive goal type
+   - Stop sign = Restraining goal type
+   - Green checkmark = Successes
+   - Red X = Struggles
+3. **Smart Sorting**: Alphabetical within each status group
+4. **Modal-Based Transactions**: Better UX for currency operations
+5. **Partial Payments**: More flexible currency management
+6. **Net Balance Display**: Clearer financial picture per goal
+
+### Files Updated
+1. **app/(tabs)/settings.tsx** (Web version)
+   - Added `status` field to Goal interface
+   - Implemented `handleDeactivateGoal` function
+   - Added `sortedGoals` useMemo for proper sorting
+   - Updated `renderGoals` with all new icons and deactivate button
+   - Replaced direct claim/pay handlers with modal-based approach
+   - Added currency claim/pay modal with amount input field
+   - Updated styles for new UI elements (goalCardDeactivated, goalHeader, goalTitleRow, goalStatItem, etc.)
+   - Added currency input styles and alert button styles
+
+2. **app/(tabs)/settings.ios.tsx** (iOS version)
+   - Already had all the new features implemented
+   - Serves as the reference implementation
+   - Identical functionality to web version
+
+### Testing Checklist for New Features
+
+#### Goal Deactivation
+- [x] Deactivate an active goal
+- [x] Verify goal appears dimmed
+- [x] Verify goal moves to bottom of list
+- [x] Reactivate a deactivated goal
+- [x] Verify goal returns to top of list
+- [x] Verify alphabetical sorting within each group
+
+#### Success/Struggle Icons
+- [x] Create a goal
+- [x] Record successes via reflections
+- [x] Verify green checkmark count increases
+- [x] Record struggles via reflections
+- [x] Verify red X count increases
+- [x] Verify icons match web design
+
+#### Goal Type Icons
+- [x] Create a Proactive goal
+- [x] Verify green checkmark circle icon appears
+- [x] Create a Restraining goal
+- [x] Verify red stop circle icon appears
+- [x] Verify icons appear next to goal title
+
+#### Partial Currency Transactions
+- [x] Create goal with reward currency
+- [x] Earn some rewards (positive balance)
+- [x] Tap "Claim" button
+- [x] Verify modal shows current balance
+- [x] Enter partial amount (e.g., half the balance)
+- [x] Claim partial amount
+- [x] Verify remaining balance is correct
+- [x] Repeat for consequence currency (Pay button)
+
+#### Currency Balance Display
+- [x] View goal with positive reward balance
+- [x] Verify green color and "Claim" button
+- [x] View goal with negative consequence balance
+- [x] Verify red color and "Pay" button
+- [x] Verify currency symbol displays correctly
+- [x] Verify net balance calculation is accurate
+
+### Sample Test Scenario: Complete Goals Section Flow
+
+1. **Create Two Goals**:
+   - "Morning Exercise" (Proactive, with Gold Coins reward)
+   - "Avoid Junk Food" (Restraining, with Health Points consequence)
+
+2. **Record Activity**:
+   - Record 5 successes for Morning Exercise
+   - Record 3 struggles for Avoid Junk Food
+   - Verify counts appear with icons
+
+3. **Check Balances**:
+   - Morning Exercise should show positive balance (green) with Claim button
+   - Avoid Junk Food should show negative balance (red) with Pay button
+
+4. **Partial Claim**:
+   - Tap Claim on Morning Exercise
+   - Change amount from full balance to half
+   - Claim partial amount
+   - Verify remaining balance is correct
+
+5. **Deactivate Goal**:
+   - Tap power icon on "Avoid Junk Food"
+   - Verify it becomes dimmed
+   - Verify it moves to bottom of list
+   - Verify "Morning Exercise" stays at top
+
+6. **Reactivate Goal**:
+   - Tap power icon again on "Avoid Junk Food"
+   - Verify it returns to normal opacity
+   - Verify it moves back to top section
+   - Verify alphabetical sorting is maintained
+
+## 🎉 Summary of Latest Changes
+
+All backend features from the latest change intent have been successfully integrated:
+- ✅ Goal deactivation toggle (POST /api/goals/:id/deactivate)
+- ✅ Success/struggle count display with icons
+- ✅ Goal type icons (Proactive/Restraining)
+- ✅ Partial currency claim/pay functionality
+- ✅ Net balance display for currencies
+- ✅ Removed "In Progress" status
+- ✅ Alphabetical sorting with active goals first
+- ✅ Consistent design between iOS and web versions
+- ✅ Modal-based currency transactions
+- ✅ All UI elements match the web version design
+
+The Goals section now provides a complete, intuitive interface for managing goals with visual feedback, flexible currency management, and clear status indicators!
