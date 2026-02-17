@@ -36,40 +36,43 @@ export function registerReportsRoutes(app: App) {
 
       // Calculate balances for each currency from ONLY goal_currency_balances
       // (currency_transactions are manual operations, not included in total)
-      const balances = userCurrencies.map(currency => {
-        let totalBalance = 0;
+      const balances = userCurrencies
+        .map(currency => {
+          let totalBalance = 0;
 
-        // Sum all goal_currency_balances for this currency
-        for (const goalBalance of goalBalances) {
-          if (goalBalance.currencyId === currency.id) {
-            totalBalance += goalBalance.balance;
+          // Sum all goal_currency_balances for this currency
+          for (const goalBalance of goalBalances) {
+            if (goalBalance.currencyId === currency.id) {
+              totalBalance += goalBalance.balance;
+            }
           }
-        }
 
-        // Build goal breakdown
-        const goalBreakdown = goals
-          .filter(goal => {
-            // Check if this goal has this currency
-            return goal.rewardCurrencyId === currency.id || goal.consequenceCurrencyId === currency.id;
-          })
-          .map(goal => {
-            // Find the balance for this goal and currency
-            const balance = goalBalances.find(gb => gb.goalId === goal.id && gb.currencyId === currency.id);
-            return {
-              goalId: goal.id,
-              goalTitle: goal.title,
-              balance: balance?.balance || 0,
-            };
-          });
+          // Build goal breakdown - only include non-zero balances
+          const goalBreakdown = goals
+            .filter(goal => {
+              // Check if this goal has this currency
+              return goal.rewardCurrencyId === currency.id || goal.consequenceCurrencyId === currency.id;
+            })
+            .map(goal => {
+              // Find the balance for this goal and currency
+              const balance = goalBalances.find(gb => gb.goalId === goal.id && gb.currencyId === currency.id);
+              return {
+                goalId: goal.id,
+                goalTitle: goal.title,
+                balance: balance?.balance || 0,
+              };
+            })
+            .filter(gb => gb.balance !== 0); // Only include non-zero balances
 
-        return {
-          currencyId: currency.id,
-          currencyName: currency.name,
-          symbol: currency.symbol,
-          totalBalance,
-          goalBreakdown,
-        };
-      });
+          return {
+            currencyId: currency.id,
+            currencyName: currency.name,
+            symbol: currency.symbol,
+            totalBalance,
+            goalBreakdown,
+          };
+        })
+        .filter(cb => cb.totalBalance !== 0); // Only include currencies with non-zero total balance
 
       app.logger.info({ userId: session.user.id, currencyCount: balances.length }, 'Currency balances report generated successfully');
       return balances;
