@@ -87,7 +87,7 @@ interface ActivatedGoal {
   title: string;
   description?: string;
   type: 'RESTRAINING' | 'PROACTIVE';
-  lifeArea?: { id: string; name: string };
+  lifeArea?: { id: string; name: string; parentId?: string; level: number };
   subCategory?: string;
   behaviorCategories: string[];
   todaySuccessCount: number;
@@ -97,8 +97,10 @@ interface ActivatedGoal {
 
 interface CategoryGroup {
   name: string;
-  subCategories: Record<string, ActivatedGoal[]>;
-  uncategorizedGoals: ActivatedGoal[];
+  id: string;
+  level: number;
+  subCategories: Record<string, CategoryGroup>;
+  goals: ActivatedGoal[];
 }
 
 export default function HomeScreen() {
@@ -121,10 +123,16 @@ export default function HomeScreen() {
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
   const [categoryGroups, setCategoryGroups] = useState<Record<string, CategoryGroup>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
-  const [collapsedSubCategories, setCollapsedSubCategories] = useState<Record<string, boolean>>({});
   
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  
+  // Quick reflection modal state
+  const [showQuickReflectionModal, setShowQuickReflectionModal] = useState(false);
+  const [quickReflectionGoalId, setQuickReflectionGoalId] = useState<string | undefined>();
+  const [quickReflectionStep, setQuickReflectionStep] = useState(1);
+  const [quickReflectionOutcome, setQuickReflectionOutcome] = useState<'success' | 'struggled' | undefined>();
+  const [quickReflectionDescription, setQuickReflectionDescription] = useState('');
 
   useEffect(() => {
     console.log("HomeScreen mounted");
@@ -217,43 +225,84 @@ export default function HomeScreen() {
       
       setActivatedGoals(goalsData);
       
+      // Build hierarchical category structure
       const groups: Record<string, CategoryGroup> = {};
       
       goalsData.forEach((goal: ActivatedGoal) => {
-        const category = goal.lifeArea?.name || 'Uncategorized';
-        const subCategory = goal.subCategory || '';
+        const lifeArea = goal.lifeArea;
         
-        if (!groups[category]) {
-          groups[category] = {
-            name: category,
-            subCategories: {},
-            uncategorizedGoals: [],
-          };
+        if (!lifeArea) {
+          // Uncategorized goals
+          if (!groups['Uncategorized']) {
+            groups['Uncategorized'] = {
+              name: 'Uncategorized',
+              id: 'uncategorized',
+              level: 0,
+              subCategories: {},
+              goals: [],
+            };
+          }
+          groups['Uncategorized'].goals.push(goal);
+          return;
         }
         
-        if (subCategory) {
-          if (!groups[category].subCategories[subCategory]) {
-            groups[category].subCategories[subCategory] = [];
+        // Determine if this is a top-level or sub-level life area
+        const isTopLevel = lifeArea.level === 1;
+        
+        if (isTopLevel) {
+          // Top-level life area
+          if (!groups[lifeArea.id]) {
+            groups[lifeArea.id] = {
+              name: lifeArea.name,
+              id: lifeArea.id,
+              level: lifeArea.level,
+              subCategories: {},
+              goals: [],
+            };
           }
-          groups[category].subCategories[subCategory].push(goal);
+          groups[lifeArea.id].goals.push(goal);
         } else {
-          groups[category].uncategorizedGoals.push(goal);
+          // Sub-level life area - need to find parent
+          const parentId = lifeArea.parentId || 'Uncategorized';
+          
+          if (!groups[parentId]) {
+            groups[parentId] = {
+              name: parentId === 'Uncategorized' ? 'Uncategorized' : 'Unknown Parent',
+              id: parentId,
+              level: 1,
+              subCategories: {},
+              goals: [],
+            };
+          }
+          
+          if (!groups[parentId].subCategories[lifeArea.id]) {
+            groups[parentId].subCategories[lifeArea.id] = {
+              name: lifeArea.name,
+              id: lifeArea.id,
+              level: lifeArea.level,
+              subCategories: {},
+              goals: [],
+            };
+          }
+          
+          groups[parentId].subCategories[lifeArea.id].goals.push(goal);
         }
       });
       
+      // Sort groups alphabetically, with Uncategorized at the end
       const sortedGroups: Record<string, CategoryGroup> = {};
-      const categoryNames = Object.keys(groups).sort((a, b) => {
+      const categoryKeys = Object.keys(groups).sort((a, b) => {
         if (a === 'Uncategorized') return 1;
         if (b === 'Uncategorized') return -1;
-        return a.localeCompare(b);
+        return groups[a].name.localeCompare(groups[b].name);
       });
       
-      categoryNames.forEach(name => {
-        sortedGroups[name] = groups[name];
+      categoryKeys.forEach(key => {
+        sortedGroups[key] = groups[key];
       });
       
       setCategoryGroups(sortedGroups);
-      console.log("Express data loaded successfully");
+      console.log("Express data loaded successfully, category groups:", sortedGroups);
     } catch (error) {
       console.error("Error loading express data:", error);
       throw error;
@@ -297,30 +346,41 @@ export default function HomeScreen() {
 
   const handleEditGoal = (goalId: string) => {
     console.log("Opening goal editor for:", goalId);
-    router.push(`/create-goal?goalId=${goalId}`);
+    router.push(`/create-goal?id=${goalId}`);
   };
 
-  const handleQuickReflection = (goalId: string, entryId?: string) => {
-    console.log("Opening quick reflection for goal:", goalId, "entry:", entryId);
-    const dateString = selectedDate.toISOString().split('T')[0];
-    if (entryId) {
-      router.push(`/reflect?goalId=${goalId}&entryId=${entryId}&date=${dateString}`);
-    } else {
-      router.push(`/reflect?goalId=${goalId}&date=${dateString}`);
+  const handleQuickReflection = (goalId: string) => {
+    console.log("Opening quick reflection modal for goal:", goalId);
+    setQuickReflectionGoalId(goalId);
+    setQuickReflectionStep(1);
+    setQuickReflectionOutcome(undefined);
+    setQuickReflectionDescription('');
+    setShowQuickReflectionModal(true);
+  };
+
+  const handleQuickReflectionNext = () => {
+    if (quickReflectionStep < 5) {
+      setQuickReflectionStep(quickReflectionStep + 1);
     }
   };
 
-  const toggleCategory = (category: string) => {
-    setCollapsedCategories(prev => ({
-      ...prev,
-      [category]: !prev[category],
-    }));
+  const handleQuickReflectionBack = () => {
+    if (quickReflectionStep > 1) {
+      setQuickReflectionStep(quickReflectionStep - 1);
+    }
   };
 
-  const toggleSubCategory = (key: string) => {
-    setCollapsedSubCategories(prev => ({
+  const handleQuickReflectionSave = () => {
+    console.log("Quick reflection completed, navigating to full reflection screen");
+    setShowQuickReflectionModal(false);
+    const dateString = selectedDate.toISOString().split('T')[0];
+    router.push(`/(tabs)/reflect?goalId=${quickReflectionGoalId}&outcome=${quickReflectionOutcome}&date=${dateString}`);
+  };
+
+  const toggleCategory = (categoryKey: string) => {
+    setCollapsedCategories(prev => ({
       ...prev,
-      [key]: !prev[key],
+      [categoryKey]: !prev[categoryKey],
     }));
   };
 
@@ -328,7 +388,7 @@ export default function HomeScreen() {
     console.log("Opening reflection screen", goalId ? `for goal: ${goalId}` : "");
     const dateString = selectedDate.toISOString().split('T')[0];
     router.push({
-      pathname: '/reflect',
+      pathname: '/(tabs)/reflect',
       params: goalId ? { goalId, date: dateString } : { date: dateString },
     });
   };
@@ -435,7 +495,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={entry.id}
                   style={[styles.entryBadge, { borderColor: entryColor }]}
-                  onPress={() => handleQuickReflection(goal.id, entry.id)}
+                  onPress={() => handleQuickReflection(goal.id)}
                 >
                   <IconSymbol
                     ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
@@ -502,6 +562,42 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
         </View>
+      </View>
+    );
+  };
+
+  const renderCategoryGroup = (group: CategoryGroup, depth: number = 0): React.ReactNode => {
+    const isCollapsed = collapsedCategories[group.id];
+    const totalGoals = group.goals.length + 
+      Object.values(group.subCategories).reduce((sum, subCat) => sum + subCat.goals.length, 0);
+    
+    return (
+      <View key={group.id} style={[styles.categorySection, depth > 0 && styles.subCategorySection]}>
+        <TouchableOpacity 
+          style={styles.categoryHeader}
+          onPress={() => toggleCategory(group.id)}
+        >
+          <View style={styles.categoryTitleRow}>
+            <IconSymbol
+              ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
+              android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
+              size={20}
+              color={colors.text}
+            />
+            <Text style={styles.categoryTitle}>{group.name}</Text>
+          </View>
+          <Text style={styles.categoryCount}>{totalGoals}</Text>
+        </TouchableOpacity>
+        
+        {!isCollapsed && (
+          <View>
+            {/* Render sub-categories first */}
+            {Object.values(group.subCategories).map(subCat => renderCategoryGroup(subCat, depth + 1))}
+            
+            {/* Then render goals directly in this category */}
+            {group.goals.map(goal => renderGoalCard(goal))}
+          </View>
+        )}
       </View>
     );
   };
@@ -851,68 +947,105 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              Object.entries(categoryGroups).map(([categoryName, group]) => {
-                const isCollapsed = collapsedCategories[categoryName];
-                const totalGoals = group.uncategorizedGoals.length + 
-                  Object.values(group.subCategories).reduce((sum, goals) => sum + goals.length, 0);
-                
-                return (
-                  <View key={categoryName} style={styles.categorySection}>
-                    <TouchableOpacity 
-                      style={styles.categoryHeader}
-                      onPress={() => toggleCategory(categoryName)}
-                    >
-                      <View style={styles.categoryTitleRow}>
-                        <IconSymbol
-                          ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
-                          android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
-                          size={20}
-                          color={colors.text}
-                        />
-                        <Text style={styles.categoryTitle}>{categoryName}</Text>
-                      </View>
-                      <Text style={styles.categoryCount}>{totalGoals}</Text>
-                    </TouchableOpacity>
-                    
-                    {!isCollapsed && (
-                      <>
-                        {Object.entries(group.subCategories).sort(([a], [b]) => a.localeCompare(b)).map(([subCatName, goals]) => {
-                          const subCatKey = `${categoryName}-${subCatName}`;
-                          const isSubCollapsed = collapsedSubCategories[subCatKey];
-                          
-                          return (
-                            <View key={subCatKey} style={styles.subCategorySection}>
-                              <TouchableOpacity 
-                                style={styles.subCategoryHeader}
-                                onPress={() => toggleSubCategory(subCatKey)}
-                              >
-                                <View style={styles.subCategoryTitleRow}>
-                                  <IconSymbol
-                                    ios_icon_name={isSubCollapsed ? 'chevron.right' : 'chevron.down'}
-                                    android_material_icon_name={isSubCollapsed ? 'arrow-forward' : 'arrow-downward'}
-                                    size={18}
-                                    color={colors.textSecondary}
-                                  />
-                                  <Text style={styles.subCategoryTitle}>{subCatName}</Text>
-                                </View>
-                                <Text style={styles.subCategoryCount}>{goals.length}</Text>
-                              </TouchableOpacity>
-                              
-                              {!isSubCollapsed && goals.map(goal => renderGoalCard(goal))}
-                            </View>
-                          );
-                        })}
-                        
-                        {group.uncategorizedGoals.map(goal => renderGoalCard(goal))}
-                      </>
-                    )}
-                  </View>
-                );
-              })
+              Object.values(categoryGroups).map(group => renderCategoryGroup(group))
             )}
           </>
         )}
       </ScrollView>
+
+      {/* Quick Reflection Modal */}
+      <Modal
+        visible={showQuickReflectionModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowQuickReflectionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.quickReflectionModal}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setShowQuickReflectionModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Quick Reflection</Text>
+              <View style={{ width: 24 }} />
+            </View>
+            
+            <View style={styles.stepIndicator}>
+              <Text style={styles.stepText}>Step {quickReflectionStep} of 5</Text>
+            </View>
+            
+            <ScrollView style={styles.modalContent}>
+              {quickReflectionStep === 1 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>How did it go?</Text>
+                  <TouchableOpacity
+                    style={[styles.outcomeButton, quickReflectionOutcome === 'success' && styles.outcomeButtonSelected]}
+                    onPress={() => setQuickReflectionOutcome('success')}
+                  >
+                    <IconSymbol
+                      ios_icon_name="checkmark.circle.fill"
+                      android_material_icon_name="check-circle"
+                      size={24}
+                      color={quickReflectionOutcome === 'success' ? '#FFFFFF' : colors.success}
+                    />
+                    <Text style={[styles.outcomeButtonText, quickReflectionOutcome === 'success' && styles.outcomeButtonTextSelected]}>
+                      Success
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.outcomeButton, quickReflectionOutcome === 'struggled' && styles.outcomeButtonSelected]}
+                    onPress={() => setQuickReflectionOutcome('struggled')}
+                  >
+                    <IconSymbol
+                      ios_icon_name="xmark.circle.fill"
+                      android_material_icon_name="cancel"
+                      size={24}
+                      color={quickReflectionOutcome === 'struggled' ? '#FFFFFF' : colors.error}
+                    />
+                    <Text style={[styles.outcomeButtonText, quickReflectionOutcome === 'struggled' && styles.outcomeButtonTextSelected]}>
+                      Struggled
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {quickReflectionStep > 1 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Continue in full reflection</Text>
+                  <Text style={styles.stepDescription}>
+                    To complete your reflection with more details, we'll take you to the full reflection screen.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+            
+            <View style={styles.modalFooter}>
+              {quickReflectionStep > 1 && (
+                <TouchableOpacity
+                  style={styles.modalButton}
+                  onPress={handleQuickReflectionBack}
+                >
+                  <Text style={styles.modalButtonText}>Back</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={quickReflectionStep === 1 ? handleQuickReflectionNext : handleQuickReflectionSave}
+                disabled={quickReflectionStep === 1 && !quickReflectionOutcome}
+              >
+                <Text style={styles.modalButtonPrimaryText}>
+                  {quickReflectionStep === 1 ? 'Next' : 'Continue'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={errorModalVisible}
@@ -1114,6 +1247,10 @@ const styles = StyleSheet.create({
   categorySection: {
     marginBottom: 16,
   },
+  subCategorySection: {
+    marginLeft: 16,
+    marginTop: 8,
+  },
   categoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1141,37 +1278,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
-    marginLeft: 8,
-  },
-  subCategorySection: {
-    marginLeft: 16,
-    marginBottom: 8,
-  },
-  subCategoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  subCategoryTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  subCategoryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  subCategoryCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
     marginLeft: 8,
   },
   goalCard: {
@@ -1272,6 +1378,105 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  quickReflectionModal: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  stepIndicator: {
+    padding: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  stepText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  modalContent: {
+    padding: 20,
+  },
+  stepContent: {
+    gap: 16,
+  },
+  stepTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  stepDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  outcomeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  outcomeButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  outcomeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  outcomeButtonTextSelected: {
+    color: '#FFFFFF',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalButtonPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  modalButtonPrimaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   alertModal: {
     backgroundColor: colors.backgroundAlt,
