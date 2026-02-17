@@ -190,7 +190,7 @@ export default function ReflectScreen() {
   };
 
   const handleSaveJournal = async () => {
-    console.log('Saving journal entry...');
+    console.log('Saving journal entry and returning to Home...');
     try {
       setLoading(true);
       const dateString = selectedDate.toISOString().split('T')[0];
@@ -203,6 +203,10 @@ export default function ReflectScreen() {
       setJournalEntry(savedEntry?.data || savedEntry);
       showSuccess('Journal entry saved successfully');
       Keyboard.dismiss();
+      
+      setTimeout(() => {
+        router.push('/(tabs)/(home)');
+      }, 500);
     } catch (error) {
       console.error('Error saving journal:', error);
       showError('Failed to save journal entry');
@@ -394,7 +398,7 @@ export default function ReflectScreen() {
                     size={20}
                     color={colors.background}
                   />
-                  <Text style={styles.saveButtonText}>Done</Text>
+                  <Text style={styles.saveButtonText}>Save & Return to Home</Text>
                 </React.Fragment>
               )}
             </TouchableOpacity>
