@@ -101,7 +101,7 @@ interface UserPreferences {
 
 export default function ReflectScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ date?: string; reflectionId?: string }>();
+  const params = useLocalSearchParams<{ date?: string; reflectionId?: string; openModal?: string; goalId?: string }>();
   const scrollViewRef = useRef<ScrollView>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -113,6 +113,7 @@ export default function ReflectScreen() {
 
   const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
   const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
+  const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
 
   const [goals, setGoals] = useState<Goal[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -136,6 +137,21 @@ export default function ReflectScreen() {
       }
     }
   }, [params.date]);
+
+  useEffect(() => {
+    // Handle openModal parameter from Express tab
+    if (params.openModal === 'true') {
+      console.log('[Reflect] openModal parameter detected, opening AddReflectionModal');
+      if (params.goalId) {
+        console.log('[Reflect] Pre-filling with goalId:', params.goalId);
+        setPrefilledGoalId(params.goalId);
+      }
+      // Wait for data to load before opening modal
+      setTimeout(() => {
+        setShowAddReflectionModal(true);
+      }, 500);
+    }
+  }, [params.openModal, params.goalId]);
 
   useEffect(() => {
     loadData();
@@ -287,11 +303,13 @@ export default function ReflectScreen() {
 
   const openAddReflectionModal = () => {
     setEditingReflection(null);
+    setPrefilledGoalId(undefined);
     setShowAddReflectionModal(true);
   };
 
   const openEditReflectionModal = (reflection: Reflection) => {
     setEditingReflection(reflection);
+    setPrefilledGoalId(undefined);
     setShowAddReflectionModal(true);
   };
 
@@ -723,6 +741,7 @@ export default function ReflectScreen() {
             console.log('[Reflect] Closing modal without saving');
             setShowAddReflectionModal(false);
             setEditingReflection(null);
+            setPrefilledGoalId(undefined);
           }}
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
@@ -732,6 +751,7 @@ export default function ReflectScreen() {
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
           strategies={strategies}
+          prefilledGoalId={prefilledGoalId}
         />
       )}
 
@@ -788,6 +808,7 @@ interface AddReflectionModalProps {
   editingReflection: Reflection | null;
   gainsLosses: GainLoss[];
   strategies: Strategy[];
+  prefilledGoalId?: string;
 }
 
 function AddReflectionModal({
@@ -801,6 +822,7 @@ function AddReflectionModal({
   editingReflection,
   gainsLosses,
   strategies,
+  prefilledGoalId,
 }: AddReflectionModalProps) {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -813,7 +835,7 @@ function AddReflectionModal({
   const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
   const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Proactive');
   const [description, setDescription] = useState(editingReflection?.description || '');
-  const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId);
+  const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId || prefilledGoalId);
   const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(editingReflection?.outcome);
   const [gainedIds, setGainedIds] = useState<string[]>(editingReflection?.gainedIds || []);
   const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
