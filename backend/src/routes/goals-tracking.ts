@@ -87,29 +87,38 @@ export function registerGoalsTrackingRoutes(app: App) {
           // Count successes and struggles for today, and build dailyEntries array
           let todaySuccessCount = 0;
           let todayStruggleCount = 0;
+          // Count total successes and struggles across all dates
+          let totalSuccessCount = 0;
+          let totalStruggleCount = 0;
           const dailyEntries: Array<{ id: string; type: 'success' | 'struggle'; timestamp: string }> = [];
 
           for (const reflection of reflections) {
-            if (reflection.linkedGoalId === goal.id && reflection.entryDate === today) {
+            if (reflection.linkedGoalId === goal.id) {
               if (reflection.outcome === 'success') {
-                todaySuccessCount++;
-                // Add to dailyEntries with timestamp (use createdAt for timestamp)
-                dailyEntries.push({
-                  id: reflection.id,
-                  type: 'success',
-                  timestamp: reflection.createdAt instanceof Date
-                    ? reflection.createdAt.toISOString()
-                    : new Date(reflection.createdAt).toISOString(),
-                });
+                totalSuccessCount++;
+                if (reflection.entryDate === today) {
+                  todaySuccessCount++;
+                  // Add to dailyEntries with timestamp (use createdAt for timestamp)
+                  dailyEntries.push({
+                    id: reflection.id,
+                    type: 'success',
+                    timestamp: reflection.createdAt instanceof Date
+                      ? reflection.createdAt.toISOString()
+                      : new Date(reflection.createdAt).toISOString(),
+                  });
+                }
               } else if (reflection.outcome === 'struggled') {
-                todayStruggleCount++;
-                dailyEntries.push({
-                  id: reflection.id,
-                  type: 'struggle',
-                  timestamp: reflection.createdAt instanceof Date
-                    ? reflection.createdAt.toISOString()
-                    : new Date(reflection.createdAt).toISOString(),
-                });
+                totalStruggleCount++;
+                if (reflection.entryDate === today) {
+                  todayStruggleCount++;
+                  dailyEntries.push({
+                    id: reflection.id,
+                    type: 'struggle',
+                    timestamp: reflection.createdAt instanceof Date
+                      ? reflection.createdAt.toISOString()
+                      : new Date(reflection.createdAt).toISOString(),
+                  });
+                }
               }
             }
           }
@@ -130,6 +139,8 @@ export function registerGoalsTrackingRoutes(app: App) {
             behaviorCategories: goal.behaviorCategories || [],
             todaySuccessCount,
             todayStruggleCount,
+            successCount: totalSuccessCount,
+            struggleCount: totalStruggleCount,
             dailyEntries,
           };
         });
@@ -319,7 +330,7 @@ export function registerGoalsTrackingRoutes(app: App) {
       }
 
       app.logger.info({ userId: session.user.id, goalId: id, todaySuccessCount, totalSuccessCount }, 'Goal success recorded');
-      return { success: true, todaySuccessCount };
+      return { success: true, todaySuccessCount, successCount: totalSuccessCount };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to record goal success');
       throw error;
@@ -503,7 +514,7 @@ export function registerGoalsTrackingRoutes(app: App) {
       }
 
       app.logger.info({ userId: session.user.id, goalId: id, todayStruggleCount, totalStruggleCount }, 'Goal struggle recorded');
-      return { success: true, todayStruggleCount };
+      return { success: true, todayStruggleCount, struggleCount: totalStruggleCount };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to record goal struggle');
       throw error;
