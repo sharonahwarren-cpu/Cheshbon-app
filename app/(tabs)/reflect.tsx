@@ -80,8 +80,10 @@ interface Goal {
   behaviorCategories?: string[];
   rewardCurrencyId?: string;
   rewardAmount?: number;
+  rewardSuccesses?: number;
   consequenceCurrencyId?: string;
   consequenceAmount?: number;
+  consequenceFailures?: number;
 }
 
 interface Currency {
@@ -375,8 +377,7 @@ export default function ReflectScreen() {
               placeholderTextColor={colors.textSecondary}
               multiline
               textAlignVertical="top"
-              returnKeyType="done"
-              blurOnSubmit={true}
+              blurOnSubmit={false}
               onFocus={() => {
                 setTimeout(() => {
                   scrollViewRef.current?.scrollTo({ y: 0, animated: true });
@@ -737,6 +738,10 @@ function AddReflectionModal({
   const scrollViewRef = useRef<ScrollView>(null);
   const descriptionInputRef = useRef<TextInput>(null);
   const additionalThoughtsInputRef = useRef<TextInput>(null);
+  const gainNameInputRef = useRef<TextInput>(null);
+  const lossNameInputRef = useRef<TextInput>(null);
+  const strategyNameInputRef = useRef<TextInput>(null);
+  const strategyDescInputRef = useRef<TextInput>(null);
   
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
@@ -760,7 +765,6 @@ function AddReflectionModal({
   const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
-  const [pendingReflectionData, setPendingReflectionData] = useState<any>(null);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
@@ -782,6 +786,7 @@ function AddReflectionModal({
     const isSuccess = outcome === 'success';
     const currencyId = isSuccess ? selectedGoal.rewardCurrencyId : selectedGoal.consequenceCurrencyId;
     const amount = isSuccess ? selectedGoal.rewardAmount : selectedGoal.consequenceAmount;
+    const threshold = isSuccess ? selectedGoal.rewardSuccesses : selectedGoal.consequenceFailures;
     
     if (!currencyId || !amount) return null;
     
@@ -791,15 +796,22 @@ function AddReflectionModal({
     const operation = isSuccess ? currency.onSuccess : currency.onFailure;
     if (!operation || operation === 'NONE') return null;
     
-    const isAdding = operation === 'ADD';
+    const actionText = isSuccess 
+      ? (operation === 'ADD' ? 'earn' : 'lose')
+      : (operation === 'ADD' ? 'gain' : 'lose');
+    
     const displayAmount = amount;
     const displaySymbol = currency.symbol || currency.name;
+    const displayThreshold = threshold || 1;
     
     return {
-      operation: isAdding ? 'add' : 'subtract',
+      operation: operation === 'ADD' ? 'add' : 'subtract',
       amount: displayAmount,
       symbol: displaySymbol,
       name: currency.name,
+      threshold: displayThreshold,
+      actionText,
+      isSuccess,
     };
   })();
 
@@ -887,22 +899,6 @@ function AddReflectionModal({
   };
 
   const handleCreateGoal = () => {
-    const reflectionData = {
-      category,
-      type,
-      description,
-      linkedGoalId,
-      outcome,
-      gainedIds,
-      lostIds,
-      wasWorthIt,
-      additionalThoughts,
-      strategyEffectiveness,
-      step,
-    };
-    setPendingReflectionData(reflectionData);
-    
-    onClose();
     router.push('/create-goal');
   };
 
@@ -1128,6 +1124,7 @@ function AddReflectionModal({
                     placeholderTextColor={colors.textSecondary}
                     multiline
                     numberOfLines={6}
+                    blurOnSubmit={false}
                     onFocus={() => {
                       setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -1236,14 +1233,21 @@ function AddReflectionModal({
                       {(['success', 'struggled'] as const).map((o, index) => {
                         const isSelected = outcome === o;
                         const displayText = o === 'success' ? 'Success' : 'Struggled';
+                        const iconName = o === 'success' ? 'check-circle' : 'cancel';
                         
                         return (
                           <React.Fragment key={index}>
                             <TouchableOpacity
-                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              style={[styles.outcomeButton, isSelected && (o === 'success' ? styles.outcomeButtonSuccess : styles.outcomeButtonStruggled)]}
                               onPress={() => setOutcome(o)}
                             >
-                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                              <IconSymbol
+                                ios_icon_name={o === 'success' ? "checkmark.circle.fill" : "xmark.circle.fill"}
+                                android_material_icon_name={iconName}
+                                size={20}
+                                color={isSelected ? colors.background : (o === 'success' ? colors.success : colors.error)}
+                              />
+                              <Text style={[styles.outcomeButtonText, isSelected && styles.outcomeButtonTextSelected]}>
                                 {displayText}
                               </Text>
                             </TouchableOpacity>
@@ -1253,13 +1257,16 @@ function AddReflectionModal({
                     </View>
                     
                     {currencyBalanceInfo && (
-                      <View style={styles.currencyBalanceInfo}>
+                      <View style={[
+                        styles.currencyBalanceInfo,
+                        currencyBalanceInfo.isSuccess ? styles.currencyBalanceInfoSuccess : styles.currencyBalanceInfoStruggled
+                      ]}>
                         <View style={styles.currencyBalanceHeader}>
                           <IconSymbol
                             ios_icon_name="dollarsign.circle.fill"
                             android_material_icon_name="account-balance-wallet"
                             size={20}
-                            color={currencyBalanceInfo.operation === 'add' ? colors.success : colors.error}
+                            color={currencyBalanceInfo.isSuccess ? colors.success : colors.error}
                           />
                           <Text style={styles.currencyBalanceTitle}>Currency Impact</Text>
                         </View>
@@ -1273,9 +1280,7 @@ function AddReflectionModal({
                           </Text>
                         </View>
                         <Text style={styles.currencyBalanceDescription}>
-                          {currencyBalanceInfo.operation === 'add' 
-                            ? `You will gain ${currencyBalanceInfo.amount} ${currencyBalanceInfo.name}` 
-                            : `You will lose ${currencyBalanceInfo.amount} ${currencyBalanceInfo.name}`}
+                          After {currencyBalanceInfo.threshold} {currencyBalanceInfo.isSuccess ? 'successes' : 'struggles'}, {currencyBalanceInfo.actionText} {currencyBalanceInfo.amount} {currencyBalanceInfo.name}
                         </Text>
                       </View>
                     )}
@@ -1312,8 +1317,8 @@ function AddReflectionModal({
                   </TouchableOpacity>
 
                   {showGainsPicker && (
-                    <View style={styles.goalPickerContainer}>
-                      <ScrollView style={styles.goalList}>
+                    <View style={styles.pickerContainer}>
+                      <ScrollView style={styles.pickerList}>
                         {gainsLosses.filter(gl => gl.type === 'Gain').map((gain, index) => {
                           const isSelected = gainedIds.includes(gain.id);
                           
@@ -1388,8 +1393,8 @@ function AddReflectionModal({
                   </TouchableOpacity>
 
                   {showLossesPicker && (
-                    <View style={styles.goalPickerContainer}>
-                      <ScrollView style={styles.goalList}>
+                    <View style={styles.pickerContainer}>
+                      <ScrollView style={styles.pickerList}>
                         {gainsLosses.filter(gl => gl.type === 'Loss').map((loss, index) => {
                           const isSelected = lostIds.includes(loss.id);
                           
@@ -1494,6 +1499,7 @@ function AddReflectionModal({
                     placeholderTextColor={colors.textSecondary}
                     multiline
                     numberOfLines={6}
+                    blurOnSubmit={false}
                     onFocus={() => {
                       setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -1535,8 +1541,8 @@ function AddReflectionModal({
                   </TouchableOpacity>
 
                   {showStrategyPicker && (
-                    <View style={styles.goalPickerContainer}>
-                      <ScrollView style={styles.goalList}>
+                    <View style={styles.pickerContainer}>
+                      <ScrollView style={styles.pickerList}>
                         {strategies.map((strategy, index) => {
                           const isSelected = strategyEffectiveness.some(se => se.strategyId === strategy.id);
                           const successRateText = `${Math.round(strategy.successRate)}%`;
@@ -1708,15 +1714,20 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateGainModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.createItemModal}>
             <Text style={styles.alertTitle}>Add New Gain</Text>
             <TextInput
+              ref={gainNameInputRef}
               style={styles.input}
               value={newItemName}
               onChangeText={setNewItemName}
               placeholder="Gain name..."
               placeholderTextColor={colors.textSecondary}
+              blurOnSubmit={false}
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
@@ -1741,7 +1752,7 @@ function AddReflectionModal({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1750,15 +1761,20 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateLossModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.createItemModal}>
             <Text style={styles.alertTitle}>Add New Loss</Text>
             <TextInput
+              ref={lossNameInputRef}
               style={styles.input}
               value={newItemName}
               onChangeText={setNewItemName}
               placeholder="Loss name..."
               placeholderTextColor={colors.textSecondary}
+              blurOnSubmit={false}
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
@@ -1783,7 +1799,7 @@ function AddReflectionModal({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1792,17 +1808,23 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateStrategyModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.createItemModal}>
             <Text style={styles.alertTitle}>Add New Strategy</Text>
             <TextInput
+              ref={strategyNameInputRef}
               style={styles.input}
               value={newItemName}
               onChangeText={setNewItemName}
               placeholder="Strategy name..."
               placeholderTextColor={colors.textSecondary}
+              blurOnSubmit={false}
             />
             <TextInput
+              ref={strategyDescInputRef}
               style={[styles.input, styles.textArea]}
               value={newItemDescription}
               onChangeText={setNewItemDescription}
@@ -1810,6 +1832,7 @@ function AddReflectionModal({
               placeholderTextColor={colors.textSecondary}
               multiline
               numberOfLines={3}
+              blurOnSubmit={false}
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
@@ -1835,7 +1858,7 @@ function AddReflectionModal({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Modal>
   );
@@ -2356,6 +2379,33 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontWeight: '600',
   },
+  outcomeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  outcomeButtonSuccess: {
+    borderColor: colors.success,
+  },
+  outcomeButtonStruggled: {
+    borderColor: colors.error,
+  },
+  outcomeButtonText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  outcomeButtonTextSelected: {
+    color: colors.background,
+  },
   goalPickerButton: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -2378,6 +2428,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     maxHeight: 250,
   },
+  pickerContainer: {
+    marginTop: 8,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: 300,
+  },
   searchInput: {
     backgroundColor: colors.background,
     borderRadius: 8,
@@ -2390,6 +2448,9 @@ const styles = StyleSheet.create({
   },
   goalList: {
     maxHeight: 200,
+  },
+  pickerList: {
+    maxHeight: 280,
   },
   goalItem: {
     padding: 14,
@@ -2431,7 +2492,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 2,
-    borderColor: colors.primary + '40',
+  },
+  currencyBalanceInfoSuccess: {
+    borderColor: colors.success + '60',
+    backgroundColor: colors.success + '10',
+  },
+  currencyBalanceInfoStruggled: {
+    borderColor: colors.error + '60',
+    backgroundColor: colors.error + '10',
   },
   currencyBalanceHeader: {
     flexDirection: 'row',
@@ -2564,6 +2632,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  createItemModal: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 20,
+    margin: 20,
+  },
   alertModal: {
     backgroundColor: colors.background,
     borderRadius: 16,
@@ -2584,6 +2658,7 @@ const styles = StyleSheet.create({
   alertButtons: {
     flexDirection: 'row',
     gap: 10,
+    marginTop: 16,
   },
   alertButton: {
     flex: 1,
