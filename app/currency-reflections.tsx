@@ -56,11 +56,18 @@ export default function CurrencyReflectionsScreen() {
       const response = await authenticatedGet(`/api/reports/currency-reflections/${currencyId}`);
       const reflectionsData = Array.isArray(response) ? response : (response?.data || []);
       
-      setReflections(reflectionsData);
+      // Sort reflections by entryDate descending (newest first)
+      const sortedReflections = [...reflectionsData].sort((a, b) => {
+        const dateA = new Date(a.entryDate).getTime();
+        const dateB = new Date(b.entryDate).getTime();
+        return dateB - dateA; // Newest first
+      });
       
-      if (reflectionsData.length > 0 && reflectionsData[0].currencyChange) {
-        const currencyNameValue = reflectionsData[0].currencyChange.currencyName || '';
-        const currencySymbolValue = reflectionsData[0].currencyChange.currencySymbol || '';
+      setReflections(sortedReflections);
+      
+      if (sortedReflections.length > 0 && sortedReflections[0].currencyChange) {
+        const currencyNameValue = sortedReflections[0].currencyChange.currencyName || '';
+        const currencySymbolValue = sortedReflections[0].currencyChange.currencySymbol || '';
         setCurrencyName(currencyNameValue);
         setCurrencySymbol(currencySymbolValue);
       } else {
@@ -72,7 +79,7 @@ export default function CurrencyReflectionsScreen() {
         setCurrencySymbol(currencySymbolValue);
       }
       
-      console.log('Currency reflections loaded:', reflectionsData.length);
+      console.log('Currency reflections loaded and sorted:', sortedReflections.length);
     } catch (error: any) {
       console.error('Error loading currency reflections:', error);
       showError(error.message || 'Failed to load reflections');
