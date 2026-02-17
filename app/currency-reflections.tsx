@@ -18,6 +18,7 @@ import { authenticatedGet } from '@/utils/api';
 interface CurrencyReflection {
   id: string;
   entryDate: string;
+  type: 'reflection';
   description: string;
   linkedGoalTitle?: string;
   outcome?: 'success' | 'struggled';
@@ -31,12 +32,24 @@ interface CurrencyReflection {
   createdAt: string;
 }
 
+interface CurrencyTransaction {
+  id: string;
+  entryDate: string;
+  type: 'transaction';
+  transactionType: 'claim' | 'pay';
+  amount: number;
+  description: string;
+  createdAt: string;
+}
+
+type CurrencyEntry = CurrencyReflection | CurrencyTransaction;
+
 export default function CurrencyReflectionsScreen() {
   const router = useRouter();
   const { currencyId } = useLocalSearchParams<{ currencyId: string }>();
   
   const [loading, setLoading] = useState(true);
-  const [reflections, setReflections] = useState<CurrencyReflection[]>([]);
+  const [entries, setEntries] = useState<CurrencyEntry[]>([]);
   const [currencyName, setCurrencyName] = useState('');
   const [currencySymbol, setCurrencySymbol] = useState('');
   
@@ -45,32 +58,39 @@ export default function CurrencyReflectionsScreen() {
 
   useEffect(() => {
     if (currencyId) {
-      loadReflections();
+      loadEntries();
     }
   }, [currencyId]);
 
-  const loadReflections = async () => {
-    console.log('Loading reflections for currency:', currencyId);
+  const loadEntries = async () => {
+    console.log('Loading entries for currency:', currencyId);
     setLoading(true);
     try {
       const response = await authenticatedGet(`/api/reports/currency-reflections/${currencyId}`);
-      const reflectionsData = Array.isArray(response) ? response : (response?.data || []);
+      const entriesData = Array.isArray(response) ? response : (response?.data || []);
       
-      // Sort reflections by entryDate descending (newest first)
-      const sortedReflections = [...reflectionsData].sort((a, b) => {
-        const dateA = new Date(a.entryDate).getTime();
-        const dateB = new Date(b.entryDate).getTime();
-        return dateB - dateA; // Newest first
-      });
+      // Entries are already sorted by backend (newest first)
+      setEntries(entriesData);
       
-      setReflections(sortedReflections);
-      
-      if (sortedReflections.length > 0 && sortedReflections[0].currencyChange) {
-        const currencyNameValue = sortedReflections[0].currencyChange.currencyName || '';
-        const currencySymbolValue = sortedReflections[0].currencyChange.currencySymbol || '';
-        setCurrencyName(currencyNameValue);
-        setCurrencySymbol(currencySymbolValue);
+      // Get currency name and symbol
+      if (entriesData.length > 0) {
+        const firstReflection = entriesData.find((e: CurrencyEntry) => e.type === 'reflection') as CurrencyReflection | undefined;
+        if (firstReflection?.currencyChange) {
+          const currencyNameValue = firstReflection.currencyChange.currencyName || '';
+          const currencySymbolValue = firstReflection.currencyChange.currencySymbol || '';
+          setCurrencyName(currencyNameValue);
+          setCurrencySymbol(currencySymbolValue);
+        } else {
+          // Fallback: fetch currency details
+          const currencyRes = await authenticatedGet(`/api/currencies/${currencyId}`);
+          const currencyData = currencyRes?.data || currencyRes;
+          const currencyNameValue = currencyData.name || 'Currency';
+          const currencySymbolValue = currencyData.symbol || '';
+          setCurrencyName(currencyNameValue);
+          setCurrencySymbol(currencySymbolValue);
+        }
       } else {
+        // No entries, fetch currency details
         const currencyRes = await authenticatedGet(`/api/currencies/${currencyId}`);
         const currencyData = currencyRes?.data || currencyRes;
         const currencyNameValue = currencyData.name || 'Currency';
@@ -79,10 +99,10 @@ export default function CurrencyReflectionsScreen() {
         setCurrencySymbol(currencySymbolValue);
       }
       
-      console.log('Currency reflections loaded and sorted:', sortedReflections.length);
+      console.log('Currency entries loaded and sorted:', entriesData.length);
     } catch (error: any) {
-      console.error('Error loading currency reflections:', error);
-      showError(error.message || 'Failed to load reflections');
+      console.error('Error loading currency entries:', error);
+      showError(error.message || 'Failed to load entries');
     } finally {
       setLoading(false);
     }
@@ -98,20 +118,28 @@ export default function CurrencyReflectionsScreen() {
     const options: Intl.DateTimeFormatOptions = { 
       month: 'short', 
       day: 'numeric', 
-      year: 'numeric' 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     };
     return date.toLocaleDateString('en-US', options);
   };
 
-  const handleReflectionPress = (reflection: CurrencyReflection) => {
-    console.log('Navigating to reflection date:', reflection.entryDate);
-    router.push({
-      pathname: '/(tabs)/reflect',
-      params: { date: reflection.entryDate }
-    });
+  const handleReflectionPress = (entry: CurrencyEntry) => {
+    if (entry.type === 'reflection') {
+      console.log('Navigating to reflection date:', entry.entryDate);
+      router.push({
+        pathname: '/(tabs)/reflect',
+        params: { date: entry.entryDate }
+      });
+    }
+    // Transactions are not clickable (no detail screen)
   };
 
-  const screenTitle = currencyName ? `${currencyName} Reflections` : 'Currency Reflections';
+  const screenTitle = currencyName ? `${currencyName} History` : 'Currency History';
+  const totalEntries = entries.length;
+  const reflectionCount = entries.filter(e => e.type === 'reflection').length;
+  const transactionCount = entries.filter(e => e.type === 'transaction').length;
 
   if (loading) {
     return (
@@ -139,7 +167,7 @@ export default function CurrencyReflectionsScreen() {
       />
       
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {reflections.length === 0 ? (
+        {entries.length === 0 ? (
           <View style={styles.emptyState}>
             <IconSymbol
               ios_icon_name="sparkles"
@@ -147,86 +175,151 @@ export default function CurrencyReflectionsScreen() {
               size={64}
               color={colors.textSecondary}
             />
-            <Text style={styles.emptyStateTitle}>No reflections found</Text>
+            <Text style={styles.emptyStateTitle}>No entries found</Text>
             <Text style={styles.emptyStateText}>
-              No reflections have affected this currency yet.
+              No reflections or transactions have affected this currency yet.
             </Text>
           </View>
         ) : (
           <>
             <Text style={styles.sectionTitle}>
-              Reflections affecting {currencyName}
+              All entries affecting {currencyName}
             </Text>
-            <Text style={styles.sectionSubtitle}>
-              {reflections.length} {reflections.length === 1 ? 'reflection' : 'reflections'}
-            </Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{totalEntries}</Text>
+                <Text style={styles.statLabel}>Total</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{reflectionCount}</Text>
+                <Text style={styles.statLabel}>Reflections</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{transactionCount}</Text>
+                <Text style={styles.statLabel}>Transactions</Text>
+              </View>
+            </View>
             <Text style={styles.helperText}>
-              Tap any reflection to view full details
+              Tap reflections to view full details • Sorted by most recent
             </Text>
             
-            {reflections.map((reflection, index) => {
-              const dateText = formatDate(reflection.entryDate);
-              const outcomeText = reflection.outcome ? 
-                (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
-                null;
-              
-              const currencyChangeAmount = reflection.currencyChange?.amount || 0;
-              const currencyChangeOperation = reflection.currencyChange?.operation || 'add';
-              const currencyChangeText = `${currencyChangeOperation === 'add' ? '+' : '-'}${currencyChangeAmount} ${currencySymbol}`;
-              const currencyChangeColor = currencyChangeOperation === 'add' ? colors.success : colors.error;
-              
-              return (
-                <React.Fragment key={index}>
-                  <TouchableOpacity 
-                    style={styles.reflectionCard}
-                    onPress={() => handleReflectionPress(reflection)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.reflectionHeader}>
-                      <Text style={styles.reflectionDate}>{dateText}</Text>
-                      {reflection.outcome && (
-                        <View style={[styles.outcomeBadge, reflection.outcome === 'success' ? styles.outcomeBadgeSuccess : styles.outcomeBadgeStruggle]}>
-                          <Text style={styles.outcomeBadgeText}>{outcomeText}</Text>
+            {entries.map((entry, index) => {
+              if (entry.type === 'reflection') {
+                const reflection = entry as CurrencyReflection;
+                const dateText = formatDate(reflection.entryDate);
+                const outcomeText = reflection.outcome ? 
+                  (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
+                  null;
+                
+                const currencyChangeAmount = reflection.currencyChange?.amount || 0;
+                const currencyChangeOperation = reflection.currencyChange?.operation || 'add';
+                const currencyChangeText = `${currencyChangeOperation === 'add' ? '+' : '-'}${currencyChangeAmount} ${currencySymbol}`;
+                const currencyChangeColor = currencyChangeOperation === 'add' ? colors.success : colors.error;
+                
+                return (
+                  <React.Fragment key={`reflection-${index}`}>
+                    <TouchableOpacity 
+                      style={styles.entryCard}
+                      onPress={() => handleReflectionPress(reflection)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.entryTypeIndicator}>
+                        <IconSymbol
+                          ios_icon_name="note.text"
+                          android_material_icon_name="description"
+                          size={20}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.entryTypeText}>Reflection</Text>
+                      </View>
+                      
+                      <View style={styles.entryHeader}>
+                        <Text style={styles.entryDate}>{dateText}</Text>
+                        {reflection.outcome && (
+                          <View style={[styles.outcomeBadge, reflection.outcome === 'success' ? styles.outcomeBadgeSuccess : styles.outcomeBadgeStruggle]}>
+                            <Text style={styles.outcomeBadgeText}>{outcomeText}</Text>
+                          </View>
+                        )}
+                      </View>
+                      
+                      {reflection.linkedGoalTitle && (
+                        <View style={styles.linkedGoalSection}>
+                          <IconSymbol
+                            ios_icon_name="target"
+                            android_material_icon_name="flag"
+                            size={16}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.linkedGoalText}>{reflection.linkedGoalTitle}</Text>
                         </View>
                       )}
-                    </View>
-                    
-                    {reflection.linkedGoalTitle && (
-                      <View style={styles.linkedGoalSection}>
+                      
+                      <Text style={styles.entryDescription} numberOfLines={3}>
+                        {reflection.description}
+                      </Text>
+                      
+                      {reflection.currencyChange && (
+                        <View style={styles.currencyChangeSection}>
+                          <Text style={[styles.currencyChangeText, { color: currencyChangeColor }]}>
+                            {currencyChangeText}
+                          </Text>
+                        </View>
+                      )}
+                      
+                      <View style={styles.viewDetailsRow}>
+                        <Text style={styles.viewDetailsText}>Tap to view full reflection</Text>
                         <IconSymbol
-                          ios_icon_name="target"
-                          android_material_icon_name="flag"
+                          ios_icon_name="chevron.right"
+                          android_material_icon_name="arrow-forward"
                           size={16}
                           color={colors.primary}
                         />
-                        <Text style={styles.linkedGoalText}>{reflection.linkedGoalTitle}</Text>
                       </View>
-                    )}
-                    
-                    <Text style={styles.reflectionDescription} numberOfLines={3}>
-                      {reflection.description}
-                    </Text>
-                    
-                    {reflection.currencyChange && (
-                      <View style={styles.currencyChangeSection}>
-                        <Text style={[styles.currencyChangeText, { color: currencyChangeColor }]}>
-                          {currencyChangeText}
+                    </TouchableOpacity>
+                  </React.Fragment>
+                );
+              } else {
+                // Transaction entry
+                const transaction = entry as CurrencyTransaction;
+                const dateText = formatDate(transaction.entryDate);
+                const isClaim = transaction.transactionType === 'claim';
+                const amountText = `${isClaim ? '+' : '-'}${Math.abs(transaction.amount)} ${currencySymbol}`;
+                const amountColor = isClaim ? colors.success : colors.error;
+                const iconName = isClaim ? 'download' : 'upload';
+                const iosIconName = isClaim ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill';
+                
+                return (
+                  <React.Fragment key={`transaction-${index}`}>
+                    <View style={[styles.entryCard, styles.transactionCard]}>
+                      <View style={styles.entryTypeIndicator}>
+                        <IconSymbol
+                          ios_icon_name={iosIconName}
+                          android_material_icon_name={iconName}
+                          size={20}
+                          color={amountColor}
+                        />
+                        <Text style={[styles.entryTypeText, { color: amountColor }]}>
+                          {isClaim ? 'Claimed' : 'Paid'}
                         </Text>
                       </View>
-                    )}
-                    
-                    <View style={styles.viewDetailsRow}>
-                      <Text style={styles.viewDetailsText}>Tap to view full reflection</Text>
-                      <IconSymbol
-                        ios_icon_name="chevron.right"
-                        android_material_icon_name="arrow-forward"
-                        size={16}
-                        color={colors.primary}
-                      />
+                      
+                      <View style={styles.entryHeader}>
+                        <Text style={styles.entryDate}>{dateText}</Text>
+                      </View>
+                      
+                      <Text style={styles.entryDescription}>
+                        {transaction.description}
+                      </Text>
+                      
+                      <View style={styles.currencyChangeSection}>
+                        <Text style={[styles.currencyChangeText, styles.transactionAmount, { color: amountColor }]}>
+                          {amountText}
+                        </Text>
+                      </View>
                     </View>
-                  </TouchableOpacity>
-                </React.Fragment>
-              );
+                  </React.Fragment>
+                );
+              }
             })}
           </>
         )}
@@ -276,12 +369,30 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 8,
+    marginBottom: 16,
   },
-  sectionSubtitle: {
-    fontSize: 14,
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
     color: colors.textSecondary,
-    marginBottom: 8,
   },
   helperText: {
     fontSize: 13,
@@ -308,7 +419,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 40,
   },
-  reflectionCard: {
+  entryCard: {
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
@@ -321,13 +432,30 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  reflectionHeader: {
+  transactionCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  entryTypeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  entryTypeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  entryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  reflectionDate: {
+  entryDate: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.textSecondary,
@@ -362,7 +490,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
   },
-  reflectionDescription: {
+  entryDescription: {
     fontSize: 15,
     color: colors.text,
     lineHeight: 22,
@@ -378,6 +506,9 @@ const styles = StyleSheet.create({
   currencyChangeText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  transactionAmount: {
+    fontSize: 20,
   },
   viewDetailsRow: {
     flexDirection: 'row',

@@ -249,7 +249,7 @@ export default function HomeScreen() {
       setBehaviorCounts(behaviorCountsData);
       setGoalProgress(goalProgressData);
 
-      console.log("Reports data loaded successfully with currency balances:", currencyData);
+      console.log("Reports data loaded successfully with currency balances");
     } catch (error) {
       console.error("Error loading reports data:", error);
       throw error;
@@ -260,23 +260,15 @@ export default function HomeScreen() {
     console.log("Loading express data (activated goals) for date:", selectedDate.toISOString());
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
-      const [goalsRes, currenciesRes] = await Promise.all([
-        authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
-        authenticatedGet('/api/currencies'),
-      ]);
-      
+      const goalsRes = await authenticatedGet(`/api/goals/activated-today?date=${dateString}`);
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
-      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       
       setActivatedGoals(goalsData);
-      setCurrencies(currenciesData);
       
       const groups: Record<string, CategoryGroup> = {};
       
       goalsData.forEach((goal: ActivatedGoal) => {
-        const lifeArea = goal.lifeArea;
-        
-        if (!lifeArea) {
+        if (!goal.lifeArea) {
           if (!groups['Uncategorized']) {
             groups['Uncategorized'] = {
               name: 'Uncategorized',
@@ -289,12 +281,13 @@ export default function HomeScreen() {
           groups['Uncategorized'].goals.push(goal);
           return;
         }
+
+        const lifeArea = goal.lifeArea;
+        const categoryKey = lifeArea.id;
         
-        const isTopLevel = lifeArea.level === 1;
-        
-        if (isTopLevel) {
-          if (!groups[lifeArea.id]) {
-            groups[lifeArea.id] = {
+        if (lifeArea.level === 1 || !lifeArea.parentId) {
+          if (!groups[categoryKey]) {
+            groups[categoryKey] = {
               name: lifeArea.name,
               id: lifeArea.id,
               level: lifeArea.level,
@@ -302,13 +295,13 @@ export default function HomeScreen() {
               goals: [],
             };
           }
-          groups[lifeArea.id].goals.push(goal);
+          groups[categoryKey].goals.push(goal);
         } else {
-          const parentId = lifeArea.parentId || 'Uncategorized';
+          const parentId = lifeArea.parentId;
           
           if (!groups[parentId]) {
             groups[parentId] = {
-              name: parentId === 'Uncategorized' ? 'Uncategorized' : 'Unknown Parent',
+              name: 'Parent Category',
               id: parentId,
               level: 1,
               subCategories: {},
@@ -316,8 +309,8 @@ export default function HomeScreen() {
             };
           }
           
-          if (!groups[parentId].subCategories[lifeArea.id]) {
-            groups[parentId].subCategories[lifeArea.id] = {
+          if (!groups[parentId].subCategories[categoryKey]) {
+            groups[parentId].subCategories[categoryKey] = {
               name: lifeArea.name,
               id: lifeArea.id,
               level: lifeArea.level,
@@ -325,8 +318,7 @@ export default function HomeScreen() {
               goals: [],
             };
           }
-          
-          groups[parentId].subCategories[lifeArea.id].goals.push(goal);
+          groups[parentId].subCategories[categoryKey].goals.push(goal);
         }
       });
       
@@ -342,7 +334,7 @@ export default function HomeScreen() {
       });
       
       setCategoryGroups(sortedGroups);
-      console.log("Express data loaded successfully, category groups:", sortedGroups);
+      console.log("Express data loaded successfully with nested categories:", sortedGroups);
     } catch (error) {
       console.error("Error loading express data:", error);
       throw error;
@@ -389,8 +381,8 @@ export default function HomeScreen() {
     router.push(`/create-goal?id=${goalId}`);
   };
 
-  const handleQuickReflection = (goalId: string) => {
-    console.log("Opening quick reflection modal for goal:", goalId);
+  const handleQuickReflection = (goalId: string, entryId?: string) => {
+    console.log("Opening quick reflection modal for goal:", goalId, "entry:", entryId);
     setQuickReflectionGoalId(goalId);
     setQuickReflectionStep(1);
     setQuickReflectionOutcome(undefined);
@@ -401,7 +393,7 @@ export default function HomeScreen() {
   };
 
   const handleQuickReflectionNext = () => {
-    if (quickReflectionStep < 4) {
+    if (quickReflectionStep < 5) {
       setQuickReflectionStep(quickReflectionStep + 1);
     }
   };
@@ -412,9 +404,10 @@ export default function HomeScreen() {
     }
   };
 
-  const handleQuickReflectionSave = () => {
-    console.log("Saving quick reflection, navigating to full reflection screen");
+  const handleQuickReflectionSave = async () => {
+    console.log("Saving quick reflection");
     setShowQuickReflectionModal(false);
+    
     const dateString = selectedDate.toISOString().split('T')[0];
     const params: any = {
       goalId: quickReflectionGoalId,
@@ -445,9 +438,16 @@ export default function HomeScreen() {
   const handleReflection = (goalId?: string) => {
     console.log("Opening reflection screen", goalId ? `for goal: ${goalId}` : "");
     const dateString = selectedDate.toISOString().split('T')[0];
+    const params: any = { 
+      date: dateString,
+      fromExpress: 'true'
+    };
+    if (goalId) {
+      params.goalId = goalId;
+    }
     router.push({
       pathname: '/(tabs)/reflect',
-      params: goalId ? { goalId, date: dateString } : { date: dateString },
+      params,
     });
   };
 
@@ -519,7 +519,7 @@ export default function HomeScreen() {
         ? `/api/currencies/${selectedCurrencyId}/claim`
         : `/api/currencies/${selectedCurrencyId}/pay`;
       
-      await authenticatedPost(endpoint, { amount });
+      const response = await authenticatedPost(endpoint, { amount });
       
       setShowCurrencyModal(false);
       setCurrencyModalAmount('');
@@ -660,7 +660,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={entry.id}
                   style={[styles.entryBadge, { borderColor: entryColor }]}
-                  onPress={() => handleQuickReflection(goal.id)}
+                  onPress={() => handleQuickReflection(goal.id, entry.id)}
                 >
                   <IconSymbol
                     ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
@@ -734,10 +734,13 @@ export default function HomeScreen() {
   const renderCategoryGroup = (group: CategoryGroup, depth: number = 0): React.ReactNode => {
     const isCollapsed = collapsedCategories[group.id];
     const totalGoals = group.goals.length + 
-      Object.values(group.subCategories).reduce((sum, subCat) => sum + subCat.goals.length, 0);
+      Object.values(group.subCategories).reduce((sum, subGroup) => {
+        return sum + subGroup.goals.length + 
+          Object.values(subGroup.subCategories).reduce((subSum, subSubGroup) => subSum + subSubGroup.goals.length, 0);
+      }, 0);
     
     return (
-      <View key={group.id} style={[styles.categorySection, depth > 0 && styles.subCategorySection]}>
+      <View key={group.id} style={[styles.categorySection, { marginLeft: depth * 16 }]}>
         <TouchableOpacity 
           style={styles.categoryHeader}
           onPress={() => toggleCategory(group.id)}
@@ -755,11 +758,13 @@ export default function HomeScreen() {
         </TouchableOpacity>
         
         {!isCollapsed && (
-          <View>
-            {Object.values(group.subCategories).map(subCat => renderCategoryGroup(subCat, depth + 1))}
+          <>
+            {Object.values(group.subCategories).sort((a, b) => a.name.localeCompare(b.name)).map(subGroup => 
+              renderCategoryGroup(subGroup, depth + 1)
+            )}
             
             {group.goals.map(goal => renderGoalCard(goal))}
-          </View>
+          </>
         )}
       </View>
     );
@@ -863,18 +868,11 @@ export default function HomeScreen() {
                   }
                   
                   const buttonText = buttonType === 'claim' ? 'Claim' : 'Pay';
-                  const buttonIcon = buttonType === 'claim' ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill';
-                  const buttonAndroidIcon = buttonType === 'claim' ? 'download' : 'upload';
+                  const buttonIcon = buttonType === 'claim' ? 'download' : 'upload';
+                  const buttonIosIcon = buttonType === 'claim' ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill';
                   
                   return (
-                    <TouchableOpacity 
-                      key={index} 
-                      style={styles.reportCard}
-                      onPress={() => {
-                        console.log("Navigating to currency reflections for:", balance.currencyId);
-                        router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
-                      }}
-                    >
+                    <View key={index} style={styles.reportCard}>
                       <View style={styles.reportHeader}>
                         <Text style={styles.reportTitle}>{balance.currencyName}</Text>
                         {symbolText && <Text style={styles.reportSymbol}>{symbolText}</Text>}
@@ -892,8 +890,8 @@ export default function HomeScreen() {
                           onPress={() => openCurrencyModal(balance.currencyId, balance.currencyName, symbolText, balance.totalBalance, buttonType)}
                         >
                           <IconSymbol
-                            ios_icon_name={buttonIcon}
-                            android_material_icon_name={buttonAndroidIcon}
+                            ios_icon_name={buttonIosIcon}
+                            android_material_icon_name={buttonIcon}
                             size={18}
                             color={colors.background}
                           />
@@ -920,7 +918,13 @@ export default function HomeScreen() {
                         </View>
                       )}
                       
-                      <View style={styles.drillDownHint}>
+                      <TouchableOpacity 
+                        style={styles.drillDownHint}
+                        onPress={() => {
+                          console.log("Navigating to currency history for:", balance.currencyId);
+                          router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
+                        }}
+                      >
                         <IconSymbol
                           ios_icon_name="chevron.right"
                           android_material_icon_name="arrow-forward"
@@ -928,8 +932,8 @@ export default function HomeScreen() {
                           color={colors.primary}
                         />
                         <Text style={styles.drillDownText}>Tap to view related reflections</Text>
-                      </View>
-                    </TouchableOpacity>
+                      </TouchableOpacity>
+                    </View>
                   );
                 })}
               </>
@@ -1164,7 +1168,7 @@ export default function HomeScreen() {
               <>
                 <Text style={styles.sectionTitle}>Goal Progress</Text>
                 {goalProgress.map((goal, index) => {
-                  const progressText = `${goal.progress}%`;
+                  const progressText = `${goal.progress || 0}%`;
                   const successText = `${goal.successCount} successes`;
                   const struggleText = `${goal.struggleCount} struggles`;
                   
@@ -1299,7 +1303,7 @@ export default function HomeScreen() {
             </View>
             
             <View style={styles.stepIndicator}>
-              <Text style={styles.stepText}>Step {quickReflectionStep} of 4</Text>
+              <Text style={styles.stepText}>Step {quickReflectionStep} of 5</Text>
             </View>
             
             <ScrollView style={styles.modalContent}>
@@ -1383,7 +1387,11 @@ export default function HomeScreen() {
                       No
                     </Text>
                   </TouchableOpacity>
-                  
+                </View>
+              )}
+              
+              {quickReflectionStep === 4 && (
+                <View style={styles.stepContent}>
                   <Text style={styles.stepTitle}>Additional thoughts?</Text>
                   <TextInput
                     style={styles.textInput}
@@ -1397,7 +1405,7 @@ export default function HomeScreen() {
                 </View>
               )}
               
-              {quickReflectionStep === 4 && (
+              {quickReflectionStep === 5 && (
                 <View style={styles.stepContent}>
                   <Text style={styles.stepTitle}>Complete your reflection</Text>
                   <Text style={styles.stepDescription}>
@@ -1418,11 +1426,11 @@ export default function HomeScreen() {
               )}
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonPrimary]}
-                onPress={quickReflectionStep < 4 ? handleQuickReflectionNext : handleQuickReflectionSave}
+                onPress={quickReflectionStep < 5 ? handleQuickReflectionNext : handleQuickReflectionSave}
                 disabled={quickReflectionStep === 1 && !quickReflectionOutcome}
               >
                 <Text style={styles.modalButtonPrimaryText}>
-                  {quickReflectionStep < 4 ? 'Next' : 'Continue to Full Reflection'}
+                  {quickReflectionStep < 5 ? 'Next' : 'Continue to Full Reflection'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1698,6 +1706,24 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 8,
   },
+  goalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: colors.cardBorder,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 4,
+  },
   goalBreakdownSection: {
     marginTop: 8,
     paddingTop: 12,
@@ -1761,24 +1787,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  goalTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: colors.cardBorder,
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 4,
-  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1798,11 +1806,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   categorySection: {
-    marginBottom: 16,
-  },
-  subCategorySection: {
-    marginLeft: 16,
-    marginTop: 8,
+    marginBottom: 12,
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -1877,7 +1881,6 @@ const styles = StyleSheet.create({
   },
   currencyProgressContainer: {
     marginTop: 8,
-    marginBottom: 12,
     gap: 6,
   },
   currencyProgressRow: {
