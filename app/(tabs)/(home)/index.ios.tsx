@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
-import { authenticatedGet, authenticatedPost } from "@/utils/api";
+import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
 
 interface CurrencyBalance {
   currencyId: string;
@@ -76,15 +76,29 @@ interface GoalProgress {
   consequenceCurrencySymbol?: string;
 }
 
+interface DailyEntry {
+  id: string;
+  type: 'success' | 'struggle';
+  timestamp: string;
+}
+
 interface ActivatedGoal {
   id: string;
   title: string;
   description?: string;
   type: 'RESTRAINING' | 'PROACTIVE';
   lifeArea?: { id: string; name: string };
+  subCategory?: string;
   behaviorCategories: string[];
   todaySuccessCount: number;
   todayStruggleCount: number;
+  dailyEntries?: DailyEntry[];
+}
+
+interface CategoryGroup {
+  name: string;
+  subCategories: Record<string, ActivatedGoal[]>;
+  uncategorizedGoals: ActivatedGoal[];
 }
 
 export default function HomeScreen() {
@@ -104,12 +118,12 @@ export default function HomeScreen() {
   const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);
   
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
-  const [categorizedGoals, setCategorizedGoals] = useState<Record<string, ActivatedGoal[]>>({});
+  const [categoryGroups, setCategoryGroups] = useState<Record<string, CategoryGroup>>({});
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [collapsedSubCategories, setCollapsedSubCategories] = useState<Record<string, boolean>>({});
   
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successModalVisible, setSuccessModalVisible] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
     console.log("HomeScreen mounted");
@@ -119,11 +133,6 @@ export default function HomeScreen() {
   const showError = (message: string) => {
     setErrorMessage(message);
     setErrorModalVisible(true);
-  };
-
-  const showSuccess = (message: string) => {
-    setSuccessMessage(message);
-    setSuccessModalVisible(true);
   };
 
   const loadData = async () => {
@@ -199,16 +208,42 @@ export default function HomeScreen() {
       
       setActivatedGoals(goalsData);
       
-      const categorized = goalsData.reduce((acc: Record<string, ActivatedGoal[]>, goal: ActivatedGoal) => {
-        const category = goal.lifeArea?.name || 'Uncategorized';
-        if (!acc[category]) {
-          acc[category] = [];
-        }
-        acc[category].push(goal);
-        return acc;
-      }, {});
+      const groups: Record<string, CategoryGroup> = {};
       
-      setCategorizedGoals(categorized);
+      goalsData.forEach((goal: ActivatedGoal) => {
+        const category = goal.lifeArea?.name || 'Uncategorized';
+        const subCategory = goal.subCategory || '';
+        
+        if (!groups[category]) {
+          groups[category] = {
+            name: category,
+            subCategories: {},
+            uncategorizedGoals: [],
+          };
+        }
+        
+        if (subCategory) {
+          if (!groups[category].subCategories[subCategory]) {
+            groups[category].subCategories[subCategory] = [];
+          }
+          groups[category].subCategories[subCategory].push(goal);
+        } else {
+          groups[category].uncategorizedGoals.push(goal);
+        }
+      });
+      
+      const sortedGroups: Record<string, CategoryGroup> = {};
+      const categoryNames = Object.keys(groups).sort((a, b) => {
+        if (a === 'Uncategorized') return 1;
+        if (b === 'Uncategorized') return -1;
+        return a.localeCompare(b);
+      });
+      
+      categoryNames.forEach(name => {
+        sortedGroups[name] = groups[name];
+      });
+      
+      setCategoryGroups(sortedGroups);
       console.log("Express data loaded successfully");
     } catch (error) {
       console.error("Error loading express data:", error);
@@ -221,7 +256,6 @@ export default function HomeScreen() {
     try {
       const timestamp = new Date().toISOString();
       await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
-      showSuccess("Success recorded!");
       await loadExpressData();
     } catch (error: any) {
       console.error("Error recording success:", error);
@@ -234,12 +268,44 @@ export default function HomeScreen() {
     try {
       const timestamp = new Date().toISOString();
       await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
-      showSuccess("Struggle recorded!");
       await loadExpressData();
     } catch (error: any) {
       console.error("Error recording struggle:", error);
       showError(error.message || "Failed to record struggle");
     }
+  };
+
+  const handleDeleteEntry = async (goalId: string, entryId: string) => {
+    console.log("Deleting entry:", entryId, "for goal:", goalId);
+    try {
+      await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
+      await loadExpressData();
+    } catch (error: any) {
+      console.error("Error deleting entry:", error);
+      showError(error.message || "Failed to delete entry");
+    }
+  };
+
+  const handleEditGoal = (goalId: string) => {
+    console.log("Opening goal editor for:", goalId);
+    router.push({
+      pathname: '/create-goal',
+      params: { goalId },
+    });
+  };
+
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category],
+    }));
+  };
+
+  const toggleSubCategory = (key: string) => {
+    setCollapsedSubCategories(prev => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   const handleReflection = (goalId?: string) => {
@@ -262,6 +328,111 @@ export default function HomeScreen() {
     );
   }
 
+  const renderGoalCard = (goal: ActivatedGoal) => {
+    const typeIcon = goal.type === 'RESTRAINING' ? 'cancel' : 'check-circle';
+    const typeColor = goal.type === 'RESTRAINING' ? colors.error : colors.success;
+    const successCount = goal.todaySuccessCount;
+    const struggleCount = goal.todayStruggleCount;
+    
+    return (
+      <View key={goal.id} style={styles.goalCard}>
+        <TouchableOpacity 
+          style={styles.goalTitleRow}
+          onPress={() => handleEditGoal(goal.id)}
+        >
+          <IconSymbol
+            ios_icon_name={goal.type === 'RESTRAINING' ? 'xmark.circle.fill' : 'checkmark.circle.fill'}
+            android_material_icon_name={typeIcon}
+            size={20}
+            color={typeColor}
+          />
+          <Text style={styles.goalCardTitle}>{goal.title}</Text>
+        </TouchableOpacity>
+        
+        <View style={styles.tallyRow}>
+          <View style={styles.tallySection}>
+            <Text style={[styles.tallyCount, { color: colors.success }]}>{successCount}</Text>
+            <IconSymbol
+              ios_icon_name="checkmark"
+              android_material_icon_name="check"
+              size={16}
+              color={colors.success}
+            />
+          </View>
+          <View style={styles.tallySection}>
+            <Text style={[styles.tallyCount, { color: colors.error }]}>{struggleCount}</Text>
+            <IconSymbol
+              ios_icon_name="xmark"
+              android_material_icon_name="close"
+              size={16}
+              color={colors.error}
+            />
+          </View>
+        </View>
+        
+        {goal.dailyEntries && goal.dailyEntries.length > 0 && (
+          <View style={styles.entriesContainer}>
+            {goal.dailyEntries.map((entry) => {
+              const isSuccess = entry.type === 'success';
+              const entryColor = isSuccess ? colors.success : colors.error;
+              const entryIcon = isSuccess ? 'check' : 'close';
+              
+              return (
+                <View key={entry.id} style={[styles.entryBadge, { borderColor: entryColor }]}>
+                  <IconSymbol
+                    ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
+                    android_material_icon_name={entryIcon}
+                    size={12}
+                    color={entryColor}
+                  />
+                  <TouchableOpacity
+                    style={styles.deleteEntryButton}
+                    onPress={() => handleDeleteEntry(goal.id, entry.id)}
+                  >
+                    <IconSymbol
+                      ios_icon_name="xmark"
+                      android_material_icon_name="close"
+                      size={10}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
+        
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.successButton]}
+            onPress={() => handleGoalSuccess(goal.id)}
+          >
+            <IconSymbol
+              ios_icon_name="checkmark"
+              android_material_icon_name="check"
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.actionButtonText}>Success</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.struggleButton]}
+            onPress={() => handleGoalStruggle(goal.id)}
+          >
+            <IconSymbol
+              ios_icon_name="xmark"
+              android_material_icon_name="close"
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.actionButtonText}>Struggle</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
 
   return (
@@ -283,7 +454,7 @@ export default function HomeScreen() {
             ios_icon_name="chart.bar.fill"
             android_material_icon_name="assessment"
             size={20}
-            color={activeTab === 'reports' ? colors.primary : colors.textSecondary}
+            color={activeTab === 'reports' ? '#FFFFFF' : colors.textSecondary}
           />
           <Text style={[styles.tabText, activeTab === 'reports' && styles.tabTextActive]}>
             Reports
@@ -301,7 +472,7 @@ export default function HomeScreen() {
             ios_icon_name="bolt.fill"
             android_material_icon_name="flash-on"
             size={20}
-            color={activeTab === 'express' ? colors.primary : colors.textSecondary}
+            color={activeTab === 'express' ? '#FFFFFF' : colors.textSecondary}
           />
           <Text style={[styles.tabText, activeTab === 'express' && styles.tabTextActive]}>
             Express
@@ -562,7 +733,7 @@ export default function HomeScreen() {
           </>
         ) : (
           <>
-            {Object.keys(categorizedGoals).length === 0 ? (
+            {Object.keys(categoryGroups).length === 0 ? (
               <View style={styles.emptyState}>
                 <IconSymbol
                   ios_icon_name="bolt"
@@ -576,86 +747,64 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              Object.entries(categorizedGoals).map(([category, goals], catIndex) => (
-                <View key={catIndex} style={styles.categorySection}>
-                  <Text style={styles.categoryTitle}>{category}</Text>
-                  {goals.map((goal, goalIndex) => {
-                    const typeText = goal.type === 'RESTRAINING' ? 'Restraining' : 'Proactive';
-                    const typeColor = goal.type === 'RESTRAINING' ? colors.warning : colors.success;
-                    const successText = `✓ ${goal.todaySuccessCount}`;
-                    const struggleText = `✗ ${goal.todayStruggleCount}`;
-                    
-                    return (
-                      <View key={goalIndex} style={styles.goalCard}>
-                        <View style={styles.goalHeader}>
-                          <Text style={styles.goalCardTitle}>{goal.title}</Text>
-                          <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
-                            <Text style={styles.typeBadgeText}>{typeText}</Text>
-                          </View>
-                        </View>
-                        
-                        {goal.description && (
-                          <Text style={styles.goalDescription}>{goal.description}</Text>
-                        )}
-                        
-                        <View style={styles.tallyRow}>
-                          <View style={styles.tallyItem}>
-                            <Text style={[styles.tallyText, { color: colors.success }]}>
-                              {successText}
-                            </Text>
-                          </View>
-                          <View style={styles.tallyItem}>
-                            <Text style={[styles.tallyText, { color: colors.error }]}>
-                              {struggleText}
-                            </Text>
-                          </View>
-                        </View>
-                        
-                        <View style={styles.actionButtons}>
-                          <TouchableOpacity
-                            style={[styles.actionButton, styles.successButton]}
-                            onPress={() => handleGoalSuccess(goal.id)}
-                          >
-                            <IconSymbol
-                              ios_icon_name="checkmark"
-                              android_material_icon_name="check"
-                              size={20}
-                              color="#FFFFFF"
-                            />
-                            <Text style={styles.actionButtonText}>Success</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionButton, styles.struggleButton]}
-                            onPress={() => handleGoalStruggle(goal.id)}
-                          >
-                            <IconSymbol
-                              ios_icon_name="xmark"
-                              android_material_icon_name="close"
-                              size={20}
-                              color="#FFFFFF"
-                            />
-                            <Text style={styles.actionButtonText}>Struggle</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionButton, styles.reflectionButton]}
-                            onPress={() => handleReflection(goal.id)}
-                          >
-                            <IconSymbol
-                              ios_icon_name="pencil"
-                              android_material_icon_name="edit-note"
-                              size={20}
-                              color="#FFFFFF"
-                            />
-                            <Text style={styles.actionButtonText}>Reflect</Text>
-                          </TouchableOpacity>
-                        </View>
+              Object.entries(categoryGroups).map(([categoryName, group]) => {
+                const isCollapsed = collapsedCategories[categoryName];
+                const totalGoals = group.uncategorizedGoals.length + 
+                  Object.values(group.subCategories).reduce((sum, goals) => sum + goals.length, 0);
+                
+                return (
+                  <View key={categoryName} style={styles.categorySection}>
+                    <TouchableOpacity 
+                      style={styles.categoryHeader}
+                      onPress={() => toggleCategory(categoryName)}
+                    >
+                      <View style={styles.categoryTitleRow}>
+                        <IconSymbol
+                          ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
+                          android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
+                          size={20}
+                          color={colors.text}
+                        />
+                        <Text style={styles.categoryTitle}>{categoryName}</Text>
                       </View>
-                    );
-                  })}
-                </View>
-              ))
+                      <Text style={styles.categoryCount}>{totalGoals}</Text>
+                    </TouchableOpacity>
+                    
+                    {!isCollapsed && (
+                      <>
+                        {Object.entries(group.subCategories).sort(([a], [b]) => a.localeCompare(b)).map(([subCatName, goals]) => {
+                          const subCatKey = `${categoryName}-${subCatName}`;
+                          const isSubCollapsed = collapsedSubCategories[subCatKey];
+                          
+                          return (
+                            <View key={subCatKey} style={styles.subCategorySection}>
+                              <TouchableOpacity 
+                                style={styles.subCategoryHeader}
+                                onPress={() => toggleSubCategory(subCatKey)}
+                              >
+                                <View style={styles.subCategoryTitleRow}>
+                                  <IconSymbol
+                                    ios_icon_name={isSubCollapsed ? 'chevron.right' : 'chevron.down'}
+                                    android_material_icon_name={isSubCollapsed ? 'arrow-forward' : 'arrow-downward'}
+                                    size={18}
+                                    color={colors.textSecondary}
+                                  />
+                                  <Text style={styles.subCategoryTitle}>{subCatName}</Text>
+                                </View>
+                                <Text style={styles.subCategoryCount}>{goals.length}</Text>
+                              </TouchableOpacity>
+                              
+                              {!isSubCollapsed && goals.map(goal => renderGoalCard(goal))}
+                            </View>
+                          );
+                        })}
+                        
+                        {group.uncategorizedGoals.map(goal => renderGoalCard(goal))}
+                      </>
+                    )}
+                  </View>
+                );
+              })
             )}
           </>
         )}
@@ -674,26 +823,6 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.alertButton}
               onPress={() => setErrorModalVisible(false)}
-            >
-              <Text style={styles.alertButtonText}>OK</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={successModalVisible}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setSuccessModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
-            <Text style={styles.alertTitle}>Success</Text>
-            <Text style={styles.alertMessage}>{successMessage}</Text>
-            <TouchableOpacity
-              style={styles.alertButton}
-              onPress={() => setSuccessModalVisible(false)}
             >
               <Text style={styles.alertButtonText}>OK</Text>
             </TouchableOpacity>
@@ -858,13 +987,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   categorySection: {
-    marginBottom: 24,
+    marginBottom: 16,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  categoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
   },
   categoryTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 12,
+  },
+  categoryCount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+    marginLeft: 8,
+  },
+  subCategorySection: {
+    marginLeft: 16,
+    marginBottom: 8,
+  },
+  subCategoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  subCategoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  subCategoryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  subCategoryCount: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginLeft: 8,
   },
   goalCard: {
     backgroundColor: colors.card,
@@ -874,11 +1057,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  goalHeader: {
+  goalTitleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 12,
   },
   goalCardTitle: {
     fontSize: 16,
@@ -886,32 +1069,40 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
   },
-  typeBadge: {
+  tallyRow: {
+    flexDirection: 'row',
+    gap: 24,
+    marginBottom: 12,
+  },
+  tallySection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tallyCount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  entriesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  entryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+    borderWidth: 1,
+    backgroundColor: colors.backgroundAlt,
   },
-  typeBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  goalDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 12,
-  },
-  tallyRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 12,
-  },
-  tallyItem: {
-    flex: 1,
-  },
-  tallyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  deleteEntryButton: {
+    padding: 2,
+    backgroundColor: colors.card,
+    borderRadius: 3,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -922,9 +1113,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     borderRadius: 8,
-    gap: 4,
+    gap: 6,
   },
   successButton: {
     backgroundColor: colors.success,
@@ -932,11 +1124,8 @@ const styles = StyleSheet.create({
   struggleButton: {
     backgroundColor: colors.error,
   },
-  reflectionButton: {
-    backgroundColor: colors.primary,
-  },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
   },
