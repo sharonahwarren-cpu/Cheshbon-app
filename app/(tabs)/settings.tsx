@@ -80,11 +80,8 @@ interface CurrencyBalance {
   currencyId: string;
   currencyName: string;
   symbol: string;
-  earned: number;
-  lost: number;
-  debtAdded: number;
-  debtReduced: number;
-  netBalance: number;
+  totalBalance: number;
+  goalBreakdown?: Array<{ goalId: string; goalTitle: string; balance: number }>;
 }
 
 interface GainLoss {
@@ -200,7 +197,7 @@ export default function SettingsScreen() {
         ? goalProgressRes 
         : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
 
-      // Merge goal progress data (which includes currency balances and success/struggle counts) with goals
+      // Merge goal progress data (which includes per-goal currency balances) with goals
       const goalsWithBalances = goalsData.map((goal: Goal) => {
         const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
         if (progressInfo) {
@@ -639,32 +636,36 @@ export default function SettingsScreen() {
               const struggleCount = goal.struggleCount || 0;
               const isDeactivated = goal.status === 'DEACTIVATED';
               
-              // Determine which currency to display (reward takes priority if both exist)
+              // Display per-goal currency balance (not total)
               let displayCurrencyId = null;
               let displayCurrencyBalance = 0;
               let displayCurrencySymbol = '';
               let displayCurrency = null;
               let displayButtonType: 'claim' | 'pay' = 'claim';
               
-              if (goal.rewardCurrencyId) {
+              if (goal.rewardCurrencyId && goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null) {
                 displayCurrencyId = goal.rewardCurrencyId;
-                displayCurrencyBalance = goal.rewardCurrencyBalance || 0;
+                displayCurrencyBalance = goal.rewardCurrencyBalance;
                 displayCurrencySymbol = goal.rewardCurrencySymbol || '';
                 displayCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
                 if (displayCurrency && isRewardCurrency(displayCurrency) && displayCurrencyBalance > 0) {
                   displayButtonType = 'claim';
-                } else {
+                } else if (displayCurrencyBalance < 0) {
                   displayButtonType = 'pay';
+                } else {
+                  displayButtonType = 'claim';
                 }
-              } else if (goal.consequenceCurrencyId) {
+              } else if (goal.consequenceCurrencyId && goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null) {
                 displayCurrencyId = goal.consequenceCurrencyId;
-                displayCurrencyBalance = goal.consequenceCurrencyBalance || 0;
+                displayCurrencyBalance = goal.consequenceCurrencyBalance;
                 displayCurrencySymbol = goal.consequenceCurrencySymbol || '';
                 displayCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
                 if (displayCurrency && isConsequenceCurrency(displayCurrency) && displayCurrencyBalance > 0) {
                   displayButtonType = 'pay';
-                } else {
+                } else if (displayCurrencyBalance < 0) {
                   displayButtonType = 'claim';
+                } else {
+                  displayButtonType = 'pay';
                 }
               }
               
@@ -760,7 +761,7 @@ export default function SettingsScreen() {
                       </View>
                     </View>
                     
-                    {/* Single currency line */}
+                    {/* Per-goal currency balance (not total) */}
                     {displayCurrencyId && (
                       <View style={styles.currencyBalances}>
                         <View style={styles.currencyBalanceRow}>
@@ -1382,7 +1383,7 @@ export default function SettingsScreen() {
             </>
           )}
 
-          <Text style={styles.sectionSubtitle}>Currency Balances</Text>
+          <Text style={styles.sectionSubtitle}>Total Currency Balances</Text>
           {currencyBalances.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No currency data yet. Complete some goals to see your balances!</Text>
@@ -1390,32 +1391,80 @@ export default function SettingsScreen() {
           ) : (
             currencyBalances.map((balance, index) => {
               const symbolText = balance.symbol || '';
-              const earnedText = `Earned: ${balance.earned}`;
-              const lostText = `Lost: ${balance.lost}`;
-              const debtAddedText = `Debt Added: ${balance.debtAdded}`;
-              const debtReducedText = `Debt Reduced: ${balance.debtReduced}`;
-              const netBalanceText = `Net Balance: ${balance.netBalance}`;
-              const netBalanceColor = balance.netBalance >= 0 ? colors.success : colors.error;
+              const totalBalanceText = `${balance.totalBalance}`;
+              const totalBalanceColor = balance.totalBalance >= 0 ? colors.success : colors.error;
+              const currency = currencies.find(c => c.id === balance.currencyId);
+              
+              // Determine button type based on balance and currency type
+              let buttonType: 'claim' | 'pay' = 'claim';
+              if (balance.totalBalance > 0) {
+                buttonType = (currency && isRewardCurrency(currency)) ? 'claim' : 'pay';
+              } else if (balance.totalBalance < 0) {
+                buttonType = (currency && isRewardCurrency(currency)) ? 'pay' : 'claim';
+              }
               
               return (
                 <React.Fragment key={index}>
-                  <View style={styles.reportCard}>
+                  <TouchableOpacity 
+                    style={styles.reportCard}
+                    onPress={() => {
+                      console.log('Navigating to currency reflections for:', balance.currencyId);
+                      router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
+                    }}
+                  >
                     <View style={styles.reportHeader}>
                       <Text style={styles.reportTitle}>{balance.currencyName}</Text>
                       {symbolText && <Text style={styles.reportSymbol}>{symbolText}</Text>}
                     </View>
-                    <View style={styles.reportStats}>
-                      <Text style={styles.reportStat}>{earnedText}</Text>
-                      <Text style={styles.reportStat}>{lostText}</Text>
-                      <Text style={styles.reportStat}>{debtAddedText}</Text>
-                      <Text style={styles.reportStat}>{debtReducedText}</Text>
-                    </View>
                     <View style={styles.reportNetBalance}>
-                      <Text style={[styles.reportNetBalanceText, { color: netBalanceColor }]}>
-                        {netBalanceText}
+                      <Text style={[styles.reportNetBalanceText, { color: totalBalanceColor }]}>
+                        Total: {totalBalanceText}
                       </Text>
                     </View>
-                  </View>
+                    
+                    {balance.goalBreakdown && balance.goalBreakdown.length > 0 && (
+                      <View style={styles.goalBreakdownSection}>
+                        <Text style={styles.goalBreakdownTitle}>Per Goal:</Text>
+                        {balance.goalBreakdown.map((goalBalance, idx) => {
+                          const goalBalanceText = `${goalBalance.balance}`;
+                          const goalBalanceColor = goalBalance.balance >= 0 ? colors.success : colors.error;
+                          
+                          return (
+                            <View key={idx} style={styles.goalBreakdownRow}>
+                              <Text style={styles.goalBreakdownGoal}>{goalBalance.goalTitle}</Text>
+                              <Text style={[styles.goalBreakdownBalance, { color: goalBalanceColor }]}>
+                                {symbolText}{goalBalanceText}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                    
+                    {balance.totalBalance !== 0 && (
+                      <TouchableOpacity
+                        style={[styles.currencyTotalActionButton, { backgroundColor: buttonType === 'claim' ? colors.success : colors.error }]}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          openCurrencyModal(buttonType, balance.currencyId, balance.totalBalance);
+                        }}
+                      >
+                        <Text style={styles.currencyTotalActionButtonText}>
+                          {buttonType === 'claim' ? 'Claim' : 'Pay'} {Math.abs(balance.totalBalance)} {symbolText}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    
+                    <View style={styles.drillDownHint}>
+                      <IconSymbol
+                        ios_icon_name="chevron.right"
+                        android_material_icon_name="arrow-forward"
+                        size={16}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.drillDownText}>Tap to view related reflections</Text>
+                    </View>
+                  </TouchableOpacity>
                 </React.Fragment>
               );
             })
@@ -2225,10 +2274,65 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: 12,
+    marginBottom: 12,
   },
   reportNetBalanceText: {
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  goalBreakdownSection: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  goalBreakdownTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  goalBreakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  goalBreakdownGoal: {
+    fontSize: 14,
+    color: colors.text,
+    flex: 1,
+  },
+  goalBreakdownBalance: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  currencyTotalActionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  currencyTotalActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  drillDownHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  drillDownText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -2412,11 +2516,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  currencyBalanceLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    minWidth: 100,
   },
   currencyBalanceValue: {
     fontSize: 16,
