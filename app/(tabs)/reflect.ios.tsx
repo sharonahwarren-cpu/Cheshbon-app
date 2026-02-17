@@ -943,41 +943,53 @@ function AddReflectionModal({
     if (!currency) return null;
 
     if (outcome === 'success') {
+      if (!selectedGoal.rewardSuccesses || !selectedGoal.rewardAmount) return null;
+      
       const currentSuccesses = selectedGoal.successCount || 0;
-      const requiredSuccesses = selectedGoal.rewardSuccesses || 0;
-      const rewardAmount = selectedGoal.rewardAmount || 0;
+      const requiredSuccesses = selectedGoal.rewardSuccesses;
+      const rewardAmount = selectedGoal.rewardAmount;
       const currencySymbol = currency.symbol || '';
 
-      const successesNeeded = requiredSuccesses - currentSuccesses - 1;
+      // Calculate how many more successes until next reward
+      // We add 1 because we're about to record a new success
+      const successesAfterThis = currentSuccesses + 1;
+      const successesUntilNextReward = requiredSuccesses - (successesAfterThis % requiredSuccesses);
 
-      if (successesNeeded <= 0) {
+      // If successesUntilNextReward equals requiredSuccesses, it means we're at a milestone
+      if (successesUntilNextReward === requiredSuccesses || successesAfterThis % requiredSuccesses === 0) {
         return {
           type: 'success',
-          message: `Earned ${rewardAmount} ${currencySymbol}`,
+          message: `Earned ${rewardAmount} ${currencySymbol}!`,
         };
       } else {
         return {
           type: 'success',
-          message: `${successesNeeded} more ${successesNeeded === 1 ? 'success' : 'successes'} until ${rewardAmount} ${currencySymbol}`,
+          message: `${successesUntilNextReward} more ${successesUntilNextReward === 1 ? 'success' : 'successes'} until ${rewardAmount} ${currencySymbol}`,
         };
       }
     } else {
+      if (!selectedGoal.consequenceFailures || !selectedGoal.consequenceAmount) return null;
+      
       const currentStruggles = selectedGoal.struggleCount || 0;
-      const requiredStruggles = selectedGoal.consequenceFailures || 0;
-      const consequenceAmount = selectedGoal.consequenceAmount || 0;
+      const requiredStruggles = selectedGoal.consequenceFailures;
+      const consequenceAmount = selectedGoal.consequenceAmount;
       const currencySymbol = currency.symbol || '';
 
-      const strugglesNeeded = requiredStruggles - currentStruggles - 1;
+      // Calculate how many more struggles until next consequence
+      // We add 1 because we're about to record a new struggle
+      const strugglesAfterThis = currentStruggles + 1;
+      const strugglesUntilNextConsequence = requiredStruggles - (strugglesAfterThis % requiredStruggles);
 
-      if (strugglesNeeded <= 0) {
+      // If strugglesUntilNextConsequence equals requiredStruggles, it means we're at a milestone
+      if (strugglesUntilNextConsequence === requiredStruggles || strugglesAfterThis % requiredStruggles === 0) {
         return {
           type: 'struggled',
-          message: `Incurred ${consequenceAmount} ${currencySymbol}`,
+          message: `Incurred ${consequenceAmount} ${currencySymbol}!`,
         };
       } else {
         return {
           type: 'struggled',
-          message: `${strugglesNeeded} more ${strugglesNeeded === 1 ? 'struggle' : 'struggles'} until ${consequenceAmount} ${currencySymbol}`,
+          message: `${strugglesUntilNextConsequence} more ${strugglesUntilNextConsequence === 1 ? 'struggle' : 'struggles'} until ${consequenceAmount} ${currencySymbol}`,
         };
       }
     }
