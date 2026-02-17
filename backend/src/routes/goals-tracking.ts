@@ -57,7 +57,12 @@ export function registerGoalsTrackingRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching goals activated today');
+    const { date } = request.query as { date?: string };
+
+    // Use provided date or default to today
+    const requestedDate = date || new Date().toISOString().split('T')[0];
+
+    app.logger.info({ userId: session.user.id, requestedDate }, 'Fetching goals activated for date');
 
     try {
       const goals = await app.db
@@ -77,14 +82,11 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       const lifeAreaMap = new Map(lifeAreasData.map(la => [la.id, la]));
 
-      // Get today's date
-      const today = new Date().toISOString().split('T')[0];
-
       // Filter goals that are active today
       const activatedToday = goals
         .filter(goal => isGoalActiveTodayHelper(goal))
         .map(goal => {
-          // Count successes and struggles for today, and build dailyEntries array
+          // Count successes and struggles for the requested date, and build dailyEntries array
           let todaySuccessCount = 0;
           let todayStruggleCount = 0;
           // Count total successes and struggles across all dates
@@ -96,7 +98,7 @@ export function registerGoalsTrackingRoutes(app: App) {
             if (reflection.linkedGoalId === goal.id) {
               if (reflection.outcome === 'success') {
                 totalSuccessCount++;
-                if (reflection.entryDate === today) {
+                if (reflection.entryDate === requestedDate) {
                   todaySuccessCount++;
                   // Add to dailyEntries with timestamp (use createdAt for timestamp)
                   dailyEntries.push({
@@ -109,7 +111,7 @@ export function registerGoalsTrackingRoutes(app: App) {
                 }
               } else if (reflection.outcome === 'struggled') {
                 totalStruggleCount++;
-                if (reflection.entryDate === today) {
+                if (reflection.entryDate === requestedDate) {
                   todayStruggleCount++;
                   dailyEntries.push({
                     id: reflection.id,
@@ -145,10 +147,10 @@ export function registerGoalsTrackingRoutes(app: App) {
           };
         });
 
-      app.logger.info({ userId: session.user.id, count: activatedToday.length }, 'Goals activated today fetched');
+      app.logger.info({ userId: session.user.id, requestedDate, count: activatedToday.length }, 'Goals activated for date fetched');
       return activatedToday;
     } catch (error) {
-      app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch goals activated today');
+      app.logger.error({ err: error, userId: session.user.id, requestedDate }, 'Failed to fetch goals activated for date');
       throw error;
     }
   });
