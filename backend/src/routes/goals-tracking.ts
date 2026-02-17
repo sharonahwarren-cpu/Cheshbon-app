@@ -84,16 +84,38 @@ export function registerGoalsTrackingRoutes(app: App) {
       const activatedToday = goals
         .filter(goal => isGoalActiveTodayHelper(goal))
         .map(goal => {
-          // Count successes and struggles for today
+          // Count successes and struggles for today, and build dailyEntries array
           let todaySuccessCount = 0;
           let todayStruggleCount = 0;
+          const dailyEntries: Array<{ id: string; type: 'success' | 'struggle'; timestamp: string }> = [];
 
           for (const reflection of reflections) {
             if (reflection.linkedGoalId === goal.id && reflection.entryDate === today) {
-              if (reflection.outcome === 'success') todaySuccessCount++;
-              else if (reflection.outcome === 'struggled') todayStruggleCount++;
+              if (reflection.outcome === 'success') {
+                todaySuccessCount++;
+                // Add to dailyEntries with timestamp (use createdAt for timestamp)
+                dailyEntries.push({
+                  id: reflection.id,
+                  type: 'success',
+                  timestamp: reflection.createdAt instanceof Date
+                    ? reflection.createdAt.toISOString()
+                    : new Date(reflection.createdAt).toISOString(),
+                });
+              } else if (reflection.outcome === 'struggled') {
+                todayStruggleCount++;
+                dailyEntries.push({
+                  id: reflection.id,
+                  type: 'struggle',
+                  timestamp: reflection.createdAt instanceof Date
+                    ? reflection.createdAt.toISOString()
+                    : new Date(reflection.createdAt).toISOString(),
+                });
+              }
             }
           }
+
+          // Sort dailyEntries by timestamp (oldest first)
+          dailyEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
           const lifeArea = goal.lifeAreaId ? lifeAreaMap.get(goal.lifeAreaId) : null;
 
@@ -108,6 +130,7 @@ export function registerGoalsTrackingRoutes(app: App) {
             behaviorCategories: goal.behaviorCategories || [],
             todaySuccessCount,
             todayStruggleCount,
+            dailyEntries,
           };
         });
 
