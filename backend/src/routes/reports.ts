@@ -413,66 +413,76 @@ export function registerReportsRoutes(app: App) {
         currencyBalances.set(currency.id, { earned, lost });
       }
 
-      const result = goals.map(goal => {
-        let successCount = 0;
-        let struggleCount = 0;
-        const successReflectionIds: string[] = [];
-        const struggleReflectionIds: string[] = [];
+      const result = goals
+        .map(goal => {
+          let successCount = 0;
+          let struggleCount = 0;
+          const successReflectionIds: string[] = [];
+          const struggleReflectionIds: string[] = [];
 
-        for (const reflection of reflections) {
-          if (reflection.linkedGoalId === goal.id) {
-            if (reflection.outcome === 'success') {
-              successCount++;
-              successReflectionIds.push(reflection.id);
-            } else if (reflection.outcome === 'struggled') {
-              struggleCount++;
-              struggleReflectionIds.push(reflection.id);
+          for (const reflection of reflections) {
+            if (reflection.linkedGoalId === goal.id) {
+              if (reflection.outcome === 'success') {
+                successCount++;
+                successReflectionIds.push(reflection.id);
+              } else if (reflection.outcome === 'struggled') {
+                struggleCount++;
+                struggleReflectionIds.push(reflection.id);
+              }
             }
           }
-        }
 
-        // Get currency balances for this goal
-        let rewardCurrencyBalance = 0;
-        let rewardCurrencySymbol = '';
-        let consequenceCurrencyBalance = 0;
-        let consequenceCurrencySymbol = '';
+          // Get currency balances for this goal
+          let rewardCurrencyBalance = 0;
+          let rewardCurrencySymbol = '';
+          let consequenceCurrencyBalance = 0;
+          let consequenceCurrencySymbol = '';
 
-        if (goal.rewardCurrencyId) {
-          const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
-          if (rewardCurrency) {
-            const balance = currencyBalances.get(goal.rewardCurrencyId);
-            if (balance) {
-              rewardCurrencyBalance = balance.earned - balance.lost;
+          if (goal.rewardCurrencyId) {
+            const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
+            if (rewardCurrency) {
+              const balance = currencyBalances.get(goal.rewardCurrencyId);
+              if (balance) {
+                rewardCurrencyBalance = balance.earned - balance.lost;
+              }
+              rewardCurrencySymbol = rewardCurrency.symbol || '';
             }
-            rewardCurrencySymbol = rewardCurrency.symbol || '';
           }
-        }
 
-        if (goal.consequenceCurrencyId) {
-          const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
-          if (consequenceCurrency) {
-            const balance = currencyBalances.get(goal.consequenceCurrencyId);
-            if (balance) {
-              consequenceCurrencyBalance = balance.earned - balance.lost;
+          if (goal.consequenceCurrencyId) {
+            const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+            if (consequenceCurrency) {
+              const balance = currencyBalances.get(goal.consequenceCurrencyId);
+              if (balance) {
+                consequenceCurrencyBalance = balance.earned - balance.lost;
+              }
+              consequenceCurrencySymbol = consequenceCurrency.symbol || '';
             }
-            consequenceCurrencySymbol = consequenceCurrency.symbol || '';
           }
-        }
 
-        return {
-          goalId: goal.id,
-          goalTitle: goal.title,
-          progress: goal.progress,
-          successCount,
-          struggleCount,
-          successReflectionIds,
-          struggleReflectionIds,
-          rewardCurrencyBalance,
-          rewardCurrencySymbol,
-          consequenceCurrencyBalance,
-          consequenceCurrencySymbol,
-        };
-      });
+          return {
+            goalId: goal.id,
+            goalTitle: goal.title,
+            progress: goal.progress,
+            status: goal.status || 'ACTIVE',
+            successCount,
+            struggleCount,
+            successReflectionIds,
+            struggleReflectionIds,
+            rewardCurrencyBalance,
+            rewardCurrencySymbol,
+            consequenceCurrencyBalance,
+            consequenceCurrencySymbol,
+          };
+        })
+        .sort((a, b) => {
+          // Sort by status (ACTIVE first, DEACTIVATED last)
+          if (a.status !== b.status) {
+            return a.status === 'ACTIVE' ? -1 : 1;
+          }
+          // Then sort by title alphabetically
+          return a.goalTitle.localeCompare(b.goalTitle);
+        });
 
       app.logger.info({ userId: session.user.id, count: result.length }, 'Goal progress report generated');
       return result;

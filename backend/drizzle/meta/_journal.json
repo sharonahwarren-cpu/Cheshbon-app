@@ -43,6 +43,13 @@
       "when": 1771157086196,
       "tag": "20260215120446_aromatic_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771318361749,
+      "tag": "20260217085241_glossy_celestials",
+      "breakpoints": true
     }
   ]
 }

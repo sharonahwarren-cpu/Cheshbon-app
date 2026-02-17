@@ -68,6 +68,7 @@ export const goals = pgTable('goals', {
   schedulePeriodOfYear: jsonb('schedule_period_of_year'),
   scheduleDatesOfYear: text('schedule_dates_of_year').array(),
   isActive: boolean('is_active').default(true).notNull(),
+  status: text('status').default('ACTIVE').notNull(),
   rewardCurrencyId: uuid('reward_currency_id').references(() => currencies.id, { onDelete: 'set null' }),
   rewardSuccesses: integer('reward_successes'),
   rewardAmount: integer('reward_amount'),
