@@ -244,8 +244,21 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       const todaySuccessCount = todayReflections.length;
 
+      // Count ALL successes for this goal (across all dates)
+      const allSuccessReflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(and(
+          eq(schema.reflections.userId, session.user.id),
+          eq(schema.reflections.linkedGoalId, id),
+          eq(schema.reflections.outcome, 'success')
+        ));
+
+      const totalSuccessCount = allSuccessReflections.length;
+
       // Check if threshold is reached for currency reward
-      if (goals[0].rewardCurrencyId && goals[0].rewardSuccesses && todaySuccessCount === goals[0].rewardSuccesses) {
+      // Award currency for every X successes (use modulo to detect milestone)
+      if (goals[0].rewardCurrencyId && goals[0].rewardSuccesses && totalSuccessCount % goals[0].rewardSuccesses === 0) {
         // Threshold reached, create a currency transaction
         const currency = await app.db
           .select()
@@ -275,7 +288,7 @@ export function registerGoalsTrackingRoutes(app: App) {
                 reflectionId: reflections[0].id,
                 amount: transactionAmount,
                 transactionType: 'GOAL_REWARD',
-                description: `Reached ${goals[0].rewardSuccesses} successes on goal: ${goals[0].title}`,
+                description: `Reached ${totalSuccessCount} successes (${totalSuccessCount / goals[0].rewardSuccesses} milestones) on goal: ${goals[0].title}`,
               });
 
             // Update goal_currency_balances
@@ -305,7 +318,7 @@ export function registerGoalsTrackingRoutes(app: App) {
         }
       }
 
-      app.logger.info({ userId: session.user.id, goalId: id, todaySuccessCount }, 'Goal success recorded');
+      app.logger.info({ userId: session.user.id, goalId: id, todaySuccessCount, totalSuccessCount }, 'Goal success recorded');
       return { success: true, todaySuccessCount };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to record goal success');
@@ -415,8 +428,21 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       const todayStruggleCount = todayReflections.length;
 
+      // Count ALL struggles for this goal (across all dates)
+      const allStruggleReflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(and(
+          eq(schema.reflections.userId, session.user.id),
+          eq(schema.reflections.linkedGoalId, id),
+          eq(schema.reflections.outcome, 'struggled')
+        ));
+
+      const totalStruggleCount = allStruggleReflections.length;
+
       // Check if threshold is reached for currency consequence
-      if (goals[0].consequenceCurrencyId && goals[0].consequenceFailures && todayStruggleCount === goals[0].consequenceFailures) {
+      // Apply consequence for every X failures (use modulo to detect milestone)
+      if (goals[0].consequenceCurrencyId && goals[0].consequenceFailures && totalStruggleCount % goals[0].consequenceFailures === 0) {
         // Threshold reached, create a currency transaction
         const currency = await app.db
           .select()
@@ -446,7 +472,7 @@ export function registerGoalsTrackingRoutes(app: App) {
                 reflectionId: reflections[0].id,
                 amount: transactionAmount,
                 transactionType: 'GOAL_CONSEQUENCE',
-                description: `Reached ${goals[0].consequenceFailures} struggles on goal: ${goals[0].title}`,
+                description: `Reached ${totalStruggleCount} struggles (${totalStruggleCount / goals[0].consequenceFailures} milestones) on goal: ${goals[0].title}`,
               });
 
             // Update goal_currency_balances
@@ -476,7 +502,7 @@ export function registerGoalsTrackingRoutes(app: App) {
         }
       }
 
-      app.logger.info({ userId: session.user.id, goalId: id, todayStruggleCount }, 'Goal struggle recorded');
+      app.logger.info({ userId: session.user.id, goalId: id, todayStruggleCount, totalStruggleCount }, 'Goal struggle recorded');
       return { success: true, todayStruggleCount };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to record goal struggle');

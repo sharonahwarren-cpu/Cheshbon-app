@@ -283,24 +283,24 @@ export function registerGoalRoutes(app: App) {
       if (body.completed !== undefined) updateData.completed = body.completed;
       if (body.progress !== undefined) updateData.progress = body.progress;
       if (body.reward !== undefined) {
-        if (body.reward) {
-          updateData.rewardCurrencyId = body.reward.currencyId || null;
-          updateData.rewardSuccesses = body.reward.successes || null;
-          updateData.rewardAmount = body.reward.amount || null;
+        if (body.reward && body.reward.currencyId) {
+          updateData.rewardCurrencyId = body.reward.currencyId;
+          updateData.rewardSuccesses = body.reward.successes ?? null;
+          updateData.rewardAmount = body.reward.amount ?? null;
         } else {
-          // If reward is explicitly set to null/falsy, clear all reward fields
+          // If reward is explicitly set to null or missing currencyId, clear all reward fields
           updateData.rewardCurrencyId = null;
           updateData.rewardSuccesses = null;
           updateData.rewardAmount = null;
         }
       }
       if (body.consequence !== undefined) {
-        if (body.consequence) {
-          updateData.consequenceCurrencyId = body.consequence.currencyId || null;
-          updateData.consequenceFailures = body.consequence.failures || null;
-          updateData.consequenceAmount = body.consequence.amount || null;
+        if (body.consequence && body.consequence.currencyId) {
+          updateData.consequenceCurrencyId = body.consequence.currencyId;
+          updateData.consequenceFailures = body.consequence.failures ?? null;
+          updateData.consequenceAmount = body.consequence.amount ?? null;
         } else {
-          // If consequence is explicitly set to null/falsy, clear all consequence fields
+          // If consequence is explicitly set to null or missing currencyId, clear all consequence fields
           updateData.consequenceCurrencyId = null;
           updateData.consequenceFailures = null;
           updateData.consequenceAmount = null;
@@ -313,6 +313,12 @@ export function registerGoalRoutes(app: App) {
         .set(updateData)
         .where(eq(schema.goals.id, id))
         .returning();
+
+      if (!updatedGoals.length) {
+        app.logger.error({ userId: session.user.id, goalId: id }, 'Goal update failed - no result returned');
+        return reply.status(500).send({ error: 'Failed to update goal' });
+      }
+
       const updatedGoal = updatedGoals[0];
 
       // Initialize or update goal_currency_balances if currencies are set
@@ -354,7 +360,19 @@ export function registerGoalRoutes(app: App) {
         }
       }
 
-      app.logger.info({ userId: session.user.id, goalId: id }, 'Goal updated successfully');
+      app.logger.info(
+        {
+          userId: session.user.id,
+          goalId: id,
+          rewardCurrencyId: updatedGoal.rewardCurrencyId,
+          rewardSuccesses: updatedGoal.rewardSuccesses,
+          rewardAmount: updatedGoal.rewardAmount,
+          consequenceCurrencyId: updatedGoal.consequenceCurrencyId,
+          consequenceFailures: updatedGoal.consequenceFailures,
+          consequenceAmount: updatedGoal.consequenceAmount,
+        },
+        'Goal updated successfully'
+      );
       return updatedGoal;
     } catch (error) {
       app.logger.error(
