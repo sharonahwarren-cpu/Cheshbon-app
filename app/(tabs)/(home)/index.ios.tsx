@@ -374,7 +374,7 @@ export default function HomeScreen() {
     router.push(`/create-goal?id=${goalId}`);
   };
 
-  const handleReflection = (goalId?: string) => {
+  const openAddReflectionModal = (goalId?: string) => {
     console.log("Opening Add Reflection modal directly from Express", goalId ? `for goal: ${goalId}` : "");
     const dateString = selectedDate.toISOString().split('T')[0];
     router.push({
@@ -603,7 +603,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={entry.id}
                   style={[styles.entryBadge, { borderColor: entryColor }]}
-                  onPress={() => handleReflection(goal.id)}
+                  onPress={() => openAddReflectionModal(goal.id)}
                 >
                   <IconSymbol
                     ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
@@ -660,11 +660,11 @@ export default function HomeScreen() {
           
           <TouchableOpacity
             style={[styles.actionButton, styles.reflectionButton]}
-            onPress={() => handleReflection(goal.id)}
+            onPress={() => openAddReflectionModal(goal.id)}
           >
             <IconSymbol
-              ios_icon_name="note.text"
-              android_material_icon_name="edit"
+              ios_icon_name="book.fill"
+              android_material_icon_name="menu-book"
               size={18}
               color="#FFFFFF"
             />
@@ -786,6 +786,18 @@ export default function HomeScreen() {
               android_material_icon_name="arrow-forward"
               size={18}
               color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.addReflectionButton}
+            onPress={() => openAddReflectionModal()}
+          >
+            <IconSymbol
+              ios_icon_name="book.fill"
+              android_material_icon_name="menu-book"
+              size={20}
+              color={colors.primary}
             />
           </TouchableOpacity>
         </View>
@@ -1126,6 +1138,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     minWidth: 120,
     textAlign: 'center',
+  },
+  addReflectionButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 1,
+    borderColor: colors.primary,
   },
   content: {
     flex: 1,
