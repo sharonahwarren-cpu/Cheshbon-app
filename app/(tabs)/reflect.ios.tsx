@@ -722,6 +722,11 @@ function AddReflectionModal({
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
   const descriptionInputRef = useRef<TextInput>(null);
+  const additionalThoughtsInputRef = useRef<TextInput>(null);
+  const newGainInputRef = useRef<TextInput>(null);
+  const newLossInputRef = useRef<TextInput>(null);
+  const newStrategyNameInputRef = useRef<TextInput>(null);
+  const newStrategyDescInputRef = useRef<TextInput>(null);
   
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
@@ -950,12 +955,9 @@ function AddReflectionModal({
       const rewardAmount = selectedGoal.rewardAmount;
       const currencySymbol = currency.symbol || '';
 
-      // Calculate how many more successes until next reward
-      // We add 1 because we're about to record a new success
       const successesAfterThis = currentSuccesses + 1;
       const successesUntilNextReward = requiredSuccesses - (successesAfterThis % requiredSuccesses);
 
-      // If successesUntilNextReward equals requiredSuccesses, it means we're at a milestone
       if (successesUntilNextReward === requiredSuccesses || successesAfterThis % requiredSuccesses === 0) {
         return {
           type: 'success',
@@ -975,12 +977,9 @@ function AddReflectionModal({
       const consequenceAmount = selectedGoal.consequenceAmount;
       const currencySymbol = currency.symbol || '';
 
-      // Calculate how many more struggles until next consequence
-      // We add 1 because we're about to record a new struggle
       const strugglesAfterThis = currentStruggles + 1;
       const strugglesUntilNextConsequence = requiredStruggles - (strugglesAfterThis % requiredStruggles);
 
-      // If strugglesUntilNextConsequence equals requiredStruggles, it means we're at a milestone
       if (strugglesUntilNextConsequence === requiredStruggles || strugglesAfterThis % requiredStruggles === 0) {
         return {
           type: 'struggled',
@@ -998,7 +997,7 @@ function AddReflectionModal({
   const currencyFeedback = getCurrencyFeedback();
 
   const modalTitle = editingReflection ? 'Edit Reflection' : 'Add Reflection';
-  const totalSteps = 5;
+  const totalSteps = 4;
   const progressPercent = (step / totalSteps) * 100;
 
   return (
@@ -1275,8 +1274,8 @@ function AddReflectionModal({
                     currencyFeedback.type === 'success' ? styles.currencyFeedbackSuccess : styles.currencyFeedbackStruggled
                   ]}>
                     <IconSymbol
-                      ios_icon_name={currencyFeedback.type === 'success' ? "checkmark.circle.fill" : "xmark.circle.fill"}
-                      android_material_icon_name={currencyFeedback.type === 'success' ? "check-circle" : "cancel"}
+                      ios_icon_name={currencyFeedback.type === 'success' ? "gift.fill" : "exclamationmark.triangle.fill"}
+                      android_material_icon_name={currencyFeedback.type === 'success' ? "card-giftcard" : "warning"}
                       size={20}
                       color={colors.background}
                     />
@@ -1439,11 +1438,7 @@ function AddReflectionModal({
                     </View>
                   )}
                 </View>
-              </React.Fragment>
-            )}
 
-            {step === 4 && (
-              <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
@@ -1488,6 +1483,7 @@ function AddReflectionModal({
                     <Text style={styles.label}>Additional Thoughts (Optional)</Text>
                   </View>
                   <TextInput
+                    ref={additionalThoughtsInputRef}
                     style={[styles.input, styles.textArea]}
                     value={additionalThoughts}
                     onChangeText={setAdditionalThoughts}
@@ -1497,12 +1493,17 @@ function AddReflectionModal({
                     numberOfLines={3}
                     returnKeyType="default"
                     blurOnSubmit={false}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
                   />
                 </View>
               </React.Fragment>
             )}
 
-            {step === 5 && (
+            {step === 4 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
@@ -1706,15 +1707,23 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateGainModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior="padding"
+          style={styles.modalOverlay}
+        >
           <View style={styles.alertModal}>
             <Text style={styles.alertTitle}>Add New Gain</Text>
             <TextInput
+              ref={newGainInputRef}
               style={styles.input}
               value={newItemName}
               onChangeText={setNewItemName}
               placeholder="Gain name..."
               placeholderTextColor={colors.textSecondary}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleCreateGain}
+              blurOnSubmit={false}
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
@@ -1739,7 +1748,7 @@ function AddReflectionModal({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1748,15 +1757,23 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateLossModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior="padding"
+          style={styles.modalOverlay}
+        >
           <View style={styles.alertModal}>
             <Text style={styles.alertTitle}>Add New Loss</Text>
             <TextInput
+              ref={newLossInputRef}
               style={styles.input}
               value={newItemName}
               onChangeText={setNewItemName}
               placeholder="Loss name..."
               placeholderTextColor={colors.textSecondary}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleCreateLoss}
+              blurOnSubmit={false}
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
@@ -1781,7 +1798,7 @@ function AddReflectionModal({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1790,24 +1807,36 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateStrategyModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior="padding"
+          style={styles.modalOverlay}
+        >
           <View style={styles.alertModal}>
             <Text style={styles.alertTitle}>Add New Strategy</Text>
             <TextInput
+              ref={newStrategyNameInputRef}
               style={styles.input}
               value={newItemName}
               onChangeText={setNewItemName}
               placeholder="Strategy name..."
               placeholderTextColor={colors.textSecondary}
+              autoFocus
+              returnKeyType="next"
+              onSubmitEditing={() => newStrategyDescInputRef.current?.focus()}
+              blurOnSubmit={false}
             />
             <TextInput
-              style={[styles.input, styles.textArea]}
+              ref={newStrategyDescInputRef}
+              style={[styles.input, styles.textArea, { marginTop: 12 }]}
               value={newItemDescription}
               onChangeText={setNewItemDescription}
               placeholder="Description (optional)..."
               placeholderTextColor={colors.textSecondary}
               multiline
               numberOfLines={3}
+              returnKeyType="done"
+              onSubmitEditing={handleCreateStrategy}
+              blurOnSubmit={false}
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
@@ -1833,7 +1862,7 @@ function AddReflectionModal({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Modal>
   );
@@ -2581,6 +2610,7 @@ const styles = StyleSheet.create({
   alertButtons: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 16,
   },
   alertButton: {
     flex: 1,
