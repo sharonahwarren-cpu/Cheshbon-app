@@ -225,31 +225,31 @@ export default function CreateGoalScreen() {
         scheduleTimesPerDay: scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
       };
 
-      // Handle rewards - explicitly set to null if cleared, or set values if all fields are filled
+      // Handle rewards - send as nested object or null to clear
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
-        goalData.rewardCurrencyId = rewardCurrencyId;
-        goalData.rewardSuccesses = parseInt(rewardSuccesses);
-        goalData.rewardAmount = parseInt(rewardAmount);
-        console.log('Setting reward data:', { rewardCurrencyId, rewardSuccesses, rewardAmount });
-      } else if (editingGoalId) {
-        // When editing, explicitly clear reward if currency is not selected
-        goalData.rewardCurrencyId = null;
-        goalData.rewardSuccesses = null;
-        goalData.rewardAmount = null;
+        goalData.reward = {
+          currencyId: rewardCurrencyId,
+          successes: parseInt(rewardSuccesses),
+          amount: parseInt(rewardAmount),
+        };
+        console.log('Setting reward data:', goalData.reward);
+      } else {
+        // Explicitly set to null to clear reward fields
+        goalData.reward = null;
         console.log('Clearing reward data');
       }
 
-      // Handle consequences - explicitly set to null if cleared, or set values if all fields are filled
+      // Handle consequences - send as nested object or null to clear
       if (consequenceCurrencyId && consequenceFailures && consequenceAmount) {
-        goalData.consequenceCurrencyId = consequenceCurrencyId;
-        goalData.consequenceFailures = parseInt(consequenceFailures);
-        goalData.consequenceAmount = parseInt(consequenceAmount);
-        console.log('Setting consequence data:', { consequenceCurrencyId, consequenceFailures, consequenceAmount });
-      } else if (editingGoalId) {
-        // When editing, explicitly clear consequence if currency is not selected
-        goalData.consequenceCurrencyId = null;
-        goalData.consequenceFailures = null;
-        goalData.consequenceAmount = null;
+        goalData.consequence = {
+          currencyId: consequenceCurrencyId,
+          failures: parseInt(consequenceFailures),
+          amount: parseInt(consequenceAmount),
+        };
+        console.log('Setting consequence data:', goalData.consequence);
+      } else {
+        // Explicitly set to null to clear consequence fields
+        goalData.consequence = null;
         console.log('Clearing consequence data');
       }
 
