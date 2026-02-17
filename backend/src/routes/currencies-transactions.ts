@@ -118,8 +118,45 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
           description: `Claimed ${body.amount} ${currencies[0].name}${body.reason ? `: ${body.reason}` : ''}`,
         });
 
-      // Calculate updated balance
-      const updatedBalance = await calculateCurrencyBalance(app, session.user.id, id);
+      // Update goal_currency_balances proportionally
+      const goalBalances = await app.db
+        .select()
+        .from(schema.goalCurrencyBalances)
+        .where(eq(schema.goalCurrencyBalances.currencyId, id));
+
+      // Calculate total balance across all goals for this currency
+      let totalBalance = 0;
+      for (const gb of goalBalances) {
+        totalBalance += gb.balance;
+      }
+
+      // Distribute the claim amount proportionally across goals
+      if (goalBalances.length > 0 && totalBalance !== 0) {
+        for (const gb of goalBalances) {
+          if (totalBalance === 0) continue;
+          // Calculate proportional share of the claim
+          const proportion = gb.balance / totalBalance;
+          const amountToReduce = Math.round(body.amount * proportion);
+
+          // Update the balance (reduce by claimed amount)
+          const newBalance = gb.balance - amountToReduce;
+          await app.db
+            .update(schema.goalCurrencyBalances)
+            .set({ balance: newBalance, updatedAt: new Date() })
+            .where(eq(schema.goalCurrencyBalances.id, gb.id));
+        }
+      }
+
+      // Calculate updated total balance
+      let updatedBalance = 0;
+      const updatedGoalBalances = await app.db
+        .select()
+        .from(schema.goalCurrencyBalances)
+        .where(eq(schema.goalCurrencyBalances.currencyId, id));
+
+      for (const gb of updatedGoalBalances) {
+        updatedBalance += gb.balance;
+      }
 
       app.logger.info({ userId: session.user.id, currencyId: id, amount: body.amount, reflectionId: reflections[0].id, updatedBalance }, 'Currency claimed successfully');
       return { success: true, amount: body.amount, transactionId: reflections[0].id, balance: updatedBalance };
@@ -206,8 +243,45 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
           description: `Paid ${body.amount} ${currencies[0].name}${body.reason ? `: ${body.reason}` : ''}`,
         });
 
-      // Calculate updated balance
-      const updatedBalance = await calculateCurrencyBalance(app, session.user.id, id);
+      // Update goal_currency_balances proportionally
+      const goalBalances = await app.db
+        .select()
+        .from(schema.goalCurrencyBalances)
+        .where(eq(schema.goalCurrencyBalances.currencyId, id));
+
+      // Calculate total balance across all goals for this currency
+      let totalBalance = 0;
+      for (const gb of goalBalances) {
+        totalBalance += gb.balance;
+      }
+
+      // Distribute the payment amount proportionally across goals
+      if (goalBalances.length > 0 && totalBalance !== 0) {
+        for (const gb of goalBalances) {
+          if (totalBalance === 0) continue;
+          // Calculate proportional share of the payment
+          const proportion = gb.balance / totalBalance;
+          const amountToPay = Math.round(body.amount * proportion);
+
+          // Update the balance (add to balance, which reduces debt toward zero)
+          const newBalance = gb.balance + amountToPay;
+          await app.db
+            .update(schema.goalCurrencyBalances)
+            .set({ balance: newBalance, updatedAt: new Date() })
+            .where(eq(schema.goalCurrencyBalances.id, gb.id));
+        }
+      }
+
+      // Calculate updated total balance
+      let updatedBalance = 0;
+      const updatedGoalBalances = await app.db
+        .select()
+        .from(schema.goalCurrencyBalances)
+        .where(eq(schema.goalCurrencyBalances.currencyId, id));
+
+      for (const gb of updatedGoalBalances) {
+        updatedBalance += gb.balance;
+      }
 
       app.logger.info({ userId: session.user.id, currencyId: id, amount: body.amount, reflectionId: reflections[0].id, updatedBalance }, 'Currency paid successfully');
       return { success: true, amount: body.amount, transactionId: reflections[0].id, balance: updatedBalance };
