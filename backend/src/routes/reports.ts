@@ -6,7 +6,7 @@ import * as schema from '../db/schema.js';
 export function registerReportsRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
-  // GET /api/reports/currency-balances - Calculate currency balances from reflection currencyChange
+  // GET /api/reports/currency-balances - Calculate total currency balances from currency_transactions
   app.fastify.get('/api/reports/currency-balances', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -23,51 +23,59 @@ export function registerReportsRoutes(app: App) {
         .from(schema.currencies)
         .where(eq(schema.currencies.userId, session.user.id));
 
-      // Get all reflections for the user
-      const reflections = await app.db
+      // Get all currency transactions for the user
+      const transactions = await app.db
         .select()
-        .from(schema.reflections)
-        .where(eq(schema.reflections.userId, session.user.id));
+        .from(schema.currencyTransactions)
+        .where(eq(schema.currencyTransactions.userId, session.user.id));
 
-      // Calculate balances for each currency from reflection currencyChange
+      // Get all goal_currency_balances for the user's goals
+      const goals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.userId, session.user.id));
+
+      const goalBalances = await app.db
+        .select()
+        .from(schema.goalCurrencyBalances)
+        .where(eq(schema.goalCurrencyBalances.userId, session.user.id));
+
+      // Calculate balances for each currency from currency_transactions
       const balances = userCurrencies.map(currency => {
-        let earned = 0;
-        let lost = 0;
-        const reflectionIds: string[] = [];
+        let totalBalance = 0;
+        const transactionIds: string[] = [];
 
-        // Process all reflections with currencyChange
-        for (const reflection of reflections) {
-          if (!reflection.currencyChange) continue;
-
-          try {
-            const change = typeof reflection.currencyChange === 'string'
-              ? JSON.parse(reflection.currencyChange)
-              : reflection.currencyChange;
-
-            if (change.currencyId === currency.id) {
-              reflectionIds.push(reflection.id);
-              if (change.operation === 'add') {
-                earned += change.amount;
-              } else if (change.operation === 'subtract') {
-                lost += change.amount;
-              }
-            }
-          } catch (e) {
-            // Skip invalid currencyChange entries
-            continue;
+        // Sum all transactions for this currency
+        for (const transaction of transactions) {
+          if (transaction.currencyId === currency.id) {
+            totalBalance += transaction.amount;
+            transactionIds.push(transaction.id);
           }
         }
 
-        const netBalance = earned - lost;
+        // Build goal breakdown
+        const goalBreakdown = goals
+          .filter(goal => {
+            // Check if this goal has this currency
+            return goal.rewardCurrencyId === currency.id || goal.consequenceCurrencyId === currency.id;
+          })
+          .map(goal => {
+            // Find the balance for this goal and currency
+            const balance = goalBalances.find(gb => gb.goalId === goal.id && gb.currencyId === currency.id);
+            return {
+              goalId: goal.id,
+              goalTitle: goal.title,
+              balance: balance?.balance || 0,
+            };
+          });
 
         return {
           currencyId: currency.id,
           currencyName: currency.name,
           symbol: currency.symbol,
-          earned,
-          lost,
-          netBalance,
-          reflectionIds,
+          totalBalance,
+          transactionIds,
+          goalBreakdown,
         };
       });
 
@@ -75,6 +83,82 @@ export function registerReportsRoutes(app: App) {
       return balances;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to generate currency balances report');
+      throw error;
+    }
+  });
+
+  // GET /api/reports/currency-reflections/:currencyId - Get all reflections affecting a currency
+  app.fastify.get('/api/reports/currency-reflections/:currencyId', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { currencyId } = request.params as { currencyId: string };
+
+    app.logger.info({ userId: session.user.id, currencyId }, 'Fetching currency reflections');
+
+    try {
+      // Get all reflections for the user
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(eq(schema.reflections.userId, session.user.id));
+
+      // Get all goals to map goal IDs to titles
+      const goals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.userId, session.user.id));
+
+      const goalMap = new Map(goals.map(g => [g.id, g]));
+
+      // Filter reflections that affected this currency
+      const currencyReflections = reflections
+        .filter(reflection => {
+          // Check if reflection has currencyChange for this currency
+          if (reflection.currencyChange) {
+            try {
+              const change = typeof reflection.currencyChange === 'string'
+                ? JSON.parse(reflection.currencyChange)
+                : reflection.currencyChange;
+              if (change.currencyId === currencyId) {
+                return true;
+              }
+            } catch (e) {
+              // Skip invalid currencyChange
+            }
+          }
+
+          // Or check if linked goal uses this currency
+          if (reflection.linkedGoalId) {
+            const goal = goalMap.get(reflection.linkedGoalId);
+            if (goal && (goal.rewardCurrencyId === currencyId || goal.consequenceCurrencyId === currencyId)) {
+              return true;
+            }
+          }
+
+          return false;
+        })
+        .map(reflection => {
+          const goal = reflection.linkedGoalId ? goalMap.get(reflection.linkedGoalId) : null;
+          return {
+            id: reflection.id,
+            entryDate: reflection.entryDate,
+            description: reflection.description,
+            linkedGoalId: reflection.linkedGoalId,
+            linkedGoalTitle: goal?.title || null,
+            outcome: reflection.outcome,
+            currencyChange: reflection.currencyChange,
+            createdAt: reflection.createdAt,
+          };
+        });
+
+      app.logger.info({ userId: session.user.id, currencyId, count: currencyReflections.length }, 'Currency reflections fetched');
+      return currencyReflections;
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, currencyId }, 'Failed to fetch currency reflections');
       throw error;
     }
   });
@@ -382,36 +466,11 @@ export function registerReportsRoutes(app: App) {
         .from(schema.currencies)
         .where(eq(schema.currencies.userId, session.user.id));
 
-      // Calculate currency balances from reflection currencyChange field
-      const currencyBalances = new Map<string, { earned: number; lost: number }>();
-
-      for (const currency of currencies) {
-        let earned = 0;
-        let lost = 0;
-
-        for (const reflection of reflections) {
-          if (!reflection.currencyChange) continue;
-
-          try {
-            const change = typeof reflection.currencyChange === 'string'
-              ? JSON.parse(reflection.currencyChange)
-              : reflection.currencyChange;
-
-            if (change.currencyId === currency.id) {
-              if (change.operation === 'add') {
-                earned += change.amount;
-              } else if (change.operation === 'subtract') {
-                lost += change.amount;
-              }
-            }
-          } catch (e) {
-            // Skip invalid currencyChange entries
-            continue;
-          }
-        }
-
-        currencyBalances.set(currency.id, { earned, lost });
-      }
+      // Get per-goal currency balances from goal_currency_balances table
+      const goalCurrencyBalances = await app.db
+        .select()
+        .from(schema.goalCurrencyBalances)
+        .where(eq(schema.goalCurrencyBalances.userId, session.user.id));
 
       const result = goals
         .map(goal => {
@@ -432,7 +491,7 @@ export function registerReportsRoutes(app: App) {
             }
           }
 
-          // Get currency balances for this goal
+          // Get currency balances for this goal from goal_currency_balances table
           let rewardCurrencyBalance = 0;
           let rewardCurrencySymbol = '';
           let consequenceCurrencyBalance = 0;
@@ -441,9 +500,9 @@ export function registerReportsRoutes(app: App) {
           if (goal.rewardCurrencyId) {
             const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
             if (rewardCurrency) {
-              const balance = currencyBalances.get(goal.rewardCurrencyId);
+              const balance = goalCurrencyBalances.find(gcb => gcb.goalId === goal.id && gcb.currencyId === goal.rewardCurrencyId);
               if (balance) {
-                rewardCurrencyBalance = balance.earned - balance.lost;
+                rewardCurrencyBalance = balance.balance;
               }
               rewardCurrencySymbol = rewardCurrency.symbol || '';
             }
@@ -452,9 +511,9 @@ export function registerReportsRoutes(app: App) {
           if (goal.consequenceCurrencyId) {
             const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
             if (consequenceCurrency) {
-              const balance = currencyBalances.get(goal.consequenceCurrencyId);
+              const balance = goalCurrencyBalances.find(gcb => gcb.goalId === goal.id && gcb.currencyId === goal.consequenceCurrencyId);
               if (balance) {
-                consequenceCurrencyBalance = balance.earned - balance.lost;
+                consequenceCurrencyBalance = balance.balance;
               }
               consequenceCurrencySymbol = consequenceCurrency.symbol || '';
             }
