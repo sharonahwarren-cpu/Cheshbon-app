@@ -163,8 +163,6 @@ export default function HomeScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
 
-  const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
-
   useEffect(() => {
     console.log("HomeScreen mounted");
     loadData();
@@ -176,15 +174,6 @@ export default function HomeScreen() {
       loadExpressData();
     }
   }, [selectedDate]);
-
-  useEffect(() => {
-    if (params.fromReflection === 'true') {
-      console.log("Returned from reflection, switching to Express tab and reloading data");
-      setActiveTab('express');
-      loadExpressData();
-      router.setParams({ fromReflection: undefined });
-    }
-  }, [params.fromReflection]);
 
   const showError = (message: string) => {
     setErrorMessage(message);
@@ -394,15 +383,16 @@ export default function HomeScreen() {
   };
 
   const handleReflection = (goalId?: string) => {
-    console.log("Opening Add Reflection modal from Express", goalId ? `for goal: ${goalId}` : "");
-    setShowAddReflectionModal(true);
-  };
-
-  const handleReflectionSaved = () => {
-    console.log("Reflection saved from Express, reloading data");
-    setShowAddReflectionModal(false);
-    loadExpressData();
-    showSuccess('Reflection saved successfully');
+    console.log("Opening Add Reflection modal directly from Express", goalId ? `for goal: ${goalId}` : "");
+    const dateString = selectedDate.toISOString().split('T')[0];
+    router.push({
+      pathname: '/(tabs)/reflect',
+      params: { 
+        date: dateString,
+        openModal: 'true',
+        ...(goalId && { goalId }),
+      },
+    });
   };
 
   const toggleCategory = (categoryKey: string) => {
@@ -1368,53 +1358,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-
-      {showAddReflectionModal && (
-        <Modal
-          visible={showAddReflectionModal}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setShowAddReflectionModal(false)}
-        >
-          <View style={styles.reflectionModalOverlay}>
-            <View style={styles.reflectionModalContent}>
-              <View style={styles.reflectionModalHeader}>
-                <TouchableOpacity onPress={() => setShowAddReflectionModal(false)}>
-                  <IconSymbol
-                    ios_icon_name="xmark"
-                    android_material_icon_name="close"
-                    size={24}
-                    color={colors.text}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.reflectionModalTitle}>Add Reflection</Text>
-                <View style={{ width: 24 }} />
-              </View>
-              <View style={styles.reflectionModalBody}>
-                <Text style={styles.reflectionModalMessage}>
-                  Opening full reflection form...
-                </Text>
-                <TouchableOpacity
-                  style={styles.reflectionModalButton}
-                  onPress={() => {
-                    setShowAddReflectionModal(false);
-                    const dateString = selectedDate.toISOString().split('T')[0];
-                    router.push({
-                      pathname: '/(tabs)/reflect',
-                      params: { 
-                        date: dateString,
-                        fromExpress: 'true'
-                      },
-                    });
-                  }}
-                >
-                  <Text style={styles.reflectionModalButtonText}>Open Reflection Form</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
     </SafeAreaView>
   );
 }
@@ -1949,50 +1892,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
-  },
-  reflectionModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  reflectionModalContent: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 40,
-  },
-  reflectionModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  reflectionModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  reflectionModalBody: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  reflectionModalMessage: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  reflectionModalButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-  },
-  reflectionModalButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 });

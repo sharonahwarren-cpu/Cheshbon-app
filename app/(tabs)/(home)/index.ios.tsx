@@ -167,15 +167,6 @@ export default function HomeScreen() {
     }
   }, [selectedDate]);
 
-  useEffect(() => {
-    if (params.fromReflection === 'true') {
-      console.log("Returned from reflection, switching to Express tab and reloading data");
-      setActiveTab('express');
-      loadExpressData();
-      router.setParams({ fromReflection: undefined });
-    }
-  }, [params.fromReflection]);
-
   const showError = (message: string) => {
     setErrorMessage(message);
     setErrorModalVisible(true);
@@ -384,13 +375,14 @@ export default function HomeScreen() {
   };
 
   const handleReflection = (goalId?: string) => {
-    console.log("Opening Add Reflection modal from Express", goalId ? `for goal: ${goalId}` : "");
+    console.log("Opening Add Reflection modal directly from Express", goalId ? `for goal: ${goalId}` : "");
     const dateString = selectedDate.toISOString().split('T')[0];
     router.push({
       pathname: '/(tabs)/reflect',
       params: { 
         date: dateString,
-        fromExpress: 'true'
+        openModal: 'true',
+        ...(goalId && { goalId }),
       },
     });
   };
