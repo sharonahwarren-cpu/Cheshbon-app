@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import React, { useState, useEffect } from "react";
 import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AddReflectionModal } from "@/components/AddReflectionModal";
 import {
   StyleSheet,
   View,
@@ -117,6 +118,30 @@ interface CategoryGroup {
   goals: ActivatedGoal[];
 }
 
+interface GainLoss {
+  id: string;
+  name: string;
+  type: 'Gain' | 'Loss';
+  category?: string;
+  subCategory?: string;
+}
+
+interface Strategy {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  successCount: number;
+  failureCount: number;
+  timesUsed: number;
+  successRate: number;
+}
+
+interface UserPreferences {
+  reflectionCategoriesEnabled?: boolean;
+  reflectionCategories?: string[];
+}
+
 export default function HomeScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -155,6 +180,13 @@ export default function HomeScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
 
+  const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
+  const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
+  const [goals, setGoals] = useState<any[]>([]);
+  const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
+
   useEffect(() => {
     console.log("HomeScreen mounted");
     loadData();
@@ -189,11 +221,36 @@ export default function HomeScreen() {
       } else {
         await loadExpressData();
       }
+      await loadModalData();
     } catch (error: any) {
       console.error("Error loading data:", error);
       showError(error.message || "Failed to load data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadModalData = async () => {
+    console.log("Loading data for AddReflectionModal");
+    try {
+      const [goalsRes, gainsLossesRes, strategiesRes, preferencesRes] = await Promise.all([
+        authenticatedGet('/api/goals'),
+        authenticatedGet('/api/gains-losses'),
+        authenticatedGet('/api/strategies'),
+        authenticatedGet('/api/preferences'),
+      ]);
+
+      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
+      const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
+      const preferencesData = preferencesRes?.data || preferencesRes || {};
+
+      setGoals(goalsData);
+      setGainsLosses(gainsLossesData);
+      setStrategies(strategiesData);
+      setUserPreferences(preferencesData);
+    } catch (error) {
+      console.error("Error loading modal data:", error);
     }
   };
 
@@ -375,16 +432,15 @@ export default function HomeScreen() {
   };
 
   const openAddReflectionModal = (goalId?: string) => {
-    console.log("Opening Add Reflection modal directly from Express", goalId ? `for goal: ${goalId}` : "");
-    const dateString = selectedDate.toISOString().split('T')[0];
-    router.push({
-      pathname: '/(tabs)/reflect',
-      params: { 
-        date: dateString,
-        openModal: 'true',
-        ...(goalId && { goalId }),
-      },
-    });
+    console.log("Opening Add Reflection modal directly in Express screen (iOS)", goalId ? `for goal: ${goalId}` : "");
+    setPrefilledGoalId(goalId);
+    setShowAddReflectionModal(true);
+  };
+
+  const handleReflectionSaved = async () => {
+    console.log("Reflection saved, refreshing Express data");
+    showSuccess("Reflection saved successfully!");
+    await loadExpressData();
   };
 
   const toggleCategory = (categoryKey: string) => {
@@ -930,6 +986,23 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
+
+      <AddReflectionModal
+        visible={showAddReflectionModal}
+        onClose={() => {
+          setShowAddReflectionModal(false);
+          setPrefilledGoalId(undefined);
+        }}
+        onSave={handleReflectionSaved}
+        selectedDate={selectedDate}
+        goals={goals}
+        currencies={currencies}
+        userPreferences={userPreferences}
+        editingReflection={null}
+        gainsLosses={gainsLosses}
+        strategies={strategies}
+        prefilledGoalId={prefilledGoalId}
+      />
 
       <Modal
         visible={showCurrencyModal}
