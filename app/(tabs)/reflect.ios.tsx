@@ -128,6 +128,15 @@ export default function ReflectScreen() {
     loadData();
   }, [selectedDate]);
 
+  useEffect(() => {
+    if (showSuccessModal && successMessage === 'Reflection saved successfully') {
+      const timer = setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccessModal, successMessage]);
+
   const loadData = async () => {
     console.log('Loading reflect data for date:', selectedDate.toISOString().split('T')[0]);
     setLoading(true);
@@ -368,6 +377,7 @@ export default function ReflectScreen() {
               textAlignVertical="top"
               returnKeyType="default"
               blurOnSubmit={false}
+              autoFocus={false}
             />
             <TouchableOpacity
               style={styles.saveButton}
@@ -678,15 +688,14 @@ export default function ReflectScreen() {
         onRequestClose={() => setShowSuccessModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
-            <Text style={styles.alertTitle}>Success</Text>
-            <Text style={styles.alertMessage}>{successMessage}</Text>
-            <TouchableOpacity
-              style={styles.alertButton}
-              onPress={() => setShowSuccessModal(false)}
-            >
-              <Text style={styles.alertButtonText}>OK</Text>
-            </TouchableOpacity>
+          <View style={styles.successFlashModal}>
+            <IconSymbol
+              ios_icon_name="checkmark.circle.fill"
+              android_material_icon_name="check-circle"
+              size={48}
+              color={colors.success}
+            />
+            <Text style={styles.successFlashTitle}>{successMessage}</Text>
           </View>
         </View>
       </Modal>
@@ -2652,5 +2661,24 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+  },
+  successFlashModal: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: 32,
+    margin: 40,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  successFlashTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 16,
+    textAlign: 'center',
   },
 });
