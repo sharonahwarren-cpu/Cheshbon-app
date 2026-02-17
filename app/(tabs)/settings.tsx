@@ -639,20 +639,36 @@ export default function SettingsScreen() {
               const struggleCount = goal.struggleCount || 0;
               const isDeactivated = goal.status === 'DEACTIVATED';
               
-              // Get currency objects
-              const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
-              const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+              // Determine which currency to display (reward takes priority if both exist)
+              let displayCurrencyId = null;
+              let displayCurrencyBalance = 0;
+              let displayCurrencySymbol = '';
+              let displayCurrency = null;
+              let displayButtonType: 'claim' | 'pay' = 'claim';
               
-              // Determine balances
-              const rewardBalance = goal.rewardCurrencyBalance || 0;
-              const consequenceBalance = goal.consequenceCurrencyBalance || 0;
+              if (goal.rewardCurrencyId) {
+                displayCurrencyId = goal.rewardCurrencyId;
+                displayCurrencyBalance = goal.rewardCurrencyBalance || 0;
+                displayCurrencySymbol = goal.rewardCurrencySymbol || '';
+                displayCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
+                if (displayCurrency && isRewardCurrency(displayCurrency) && displayCurrencyBalance > 0) {
+                  displayButtonType = 'claim';
+                } else {
+                  displayButtonType = 'pay';
+                }
+              } else if (goal.consequenceCurrencyId) {
+                displayCurrencyId = goal.consequenceCurrencyId;
+                displayCurrencyBalance = goal.consequenceCurrencyBalance || 0;
+                displayCurrencySymbol = goal.consequenceCurrencySymbol || '';
+                displayCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+                if (displayCurrency && isConsequenceCurrency(displayCurrency) && displayCurrencyBalance > 0) {
+                  displayButtonType = 'pay';
+                } else {
+                  displayButtonType = 'claim';
+                }
+              }
               
-              // Determine button type based on currency type and balance
-              const showRewardButton = rewardCurrency && rewardBalance !== 0;
-              const rewardButtonType = rewardCurrency && isRewardCurrency(rewardCurrency) && rewardBalance > 0 ? 'claim' : 'pay';
-              
-              const showConsequenceButton = consequenceCurrency && consequenceBalance !== 0;
-              const consequenceButtonType = consequenceCurrency && isConsequenceCurrency(consequenceCurrency) && consequenceBalance > 0 ? 'pay' : 'claim';
+              const showCurrencyButton = displayCurrencyId && displayCurrencyBalance !== 0;
               
               return (
                 <React.Fragment key={index}>
@@ -744,53 +760,28 @@ export default function SettingsScreen() {
                       </View>
                     </View>
                     
-                    {/* Currency balances on single line with appropriate button */}
-                    {(goal.rewardCurrencyId || goal.consequenceCurrencyId) && (
+                    {/* Single currency line */}
+                    {displayCurrencyId && (
                       <View style={styles.currencyBalances}>
-                        {goal.rewardCurrencyId && rewardCurrency && (
-                          <View style={styles.currencyBalanceRow}>
-                            <Text style={styles.currencyBalanceLabel}>Reward:</Text>
-                            <Text style={[styles.currencyBalanceValue, { color: rewardBalance >= 0 ? colors.success : colors.error }]}>
-                              {rewardBalance} {goal.rewardCurrencySymbol || ''}
-                            </Text>
-                            {showRewardButton && (
-                              <TouchableOpacity
-                                style={[styles.currencyActionButton, { backgroundColor: rewardButtonType === 'claim' ? colors.success : colors.error }]}
-                                onPress={() => {
-                                  if (goal.rewardCurrencyId) {
-                                    openCurrencyModal(rewardButtonType, goal.rewardCurrencyId, rewardBalance);
-                                  }
-                                }}
-                              >
-                                <Text style={styles.currencyActionButtonText}>
-                                  {rewardButtonType === 'claim' ? 'Claim' : 'Pay'}
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        )}
-                        {goal.consequenceCurrencyId && consequenceCurrency && (
-                          <View style={styles.currencyBalanceRow}>
-                            <Text style={styles.currencyBalanceLabel}>Consequence:</Text>
-                            <Text style={[styles.currencyBalanceValue, { color: consequenceBalance >= 0 ? colors.success : colors.error }]}>
-                              {consequenceBalance} {goal.consequenceCurrencySymbol || ''}
-                            </Text>
-                            {showConsequenceButton && (
-                              <TouchableOpacity
-                                style={[styles.currencyActionButton, { backgroundColor: consequenceButtonType === 'pay' ? colors.error : colors.success }]}
-                                onPress={() => {
-                                  if (goal.consequenceCurrencyId) {
-                                    openCurrencyModal(consequenceButtonType, goal.consequenceCurrencyId, consequenceBalance);
-                                  }
-                                }}
-                              >
-                                <Text style={styles.currencyActionButtonText}>
-                                  {consequenceButtonType === 'pay' ? 'Pay' : 'Claim'}
-                                </Text>
-                              </TouchableOpacity>
-                            )}
-                          </View>
-                        )}
+                        <View style={styles.currencyBalanceRow}>
+                          <Text style={styles.currencyBalanceValue}>
+                            {displayCurrencySymbol}{displayCurrencyBalance}
+                          </Text>
+                          {showCurrencyButton && (
+                            <TouchableOpacity
+                              style={[styles.currencyActionButton, { backgroundColor: displayButtonType === 'claim' ? colors.success : colors.error }]}
+                              onPress={() => {
+                                if (displayCurrencyId) {
+                                  openCurrencyModal(displayButtonType, displayCurrencyId, displayCurrencyBalance);
+                                }
+                              }}
+                            >
+                              <Text style={styles.currencyActionButtonText}>
+                                {displayButtonType === 'claim' ? 'Claim' : 'Pay'}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       </View>
                     )}
                   </View>
@@ -2420,7 +2411,6 @@ const styles = StyleSheet.create({
   currencyBalanceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
     gap: 8,
   },
   currencyBalanceLabel: {
@@ -2432,6 +2422,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     flex: 1,
+    color: colors.text,
   },
   currencyActionButton: {
     paddingHorizontal: 12,
