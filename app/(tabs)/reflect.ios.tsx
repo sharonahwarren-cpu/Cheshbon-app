@@ -2315,8 +2315,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalBodyContent: {
-    padding: 16,
-    paddingBottom: 120,
+    padding: 20,
+    paddingBottom: 40,
   },
   modalFooter: {
     padding: 16,
@@ -2325,7 +2325,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   formGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   labelRow: {
     flexDirection: 'row',
