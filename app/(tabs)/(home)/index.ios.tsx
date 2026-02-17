@@ -364,7 +364,7 @@ export default function HomeScreen() {
   };
 
   const handleQuickReflectionNext = () => {
-    if (quickReflectionStep < 5) {
+    if (quickReflectionStep < 4) {
       setQuickReflectionStep(quickReflectionStep + 1);
     }
   };
@@ -979,7 +979,7 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* Quick Reflection Modal (1-5 step popup) */}
+      {/* Quick Reflection Modal (1-4 step popup) */}
       <Modal
         visible={showQuickReflectionModal}
         animationType="slide"
@@ -1002,7 +1002,7 @@ export default function HomeScreen() {
             </View>
             
             <View style={styles.stepIndicator}>
-              <Text style={styles.stepText}>Step {quickReflectionStep} of 5</Text>
+              <Text style={styles.stepText}>Step {quickReflectionStep} of 4</Text>
             </View>
             
             <ScrollView style={styles.modalContent}>
@@ -1086,11 +1086,7 @@ export default function HomeScreen() {
                       No
                     </Text>
                   </TouchableOpacity>
-                </View>
-              )}
-              
-              {quickReflectionStep === 4 && (
-                <View style={styles.stepContent}>
+                  
                   <Text style={styles.stepTitle}>Additional thoughts?</Text>
                   <TextInput
                     style={styles.textInput}
@@ -1104,7 +1100,7 @@ export default function HomeScreen() {
                 </View>
               )}
               
-              {quickReflectionStep === 5 && (
+              {quickReflectionStep === 4 && (
                 <View style={styles.stepContent}>
                   <Text style={styles.stepTitle}>Complete your reflection</Text>
                   <Text style={styles.stepDescription}>
@@ -1125,11 +1121,11 @@ export default function HomeScreen() {
               )}
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonPrimary]}
-                onPress={quickReflectionStep < 5 ? handleQuickReflectionNext : handleQuickReflectionSave}
+                onPress={quickReflectionStep < 4 ? handleQuickReflectionNext : handleQuickReflectionSave}
                 disabled={quickReflectionStep === 1 && !quickReflectionOutcome}
               >
                 <Text style={styles.modalButtonPrimaryText}>
-                  {quickReflectionStep < 5 ? 'Next' : 'Continue to Full Reflection'}
+                  {quickReflectionStep < 4 ? 'Next' : 'Continue to Full Reflection'}
                 </Text>
               </TouchableOpacity>
             </View>
