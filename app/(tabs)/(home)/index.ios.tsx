@@ -107,6 +107,7 @@ export default function HomeScreen() {
   
   const [activeTab, setActiveTab] = useState<'reports' | 'express'>('reports');
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date());
   
   const [currencyBalances, setCurrencyBalances] = useState<CurrencyBalance[]>([]);
   const [winsVsLosses, setWinsVsLosses] = useState<WinsVsLosses | null>(null);
@@ -129,6 +130,13 @@ export default function HomeScreen() {
     console.log("HomeScreen mounted");
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'express') {
+      console.log("Selected date changed, reloading express data:", selectedDate);
+      loadExpressData();
+    }
+  }, [selectedDate]);
 
   const showError = (message: string) => {
     setErrorMessage(message);
@@ -201,9 +209,10 @@ export default function HomeScreen() {
   };
 
   const loadExpressData = async () => {
-    console.log("Loading express data (activated goals)");
+    console.log("Loading express data (activated goals) for date:", selectedDate.toISOString());
     try {
-      const goalsRes = await authenticatedGet('/api/goals/activated-today');
+      const dateString = selectedDate.toISOString().split('T')[0];
+      const goalsRes = await authenticatedGet(`/api/goals/activated-today?date=${dateString}`);
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
       
       setActivatedGoals(goalsData);
@@ -254,7 +263,7 @@ export default function HomeScreen() {
   const handleGoalSuccess = async (goalId: string) => {
     console.log("Recording success for goal:", goalId);
     try {
-      const timestamp = new Date().toISOString();
+      const timestamp = new Date(selectedDate).toISOString();
       await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
       await loadExpressData();
     } catch (error: any) {
@@ -266,7 +275,7 @@ export default function HomeScreen() {
   const handleGoalStruggle = async (goalId: string) => {
     console.log("Recording struggle for goal:", goalId);
     try {
-      const timestamp = new Date().toISOString();
+      const timestamp = new Date(selectedDate).toISOString();
       await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
       await loadExpressData();
     } catch (error: any) {
@@ -288,10 +297,17 @@ export default function HomeScreen() {
 
   const handleEditGoal = (goalId: string) => {
     console.log("Opening goal editor for:", goalId);
-    router.push({
-      pathname: '/create-goal',
-      params: { goalId },
-    });
+    router.push(`/create-goal?goalId=${goalId}`);
+  };
+
+  const handleQuickReflection = (goalId: string, entryId?: string) => {
+    console.log("Opening quick reflection for goal:", goalId, "entry:", entryId);
+    const dateString = selectedDate.toISOString().split('T')[0];
+    if (entryId) {
+      router.push(`/reflect?goalId=${goalId}&entryId=${entryId}&date=${dateString}`);
+    } else {
+      router.push(`/reflect?goalId=${goalId}&date=${dateString}`);
+    }
   };
 
   const toggleCategory = (category: string) => {
@@ -310,10 +326,40 @@ export default function HomeScreen() {
 
   const handleReflection = (goalId?: string) => {
     console.log("Opening reflection screen", goalId ? `for goal: ${goalId}` : "");
+    const dateString = selectedDate.toISOString().split('T')[0];
     router.push({
       pathname: '/reflect',
-      params: goalId ? { goalId } : {},
+      params: goalId ? { goalId, date: dateString } : { date: dateString },
     });
+  };
+
+  const handlePreviousDay = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() - 1);
+    setSelectedDate(newDate);
+  };
+
+  const handleNextDay = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + 1);
+    setSelectedDate(newDate);
+  };
+
+  const formatDateDisplay = (date: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const compareDate = new Date(date);
+    compareDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = compareDate.getTime() - today.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) return 'Today';
+    if (diffDays === -1) return 'Yesterday';
+    if (diffDays === 1) return 'Tomorrow';
+    
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+    return date.toLocaleDateString(undefined, options);
   };
 
   useEffect(() => {
@@ -333,6 +379,7 @@ export default function HomeScreen() {
     const typeColor = goal.type === 'RESTRAINING' ? colors.error : colors.success;
     const successCount = goal.todaySuccessCount;
     const struggleCount = goal.todayStruggleCount;
+    const hasDescription = goal.description && goal.description.trim().length > 0;
     
     return (
       <View key={goal.id} style={styles.goalCard}>
@@ -346,7 +393,14 @@ export default function HomeScreen() {
             size={20}
             color={typeColor}
           />
-          <Text style={styles.goalCardTitle}>{goal.title}</Text>
+          <View style={styles.goalTitleContainer}>
+            <Text style={styles.goalCardTitle}>{goal.title}</Text>
+            {hasDescription && (
+              <Text style={styles.goalDescription} numberOfLines={2}>
+                {goal.description}
+              </Text>
+            )}
+          </View>
         </TouchableOpacity>
         
         <View style={styles.tallyRow}>
@@ -378,7 +432,11 @@ export default function HomeScreen() {
               const entryIcon = isSuccess ? 'check' : 'close';
               
               return (
-                <View key={entry.id} style={[styles.entryBadge, { borderColor: entryColor }]}>
+                <TouchableOpacity
+                  key={entry.id}
+                  style={[styles.entryBadge, { borderColor: entryColor }]}
+                  onPress={() => handleQuickReflection(goal.id, entry.id)}
+                >
                   <IconSymbol
                     ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
                     android_material_icon_name={entryIcon}
@@ -387,7 +445,10 @@ export default function HomeScreen() {
                   />
                   <TouchableOpacity
                     style={styles.deleteEntryButton}
-                    onPress={() => handleDeleteEntry(goal.id, entry.id)}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleDeleteEntry(goal.id, entry.id);
+                    }}
                   >
                     <IconSymbol
                       ios_icon_name="xmark"
@@ -396,7 +457,7 @@ export default function HomeScreen() {
                       color={colors.textSecondary}
                     />
                   </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -428,12 +489,25 @@ export default function HomeScreen() {
             />
             <Text style={styles.actionButtonText}>Struggle</Text>
           </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.reflectionButton]}
+            onPress={() => handleQuickReflection(goal.id)}
+          >
+            <IconSymbol
+              ios_icon_name="note.text"
+              android_material_icon_name="edit"
+              size={18}
+              color="#FFFFFF"
+            />
+          </TouchableOpacity>
         </View>
       </View>
     );
   };
 
   const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
+  const dateDisplay = formatDateDisplay(selectedDate);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -479,6 +553,36 @@ export default function HomeScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {activeTab === 'express' && (
+        <View style={styles.dateNavigator}>
+          <TouchableOpacity 
+            style={styles.dateNavButton}
+            onPress={handlePreviousDay}
+          >
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={18}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+          
+          <Text style={styles.dateDisplay}>{dateDisplay}</Text>
+          
+          <TouchableOpacity 
+            style={styles.dateNavButton}
+            onPress={handleNextDay}
+          >
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="arrow-forward"
+              size={18}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {activeTab === 'reports' ? (
@@ -890,6 +994,27 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#FFFFFF',
   },
+  dateNavigator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    marginBottom: 12,
+    gap: 16,
+  },
+  dateNavButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: colors.backgroundAlt,
+  },
+  dateDisplay: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    minWidth: 120,
+    textAlign: 'center',
+  },
   content: {
     flex: 1,
   },
@@ -1059,15 +1184,23 @@ const styles = StyleSheet.create({
   },
   goalTitleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
     marginBottom: 12,
+  },
+  goalTitleContainer: {
+    flex: 1,
   },
   goalCardTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
-    flex: 1,
+    marginBottom: 4,
+  },
+  goalDescription: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 16,
   },
   tallyRow: {
     flexDirection: 'row',
@@ -1123,6 +1256,11 @@ const styles = StyleSheet.create({
   },
   struggleButton: {
     backgroundColor: colors.error,
+  },
+  reflectionButton: {
+    backgroundColor: colors.primary,
+    flex: 0,
+    paddingHorizontal: 12,
   },
   actionButtonText: {
     fontSize: 13,
