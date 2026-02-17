@@ -188,7 +188,7 @@ export default function HomeScreen() {
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
   useEffect(() => {
-    console.log("HomeScreen mounted");
+    console.log("HomeScreen mounted (iOS)");
     loadData();
   }, []);
 
@@ -231,24 +231,31 @@ export default function HomeScreen() {
   };
 
   const loadModalData = async () => {
-    console.log("Loading data for AddReflectionModal");
+    console.log("Loading data for AddReflectionModal (iOS)");
     try {
-      const [goalsRes, gainsLossesRes, strategiesRes, preferencesRes] = await Promise.all([
-        authenticatedGet('/api/goals'),
-        authenticatedGet('/api/gains-losses'),
-        authenticatedGet('/api/strategies'),
-        authenticatedGet('/api/preferences'),
-      ]);
+      const goalsRes = await authenticatedGet('/api/goals');
+      const gainsLossesRes = await authenticatedGet('/api/gains-losses');
+      const strategiesRes = await authenticatedGet('/api/strategies');
+      
+      let preferencesData = {};
+      try {
+        const preferencesRes = await authenticatedGet('/api/preferences');
+        preferencesData = preferencesRes?.data || preferencesRes || {};
+      } catch (prefError) {
+        console.log("Preferences endpoint not available, using defaults");
+        preferencesData = {};
+      }
 
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
-      const preferencesData = preferencesRes?.data || preferencesRes || {};
 
       setGoals(goalsData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
       setUserPreferences(preferencesData);
+      
+      console.log("Modal data loaded successfully (iOS)");
     } catch (error) {
       console.error("Error loading modal data:", error);
     }
@@ -438,7 +445,9 @@ export default function HomeScreen() {
   };
 
   const handleReflectionSaved = async () => {
-    console.log("Reflection saved, refreshing Express data");
+    console.log("Reflection saved, closing modal and refreshing Express data (iOS)");
+    setShowAddReflectionModal(false);
+    setPrefilledGoalId(undefined);
     showSuccess("Reflection saved successfully!");
     await loadExpressData();
   };
@@ -990,6 +999,7 @@ export default function HomeScreen() {
       <AddReflectionModal
         visible={showAddReflectionModal}
         onClose={() => {
+          console.log("Closing AddReflectionModal from Express screen (iOS)");
           setShowAddReflectionModal(false);
           setPrefilledGoalId(undefined);
         }}
