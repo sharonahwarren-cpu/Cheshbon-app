@@ -126,22 +126,23 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
         .where(eq(schema.goalCurrencyBalances.currencyId, id))
         .orderBy(asc(schema.goalCurrencyBalances.createdAt)); // FIFO - oldest first
 
-      // Distribute the claim amount across goals starting with oldest
+      // Distribute the claim amount across goals starting with oldest (FIFO)
+      // Claiming means taking/redeeming, so we SUBTRACT from the balance
       let remainingAmount = body.amount;
       if (goalBalances.length > 0 && remainingAmount > 0) {
         for (const gb of goalBalances) {
           if (remainingAmount <= 0) break;
 
-          // Add claim amount to this goal's balance
-          const amountToAdd = remainingAmount;
-          const newBalance = gb.balance + amountToAdd;
+          // Subtract claim amount from this goal's balance (taking it)
+          const amountToClaim = Math.min(Math.abs(gb.balance), remainingAmount);
+          const newBalance = gb.balance - amountToClaim;
 
           await app.db
             .update(schema.goalCurrencyBalances)
             .set({ balance: newBalance, updatedAt: new Date() })
             .where(eq(schema.goalCurrencyBalances.id, gb.id));
 
-          remainingAmount = 0; // All amount claimed goes to first goal with this currency
+          remainingAmount -= amountToClaim;
         }
       }
 

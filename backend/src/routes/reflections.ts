@@ -150,6 +150,50 @@ export function registerReflectionsRoutes(app: App) {
         .returning();
       const reflection = reflections[0];
 
+      // If currency change occurred, create transaction and update goal_currency_balances
+      if (currencyChange && body.linkedGoalId) {
+        const currencyChangeData = currencyChange;
+
+        // Create currency transaction record
+        await app.db
+          .insert(schema.currencyTransactions)
+          .values({
+            userId: session.user.id,
+            currencyId: currencyChangeData.currencyId,
+            goalId: body.linkedGoalId,
+            reflectionId: reflection.id,
+            amount: currencyChangeData.operation === 'add' ? currencyChangeData.amount : -currencyChangeData.amount,
+            transactionType: body.outcome === 'success' ? 'GOAL_REWARD' : 'GOAL_CONSEQUENCE',
+            description: `${body.outcome === 'success' ? 'Reward' : 'Consequence'} from reflection on goal`,
+          });
+
+        // Update or create goal_currency_balances
+        const existingBalances = await app.db
+          .select()
+          .from(schema.goalCurrencyBalances)
+          .where(and(eq(schema.goalCurrencyBalances.goalId, body.linkedGoalId), eq(schema.goalCurrencyBalances.currencyId, currencyChangeData.currencyId)))
+          .limit(1);
+
+        const balanceChange = currencyChangeData.operation === 'add' ? currencyChangeData.amount : -currencyChangeData.amount;
+
+        if (existingBalances.length) {
+          const newBalance = existingBalances[0].balance + balanceChange;
+          await app.db
+            .update(schema.goalCurrencyBalances)
+            .set({ balance: newBalance, updatedAt: new Date() })
+            .where(eq(schema.goalCurrencyBalances.id, existingBalances[0].id));
+        } else {
+          await app.db
+            .insert(schema.goalCurrencyBalances)
+            .values({
+              goalId: body.linkedGoalId,
+              currencyId: currencyChangeData.currencyId,
+              userId: session.user.id,
+              balance: balanceChange,
+            });
+        }
+      }
+
       // Update strategy effectiveness counts if provided
       if (body.strategyEffectiveness && body.strategyEffectiveness.length > 0) {
         for (const strategy of body.strategyEffectiveness) {
