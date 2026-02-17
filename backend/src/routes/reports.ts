@@ -82,7 +82,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/currency-reflections/:currencyId - Get all reflections affecting a currency
+  // GET /api/reports/currency-reflections/:currencyId - Get all reflections and transactions affecting a currency
   app.fastify.get('/api/reports/currency-reflections/:currencyId', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -92,7 +92,7 @@ export function registerReportsRoutes(app: App) {
 
     const { currencyId } = request.params as { currencyId: string };
 
-    app.logger.info({ userId: session.user.id, currencyId }, 'Fetching currency reflections');
+    app.logger.info({ userId: session.user.id, currencyId }, 'Fetching currency reflections and transactions');
 
     try {
       // Get all reflections for the user
@@ -100,6 +100,12 @@ export function registerReportsRoutes(app: App) {
         .select()
         .from(schema.reflections)
         .where(eq(schema.reflections.userId, session.user.id));
+
+      // Get all currency transactions for this currency
+      const transactions = await app.db
+        .select()
+        .from(schema.currencyTransactions)
+        .where(eq(schema.currencyTransactions.currencyId, currencyId));
 
       // Get all goals to map goal IDs to titles
       const goals = await app.db
@@ -141,6 +147,7 @@ export function registerReportsRoutes(app: App) {
           return {
             id: reflection.id,
             entryDate: reflection.entryDate,
+            type: 'reflection',
             description: reflection.description,
             linkedGoalId: reflection.linkedGoalId,
             linkedGoalTitle: goal?.title || null,
@@ -150,10 +157,34 @@ export function registerReportsRoutes(app: App) {
           };
         });
 
-      app.logger.info({ userId: session.user.id, currencyId, count: currencyReflections.length }, 'Currency reflections fetched');
-      return currencyReflections;
+      // Transform currency transactions
+      const currencyTransactionEntries = transactions.map(transaction => {
+        const goal = transaction.goalId ? goalMap.get(transaction.goalId) : null;
+        const isManualClaim = transaction.transactionType === 'MANUAL_CLAIM';
+        const isManualPay = transaction.transactionType === 'MANUAL_PAY';
+
+        return {
+          id: transaction.id,
+          entryDate: new Date(transaction.createdAt).toISOString().split('T')[0],
+          type: 'transaction',
+          transactionType: isManualClaim ? 'claim' : isManualPay ? 'pay' : transaction.transactionType,
+          amount: transaction.amount,
+          description: transaction.description,
+          linkedGoalId: transaction.goalId,
+          linkedGoalTitle: goal?.title || null,
+          createdAt: transaction.createdAt,
+        };
+      });
+
+      // Merge and sort by createdAt descending (newest first)
+      const allEntries = [...currencyReflections, ...currencyTransactionEntries].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      app.logger.info({ userId: session.user.id, currencyId, reflectionCount: currencyReflections.length, transactionCount: currencyTransactionEntries.length }, 'Currency reflections and transactions fetched');
+      return allEntries;
     } catch (error) {
-      app.logger.error({ err: error, userId: session.user.id, currencyId }, 'Failed to fetch currency reflections');
+      app.logger.error({ err: error, userId: session.user.id, currencyId }, 'Failed to fetch currency reflections and transactions');
       throw error;
     }
   });
