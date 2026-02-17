@@ -136,8 +136,37 @@ export function registerGoalRoutes(app: App) {
         .from(schema.goals)
         .where(eq(schema.goals.userId, session.user.id));
 
+      // Get all reflections for the user to calculate counts
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(eq(schema.reflections.userId, session.user.id));
+
+      // Map goals with success/struggle counts
+      const goalsWithCounts = goalsData.map(goal => {
+        // Count successes and struggles for this goal
+        let successCount = 0;
+        let struggleCount = 0;
+
+        for (const reflection of reflections) {
+          if (reflection.linkedGoalId === goal.id) {
+            if (reflection.outcome === 'success') {
+              successCount++;
+            } else if (reflection.outcome === 'struggled') {
+              struggleCount++;
+            }
+          }
+        }
+
+        const goalWithCounts = Object.assign({}, goal, {
+          successCount,
+          struggleCount,
+        });
+        return goalWithCounts;
+      });
+
       // Sort by status (ACTIVE first) then by title
-      const goals = goalsData.sort((a, b) => {
+      const goals = goalsWithCounts.sort((a: any, b: any) => {
         const statusA = a.status || 'ACTIVE';
         const statusB = b.status || 'ACTIVE';
         if (statusA !== statusB) {
