@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
 import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
@@ -83,12 +83,19 @@ interface DailyEntry {
   timestamp: string;
 }
 
+interface LifeArea {
+  id: string;
+  name: string;
+  parentId?: string;
+  level: number;
+}
+
 interface ActivatedGoal {
   id: string;
   title: string;
   description?: string;
   type: 'RESTRAINING' | 'PROACTIVE';
-  lifeArea?: { id: string; name: string };
+  lifeArea?: { id: string; name: string; parentId?: string; level: number };
   subCategory?: string;
   behaviorCategories: string[];
   todaySuccessCount: number;
@@ -98,13 +105,16 @@ interface ActivatedGoal {
 
 interface CategoryGroup {
   name: string;
-  subCategories: Record<string, ActivatedGoal[]>;
-  uncategorizedGoals: ActivatedGoal[];
+  id: string;
+  level: number;
+  subCategories: Record<string, CategoryGroup>;
+  goals: ActivatedGoal[];
 }
 
 export default function HomeScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams();
   
   const [activeTab, setActiveTab] = useState<'reports' | 'express'>('reports');
   const [loading, setLoading] = useState(true);
@@ -122,7 +132,6 @@ export default function HomeScreen() {
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
   const [categoryGroups, setCategoryGroups] = useState<Record<string, CategoryGroup>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
-  const [collapsedSubCategories, setCollapsedSubCategories] = useState<Record<string, boolean>>({});
   
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -138,6 +147,16 @@ export default function HomeScreen() {
       loadExpressData();
     }
   }, [selectedDate]);
+
+  // Check if returning from reflection
+  useEffect(() => {
+    if (params.fromReflection === 'true') {
+      console.log("Returned from reflection, switching to Express tab");
+      setActiveTab('express');
+      // Clear the param
+      router.setParams({ fromReflection: undefined });
+    }
+  }, [params.fromReflection]);
 
   const showError = (message: string) => {
     setErrorMessage(message);
@@ -259,43 +278,86 @@ export default function HomeScreen() {
       
       setActivatedGoals(goalsData);
       
+      // Build proper hierarchy with nested categories
       const groups: Record<string, CategoryGroup> = {};
       
+      // First, organize goals by their life area hierarchy
       goalsData.forEach((goal: ActivatedGoal) => {
-        const category = goal.lifeArea?.name || 'Uncategorized';
-        const subCategory = goal.subCategory || '';
-        
-        if (!groups[category]) {
-          groups[category] = {
-            name: category,
-            subCategories: {},
-            uncategorizedGoals: [],
-          };
-        }
-        
-        if (subCategory) {
-          if (!groups[category].subCategories[subCategory]) {
-            groups[category].subCategories[subCategory] = [];
+        if (!goal.lifeArea) {
+          // Uncategorized goals
+          if (!groups['Uncategorized']) {
+            groups['Uncategorized'] = {
+              name: 'Uncategorized',
+              id: 'uncategorized',
+              level: 0,
+              subCategories: {},
+              goals: [],
+            };
           }
-          groups[category].subCategories[subCategory].push(goal);
+          groups['Uncategorized'].goals.push(goal);
+          return;
+        }
+
+        const lifeArea = goal.lifeArea;
+        const categoryKey = lifeArea.id;
+        
+        // If this is a level 1 (root) life area
+        if (lifeArea.level === 1 || !lifeArea.parentId) {
+          if (!groups[categoryKey]) {
+            groups[categoryKey] = {
+              name: lifeArea.name,
+              id: lifeArea.id,
+              level: lifeArea.level,
+              subCategories: {},
+              goals: [],
+            };
+          }
+          groups[categoryKey].goals.push(goal);
         } else {
-          groups[category].uncategorizedGoals.push(goal);
+          // This is a nested life area (level 2+)
+          // Find the parent category
+          const parentId = lifeArea.parentId;
+          
+          // Ensure parent exists
+          if (!groups[parentId]) {
+            // Create parent placeholder (will be filled in by another goal or we need to fetch it)
+            groups[parentId] = {
+              name: 'Parent Category',
+              id: parentId,
+              level: 1,
+              subCategories: {},
+              goals: [],
+            };
+          }
+          
+          // Add as subcategory
+          if (!groups[parentId].subCategories[categoryKey]) {
+            groups[parentId].subCategories[categoryKey] = {
+              name: lifeArea.name,
+              id: lifeArea.id,
+              level: lifeArea.level,
+              subCategories: {},
+              goals: [],
+            };
+          }
+          groups[parentId].subCategories[categoryKey].goals.push(goal);
         }
       });
       
+      // Sort categories: Uncategorized last, others alphabetically
       const sortedGroups: Record<string, CategoryGroup> = {};
-      const categoryNames = Object.keys(groups).sort((a, b) => {
+      const categoryKeys = Object.keys(groups).sort((a, b) => {
         if (a === 'Uncategorized') return 1;
         if (b === 'Uncategorized') return -1;
-        return a.localeCompare(b);
+        return groups[a].name.localeCompare(groups[b].name);
       });
       
-      categoryNames.forEach(name => {
-        sortedGroups[name] = groups[name];
+      categoryKeys.forEach(key => {
+        sortedGroups[key] = groups[key];
       });
       
       setCategoryGroups(sortedGroups);
-      console.log("Express data loaded successfully");
+      console.log("Express data loaded successfully with nested categories:", sortedGroups);
     } catch (error) {
       console.error("Error loading express data:", error);
       throw error;
@@ -345,33 +407,40 @@ export default function HomeScreen() {
   const handleQuickReflection = (goalId: string, entryId?: string) => {
     console.log("Opening quick reflection for goal:", goalId, "entry:", entryId);
     const dateString = selectedDate.toISOString().split('T')[0];
+    const params: any = { 
+      goalId, 
+      date: dateString,
+      fromExpress: 'true'
+    };
     if (entryId) {
-      router.push(`/reflect?goalId=${goalId}&entryId=${entryId}&date=${dateString}`);
-    } else {
-      router.push(`/reflect?goalId=${goalId}&date=${dateString}`);
+      params.entryId = entryId;
     }
+    router.push({
+      pathname: '/(tabs)/reflect',
+      params,
+    });
   };
 
-  const toggleCategory = (category: string) => {
+  const toggleCategory = (categoryKey: string) => {
     setCollapsedCategories(prev => ({
       ...prev,
-      [category]: !prev[category],
-    }));
-  };
-
-  const toggleSubCategory = (key: string) => {
-    setCollapsedSubCategories(prev => ({
-      ...prev,
-      [key]: !prev[key],
+      [categoryKey]: !prev[categoryKey],
     }));
   };
 
   const handleReflection = (goalId?: string) => {
     console.log("Opening reflection screen", goalId ? `for goal: ${goalId}` : "");
     const dateString = selectedDate.toISOString().split('T')[0];
+    const params: any = { 
+      date: dateString,
+      fromExpress: 'true'
+    };
+    if (goalId) {
+      params.goalId = goalId;
+    }
     router.push({
-      pathname: '/reflect',
-      params: goalId ? { goalId, date: dateString } : { date: dateString },
+      pathname: '/(tabs)/reflect',
+      params,
     });
   };
 
@@ -548,6 +617,47 @@ export default function HomeScreen() {
     );
   };
 
+  const renderCategoryGroup = (group: CategoryGroup, depth: number = 0): React.ReactNode => {
+    const isCollapsed = collapsedCategories[group.id];
+    const totalGoals = group.goals.length + 
+      Object.values(group.subCategories).reduce((sum, subGroup) => {
+        return sum + subGroup.goals.length + 
+          Object.values(subGroup.subCategories).reduce((subSum, subSubGroup) => subSum + subSubGroup.goals.length, 0);
+      }, 0);
+    
+    return (
+      <View key={group.id} style={[styles.categorySection, { marginLeft: depth * 16 }]}>
+        <TouchableOpacity 
+          style={styles.categoryHeader}
+          onPress={() => toggleCategory(group.id)}
+        >
+          <View style={styles.categoryTitleRow}>
+            <IconSymbol
+              ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
+              android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
+              size={20}
+              color={colors.text}
+            />
+            <Text style={styles.categoryTitle}>{group.name}</Text>
+          </View>
+          <Text style={styles.categoryCount}>{totalGoals}</Text>
+        </TouchableOpacity>
+        
+        {!isCollapsed && (
+          <>
+            {/* Render subcategories first */}
+            {Object.values(group.subCategories).sort((a, b) => a.name.localeCompare(b.name)).map(subGroup => 
+              renderCategoryGroup(subGroup, depth + 1)
+            )}
+            
+            {/* Then render goals directly in this category */}
+            {group.goals.map(goal => renderGoalCard(goal))}
+          </>
+        )}
+      </View>
+    );
+  };
+
   const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
   const dateDisplay = formatDateDisplay(selectedDate);
 
@@ -643,7 +753,7 @@ export default function HomeScreen() {
                       style={styles.reportCard}
                       onPress={() => {
                         console.log("Navigating to reflections for currency:", balance.currencyId);
-                        router.push('/reflect');
+                        router.push('/(tabs)/reflect');
                       }}
                     >
                       <View style={styles.reportHeader}>
@@ -678,7 +788,7 @@ export default function HomeScreen() {
                   style={styles.reportCard}
                   onPress={() => {
                     console.log("Navigating to reflections");
-                    router.push('/reflect');
+                    router.push('/(tabs)/reflect');
                   }}
                 >
                   <View style={styles.reportRow}>
@@ -713,7 +823,7 @@ export default function HomeScreen() {
                   style={styles.reportCard}
                   onPress={() => {
                     console.log("Navigating to reflections");
-                    router.push('/reflect');
+                    router.push('/(tabs)/reflect');
                   }}
                 >
                   <View style={styles.reportRow}>
@@ -748,7 +858,7 @@ export default function HomeScreen() {
                   style={styles.reportCard}
                   onPress={() => {
                     console.log("Navigating to reflections");
-                    router.push('/reflect');
+                    router.push('/(tabs)/reflect');
                   }}
                 >
                   <View style={styles.reportRow}>
@@ -801,7 +911,7 @@ export default function HomeScreen() {
                   style={styles.reportCard}
                   onPress={() => {
                     console.log("Navigating to reflections");
-                    router.push('/reflect');
+                    router.push('/(tabs)/reflect');
                   }}
                 >
                   <View style={styles.reportRow}>
@@ -868,7 +978,7 @@ export default function HomeScreen() {
                   style={styles.reportCard}
                   onPress={() => {
                     console.log("Navigating to reflections");
-                    router.push('/reflect');
+                    router.push('/(tabs)/reflect');
                   }}
                 >
                   <View style={styles.reportRow}>
@@ -914,7 +1024,7 @@ export default function HomeScreen() {
                       onPress={() => {
                         console.log("Navigating to reflections for goal:", goal.goalId);
                         router.push({
-                          pathname: '/reflect',
+                          pathname: '/(tabs)/reflect',
                           params: { goalId: goal.goalId },
                         });
                       }}
@@ -1007,64 +1117,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
             ) : (
-              Object.entries(categoryGroups).map(([categoryName, group]) => {
-                const isCollapsed = collapsedCategories[categoryName];
-                const totalGoals = group.uncategorizedGoals.length + 
-                  Object.values(group.subCategories).reduce((sum, goals) => sum + goals.length, 0);
-                
-                return (
-                  <View key={categoryName} style={styles.categorySection}>
-                    <TouchableOpacity 
-                      style={styles.categoryHeader}
-                      onPress={() => toggleCategory(categoryName)}
-                    >
-                      <View style={styles.categoryTitleRow}>
-                        <IconSymbol
-                          ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
-                          android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
-                          size={20}
-                          color={colors.text}
-                        />
-                        <Text style={styles.categoryTitle}>{categoryName}</Text>
-                      </View>
-                      <Text style={styles.categoryCount}>{totalGoals}</Text>
-                    </TouchableOpacity>
-                    
-                    {!isCollapsed && (
-                      <>
-                        {Object.entries(group.subCategories).sort(([a], [b]) => a.localeCompare(b)).map(([subCatName, goals]) => {
-                          const subCatKey = `${categoryName}-${subCatName}`;
-                          const isSubCollapsed = collapsedSubCategories[subCatKey];
-                          
-                          return (
-                            <View key={subCatKey} style={styles.subCategorySection}>
-                              <TouchableOpacity 
-                                style={styles.subCategoryHeader}
-                                onPress={() => toggleSubCategory(subCatKey)}
-                              >
-                                <View style={styles.subCategoryTitleRow}>
-                                  <IconSymbol
-                                    ios_icon_name={isSubCollapsed ? 'chevron.right' : 'chevron.down'}
-                                    android_material_icon_name={isSubCollapsed ? 'arrow-forward' : 'arrow-downward'}
-                                    size={18}
-                                    color={colors.textSecondary}
-                                  />
-                                  <Text style={styles.subCategoryTitle}>{subCatName}</Text>
-                                </View>
-                                <Text style={styles.subCategoryCount}>{goals.length}</Text>
-                              </TouchableOpacity>
-                              
-                              {!isSubCollapsed && goals.map(goal => renderGoalCard(goal))}
-                            </View>
-                          );
-                        })}
-                        
-                        {group.uncategorizedGoals.map(goal => renderGoalCard(goal))}
-                      </>
-                    )}
-                  </View>
-                );
-              })
+              Object.values(categoryGroups).map(group => renderCategoryGroup(group))
             )}
           </>
         )}
@@ -1283,7 +1336,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   categorySection: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -1312,37 +1365,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
-    marginLeft: 8,
-  },
-  subCategorySection: {
-    marginLeft: 16,
-    marginBottom: 8,
-  },
-  subCategoryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  subCategoryTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  subCategoryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  subCategoryCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
     marginLeft: 8,
   },
   goalCard: {
