@@ -821,6 +821,15 @@ function AddReflectionModal({
     };
   })();
 
+  const getCategoryIcon = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
+  };
+
   const getDescriptionPlaceholder = () => {
     if (!category) {
       return type === 'Proactive' 
@@ -1060,6 +1069,7 @@ function AddReflectionModal({
                     <View style={styles.optionsGrid}>
                       {availableCategories.map((cat, index) => {
                         const isSelected = category === cat;
+                        const categoryIcon = getCategoryIcon(cat);
                         
                         return (
                           <React.Fragment key={index}>
@@ -1067,6 +1077,12 @@ function AddReflectionModal({
                               style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
                               onPress={() => setCategory(isSelected ? undefined : cat)}
                             >
+                              <IconSymbol
+                                ios_icon_name={categoryIcon.ios}
+                                android_material_icon_name={categoryIcon.android}
+                                size={16}
+                                color={isSelected ? colors.background : colors.primary}
+                              />
                               <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                                 {cat}
                               </Text>
@@ -2357,6 +2373,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
