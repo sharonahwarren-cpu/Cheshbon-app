@@ -225,18 +225,32 @@ export default function CreateGoalScreen() {
         scheduleTimesPerDay: scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
       };
 
-      // Add reward if all fields are filled
+      // Handle rewards - explicitly set to null if cleared, or set values if all fields are filled
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
         goalData.rewardCurrencyId = rewardCurrencyId;
         goalData.rewardSuccesses = parseInt(rewardSuccesses);
         goalData.rewardAmount = parseInt(rewardAmount);
+        console.log('Setting reward data:', { rewardCurrencyId, rewardSuccesses, rewardAmount });
+      } else if (editingGoalId) {
+        // When editing, explicitly clear reward if currency is not selected
+        goalData.rewardCurrencyId = null;
+        goalData.rewardSuccesses = null;
+        goalData.rewardAmount = null;
+        console.log('Clearing reward data');
       }
 
-      // Add consequence if all fields are filled
+      // Handle consequences - explicitly set to null if cleared, or set values if all fields are filled
       if (consequenceCurrencyId && consequenceFailures && consequenceAmount) {
         goalData.consequenceCurrencyId = consequenceCurrencyId;
         goalData.consequenceFailures = parseInt(consequenceFailures);
         goalData.consequenceAmount = parseInt(consequenceAmount);
+        console.log('Setting consequence data:', { consequenceCurrencyId, consequenceFailures, consequenceAmount });
+      } else if (editingGoalId) {
+        // When editing, explicitly clear consequence if currency is not selected
+        goalData.consequenceCurrencyId = null;
+        goalData.consequenceFailures = null;
+        goalData.consequenceAmount = null;
+        console.log('Clearing consequence data');
       }
 
       if (editingGoalId) {
@@ -893,7 +907,10 @@ export default function CreateGoalScreen() {
               <TouchableOpacity
                 style={[styles.pickerItem, !rewardCurrencyId && styles.pickerItemSelected]}
                 onPress={() => {
+                  console.log('Clearing reward currency');
                   setRewardCurrencyId(undefined);
+                  setRewardSuccesses('');
+                  setRewardAmount('');
                   setShowRewardCurrencyPicker(false);
                 }}
               >
@@ -957,7 +974,10 @@ export default function CreateGoalScreen() {
               <TouchableOpacity
                 style={[styles.pickerItem, !consequenceCurrencyId && styles.pickerItemSelected]}
                 onPress={() => {
+                  console.log('Clearing consequence currency');
                   setConsequenceCurrencyId(undefined);
+                  setConsequenceFailures('');
+                  setConsequenceAmount('');
                   setShowConsequenceCurrencyPicker(false);
                 }}
               >
