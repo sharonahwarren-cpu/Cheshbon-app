@@ -12,7 +12,7 @@ import {
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
@@ -83,16 +83,32 @@ interface CurrencyBalance {
   netBalance: number;
 }
 
-type SettingsSection = 'main' | 'lifeAreas' | 'strategies' | 'currencies' | 'reflectionPrefs' | 'notifications' | 'reports';
+interface GainLoss {
+  id: string;
+  name: string;
+  type: 'Gain' | 'Loss';
+  category?: string;
+  subCategory?: string;
+}
+
+interface ReflectionWorthItTallies {
+  worthIt: number;
+  notWorthIt: number;
+  total: number;
+}
+
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'reflectionPrefs' | 'notifications' | 'reports';
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
   const [loading, setLoading] = useState(false);
   
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     notificationsEnabled: false,
     notificationAlarms: [],
@@ -100,9 +116,10 @@ export default function SettingsScreen() {
     reflectionCategories: ['Action', 'Speech', 'Thought'],
   });
   const [currencyBalances, setCurrencyBalances] = useState<CurrencyBalance[]>([]);
+  const [worthItTallies, setWorthItTallies] = useState<ReflectionWorthItTallies | null>(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'alarm' | null>(null);
+  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
   
   const [errorMessage, setErrorMessage] = useState('');
@@ -112,7 +129,6 @@ export default function SettingsScreen() {
 
   const [formData, setFormData] = useState<any>({});
   
-  // Time picker state
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState(new Date());
 
@@ -130,15 +146,21 @@ export default function SettingsScreen() {
     console.log('Loading settings data...');
     setLoading(true);
     try {
-      const [lifeAreasRes, strategiesRes, currenciesRes, goalsRes, prefsRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes, goalProgressRes] = await Promise.all([
+        authenticatedGet('/api/goals'),
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/currencies'),
-        authenticatedGet('/api/goals'),
+        authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/user-preferences'),
+        authenticatedGet('/api/reports/goal-progress'),
       ]);
 
       console.log('Settings data loaded successfully');
+      
+      const goalsData = Array.isArray(goalsRes) 
+        ? goalsRes 
+        : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
       
       const lifeAreasData = Array.isArray(lifeAreasRes) 
         ? lifeAreasRes 
@@ -152,9 +174,9 @@ export default function SettingsScreen() {
         ? currenciesRes 
         : (Array.isArray(currenciesRes?.data) ? currenciesRes.data : []);
       
-      const goalsData = Array.isArray(goalsRes) 
-        ? goalsRes 
-        : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
+      const gainsLossesData = Array.isArray(gainsLossesRes) 
+        ? gainsLossesRes 
+        : (Array.isArray(gainsLossesRes?.data) ? gainsLossesRes.data : []);
       
       const prefsData = prefsRes?.data || prefsRes || { 
         notificationsEnabled: false, 
@@ -162,11 +184,31 @@ export default function SettingsScreen() {
         reflectionCategoriesEnabled: true,
         reflectionCategories: ['Action', 'Speech', 'Thought'],
       };
+
+      const goalProgressData = Array.isArray(goalProgressRes) 
+        ? goalProgressRes 
+        : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
+
+      // Merge goal progress data (which includes currency balances) with goals
+      const goalsWithBalances = goalsData.map((goal: Goal) => {
+        const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
+        if (progressInfo) {
+          return {
+            ...goal,
+            rewardCurrencyBalance: progressInfo.rewardCurrencyBalance,
+            rewardCurrencySymbol: progressInfo.rewardCurrencySymbol,
+            consequenceCurrencyBalance: progressInfo.consequenceCurrencyBalance,
+            consequenceCurrencySymbol: progressInfo.consequenceCurrencySymbol,
+          };
+        }
+        return goal;
+      });
       
+      setGoals(goalsWithBalances);
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
-      setGoals(goalsData);
+      setGainsLosses(gainsLossesData);
       setPreferences(prefsData);
     } catch (error) {
       console.error('Error loading settings data:', error);
@@ -177,14 +219,21 @@ export default function SettingsScreen() {
   };
 
   const loadCurrencyBalances = async () => {
-    console.log('Loading currency balances...');
+    console.log('Loading currency balances and reflection tallies...');
     try {
-      const balancesRes = await authenticatedGet('/api/reports/currency-balances');
+      const [balancesRes, talliesRes] = await Promise.all([
+        authenticatedGet('/api/reports/currency-balances'),
+        authenticatedGet('/api/reports/reflection-worth-it-tallies'),
+      ]);
+      
       const balancesData = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || []);
+      const talliesData = talliesRes?.data || talliesRes || null;
+      
       setCurrencyBalances(balancesData);
+      setWorthItTallies(talliesData);
     } catch (error) {
-      console.error('Error loading currency balances:', error);
-      showError('Failed to load currency balances');
+      console.error('Error loading reports data:', error);
+      showError('Failed to load reports data');
     }
   };
 
@@ -233,7 +282,7 @@ export default function SettingsScreen() {
     setShowSuccessModal(true);
   };
 
-  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm') => {
+  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
     setModalType(type);
     setEditingItem(null);
     if (type === 'alarm') {
@@ -244,13 +293,27 @@ export default function SettingsScreen() {
         dayOfWeek: undefined,
         dayOfMonth: undefined,
       });
+    } else if (type === 'gainLoss') {
+      setFormData({ 
+        name: '', 
+        type: 'Gain',
+        category: undefined,
+        subCategory: undefined,
+      });
+    } else if (type === 'currency') {
+      setFormData({
+        name: '',
+        symbol: '',
+        onSuccess: 'ADD',
+        onFailure: 'ADD',
+      });
     } else {
       setFormData({});
     }
     setShowModal(true);
   };
 
-  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm', item: any) => {
+  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', item: any) => {
     setModalType(type);
     setEditingItem(item);
     setFormData(item);
@@ -287,6 +350,14 @@ export default function SettingsScreen() {
           await authenticatedPost('/api/currencies', formData);
           showSuccess('Currency created successfully');
         }
+      } else if (modalType === 'gainLoss') {
+        if (editingItem) {
+          await authenticatedPut(`/api/gains-losses/${editingItem.id}`, formData);
+          showSuccess('Gain/Loss updated successfully');
+        } else {
+          await authenticatedPost('/api/gains-losses', formData);
+          showSuccess('Gain/Loss created successfully');
+        }
       } else if (modalType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         if (editingItem) {
@@ -312,7 +383,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleDeleteItem = async (type: 'lifeArea' | 'strategy' | 'currency' | 'alarm', id: string) => {
+  const handleDeleteItem = async (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', id: string) => {
     try {
       setLoading(true);
       
@@ -325,6 +396,9 @@ export default function SettingsScreen() {
       } else if (type === 'currency') {
         await authenticatedDelete(`/api/currencies/${id}`);
         showSuccess('Currency deleted successfully');
+      } else if (type === 'gainLoss') {
+        await authenticatedDelete(`/api/gains-losses/${id}`);
+        showSuccess('Gain/Loss deleted successfully');
       } else if (type === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         const updatedAlarms = alarms.filter(a => a.id !== id);
@@ -342,11 +416,25 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleDeleteGoal = async (id: string) => {
+    try {
+      setLoading(true);
+      await authenticatedDelete(`/api/goals/${id}`);
+      showSuccess('Goal deleted successfully');
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting goal:', error);
+      showError('Failed to delete goal');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSavePreferences = async () => {
     try {
       setLoading(true);
       await authenticatedPut('/api/user-preferences', preferences);
-      showSuccess('Notification preferences saved successfully');
+      showSuccess('Preferences saved successfully');
     } catch (error) {
       console.error('Error saving preferences:', error);
       showError('Failed to save preferences');
@@ -376,9 +464,11 @@ export default function SettingsScreen() {
 
   const renderMainMenu = () => {
     const menuItems = [
+      { title: 'Goals', icon: 'flag', section: 'goals' as SettingsSection },
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
+      { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
       { title: 'Reflection Preferences', icon: 'edit-note', section: 'reflectionPrefs' as SettingsSection },
       { title: 'Notifications', icon: 'notifications', section: 'notifications' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
@@ -411,6 +501,179 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </React.Fragment>
         ))}
+      </View>
+    );
+  };
+
+  const handlePayCurrency = async (currencyId: string, amount: number) => {
+    try {
+      setLoading(true);
+      console.log(`[API] Paying ${amount} of currency ${currencyId}`);
+      const result = await authenticatedPost(`/api/currencies/${currencyId}/pay`, { amount });
+      console.log('[API] Pay currency result:', result);
+      showSuccess(`Paid ${amount} successfully`);
+      await loadData();
+      if (currentSection === 'reports') {
+        await loadCurrencyBalances();
+      }
+    } catch (error: any) {
+      console.error('[API] Error paying currency:', error);
+      showError(error.message || 'Failed to pay currency');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClaimCurrency = async (currencyId: string, amount: number) => {
+    try {
+      setLoading(true);
+      console.log(`[API] Claiming ${amount} of currency ${currencyId}`);
+      const result = await authenticatedPost(`/api/currencies/${currencyId}/claim`, { amount });
+      console.log('[API] Claim currency result:', result);
+      showSuccess(`Claimed ${amount} successfully`);
+      await loadData();
+      if (currentSection === 'reports') {
+        await loadCurrencyBalances();
+      }
+    } catch (error: any) {
+      console.error('[API] Error claiming currency:', error);
+      showError(error.message || 'Failed to claim currency');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getCurrencyActionText = (currency: Currency, isSuccess: boolean): string => {
+    const action = isSuccess ? currency.onSuccess : currency.onFailure;
+    if (action === 'ADD') {
+      return isSuccess ? 'Gain' : 'Increase Debt';
+    } else if (action === 'SUBTRACT') {
+      return isSuccess ? 'Reduce Debt' : 'Lose';
+    } else {
+      return 'No Change';
+    }
+  };
+
+  const renderGoals = () => {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Goals</Text>
+          <TouchableOpacity onPress={() => router.push('/create-goal')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.listContainer}>
+          {goals.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No goals yet. Create one to get started!</Text>
+            </View>
+          ) : (
+            goals.map((goal, index) => {
+              const typeText = goal.type || 'Goal';
+              const progressText = goal.progress !== undefined ? `${goal.progress}%` : '';
+              const statusText = goal.completed ? 'Completed' : 'In Progress';
+              
+              return (
+                <React.Fragment key={index}>
+                  <View style={styles.goalCardExpanded}>
+                    <View style={styles.listItemContent}>
+                      <Text style={styles.listItemTitle}>{goal.title}</Text>
+                      {goal.description && (
+                        <Text style={styles.listItemSubtitle}>{goal.description}</Text>
+                      )}
+                      <View style={styles.goalMeta}>
+                        <Text style={styles.listItemSubtitle}>{typeText}</Text>
+                        {progressText && (
+                          <Text style={styles.listItemSubtitle}> • {progressText}</Text>
+                        )}
+                        <Text style={styles.listItemSubtitle}> • {statusText}</Text>
+                      </View>
+                      
+                      {(goal.rewardCurrencyId || goal.consequenceCurrencyId) && (
+                        <View style={styles.currencyBalances}>
+                          {goal.rewardCurrencyId && (
+                            <View style={styles.currencyBalanceItem}>
+                              <Text style={styles.currencyBalanceLabel}>Reward:</Text>
+                              <Text style={[styles.currencyBalanceValue, { color: colors.success }]}>
+                                {goal.rewardCurrencyBalance || 0} {goal.rewardCurrencySymbol || ''}
+                              </Text>
+                              <TouchableOpacity
+                                style={[styles.currencyActionButton, { backgroundColor: colors.success }]}
+                                onPress={() => {
+                                  if (goal.rewardCurrencyId) {
+                                    handleClaimCurrency(goal.rewardCurrencyId, 1);
+                                  }
+                                }}
+                              >
+                                <Text style={styles.currencyActionButtonText}>Claim</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                          {goal.consequenceCurrencyId && (
+                            <View style={styles.currencyBalanceItem}>
+                              <Text style={styles.currencyBalanceLabel}>Consequence:</Text>
+                              <Text style={[styles.currencyBalanceValue, { color: colors.error }]}>
+                                {goal.consequenceCurrencyBalance || 0} {goal.consequenceCurrencySymbol || ''}
+                              </Text>
+                              <TouchableOpacity
+                                style={[styles.currencyActionButton, { backgroundColor: colors.error }]}
+                                onPress={() => {
+                                  if (goal.consequenceCurrencyId) {
+                                    handlePayCurrency(goal.consequenceCurrencyId, 1);
+                                  }
+                                }}
+                              >
+                                <Text style={styles.currencyActionButtonText}>Pay</Text>
+                              </TouchableOpacity>
+                            </View>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.listItemActions}>
+                      <TouchableOpacity
+                        onPress={() => router.push(`/create-goal?id=${goal.id}`)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteGoal(goal.id)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={20}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </React.Fragment>
+              );
+            })
+          )}
+        </ScrollView>
       </View>
     );
   };
@@ -596,8 +859,10 @@ export default function SettingsScreen() {
           ) : (
             currencies.map((currency, index) => {
               const symbolText = currency.symbol || '';
-              const onSuccessText = `On Success: ${currency.onSuccess || 'NONE'}`;
-              const onFailureText = `On Failure: ${currency.onFailure || 'NONE'}`;
+              const onSuccessAction = getCurrencyActionText(currency, true);
+              const onFailureAction = getCurrencyActionText(currency, false);
+              const onSuccessText = `On Success: ${onSuccessAction}`;
+              const onFailureText = `On Failure: ${onFailureAction}`;
               
               return (
                 <React.Fragment key={index}>
@@ -638,6 +903,132 @@ export default function SettingsScreen() {
                 </React.Fragment>
               );
             })
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderGainsLosses = () => {
+    const gains = gainsLosses.filter(gl => gl.type === 'Gain');
+    const losses = gainsLosses.filter(gl => gl.type === 'Loss');
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Gains and Losses</Text>
+          <TouchableOpacity onPress={() => openAddModal('gainLoss')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.listContainer}>
+          {gainsLosses.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No gains or losses yet. Create some to track in reflections!</Text>
+            </View>
+          ) : (
+            <>
+              {gains.length > 0 && (
+                <>
+                  <Text style={styles.sectionSubtitle}>Gains</Text>
+                  {gains.map((gain, index) => {
+                    const categoryText = gain.category ? `${gain.category}${gain.subCategory ? ` > ${gain.subCategory}` : ''}` : '';
+                    
+                    return (
+                      <React.Fragment key={index}>
+                        <View style={styles.listItem}>
+                          <View style={styles.listItemContent}>
+                            <Text style={styles.listItemTitle}>{gain.name}</Text>
+                            {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                          </View>
+                          <View style={styles.listItemActions}>
+                            <TouchableOpacity
+                              onPress={() => openEditModal('gainLoss', gain)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="pencil"
+                                android_material_icon_name="edit"
+                                size={20}
+                                color={colors.primary}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteItem('gainLoss', gain.id)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="trash"
+                                android_material_icon_name="delete"
+                                size={20}
+                                color={colors.error}
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              )}
+
+              {losses.length > 0 && (
+                <>
+                  <Text style={styles.sectionSubtitle}>Losses</Text>
+                  {losses.map((loss, index) => {
+                    const categoryText = loss.category ? `${loss.category}${loss.subCategory ? ` > ${loss.subCategory}` : ''}` : '';
+                    
+                    return (
+                      <React.Fragment key={index}>
+                        <View style={styles.listItem}>
+                          <View style={styles.listItemContent}>
+                            <Text style={styles.listItemTitle}>{loss.name}</Text>
+                            {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                          </View>
+                          <View style={styles.listItemActions}>
+                            <TouchableOpacity
+                              onPress={() => openEditModal('gainLoss', loss)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="pencil"
+                                android_material_icon_name="edit"
+                                size={20}
+                                color={colors.primary}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteItem('gainLoss', loss.id)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="trash"
+                                android_material_icon_name="delete"
+                                size={20}
+                                color={colors.error}
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              )}
+            </>
           )}
         </ScrollView>
       </View>
@@ -851,6 +1242,26 @@ export default function SettingsScreen() {
           <View style={{ width: 24 }} />
         </View>
         <ScrollView style={styles.listContainer}>
+          {worthItTallies && worthItTallies.total > 0 && (
+            <>
+              <Text style={styles.sectionSubtitle}>Reflection Worth It Analysis</Text>
+              <View style={styles.reportCard}>
+                <View style={styles.reportHeader}>
+                  <Text style={styles.reportTitle}>Was it worth it?</Text>
+                </View>
+                <View style={styles.reportStats}>
+                  <Text style={styles.reportStat}>Total Reflections: {worthItTallies.total}</Text>
+                  <Text style={[styles.reportStat, { color: colors.success }]}>
+                    Worth It: {worthItTallies.worthIt} ({worthItTallies.total > 0 ? Math.round((worthItTallies.worthIt / worthItTallies.total) * 100) : 0}%)
+                  </Text>
+                  <Text style={[styles.reportStat, { color: colors.error }]}>
+                    Not Worth It: {worthItTallies.notWorthIt} ({worthItTallies.total > 0 ? Math.round((worthItTallies.notWorthIt / worthItTallies.total) * 100) : 0}%)
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
+
           <Text style={styles.sectionSubtitle}>Currency Balances</Text>
           {currencyBalances.length === 0 ? (
             <View style={styles.emptyState}>
@@ -1065,15 +1476,84 @@ export default function SettingsScreen() {
 
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>On Success (Reward)</Text>
+                    <Text style={styles.helperText}>How does this currency change when a goal succeeds?</Text>
                     <View style={styles.optionsGrid}>
-                      {['ADD', 'SUBTRACT', 'NONE'].map((option, index) => {
-                        const isSelected = formData.onSuccess === option;
+                      {[
+                        { value: 'ADD', label: 'Add (Gain Currency)' },
+                        { value: 'SUBTRACT', label: 'Subtract (Reduce Debt)' },
+                        { value: 'NONE', label: 'None (No Reward)' }
+                      ].map((option, index) => {
+                        const isSelected = formData.onSuccess === option.value;
                         
                         return (
                           <React.Fragment key={index}>
                             <TouchableOpacity
                               style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                              onPress={() => setFormData({ ...formData, onSuccess: option })}
+                              onPress={() => setFormData({ ...formData, onSuccess: option.value })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>On Failure (Consequence)</Text>
+                    <Text style={styles.helperText}>How does this currency change when a goal is struggled with?</Text>
+                    <View style={styles.optionsGrid}>
+                      {[
+                        { value: 'ADD', label: 'Add (Increase Debt)' },
+                        { value: 'SUBTRACT', label: 'Subtract (Lose Currency)' },
+                        { value: 'NONE', label: 'None (No Consequence)' }
+                      ].map((option, index) => {
+                        const isSelected = formData.onFailure === option.value;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, onFailure: option.value })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {modalType === 'gainLoss' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name || ''}
+                      onChangeText={(value) => setFormData({ ...formData, name: value })}
+                      placeholder="Enter gain or loss name"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Type</Text>
+                    <View style={styles.optionsGrid}>
+                      {['Gain', 'Loss'].map((option, index) => {
+                        const isSelected = formData.type === option;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, type: option })}
                             >
                               <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                                 {option}
@@ -1086,25 +1566,25 @@ export default function SettingsScreen() {
                   </View>
 
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>On Failure (Consequence)</Text>
-                    <View style={styles.optionsGrid}>
-                      {['ADD', 'SUBTRACT', 'NONE'].map((option, index) => {
-                        const isSelected = formData.onFailure === option;
-                        
-                        return (
-                          <React.Fragment key={index}>
-                            <TouchableOpacity
-                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                              onPress={() => setFormData({ ...formData, onFailure: option })}
-                            >
-                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                                {option}
-                              </Text>
-                            </TouchableOpacity>
-                          </React.Fragment>
-                        );
-                      })}
-                    </View>
+                    <Text style={styles.label}>Category (Optional)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.category || ''}
+                      onChangeText={(value) => setFormData({ ...formData, category: value })}
+                      placeholder="e.g., Emotional, Physical, Spiritual"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Sub-Category (Optional)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.subCategory || ''}
+                      onChangeText={(value) => setFormData({ ...formData, subCategory: value })}
+                      placeholder="e.g., Confidence, Energy"
+                      placeholderTextColor={colors.textSecondary}
+                    />
                   </View>
                 </>
               )}
@@ -1254,9 +1734,11 @@ export default function SettingsScreen() {
       ) : (
         <>
           {currentSection === 'main' && renderMainMenu()}
+          {currentSection === 'goals' && renderGoals()}
           {currentSection === 'lifeAreas' && renderLifeAreas()}
           {currentSection === 'strategies' && renderStrategies()}
           {currentSection === 'currencies' && renderCurrencies()}
+          {currentSection === 'gainsLosses' && renderGainsLosses()}
           {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
           {currentSection === 'notifications' && renderNotifications()}
           {currentSection === 'reports' && renderReports()}
@@ -1390,6 +1872,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  goalMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   listItemActions: {
     flexDirection: 'row',
@@ -1685,6 +2171,44 @@ const styles = StyleSheet.create({
   savePreferencesButtonText: {
     color: colors.background,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  goalCardExpanded: {
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  currencyBalances: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  currencyBalanceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  currencyBalanceLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    minWidth: 100,
+  },
+  currencyBalanceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  currencyActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  currencyActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '600',
   },
 });

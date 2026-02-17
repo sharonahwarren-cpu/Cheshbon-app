@@ -1,23 +1,23 @@
 
 import { StyleSheet, ViewStyle, TextStyle } from 'react-native';
 
-// Warm, calming colors for journaling and goal tracking
+// Calm, earthy colors for journaling and goal tracking
 export const colors = {
-  primary: '#6B4CE6',      // Soft purple - inspiring and creative
-  secondary: '#8B5CF6',    // Light purple
-  accent: '#EC4899',       // Pink accent - for highlights
-  background: '#FAFAFA',   // Light warm background
+  primary: '#7C9885',      // Sage green - calming and grounding
+  secondary: '#A8B5A0',    // Light sage
+  accent: '#C9A66B',       // Warm tan accent - for highlights
+  background: '#F5F3EF',   // Warm off-white background
   backgroundAlt: '#FFFFFF', // Pure white for cards
-  text: '#1F2937',         // Dark gray text
-  textSecondary: '#6B7280', // Medium gray for secondary text
+  text: '#3A3A3A',         // Warm dark gray text
+  textSecondary: '#6B6B6B', // Medium gray for secondary text
   card: '#FFFFFF',         // White cards
-  cardBorder: '#E5E7EB',   // Light border
-  success: '#10B981',      // Green for completed goals
-  error: '#EF4444',        // Red for errors and negative balances
-  warning: '#F59E0B',      // Orange for in-progress
-  muted: '#9CA3AF',        // Muted gray
-  highlight: '#FEF3C7',    // Light yellow highlight
-  border: '#E5E7EB',       // Border color
+  cardBorder: '#E0DDD7',   // Warm light border
+  success: '#7C9885',      // Sage green for completed goals
+  error: '#B87C6C',        // Terracotta for errors and negative balances
+  warning: '#D4A574',      // Warm sand for in-progress
+  muted: '#9B9B9B',        // Muted gray
+  highlight: '#F9F5E8',    // Warm cream highlight
+  border: '#E0DDD7',       // Border color
 };
 
 export const buttonStyles = StyleSheet.create({
