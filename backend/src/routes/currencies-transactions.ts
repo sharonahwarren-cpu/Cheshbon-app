@@ -1,6 +1,6 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 
 // Helper function to calculate current balance for a currency
@@ -118,32 +118,30 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
           description: `Claimed ${body.amount} ${currencies[0].name}${body.reason ? `: ${body.reason}` : ''}`,
         });
 
-      // Update goal_currency_balances proportionally
+      // Update goal_currency_balances using FIFO (oldest first)
+      // For claiming rewards, we ADD to the balance (oldest first)
       const goalBalances = await app.db
         .select()
         .from(schema.goalCurrencyBalances)
-        .where(eq(schema.goalCurrencyBalances.currencyId, id));
+        .where(eq(schema.goalCurrencyBalances.currencyId, id))
+        .orderBy(asc(schema.goalCurrencyBalances.createdAt)); // FIFO - oldest first
 
-      // Calculate total balance across all goals for this currency
-      let totalBalance = 0;
-      for (const gb of goalBalances) {
-        totalBalance += gb.balance;
-      }
-
-      // Distribute the claim amount proportionally across goals
-      if (goalBalances.length > 0 && totalBalance !== 0) {
+      // Distribute the claim amount across goals starting with oldest
+      let remainingAmount = body.amount;
+      if (goalBalances.length > 0 && remainingAmount > 0) {
         for (const gb of goalBalances) {
-          if (totalBalance === 0) continue;
-          // Calculate proportional share of the claim
-          const proportion = gb.balance / totalBalance;
-          const amountToReduce = Math.round(body.amount * proportion);
+          if (remainingAmount <= 0) break;
 
-          // Update the balance (reduce by claimed amount)
-          const newBalance = gb.balance - amountToReduce;
+          // Add claim amount to this goal's balance
+          const amountToAdd = remainingAmount;
+          const newBalance = gb.balance + amountToAdd;
+
           await app.db
             .update(schema.goalCurrencyBalances)
             .set({ balance: newBalance, updatedAt: new Date() })
             .where(eq(schema.goalCurrencyBalances.id, gb.id));
+
+          remainingAmount = 0; // All amount claimed goes to first goal with this currency
         }
       }
 
@@ -243,32 +241,30 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
           description: `Paid ${body.amount} ${currencies[0].name}${body.reason ? `: ${body.reason}` : ''}`,
         });
 
-      // Update goal_currency_balances proportionally
+      // Update goal_currency_balances using FIFO (oldest first)
+      // For paying/redeeming, we SUBTRACT from the balance (oldest first)
       const goalBalances = await app.db
         .select()
         .from(schema.goalCurrencyBalances)
-        .where(eq(schema.goalCurrencyBalances.currencyId, id));
+        .where(eq(schema.goalCurrencyBalances.currencyId, id))
+        .orderBy(asc(schema.goalCurrencyBalances.createdAt)); // FIFO - oldest first
 
-      // Calculate total balance across all goals for this currency
-      let totalBalance = 0;
-      for (const gb of goalBalances) {
-        totalBalance += gb.balance;
-      }
-
-      // Distribute the payment amount proportionally across goals
-      if (goalBalances.length > 0 && totalBalance !== 0) {
+      // Distribute the payment amount across goals starting with oldest
+      let remainingAmount = body.amount;
+      if (goalBalances.length > 0 && remainingAmount > 0) {
         for (const gb of goalBalances) {
-          if (totalBalance === 0) continue;
-          // Calculate proportional share of the payment
-          const proportion = gb.balance / totalBalance;
-          const amountToPay = Math.round(body.amount * proportion);
+          if (remainingAmount <= 0) break;
 
-          // Update the balance (add to balance, which reduces debt toward zero)
-          const newBalance = gb.balance + amountToPay;
+          // Reduce this goal's balance by the amount paid
+          const amountToPay = Math.min(Math.abs(gb.balance), remainingAmount);
+          const newBalance = gb.balance - amountToPay;
+
           await app.db
             .update(schema.goalCurrencyBalances)
             .set({ balance: newBalance, updatedAt: new Date() })
             .where(eq(schema.goalCurrencyBalances.id, gb.id));
+
+          remainingAmount -= amountToPay;
         }
       }
 
