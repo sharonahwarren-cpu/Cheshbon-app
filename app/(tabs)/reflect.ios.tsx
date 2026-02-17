@@ -1126,6 +1126,7 @@ function AddReflectionModal({
                     numberOfLines={6}
                     blurOnSubmit={false}
                     returnKeyType="default"
+                    autoFocus={true}
                     onFocus={() => {
                       setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
