@@ -1,6 +1,6 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { eq, desc, asc } from 'drizzle-orm';
+import { eq, desc, asc, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 
 export function registerGoalRoutes(app: App) {
@@ -78,8 +78,42 @@ export function registerGoalRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
+      const goal = goals[0];
+
+      // Fetch currency balances for this goal
+      let rewardCurrencyBalance = 0;
+      let consequenceCurrencyBalance = 0;
+
+      if (goal.rewardCurrencyId) {
+        const rewardBalances = await app.db
+          .select()
+          .from(schema.goalCurrencyBalances)
+          .where(and(eq(schema.goalCurrencyBalances.goalId, id), eq(schema.goalCurrencyBalances.currencyId, goal.rewardCurrencyId)))
+          .limit(1);
+        if (rewardBalances.length) {
+          rewardCurrencyBalance = rewardBalances[0].balance;
+        }
+      }
+
+      if (goal.consequenceCurrencyId) {
+        const consequenceBalances = await app.db
+          .select()
+          .from(schema.goalCurrencyBalances)
+          .where(and(eq(schema.goalCurrencyBalances.goalId, id), eq(schema.goalCurrencyBalances.currencyId, goal.consequenceCurrencyId)))
+          .limit(1);
+        if (consequenceBalances.length) {
+          consequenceCurrencyBalance = consequenceBalances[0].balance;
+        }
+      }
+
+      const goalWithBalances = {
+        ...goal,
+        rewardCurrencyBalance,
+        consequenceCurrencyBalance,
+      };
+
       app.logger.info({ userId: session.user.id, goalId: id }, 'Goal retrieved successfully');
-      return goals[0];
+      return goalWithBalances;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to fetch goal');
       throw error;
@@ -280,6 +314,45 @@ export function registerGoalRoutes(app: App) {
         .where(eq(schema.goals.id, id))
         .returning();
       const updatedGoal = updatedGoals[0];
+
+      // Initialize or update goal_currency_balances if currencies are set
+      if (body.reward !== undefined && body.reward?.currencyId) {
+        const existingBalance = await app.db
+          .select()
+          .from(schema.goalCurrencyBalances)
+          .where(and(eq(schema.goalCurrencyBalances.goalId, id), eq(schema.goalCurrencyBalances.currencyId, body.reward.currencyId)))
+          .limit(1);
+
+        if (!existingBalance.length) {
+          await app.db
+            .insert(schema.goalCurrencyBalances)
+            .values({
+              goalId: id,
+              currencyId: body.reward.currencyId,
+              userId: session.user.id,
+              balance: 0,
+            });
+        }
+      }
+
+      if (body.consequence !== undefined && body.consequence?.currencyId) {
+        const existingBalance = await app.db
+          .select()
+          .from(schema.goalCurrencyBalances)
+          .where(and(eq(schema.goalCurrencyBalances.goalId, id), eq(schema.goalCurrencyBalances.currencyId, body.consequence.currencyId)))
+          .limit(1);
+
+        if (!existingBalance.length) {
+          await app.db
+            .insert(schema.goalCurrencyBalances)
+            .values({
+              goalId: id,
+              currencyId: body.consequence.currencyId,
+              userId: session.user.id,
+              balance: 0,
+            });
+        }
+      }
 
       app.logger.info({ userId: session.user.id, goalId: id }, 'Goal updated successfully');
       return updatedGoal;

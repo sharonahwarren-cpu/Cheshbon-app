@@ -106,6 +106,18 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
         throw new Error('Failed to create transaction reflection');
       }
 
+      // Create a currency transaction record
+      await app.db
+        .insert(schema.currencyTransactions)
+        .values({
+          userId: session.user.id,
+          currencyId: id,
+          reflectionId: reflections[0].id,
+          amount: -body.amount, // Negative because claiming reduces balance
+          transactionType: 'MANUAL_CLAIM',
+          description: `Claimed ${body.amount} ${currencies[0].name}${body.reason ? `: ${body.reason}` : ''}`,
+        });
+
       // Calculate updated balance
       const updatedBalance = await calculateCurrencyBalance(app, session.user.id, id);
 
@@ -181,6 +193,18 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
       if (!reflections.length) {
         throw new Error('Failed to create transaction reflection');
       }
+
+      // Create a currency transaction record
+      await app.db
+        .insert(schema.currencyTransactions)
+        .values({
+          userId: session.user.id,
+          currencyId: id,
+          reflectionId: reflections[0].id,
+          amount: body.amount, // Positive because paying off reduces debt
+          transactionType: 'MANUAL_PAY',
+          description: `Paid ${body.amount} ${currencies[0].name}${body.reason ? `: ${body.reason}` : ''}`,
+        });
 
       // Calculate updated balance
       const updatedBalance = await calculateCurrencyBalance(app, session.user.id, id);

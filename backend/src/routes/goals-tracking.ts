@@ -244,6 +244,67 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       const todaySuccessCount = todayReflections.length;
 
+      // Check if threshold is reached for currency reward
+      if (goals[0].rewardCurrencyId && goals[0].rewardSuccesses && todaySuccessCount === goals[0].rewardSuccesses) {
+        // Threshold reached, create a currency transaction
+        const currency = await app.db
+          .select()
+          .from(schema.currencies)
+          .where(eq(schema.currencies.id, goals[0].rewardCurrencyId))
+          .limit(1);
+
+        if (currency.length) {
+          const curr = currency[0];
+          let transactionAmount = goals[0].rewardAmount || 0;
+
+          // Determine direction based on currency settings
+          if (curr.onSuccess === 'SUBTRACT') {
+            transactionAmount = -transactionAmount;
+          } else if (curr.onSuccess === 'NONE') {
+            transactionAmount = 0;
+          }
+
+          if (transactionAmount !== 0) {
+            // Create currency transaction
+            await app.db
+              .insert(schema.currencyTransactions)
+              .values({
+                userId: session.user.id,
+                currencyId: goals[0].rewardCurrencyId,
+                goalId: id,
+                reflectionId: reflections[0].id,
+                amount: transactionAmount,
+                transactionType: 'GOAL_REWARD',
+                description: `Reached ${goals[0].rewardSuccesses} successes on goal: ${goals[0].title}`,
+              });
+
+            // Update goal_currency_balances
+            const existingBalance = await app.db
+              .select()
+              .from(schema.goalCurrencyBalances)
+              .where(and(eq(schema.goalCurrencyBalances.goalId, id), eq(schema.goalCurrencyBalances.currencyId, goals[0].rewardCurrencyId)))
+              .limit(1);
+
+            if (existingBalance.length) {
+              const newBalance = existingBalance[0].balance + transactionAmount;
+              await app.db
+                .update(schema.goalCurrencyBalances)
+                .set({ balance: newBalance, updatedAt: new Date() })
+                .where(eq(schema.goalCurrencyBalances.id, existingBalance[0].id));
+            } else {
+              await app.db
+                .insert(schema.goalCurrencyBalances)
+                .values({
+                  goalId: id,
+                  currencyId: goals[0].rewardCurrencyId,
+                  userId: session.user.id,
+                  balance: transactionAmount,
+                });
+            }
+          }
+        }
+      }
+
       app.logger.info({ userId: session.user.id, goalId: id, todaySuccessCount }, 'Goal success recorded');
       return { success: true, todaySuccessCount };
     } catch (error) {
@@ -353,6 +414,67 @@ export function registerGoalsTrackingRoutes(app: App) {
         ));
 
       const todayStruggleCount = todayReflections.length;
+
+      // Check if threshold is reached for currency consequence
+      if (goals[0].consequenceCurrencyId && goals[0].consequenceFailures && todayStruggleCount === goals[0].consequenceFailures) {
+        // Threshold reached, create a currency transaction
+        const currency = await app.db
+          .select()
+          .from(schema.currencies)
+          .where(eq(schema.currencies.id, goals[0].consequenceCurrencyId))
+          .limit(1);
+
+        if (currency.length) {
+          const curr = currency[0];
+          let transactionAmount = goals[0].consequenceAmount || 0;
+
+          // Determine direction based on currency settings
+          if (curr.onFailure === 'SUBTRACT') {
+            transactionAmount = -transactionAmount;
+          } else if (curr.onFailure === 'NONE') {
+            transactionAmount = 0;
+          }
+
+          if (transactionAmount !== 0) {
+            // Create currency transaction
+            await app.db
+              .insert(schema.currencyTransactions)
+              .values({
+                userId: session.user.id,
+                currencyId: goals[0].consequenceCurrencyId,
+                goalId: id,
+                reflectionId: reflections[0].id,
+                amount: transactionAmount,
+                transactionType: 'GOAL_CONSEQUENCE',
+                description: `Reached ${goals[0].consequenceFailures} struggles on goal: ${goals[0].title}`,
+              });
+
+            // Update goal_currency_balances
+            const existingBalance = await app.db
+              .select()
+              .from(schema.goalCurrencyBalances)
+              .where(and(eq(schema.goalCurrencyBalances.goalId, id), eq(schema.goalCurrencyBalances.currencyId, goals[0].consequenceCurrencyId)))
+              .limit(1);
+
+            if (existingBalance.length) {
+              const newBalance = existingBalance[0].balance + transactionAmount;
+              await app.db
+                .update(schema.goalCurrencyBalances)
+                .set({ balance: newBalance, updatedAt: new Date() })
+                .where(eq(schema.goalCurrencyBalances.id, existingBalance[0].id));
+            } else {
+              await app.db
+                .insert(schema.goalCurrencyBalances)
+                .values({
+                  goalId: id,
+                  currencyId: goals[0].consequenceCurrencyId,
+                  userId: session.user.id,
+                  balance: transactionAmount,
+                });
+            }
+          }
+        }
+      }
 
       app.logger.info({ userId: session.user.id, goalId: id, todayStruggleCount }, 'Goal struggle recorded');
       return { success: true, todayStruggleCount };

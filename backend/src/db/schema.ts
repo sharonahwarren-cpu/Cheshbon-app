@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, boolean, timestamp, jsonb, date } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, boolean, timestamp, jsonb, date, uniqueIndex } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.js';
 
 export const journalEntries = pgTable('journal_entries', {
@@ -130,4 +130,28 @@ export const gainsLosses = pgTable('gains_losses', {
   subCategory: text('sub_category'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const goalCurrencyBalances = pgTable('goal_currency_balances', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  goalId: uuid('goal_id').notNull().references(() => goals.id, { onDelete: 'cascade' }),
+  currencyId: uuid('currency_id').notNull().references(() => currencies.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  balance: integer('balance').default(0).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => ({
+  uniqueGoalCurrency: uniqueIndex('unique_goal_currency').on(table.goalId, table.currencyId),
+}));
+
+export const currencyTransactions = pgTable('currency_transactions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  currencyId: uuid('currency_id').notNull().references(() => currencies.id, { onDelete: 'cascade' }),
+  goalId: uuid('goal_id').references(() => goals.id, { onDelete: 'set null' }),
+  reflectionId: uuid('reflection_id').references(() => reflections.id, { onDelete: 'set null' }),
+  amount: integer('amount').notNull(),
+  transactionType: text('transaction_type').notNull(),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
