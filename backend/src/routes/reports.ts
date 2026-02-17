@@ -23,12 +23,6 @@ export function registerReportsRoutes(app: App) {
         .from(schema.currencies)
         .where(eq(schema.currencies.userId, session.user.id));
 
-      // Get all currency transactions for the user
-      const transactions = await app.db
-        .select()
-        .from(schema.currencyTransactions)
-        .where(eq(schema.currencyTransactions.userId, session.user.id));
-
       // Get all goal_currency_balances for the user's goals
       const goals = await app.db
         .select()
@@ -40,20 +34,12 @@ export function registerReportsRoutes(app: App) {
         .from(schema.goalCurrencyBalances)
         .where(eq(schema.goalCurrencyBalances.userId, session.user.id));
 
-      // Calculate balances for each currency from both currency_transactions and goal_currency_balances
+      // Calculate balances for each currency from ONLY goal_currency_balances
+      // (currency_transactions are manual operations, not included in total)
       const balances = userCurrencies.map(currency => {
         let totalBalance = 0;
-        const transactionIds: string[] = [];
 
-        // Sum all transactions for this currency
-        for (const transaction of transactions) {
-          if (transaction.currencyId === currency.id) {
-            totalBalance += transaction.amount;
-            transactionIds.push(transaction.id);
-          }
-        }
-
-        // ALSO sum all goal_currency_balances for this currency
+        // Sum all goal_currency_balances for this currency
         for (const goalBalance of goalBalances) {
           if (goalBalance.currencyId === currency.id) {
             totalBalance += goalBalance.balance;
@@ -81,7 +67,6 @@ export function registerReportsRoutes(app: App) {
           currencyName: currency.name,
           symbol: currency.symbol,
           totalBalance,
-          transactionIds,
           goalBreakdown,
         };
       });
