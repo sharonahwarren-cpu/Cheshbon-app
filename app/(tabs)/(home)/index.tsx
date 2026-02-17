@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
@@ -135,6 +136,15 @@ export default function HomeScreen() {
   
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  
+  // Quick reflection modal state (1-5 step popup)
+  const [showQuickReflectionModal, setShowQuickReflectionModal] = useState(false);
+  const [quickReflectionGoalId, setQuickReflectionGoalId] = useState<string | undefined>();
+  const [quickReflectionStep, setQuickReflectionStep] = useState(1);
+  const [quickReflectionOutcome, setQuickReflectionOutcome] = useState<'success' | 'struggled' | undefined>();
+  const [quickReflectionDescription, setQuickReflectionDescription] = useState('');
+  const [quickReflectionWorthIt, setQuickReflectionWorthIt] = useState<boolean | undefined>();
+  const [quickReflectionThoughts, setQuickReflectionThoughts] = useState('');
 
   useEffect(() => {
     console.log("HomeScreen mounted");
@@ -401,20 +411,51 @@ export default function HomeScreen() {
 
   const handleEditGoal = (goalId: string) => {
     console.log("Opening goal editor for:", goalId);
-    router.push(`/create-goal?goalId=${goalId}`);
+    router.push(`/create-goal?id=${goalId}`);
   };
 
   const handleQuickReflection = (goalId: string, entryId?: string) => {
-    console.log("Opening quick reflection for goal:", goalId, "entry:", entryId);
-    const dateString = selectedDate.toISOString().split('T')[0];
-    const params: any = { 
-      goalId, 
-      date: dateString,
-      fromExpress: 'true'
-    };
-    if (entryId) {
-      params.entryId = entryId;
+    console.log("Opening quick reflection modal for goal:", goalId, "entry:", entryId);
+    setQuickReflectionGoalId(goalId);
+    setQuickReflectionStep(1);
+    setQuickReflectionOutcome(undefined);
+    setQuickReflectionDescription('');
+    setQuickReflectionWorthIt(undefined);
+    setQuickReflectionThoughts('');
+    setShowQuickReflectionModal(true);
+  };
+
+  const handleQuickReflectionNext = () => {
+    if (quickReflectionStep < 5) {
+      setQuickReflectionStep(quickReflectionStep + 1);
     }
+  };
+
+  const handleQuickReflectionBack = () => {
+    if (quickReflectionStep > 1) {
+      setQuickReflectionStep(quickReflectionStep - 1);
+    }
+  };
+
+  const handleQuickReflectionSave = async () => {
+    console.log("Saving quick reflection");
+    setShowQuickReflectionModal(false);
+    
+    // Navigate to full reflection screen with pre-filled data
+    const dateString = selectedDate.toISOString().split('T')[0];
+    const params: any = {
+      goalId: quickReflectionGoalId,
+      date: dateString,
+      fromExpress: 'true',
+    };
+    
+    if (quickReflectionOutcome) {
+      params.outcome = quickReflectionOutcome;
+    }
+    if (quickReflectionDescription) {
+      params.description = quickReflectionDescription;
+    }
+    
     router.push({
       pathname: '/(tabs)/reflect',
       params,
@@ -488,8 +529,13 @@ export default function HomeScreen() {
   const renderGoalCard = (goal: ActivatedGoal) => {
     const typeIcon = goal.type === 'RESTRAINING' ? 'cancel' : 'check-circle';
     const typeColor = goal.type === 'RESTRAINING' ? colors.error : colors.success;
-    const successCount = goal.todaySuccessCount;
-    const struggleCount = goal.todayStruggleCount;
+    
+    // Use dailyEntries length for daily counts (resets each day)
+    const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
+    const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
+    const successCount = dailySuccessEntries.length;
+    const struggleCount = dailyStruggleEntries.length;
+    
     const hasDescription = goal.description && goal.description.trim().length > 0;
     
     return (
@@ -1123,6 +1169,164 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
+      {/* Quick Reflection Modal (1-5 step popup) */}
+      <Modal
+        visible={showQuickReflectionModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowQuickReflectionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.quickReflectionModal}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setShowQuickReflectionModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>Quick Reflection</Text>
+              <View style={{ width: 24 }} />
+            </View>
+            
+            <View style={styles.stepIndicator}>
+              <Text style={styles.stepText}>Step {quickReflectionStep} of 5</Text>
+            </View>
+            
+            <ScrollView style={styles.modalContent}>
+              {quickReflectionStep === 1 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>How did it go?</Text>
+                  <TouchableOpacity
+                    style={[styles.outcomeButton, quickReflectionOutcome === 'success' && styles.outcomeButtonSelected]}
+                    onPress={() => setQuickReflectionOutcome('success')}
+                  >
+                    <IconSymbol
+                      ios_icon_name="checkmark.circle.fill"
+                      android_material_icon_name="check-circle"
+                      size={24}
+                      color={quickReflectionOutcome === 'success' ? '#FFFFFF' : colors.success}
+                    />
+                    <Text style={[styles.outcomeButtonText, quickReflectionOutcome === 'success' && styles.outcomeButtonTextSelected]}>
+                      Success
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.outcomeButton, quickReflectionOutcome === 'struggled' && styles.outcomeButtonSelected]}
+                    onPress={() => setQuickReflectionOutcome('struggled')}
+                  >
+                    <IconSymbol
+                      ios_icon_name="xmark.circle.fill"
+                      android_material_icon_name="cancel"
+                      size={24}
+                      color={quickReflectionOutcome === 'struggled' ? '#FFFFFF' : colors.error}
+                    />
+                    <Text style={[styles.outcomeButtonText, quickReflectionOutcome === 'struggled' && styles.outcomeButtonTextSelected]}>
+                      Struggled
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {quickReflectionStep === 2 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>What happened?</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Describe what happened..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={4}
+                    value={quickReflectionDescription}
+                    onChangeText={setQuickReflectionDescription}
+                  />
+                </View>
+              )}
+              
+              {quickReflectionStep === 3 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Was it worth it?</Text>
+                  <TouchableOpacity
+                    style={[styles.outcomeButton, quickReflectionWorthIt === true && styles.outcomeButtonSelected]}
+                    onPress={() => setQuickReflectionWorthIt(true)}
+                  >
+                    <IconSymbol
+                      ios_icon_name="checkmark.circle.fill"
+                      android_material_icon_name="check-circle"
+                      size={24}
+                      color={quickReflectionWorthIt === true ? '#FFFFFF' : colors.success}
+                    />
+                    <Text style={[styles.outcomeButtonText, quickReflectionWorthIt === true && styles.outcomeButtonTextSelected]}>
+                      Yes
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.outcomeButton, quickReflectionWorthIt === false && styles.outcomeButtonSelected]}
+                    onPress={() => setQuickReflectionWorthIt(false)}
+                  >
+                    <IconSymbol
+                      ios_icon_name="xmark.circle.fill"
+                      android_material_icon_name="cancel"
+                      size={24}
+                      color={quickReflectionWorthIt === false ? '#FFFFFF' : colors.error}
+                    />
+                    <Text style={[styles.outcomeButtonText, quickReflectionWorthIt === false && styles.outcomeButtonTextSelected]}>
+                      No
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {quickReflectionStep === 4 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Additional thoughts?</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Any additional reflections..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={4}
+                    value={quickReflectionThoughts}
+                    onChangeText={setQuickReflectionThoughts}
+                  />
+                </View>
+              )}
+              
+              {quickReflectionStep === 5 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Complete your reflection</Text>
+                  <Text style={styles.stepDescription}>
+                    Continue to the full reflection screen to add more details like gains, losses, and strategies.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+            
+            <View style={styles.modalFooter}>
+              {quickReflectionStep > 1 && (
+                <TouchableOpacity
+                  style={styles.modalButton}
+                  onPress={handleQuickReflectionBack}
+                >
+                  <Text style={styles.modalButtonText}>Back</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={quickReflectionStep < 5 ? handleQuickReflectionNext : handleQuickReflectionSave}
+                disabled={quickReflectionStep === 1 && !quickReflectionOutcome}
+              >
+                <Text style={styles.modalButtonPrimaryText}>
+                  {quickReflectionStep < 5 ? 'Next' : 'Continue to Full Reflection'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={errorModalVisible}
         animationType="fade"
@@ -1465,6 +1669,117 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  quickReflectionModal: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  stepIndicator: {
+    padding: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  stepText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  modalContent: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  stepContent: {
+    gap: 16,
+  },
+  stepTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  stepDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  outcomeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  outcomeButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  outcomeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  outcomeButtonTextSelected: {
+    color: '#FFFFFF',
+  },
+  textInput: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalButtonPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  modalButtonPrimaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   alertModal: {
     backgroundColor: colors.backgroundAlt,

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Modal,
+  TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
@@ -127,12 +128,14 @@ export default function HomeScreen() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   
-  // Quick reflection modal state
+  // Quick reflection modal state (1-5 step popup)
   const [showQuickReflectionModal, setShowQuickReflectionModal] = useState(false);
   const [quickReflectionGoalId, setQuickReflectionGoalId] = useState<string | undefined>();
   const [quickReflectionStep, setQuickReflectionStep] = useState(1);
   const [quickReflectionOutcome, setQuickReflectionOutcome] = useState<'success' | 'struggled' | undefined>();
   const [quickReflectionDescription, setQuickReflectionDescription] = useState('');
+  const [quickReflectionWorthIt, setQuickReflectionWorthIt] = useState<boolean | undefined>();
+  const [quickReflectionThoughts, setQuickReflectionThoughts] = useState('');
 
   useEffect(() => {
     console.log("HomeScreen mounted");
@@ -355,6 +358,8 @@ export default function HomeScreen() {
     setQuickReflectionStep(1);
     setQuickReflectionOutcome(undefined);
     setQuickReflectionDescription('');
+    setQuickReflectionWorthIt(undefined);
+    setQuickReflectionThoughts('');
     setShowQuickReflectionModal(true);
   };
 
@@ -371,10 +376,26 @@ export default function HomeScreen() {
   };
 
   const handleQuickReflectionSave = () => {
-    console.log("Quick reflection completed, navigating to full reflection screen");
+    console.log("Saving quick reflection, navigating to full reflection screen");
     setShowQuickReflectionModal(false);
     const dateString = selectedDate.toISOString().split('T')[0];
-    router.push(`/(tabs)/reflect?goalId=${quickReflectionGoalId}&outcome=${quickReflectionOutcome}&date=${dateString}`);
+    const params: any = {
+      goalId: quickReflectionGoalId,
+      date: dateString,
+      fromExpress: 'true',
+    };
+    
+    if (quickReflectionOutcome) {
+      params.outcome = quickReflectionOutcome;
+    }
+    if (quickReflectionDescription) {
+      params.description = quickReflectionDescription;
+    }
+    
+    router.push({
+      pathname: '/(tabs)/reflect',
+      params,
+    });
   };
 
   const toggleCategory = (categoryKey: string) => {
@@ -437,8 +458,13 @@ export default function HomeScreen() {
   const renderGoalCard = (goal: ActivatedGoal) => {
     const typeIcon = goal.type === 'RESTRAINING' ? 'cancel' : 'check-circle';
     const typeColor = goal.type === 'RESTRAINING' ? colors.error : colors.success;
-    const successCount = goal.todaySuccessCount;
-    const struggleCount = goal.todayStruggleCount;
+    
+    // Use dailyEntries length for daily counts (resets each day)
+    const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
+    const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
+    const successCount = dailySuccessEntries.length;
+    const struggleCount = dailyStruggleEntries.length;
+    
     const hasDescription = goal.description && goal.description.trim().length > 0;
     
     return (
@@ -953,7 +979,7 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* Quick Reflection Modal */}
+      {/* Quick Reflection Modal (1-5 step popup) */}
       <Modal
         visible={showQuickReflectionModal}
         animationType="slide"
@@ -1014,11 +1040,75 @@ export default function HomeScreen() {
                 </View>
               )}
               
-              {quickReflectionStep > 1 && (
+              {quickReflectionStep === 2 && (
                 <View style={styles.stepContent}>
-                  <Text style={styles.stepTitle}>Continue in full reflection</Text>
+                  <Text style={styles.stepTitle}>What happened?</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Describe what happened..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={4}
+                    value={quickReflectionDescription}
+                    onChangeText={setQuickReflectionDescription}
+                  />
+                </View>
+              )}
+              
+              {quickReflectionStep === 3 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Was it worth it?</Text>
+                  <TouchableOpacity
+                    style={[styles.outcomeButton, quickReflectionWorthIt === true && styles.outcomeButtonSelected]}
+                    onPress={() => setQuickReflectionWorthIt(true)}
+                  >
+                    <IconSymbol
+                      ios_icon_name="checkmark.circle.fill"
+                      android_material_icon_name="check-circle"
+                      size={24}
+                      color={quickReflectionWorthIt === true ? '#FFFFFF' : colors.success}
+                    />
+                    <Text style={[styles.outcomeButtonText, quickReflectionWorthIt === true && styles.outcomeButtonTextSelected]}>
+                      Yes
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.outcomeButton, quickReflectionWorthIt === false && styles.outcomeButtonSelected]}
+                    onPress={() => setQuickReflectionWorthIt(false)}
+                  >
+                    <IconSymbol
+                      ios_icon_name="xmark.circle.fill"
+                      android_material_icon_name="cancel"
+                      size={24}
+                      color={quickReflectionWorthIt === false ? '#FFFFFF' : colors.error}
+                    />
+                    <Text style={[styles.outcomeButtonText, quickReflectionWorthIt === false && styles.outcomeButtonTextSelected]}>
+                      No
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {quickReflectionStep === 4 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Additional thoughts?</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Any additional reflections..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={4}
+                    value={quickReflectionThoughts}
+                    onChangeText={setQuickReflectionThoughts}
+                  />
+                </View>
+              )}
+              
+              {quickReflectionStep === 5 && (
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Complete your reflection</Text>
                   <Text style={styles.stepDescription}>
-                    To complete your reflection with more details, we'll take you to the full reflection screen.
+                    Continue to the full reflection screen to add more details like gains, losses, and strategies.
                   </Text>
                 </View>
               )}
@@ -1035,11 +1125,11 @@ export default function HomeScreen() {
               )}
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonPrimary]}
-                onPress={quickReflectionStep === 1 ? handleQuickReflectionNext : handleQuickReflectionSave}
+                onPress={quickReflectionStep < 5 ? handleQuickReflectionNext : handleQuickReflectionSave}
                 disabled={quickReflectionStep === 1 && !quickReflectionOutcome}
               >
                 <Text style={styles.modalButtonPrimaryText}>
-                  {quickReflectionStep === 1 ? 'Next' : 'Continue'}
+                  {quickReflectionStep < 5 ? 'Next' : 'Continue to Full Reflection'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1410,6 +1500,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     padding: 20,
+    maxHeight: 400,
   },
   stepContent: {
     gap: 16,
@@ -1447,6 +1538,17 @@ const styles = StyleSheet.create({
   },
   outcomeButtonTextSelected: {
     color: '#FFFFFF',
+  },
+  textInput: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
   modalFooter: {
     flexDirection: 'row',
