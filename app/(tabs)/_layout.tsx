@@ -50,7 +50,7 @@ export default function TabLayout() {
     {
       name: 'reflect',
       route: '/(tabs)/reflect',
-      icon: 'edit-note',
+      icon: 'edit',
       label: 'Reflect',
     },
     {
