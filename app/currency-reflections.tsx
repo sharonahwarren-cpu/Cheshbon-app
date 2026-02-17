@@ -82,8 +82,8 @@ export default function CurrencyReflectionsScreen() {
       setEntries(entriesData);
       
       // Get currency name and symbol
-      if (sortedEntries.length > 0) {
-        const firstReflection = sortedEntries.find((e: CurrencyEntry) => e.type === 'reflection') as CurrencyReflection | undefined;
+      if (entriesData.length > 0) {
+        const firstReflection = entriesData.find((e: CurrencyEntry) => e.type === 'reflection') as CurrencyReflection | undefined;
         if (firstReflection?.currencyChange) {
           const currencyNameValue = firstReflection.currencyChange.currencyName || '';
           const currencySymbolValue = firstReflection.currencyChange.currencySymbol || '';
@@ -108,9 +108,9 @@ export default function CurrencyReflectionsScreen() {
         setCurrencySymbol(currencySymbolValue);
       }
       
-      console.log('Currency entries loaded and sorted:', sortedEntries.length);
+      console.log('[Currency History] Entries loaded:', entriesData.length);
     } catch (error: any) {
-      console.error('Error loading currency entries:', error);
+      console.error('[Currency History] Error loading entries:', error);
       showError(error.message || 'Failed to load entries');
     } finally {
       setLoading(false);

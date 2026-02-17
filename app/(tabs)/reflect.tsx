@@ -296,14 +296,23 @@ export default function ReflectScreen() {
   };
 
   const handleReflectionSaved = (reflection: Reflection) => {
+    console.log('[Reflect] Reflection saved, updating list and closing modal');
     if (editingReflection) {
       setReflections(reflections.map(r => r.id === reflection.id ? reflection : r));
     } else {
       setReflections([...reflections, reflection]);
     }
     setShowAddReflectionModal(false);
+    setEditingReflection(null);
     showSuccess('Reflection saved successfully');
-    loadData();
+    
+    // If we came from currency history, navigate back after a short delay
+    if (params.reflectionId) {
+      console.log('[Reflect] Came from currency history, navigating back after save');
+      setTimeout(() => {
+        router.back();
+      }, 1500);
+    }
   };
 
   const toggleCategory = (category: string) => {
@@ -710,7 +719,11 @@ export default function ReflectScreen() {
       {showAddReflectionModal && (
         <AddReflectionModal
           visible={showAddReflectionModal}
-          onClose={() => setShowAddReflectionModal(false)}
+          onClose={() => {
+            console.log('[Reflect] Closing modal without saving');
+            setShowAddReflectionModal(false);
+            setEditingReflection(null);
+          }}
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
           goals={goals}
@@ -951,11 +964,11 @@ function AddReflectionModal({
         savedReflection = await authenticatedPost('/api/reflections', payload);
       }
 
+      console.log('[AddReflectionModal] Reflection saved successfully, calling onSave callback');
       onSave(savedReflection?.data || savedReflection);
     } catch (error) {
       console.error('Error saving reflection:', error);
       alert('Failed to save reflection');
-    } finally {
       setLoading(false);
     }
   };
