@@ -55,6 +55,8 @@ interface Goal {
   consequenceCurrencyId?: string;
   consequenceCurrencyBalance?: number;
   consequenceCurrencySymbol?: string;
+  successCount?: number;
+  struggleCount?: number;
 }
 
 interface NotificationAlarm {
@@ -190,7 +192,7 @@ export default function SettingsScreen() {
         ? goalProgressRes 
         : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
 
-      // Merge goal progress data (which includes currency balances) with goals
+      // Merge goal progress data (which includes currency balances and success/struggle counts) with goals
       const goalsWithBalances = goalsData.map((goal: Goal) => {
         const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
         if (progressInfo) {
@@ -200,6 +202,8 @@ export default function SettingsScreen() {
             rewardCurrencySymbol: progressInfo.rewardCurrencySymbol,
             consequenceCurrencyBalance: progressInfo.consequenceCurrencyBalance,
             consequenceCurrencySymbol: progressInfo.consequenceCurrencySymbol,
+            successCount: progressInfo.successCount || 0,
+            struggleCount: progressInfo.struggleCount || 0,
           };
         }
         return goal;
@@ -513,7 +517,6 @@ export default function SettingsScreen() {
       const result = await authenticatedPost(`/api/currencies/${currencyId}/pay`, { amount });
       console.log('[API] Pay currency result:', result);
       showSuccess(`Paid ${amount} successfully`);
-      // Reload data to reflect the updated balance
       await loadData();
       if (currentSection === 'reports') {
         await loadCurrencyBalances();
@@ -533,7 +536,6 @@ export default function SettingsScreen() {
       const result = await authenticatedPost(`/api/currencies/${currencyId}/claim`, { amount });
       console.log('[API] Claim currency result:', result);
       showSuccess(`Claimed ${amount} successfully`);
-      // Reload data to reflect the updated balance
       await loadData();
       if (currentSection === 'reports') {
         await loadCurrencyBalances();
@@ -589,6 +591,20 @@ export default function SettingsScreen() {
               const typeText = goal.type || 'Goal';
               const progressText = goal.progress !== undefined ? `${goal.progress}%` : '';
               const statusText = goal.completed ? 'Completed' : 'In Progress';
+              const successCount = goal.successCount || 0;
+              const struggleCount = goal.struggleCount || 0;
+              
+              // Determine net result for reward currency
+              const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
+              const rewardBalance = goal.rewardCurrencyBalance || 0;
+              const showRewardClaim = rewardCurrency && rewardCurrency.onSuccess === 'ADD' && rewardBalance > 0;
+              const showRewardPay = rewardCurrency && rewardCurrency.onSuccess === 'SUBTRACT' && rewardBalance < 0;
+              
+              // Determine net result for consequence currency
+              const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+              const consequenceBalance = goal.consequenceCurrencyBalance || 0;
+              const showConsequenceClaim = consequenceCurrency && consequenceCurrency.onFailure === 'SUBTRACT' && consequenceBalance > 0;
+              const showConsequencePay = consequenceCurrency && consequenceCurrency.onFailure === 'ADD' && consequenceBalance < 0;
               
               return (
                 <React.Fragment key={index}>
@@ -606,42 +622,80 @@ export default function SettingsScreen() {
                         <Text style={styles.listItemSubtitle}> • {statusText}</Text>
                       </View>
                       
+                      {/* Success/Struggle counts */}
+                      <View style={styles.goalStats}>
+                        <Text style={[styles.goalStatText, { color: colors.success }]}>
+                          ✓ {successCount} successes
+                        </Text>
+                        <Text style={[styles.goalStatText, { color: colors.error }]}>
+                          ✗ {struggleCount} struggles
+                        </Text>
+                      </View>
+                      
                       {(goal.rewardCurrencyId || goal.consequenceCurrencyId) && (
                         <View style={styles.currencyBalances}>
                           {goal.rewardCurrencyId && (
                             <View style={styles.currencyBalanceItem}>
                               <Text style={styles.currencyBalanceLabel}>Reward:</Text>
-                              <Text style={[styles.currencyBalanceValue, { color: colors.success }]}>
-                                {goal.rewardCurrencyBalance || 0} {goal.rewardCurrencySymbol || ''}
+                              <Text style={[styles.currencyBalanceValue, { color: rewardBalance >= 0 ? colors.success : colors.error }]}>
+                                {rewardBalance} {goal.rewardCurrencySymbol || ''}
                               </Text>
-                              <TouchableOpacity
-                                style={[styles.currencyActionButton, { backgroundColor: colors.success }]}
-                                onPress={() => {
-                                  if (goal.rewardCurrencyId) {
-                                    handleClaimCurrency(goal.rewardCurrencyId, 1);
-                                  }
-                                }}
-                              >
-                                <Text style={styles.currencyActionButtonText}>Claim</Text>
-                              </TouchableOpacity>
+                              {showRewardClaim && (
+                                <TouchableOpacity
+                                  style={[styles.currencyActionButton, { backgroundColor: colors.success }]}
+                                  onPress={() => {
+                                    if (goal.rewardCurrencyId) {
+                                      handleClaimCurrency(goal.rewardCurrencyId, Math.abs(rewardBalance));
+                                    }
+                                  }}
+                                >
+                                  <Text style={styles.currencyActionButtonText}>Claim</Text>
+                                </TouchableOpacity>
+                              )}
+                              {showRewardPay && (
+                                <TouchableOpacity
+                                  style={[styles.currencyActionButton, { backgroundColor: colors.error }]}
+                                  onPress={() => {
+                                    if (goal.rewardCurrencyId) {
+                                      handlePayCurrency(goal.rewardCurrencyId, Math.abs(rewardBalance));
+                                    }
+                                  }}
+                                >
+                                  <Text style={styles.currencyActionButtonText}>Pay</Text>
+                                </TouchableOpacity>
+                              )}
                             </View>
                           )}
                           {goal.consequenceCurrencyId && (
                             <View style={styles.currencyBalanceItem}>
                               <Text style={styles.currencyBalanceLabel}>Consequence:</Text>
-                              <Text style={[styles.currencyBalanceValue, { color: colors.error }]}>
-                                {goal.consequenceCurrencyBalance || 0} {goal.consequenceCurrencySymbol || ''}
+                              <Text style={[styles.currencyBalanceValue, { color: consequenceBalance >= 0 ? colors.success : colors.error }]}>
+                                {consequenceBalance} {goal.consequenceCurrencySymbol || ''}
                               </Text>
-                              <TouchableOpacity
-                                style={[styles.currencyActionButton, { backgroundColor: colors.error }]}
-                                onPress={() => {
-                                  if (goal.consequenceCurrencyId) {
-                                    handlePayCurrency(goal.consequenceCurrencyId, 1);
-                                  }
-                                }}
-                              >
-                                <Text style={styles.currencyActionButtonText}>Pay</Text>
-                              </TouchableOpacity>
+                              {showConsequenceClaim && (
+                                <TouchableOpacity
+                                  style={[styles.currencyActionButton, { backgroundColor: colors.success }]}
+                                  onPress={() => {
+                                    if (goal.consequenceCurrencyId) {
+                                      handleClaimCurrency(goal.consequenceCurrencyId, Math.abs(consequenceBalance));
+                                    }
+                                  }}
+                                >
+                                  <Text style={styles.currencyActionButtonText}>Claim</Text>
+                                </TouchableOpacity>
+                              )}
+                              {showConsequencePay && (
+                                <TouchableOpacity
+                                  style={[styles.currencyActionButton, { backgroundColor: colors.error }]}
+                                  onPress={() => {
+                                    if (goal.consequenceCurrencyId) {
+                                      handlePayCurrency(goal.consequenceCurrencyId, Math.abs(consequenceBalance));
+                                    }
+                                  }}
+                                >
+                                  <Text style={styles.currencyActionButtonText}>Pay</Text>
+                                </TouchableOpacity>
+                              )}
                             </View>
                           )}
                         </View>
@@ -1230,6 +1284,10 @@ export default function SettingsScreen() {
   };
 
   const renderReports = () => {
+    const worthItPercentage = worthItTallies && worthItTallies.total > 0 
+      ? Math.round((worthItTallies.worthIt / worthItTallies.total) * 100)
+      : 0;
+
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -1255,10 +1313,10 @@ export default function SettingsScreen() {
                 <View style={styles.reportStats}>
                   <Text style={styles.reportStat}>Total Reflections: {worthItTallies.total}</Text>
                   <Text style={[styles.reportStat, { color: colors.success }]}>
-                    Worth It: {worthItTallies.worthIt} ({worthItTallies.total > 0 ? Math.round((worthItTallies.worthIt / worthItTallies.total) * 100) : 0}%)
+                    Worth It: {worthItTallies.worthIt} ({worthItPercentage}%)
                   </Text>
                   <Text style={[styles.reportStat, { color: colors.error }]}>
-                    Not Worth It: {worthItTallies.notWorthIt} ({worthItTallies.total > 0 ? Math.round((worthItTallies.notWorthIt / worthItTallies.total) * 100) : 0}%)
+                    Not Worth It: {worthItTallies.notWorthIt} ({100 - worthItPercentage}%)
                   </Text>
                 </View>
               </View>
@@ -1774,7 +1832,7 @@ export default function SettingsScreen() {
         visible={showSuccessModal}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowSuccessModal(false)}
+        onRequestClose={() => setSuccessModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.alertModal}>
@@ -1880,6 +1938,15 @@ const styles = StyleSheet.create({
   goalMeta: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  goalStats: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 8,
+  },
+  goalStatText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   listItemActions: {
     flexDirection: 'row',
