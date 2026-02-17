@@ -738,8 +738,6 @@ function AddReflectionModal({
   const scrollViewRef = useRef<ScrollView>(null);
   const descriptionInputRef = useRef<TextInput>(null);
   const additionalThoughtsInputRef = useRef<TextInput>(null);
-  const gainNameInputRef = useRef<TextInput>(null);
-  const lossNameInputRef = useRef<TextInput>(null);
   const strategyNameInputRef = useRef<TextInput>(null);
   const strategyDescInputRef = useRef<TextInput>(null);
   
@@ -994,7 +992,7 @@ function AddReflectionModal({
   };
 
   const modalTitle = editingReflection ? 'Edit Reflection' : 'Add Reflection';
-  const totalSteps = 5;
+  const totalSteps = 4;
   const progressPercent = (step / totalSteps) * 100;
 
   return (
@@ -1442,11 +1440,7 @@ function AddReflectionModal({
                     </View>
                   )}
                 </View>
-              </React.Fragment>
-            )}
 
-            {step === 4 && (
-              <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
@@ -1510,7 +1504,7 @@ function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {step === 5 && (
+            {step === 4 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
@@ -1721,13 +1715,13 @@ function AddReflectionModal({
           <View style={styles.createItemModal}>
             <Text style={styles.alertTitle}>Add New Gain</Text>
             <TextInput
-              ref={gainNameInputRef}
               style={styles.input}
               value={newItemName}
               onChangeText={setNewItemName}
               placeholder="Gain name..."
               placeholderTextColor={colors.textSecondary}
               blurOnSubmit={false}
+              autoFocus
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
@@ -1768,13 +1762,13 @@ function AddReflectionModal({
           <View style={styles.createItemModal}>
             <Text style={styles.alertTitle}>Add New Loss</Text>
             <TextInput
-              ref={lossNameInputRef}
               style={styles.input}
               value={newItemName}
               onChangeText={setNewItemName}
               placeholder="Loss name..."
               placeholderTextColor={colors.textSecondary}
               blurOnSubmit={false}
+              autoFocus
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
@@ -1822,10 +1816,13 @@ function AddReflectionModal({
               placeholder="Strategy name..."
               placeholderTextColor={colors.textSecondary}
               blurOnSubmit={false}
+              autoFocus
+              returnKeyType="next"
+              onSubmitEditing={() => strategyDescInputRef.current?.focus()}
             />
             <TextInput
               ref={strategyDescInputRef}
-              style={[styles.input, styles.textArea]}
+              style={[styles.input, styles.textArea, { marginTop: 12 }]}
               value={newItemDescription}
               onChangeText={setNewItemDescription}
               placeholder="Description (optional)..."
@@ -1833,6 +1830,7 @@ function AddReflectionModal({
               multiline
               numberOfLines={3}
               blurOnSubmit={false}
+              returnKeyType="done"
             />
             <View style={styles.alertButtons}>
               <TouchableOpacity
