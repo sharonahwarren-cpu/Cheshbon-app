@@ -13,7 +13,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
@@ -102,6 +102,7 @@ interface UserPreferences {
 
 export default function ReflectScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ date?: string; reflectionId?: string }>();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -127,8 +128,29 @@ export default function ReflectScreen() {
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    // Handle date parameter from navigation
+    if (params.date) {
+      const dateFromParam = new Date(params.date);
+      if (!isNaN(dateFromParam.getTime())) {
+        setSelectedDate(dateFromParam);
+      }
+    }
+  }, [params.date]);
+
+  useEffect(() => {
     loadData();
   }, [selectedDate]);
+
+  useEffect(() => {
+    // Handle reflectionId parameter - open edit modal for that reflection
+    if (params.reflectionId && reflections.length > 0) {
+      const reflection = reflections.find(r => r.id === params.reflectionId);
+      if (reflection) {
+        console.log('Opening reflection from history:', reflection.id);
+        openEditReflectionModal(reflection);
+      }
+    }
+  }, [params.reflectionId, reflections]);
 
   useEffect(() => {
     if (showSuccessModal) {

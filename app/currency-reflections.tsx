@@ -63,18 +63,27 @@ export default function CurrencyReflectionsScreen() {
   }, [currencyId]);
 
   const loadEntries = async () => {
-    console.log('Loading entries for currency:', currencyId);
+    console.log('[Currency History] Loading entries for currency:', currencyId);
     setLoading(true);
     try {
       const response = await authenticatedGet(`/api/reports/currency-reflections/${currencyId}`);
       const entriesData = Array.isArray(response) ? response : (response?.data || []);
       
-      // Entries are already sorted by backend (newest first)
+      console.log('[Currency History] Received entries:', entriesData.length);
+      if (entriesData.length > 0) {
+        console.log('[Currency History] First entry:', entriesData[0]);
+        console.log('[Currency History] Last entry:', entriesData[entriesData.length - 1]);
+      }
+      
+      // Backend sorts entries by date (newest first):
+      // - Reflections are sorted by entryDate
+      // - Transactions are sorted by createdAt
+      // Both include full timestamps for accurate time display
       setEntries(entriesData);
       
       // Get currency name and symbol
-      if (entriesData.length > 0) {
-        const firstReflection = entriesData.find((e: CurrencyEntry) => e.type === 'reflection') as CurrencyReflection | undefined;
+      if (sortedEntries.length > 0) {
+        const firstReflection = sortedEntries.find((e: CurrencyEntry) => e.type === 'reflection') as CurrencyReflection | undefined;
         if (firstReflection?.currencyChange) {
           const currencyNameValue = firstReflection.currencyChange.currencyName || '';
           const currencySymbolValue = firstReflection.currencyChange.currencySymbol || '';
@@ -99,7 +108,7 @@ export default function CurrencyReflectionsScreen() {
         setCurrencySymbol(currencySymbolValue);
       }
       
-      console.log('Currency entries loaded and sorted:', entriesData.length);
+      console.log('Currency entries loaded and sorted:', sortedEntries.length);
     } catch (error: any) {
       console.error('Error loading currency entries:', error);
       showError(error.message || 'Failed to load entries');
@@ -115,22 +124,43 @@ export default function CurrencyReflectionsScreen() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    const options: Intl.DateTimeFormatOptions = { 
+    
+    // Format date part
+    const dateOptions: Intl.DateTimeFormatOptions = { 
       month: 'short', 
       day: 'numeric', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric'
     };
-    return date.toLocaleDateString('en-US', options);
+    const datePart = date.toLocaleDateString('en-US', dateOptions);
+    
+    // Format time part
+    const timeOptions: Intl.DateTimeFormatOptions = {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    };
+    const timePart = date.toLocaleTimeString('en-US', timeOptions);
+    
+    const formattedDate = `${datePart} at ${timePart}`;
+    return formattedDate;
   };
 
   const handleReflectionPress = (entry: CurrencyEntry) => {
     if (entry.type === 'reflection') {
-      console.log('Navigating to reflection date:', entry.entryDate);
+      const reflection = entry as CurrencyReflection;
+      console.log('[Currency History] Navigating to reflection:', {
+        id: reflection.id,
+        entryDate: reflection.entryDate,
+        description: reflection.description.substring(0, 50)
+      });
+      // Navigate to reflect screen with the date and reflection ID
+      // The reflect screen will open the edit modal for this reflection
       router.push({
         pathname: '/(tabs)/reflect',
-        params: { date: entry.entryDate }
+        params: { 
+          date: reflection.entryDate,
+          reflectionId: reflection.id
+        }
       });
     }
     // Transactions are not clickable (no detail screen)
