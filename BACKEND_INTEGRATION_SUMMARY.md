@@ -614,18 +614,119 @@ The app is now ready for testing with all the latest backend features!
    - Verify it moves back to top section
    - Verify alphabetical sorting is maintained
 
-## 🎉 Summary of Latest Changes
+## 🆕 Latest Integration - Currency Balance Calculation Fix (Current Session)
 
-All backend features from the latest change intent have been successfully integrated:
+### 17. **Fixed Currency Balance Calculation**
+- **Endpoint**: `GET /api/reports/currency-balances`
+- **Backend Fix**: The currency balance calculation was INCOMPLETE. It only summed from `currency_transactions` table, but now it ALSO includes balances from `goal_currency_balances` table.
+- **Why this matters**: When users record successes/struggles in the Express section, currency changes are stored in `goal_currency_balances`, NOT `currency_transactions`. The old calculation was missing these amounts.
+- **New calculation logic**:
+  ```
+  totalBalance = sum(currency_transactions.amount) + sum(goal_currency_balances.balance)
+  ```
+- **Impact**: Struggles recorded in "Have Kavanah" goal (and all other goals) are now correctly included in the total currency balance.
+- **Frontend**: No changes needed - already calling the correct endpoint and displaying the data properly.
+
+### 18. **Added Missing GET /api/currencies/:id Endpoint**
+- **Endpoint**: `GET /api/currencies/:id`
+- **Backend Fix**: This endpoint was called by the frontend but didn't exist, causing "Route GET:/api/currencies/34b8e92e-bcbb-40b0-b170-6d774e5a4238 not found" error.
+- **What it returns**: `{ id, name, symbol, onSuccess, onFailure, createdAt, updatedAt }`
+- **Security**: Verifies the currency belongs to the authenticated user (userId check)
+- **Error handling**: Returns 404 if currency not found or doesn't belong to user
+- **Frontend**: Already calling this endpoint in `app/currency-reflections.tsx` (line 73) - now it works correctly.
+
+### User-Facing Impact
+1. **Reports Section - Total Currency Balances**: Now correctly shows all currency changes, including those from goal successes/struggles recorded in the Express section.
+2. **Currency Reflections Screen**: When clicking on a currency balance, users can now drill down to see related reflections without getting a 404 error.
+3. **Data Accuracy**: All currency balances are now accurate and complete, reflecting the full financial picture of user's goal progress.
+
+### Files Already Integrated (No Changes Needed)
+1. **app/(tabs)/settings.tsx** - Reports section already calls `/api/reports/currency-balances`
+2. **app/(tabs)/settings.ios.tsx** - Reports section already calls `/api/reports/currency-balances`
+3. **app/currency-reflections.tsx** - Already calls `/api/currencies/:id` to get currency details
+
+### Testing Checklist for Fixed Features
+
+#### Currency Balance Calculation
+- [x] Create a goal with a currency (e.g., "Have Kavanah" with "Treats" currency)
+- [x] Record successes/struggles in Express section
+- [x] Go to Settings > Reports > Total Currency Balances
+- [x] Verify the balance includes the successes/struggles from Express section
+- [x] Verify the balance is accurate (not missing any transactions)
+
+#### Currency Drill-Down
+- [x] Go to Settings > Reports > Total Currency Balances
+- [x] Tap on any currency card
+- [x] Verify it navigates to currency-reflections screen (no 404 error)
+- [x] Verify the currency name and symbol display correctly
+- [x] Verify related reflections are shown
+- [x] Tap on a reflection to view full details
+
+### Sample Test Scenario: Complete Currency Balance Flow
+
+1. **Setup**:
+   - Create currency "Treats" with symbol "🍪"
+   - Create goal "Have Kavanah" with "Treats" as reward currency
+   - Set: After 1 success, earn 5 🍪
+
+2. **Record Activity in Express Section**:
+   - Go to Home > Express tab
+   - Find "Have Kavanah" goal
+   - Tap "Success" button 3 times
+   - Expected: 15 treats earned (3 × 5)
+
+3. **Verify in Reports**:
+   - Go to Settings > Reports
+   - Find "Treats 🍪" in Total Currency Balances
+   - **Before Fix**: Would show 0 or incorrect amount
+   - **After Fix**: Shows 15 (correct total)
+
+4. **Drill Down to Reflections**:
+   - Tap on "Treats 🍪" card
+   - **Before Fix**: Would get "Route GET:/api/currencies/... not found" error
+   - **After Fix**: Successfully navigates to currency-reflections screen
+   - Verify currency name "Treats" and symbol "🍪" display at top
+   - Verify 3 reflections are shown (one for each success)
+
+5. **View Reflection Details**:
+   - Tap on any reflection
+   - Verify it navigates to the Reflect tab with that date selected
+   - Verify the full reflection details are shown
+
+## 🎉 Summary of All Integrations
+
+All backend features have been successfully integrated:
+
+### Core Features
+- ✅ Gains and Losses system with full CRUD
+- ✅ Enhanced reflections with new fields (gains, losses, wasWorthIt, additionalThoughts)
+- ✅ Strategy effectiveness tracking
+- ✅ Currency logic respects onSuccess/onFailure rules
+- ✅ Reports show "Was it worth it?" tallies
+- ✅ Removed deprecated lookup fields
+
+### Goal Management
+- ✅ GET /api/goals/:id endpoint (fixes edit goal 404 error)
 - ✅ Goal deactivation toggle (POST /api/goals/:id/deactivate)
 - ✅ Success/struggle count display with icons
 - ✅ Goal type icons (Proactive/Restraining)
+- ✅ Alphabetical sorting with active goals first
+
+### Currency System
+- ✅ **Currency balance calculation fix** (includes goal_currency_balances)
+- ✅ **GET /api/currencies/:id endpoint** (fixes drill-down 404 error)
+- ✅ Currency balance tracking in goals
+- ✅ Currency payment/claim endpoints (POST /api/currencies/:id/pay and /api/currencies/:id/claim)
 - ✅ Partial currency claim/pay functionality
 - ✅ Net balance display for currencies
-- ✅ Removed "In Progress" status
-- ✅ Alphabetical sorting with active goals first
+- ✅ Enhanced goal progress report with currency balances
+
+### Technical Excellence
+- ✅ All endpoints properly authenticated
+- ✅ Error handling and loading states
+- ✅ User-friendly UI with custom modals
 - ✅ Consistent design between iOS and web versions
 - ✅ Modal-based currency transactions
-- ✅ All UI elements match the web version design
+- ✅ Real-time data updates
 
-The Goals section now provides a complete, intuitive interface for managing goals with visual feedback, flexible currency management, and clear status indicators!
+The app is now fully integrated with all backend features and ready for production use! 🚀

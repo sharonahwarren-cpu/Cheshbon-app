@@ -58,16 +58,18 @@ export default function CurrencyReflectionsScreen() {
       
       setReflections(reflectionsData);
       
-      // Get currency name from first reflection or fetch separately
       if (reflectionsData.length > 0 && reflectionsData[0].currencyChange) {
-        setCurrencyName(reflectionsData[0].currencyChange.currencyName || '');
-        setCurrencySymbol(reflectionsData[0].currencyChange.currencySymbol || '');
+        const currencyNameValue = reflectionsData[0].currencyChange.currencyName || '';
+        const currencySymbolValue = reflectionsData[0].currencyChange.currencySymbol || '';
+        setCurrencyName(currencyNameValue);
+        setCurrencySymbol(currencySymbolValue);
       } else {
-        // Fetch currency details
         const currencyRes = await authenticatedGet(`/api/currencies/${currencyId}`);
         const currencyData = currencyRes?.data || currencyRes;
-        setCurrencyName(currencyData.name || 'Currency');
-        setCurrencySymbol(currencyData.symbol || '');
+        const currencyNameValue = currencyData.name || 'Currency';
+        const currencySymbolValue = currencyData.symbol || '';
+        setCurrencyName(currencyNameValue);
+        setCurrencySymbol(currencySymbolValue);
       }
       
       console.log('Currency reflections loaded:', reflectionsData.length);
@@ -92,6 +94,14 @@ export default function CurrencyReflectionsScreen() {
       year: 'numeric' 
     };
     return date.toLocaleDateString('en-US', options);
+  };
+
+  const handleReflectionPress = (reflection: CurrencyReflection) => {
+    console.log('Navigating to reflection date:', reflection.entryDate);
+    router.push({
+      pathname: '/(tabs)/reflect',
+      params: { date: reflection.entryDate }
+    });
   };
 
   const screenTitle = currencyName ? `${currencyName} Reflections` : 'Currency Reflections';
@@ -143,6 +153,9 @@ export default function CurrencyReflectionsScreen() {
             <Text style={styles.sectionSubtitle}>
               {reflections.length} {reflections.length === 1 ? 'reflection' : 'reflections'}
             </Text>
+            <Text style={styles.helperText}>
+              Tap any reflection to view full details
+            </Text>
             
             {reflections.map((reflection, index) => {
               const dateText = formatDate(reflection.entryDate);
@@ -157,7 +170,11 @@ export default function CurrencyReflectionsScreen() {
               
               return (
                 <React.Fragment key={index}>
-                  <View style={styles.reflectionCard}>
+                  <TouchableOpacity 
+                    style={styles.reflectionCard}
+                    onPress={() => handleReflectionPress(reflection)}
+                    activeOpacity={0.7}
+                  >
                     <View style={styles.reflectionHeader}>
                       <Text style={styles.reflectionDate}>{dateText}</Text>
                       {reflection.outcome && (
@@ -179,7 +196,9 @@ export default function CurrencyReflectionsScreen() {
                       </View>
                     )}
                     
-                    <Text style={styles.reflectionDescription}>{reflection.description}</Text>
+                    <Text style={styles.reflectionDescription} numberOfLines={3}>
+                      {reflection.description}
+                    </Text>
                     
                     {reflection.currencyChange && (
                       <View style={styles.currencyChangeSection}>
@@ -188,7 +207,17 @@ export default function CurrencyReflectionsScreen() {
                         </Text>
                       </View>
                     )}
-                  </View>
+                    
+                    <View style={styles.viewDetailsRow}>
+                      <Text style={styles.viewDetailsText}>Tap to view full reflection</Text>
+                      <IconSymbol
+                        ios_icon_name="chevron.right"
+                        android_material_icon_name="arrow-forward"
+                        size={16}
+                        color={colors.primary}
+                      />
+                    </View>
+                  </TouchableOpacity>
                 </React.Fragment>
               );
             })}
@@ -245,7 +274,13 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 14,
     color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  helperText: {
+    fontSize: 13,
+    color: colors.textSecondary,
     marginBottom: 20,
+    fontStyle: 'italic',
   },
   emptyState: {
     flex: 1,
@@ -273,6 +308,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   reflectionHeader: {
     flexDirection: 'row',
@@ -326,10 +366,23 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    marginBottom: 8,
   },
   currencyChangeText: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  viewDetailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: 4,
+  },
+  viewDetailsText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
