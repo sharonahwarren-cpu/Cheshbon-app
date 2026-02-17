@@ -151,6 +151,9 @@ export default function HomeScreen() {
   const [currencyModalMaxAmount, setCurrencyModalMaxAmount] = useState<number>(0);
   const [currencyModalLoading, setCurrencyModalLoading] = useState(false);
   
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successModalMessage, setSuccessModalMessage] = useState('');
+  
   const [showQuickReflectionModal, setShowQuickReflectionModal] = useState(false);
   const [quickReflectionGoalId, setQuickReflectionGoalId] = useState<string | undefined>();
   const [quickReflectionStep, setQuickReflectionStep] = useState(1);
@@ -174,6 +177,14 @@ export default function HomeScreen() {
   const showError = (message: string) => {
     setErrorMessage(message);
     setErrorModalVisible(true);
+  };
+
+  const showSuccess = (message: string) => {
+    setSuccessModalMessage(message);
+    setShowSuccessModal(true);
+    setTimeout(() => {
+      setShowSuccessModal(false);
+    }, 2000);
   };
 
   const loadData = async () => {
@@ -512,6 +523,10 @@ export default function HomeScreen() {
       
       setShowCurrencyModal(false);
       setCurrencyModalAmount('');
+      
+      const actionText = currencyModalType === 'claim' ? 'claimed' : 'paid';
+      showSuccess(`Successfully ${actionText} ${amount} ${selectedCurrencySymbol}`);
+      
       await loadReportsData();
     } catch (error: any) {
       console.error("Error processing currency action:", error);
@@ -1522,6 +1537,25 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={showSuccessModal}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModal}>
+            <IconSymbol
+              ios_icon_name="checkmark.circle.fill"
+              android_material_icon_name="check-circle"
+              size={48}
+              color={colors.success}
+            />
+            <Text style={styles.successModalMessage}>{successModalMessage}</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -2111,5 +2145,23 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  successModal: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  successModalMessage: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
   },
 });

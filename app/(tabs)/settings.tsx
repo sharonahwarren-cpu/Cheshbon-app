@@ -240,8 +240,22 @@ export default function SettingsScreen() {
       const balancesData = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || []);
       const talliesData = talliesRes?.data || talliesRes || null;
       
-      setCurrencyBalances(balancesData);
+      // FILTER: Only show currencies with non-zero total balance
+      const filteredBalances = balancesData
+        .filter((balance: CurrencyBalance) => balance.totalBalance !== 0)
+        .map((balance: CurrencyBalance) => ({
+          ...balance,
+          // FILTER: Only show goals with non-zero balance in breakdown
+          goalBreakdown: balance.goalBreakdown?.filter(gb => gb.balance !== 0) || [],
+        }));
+      
+      setCurrencyBalances(filteredBalances);
       setWorthItTallies(talliesData);
+      
+      console.log('[Reports] Filtered currency balances:', {
+        total: balancesData.length,
+        nonZero: filteredBalances.length,
+      });
     } catch (error) {
       console.error('Error loading reports data:', error);
       showError('Failed to load reports data');
