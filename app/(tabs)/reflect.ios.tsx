@@ -294,7 +294,11 @@ export default function ReflectScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.container}>
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reflect</Text>
           <TouchableOpacity onPress={() => router.push('/search-journals')}>
@@ -373,6 +377,7 @@ export default function ReflectScreen() {
               multiline
               textAlignVertical="top"
               blurOnSubmit={false}
+              returnKeyType="default"
               onFocus={() => {
                 setTimeout(() => {
                   scrollViewRef.current?.scrollTo({ y: 0, animated: true });
@@ -644,7 +649,7 @@ export default function ReflectScreen() {
             )}
           </View>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
 
       {showAddReflectionModal && (
         <AddReflectionModal
@@ -999,12 +1004,12 @@ function AddReflectionModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView 
-        behavior="padding"
-        style={styles.modalOverlay}
-        keyboardVerticalOffset={0}
-      >
-        <View style={styles.modalContent}>
+      <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior="padding"
+          style={styles.modalContent}
+          keyboardVerticalOffset={0}
+        >
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={step > 1 ? handleBack : onClose} style={styles.backButton}>
               <IconSymbol
@@ -1120,6 +1125,7 @@ function AddReflectionModal({
                     multiline
                     numberOfLines={6}
                     blurOnSubmit={false}
+                    returnKeyType="default"
                     onFocus={() => {
                       setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -1495,6 +1501,7 @@ function AddReflectionModal({
                     multiline
                     numberOfLines={6}
                     blurOnSubmit={false}
+                    returnKeyType="default"
                     onFocus={() => {
                       setTimeout(() => {
                         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -1700,8 +1707,8 @@ function AddReflectionModal({
               </TouchableOpacity>
             )}
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </View>
 
       <Modal
         visible={showCreateGainModal}
@@ -1709,45 +1716,48 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateGainModal(false)}
       >
-        <KeyboardAvoidingView 
-          behavior="padding"
-          style={styles.modalOverlay}
-        >
-          <View style={styles.createItemModal}>
-            <Text style={styles.alertTitle}>Add New Gain</Text>
-            <TextInput
-              ref={gainNameInputRef}
-              style={styles.input}
-              value={newItemName}
-              onChangeText={setNewItemName}
-              placeholder="Gain name..."
-              placeholderTextColor={colors.textSecondary}
-              blurOnSubmit={false}
-            />
-            <View style={styles.alertButtons}>
-              <TouchableOpacity
-                style={[styles.alertButton, styles.alertButtonSecondary]}
-                onPress={() => {
-                  setNewItemName('');
-                  setShowCreateGainModal(false);
-                }}
-              >
-                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.alertButton}
-                onPress={handleCreateGain}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.alertButtonText}>Add</Text>
-                )}
-              </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior="padding"
+            style={styles.createItemModalContainer}
+          >
+            <View style={styles.createItemModal}>
+              <Text style={styles.alertTitle}>Add New Gain</Text>
+              <TextInput
+                ref={gainNameInputRef}
+                style={styles.input}
+                value={newItemName}
+                onChangeText={setNewItemName}
+                placeholder="Gain name..."
+                placeholderTextColor={colors.textSecondary}
+                blurOnSubmit={false}
+                returnKeyType="done"
+              />
+              <View style={styles.alertButtons}>
+                <TouchableOpacity
+                  style={[styles.alertButton, styles.alertButtonSecondary]}
+                  onPress={() => {
+                    setNewItemName('');
+                    setShowCreateGainModal(false);
+                  }}
+                >
+                  <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.alertButton}
+                  onPress={handleCreateGain}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={colors.background} />
+                  ) : (
+                    <Text style={styles.alertButtonText}>Add</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       <Modal
@@ -1756,45 +1766,48 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateLossModal(false)}
       >
-        <KeyboardAvoidingView 
-          behavior="padding"
-          style={styles.modalOverlay}
-        >
-          <View style={styles.createItemModal}>
-            <Text style={styles.alertTitle}>Add New Loss</Text>
-            <TextInput
-              ref={lossNameInputRef}
-              style={styles.input}
-              value={newItemName}
-              onChangeText={setNewItemName}
-              placeholder="Loss name..."
-              placeholderTextColor={colors.textSecondary}
-              blurOnSubmit={false}
-            />
-            <View style={styles.alertButtons}>
-              <TouchableOpacity
-                style={[styles.alertButton, styles.alertButtonSecondary]}
-                onPress={() => {
-                  setNewItemName('');
-                  setShowCreateLossModal(false);
-                }}
-              >
-                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.alertButton}
-                onPress={handleCreateLoss}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.alertButtonText}>Add</Text>
-                )}
-              </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior="padding"
+            style={styles.createItemModalContainer}
+          >
+            <View style={styles.createItemModal}>
+              <Text style={styles.alertTitle}>Add New Loss</Text>
+              <TextInput
+                ref={lossNameInputRef}
+                style={styles.input}
+                value={newItemName}
+                onChangeText={setNewItemName}
+                placeholder="Loss name..."
+                placeholderTextColor={colors.textSecondary}
+                blurOnSubmit={false}
+                returnKeyType="done"
+              />
+              <View style={styles.alertButtons}>
+                <TouchableOpacity
+                  style={[styles.alertButton, styles.alertButtonSecondary]}
+                  onPress={() => {
+                    setNewItemName('');
+                    setShowCreateLossModal(false);
+                  }}
+                >
+                  <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.alertButton}
+                  onPress={handleCreateLoss}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={colors.background} />
+                  ) : (
+                    <Text style={styles.alertButtonText}>Add</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       <Modal
@@ -1803,57 +1816,61 @@ function AddReflectionModal({
         animationType="fade"
         onRequestClose={() => setShowCreateStrategyModal(false)}
       >
-        <KeyboardAvoidingView 
-          behavior="padding"
-          style={styles.modalOverlay}
-        >
-          <View style={styles.createItemModal}>
-            <Text style={styles.alertTitle}>Add New Strategy</Text>
-            <TextInput
-              ref={strategyNameInputRef}
-              style={styles.input}
-              value={newItemName}
-              onChangeText={setNewItemName}
-              placeholder="Strategy name..."
-              placeholderTextColor={colors.textSecondary}
-              blurOnSubmit={false}
-            />
-            <TextInput
-              ref={strategyDescInputRef}
-              style={[styles.input, styles.textArea]}
-              value={newItemDescription}
-              onChangeText={setNewItemDescription}
-              placeholder="Description (optional)..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={3}
-              blurOnSubmit={false}
-            />
-            <View style={styles.alertButtons}>
-              <TouchableOpacity
-                style={[styles.alertButton, styles.alertButtonSecondary]}
-                onPress={() => {
-                  setNewItemName('');
-                  setNewItemDescription('');
-                  setShowCreateStrategyModal(false);
-                }}
-              >
-                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.alertButton}
-                onPress={handleCreateStrategy}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.alertButtonText}>Add</Text>
-                )}
-              </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior="padding"
+            style={styles.createItemModalContainer}
+          >
+            <View style={styles.createItemModal}>
+              <Text style={styles.alertTitle}>Add New Strategy</Text>
+              <TextInput
+                ref={strategyNameInputRef}
+                style={styles.input}
+                value={newItemName}
+                onChangeText={setNewItemName}
+                placeholder="Strategy name..."
+                placeholderTextColor={colors.textSecondary}
+                blurOnSubmit={false}
+                returnKeyType="next"
+              />
+              <TextInput
+                ref={strategyDescInputRef}
+                style={[styles.input, styles.textArea]}
+                value={newItemDescription}
+                onChangeText={setNewItemDescription}
+                placeholder="Description (optional)..."
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                numberOfLines={3}
+                blurOnSubmit={false}
+                returnKeyType="default"
+              />
+              <View style={styles.alertButtons}>
+                <TouchableOpacity
+                  style={[styles.alertButton, styles.alertButtonSecondary]}
+                  onPress={() => {
+                    setNewItemName('');
+                    setNewItemDescription('');
+                    setShowCreateStrategyModal(false);
+                  }}
+                >
+                  <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.alertButton}
+                  onPress={handleCreateStrategy}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={colors.background} />
+                  ) : (
+                    <Text style={styles.alertButtonText}>Add</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </Modal>
   );
@@ -2628,11 +2645,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  createItemModalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   createItemModal: {
     backgroundColor: colors.background,
     borderRadius: 16,
     padding: 20,
     margin: 20,
+    width: '90%',
   },
   alertModal: {
     backgroundColor: colors.background,
