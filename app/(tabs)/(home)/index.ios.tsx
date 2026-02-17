@@ -91,8 +91,8 @@ interface ActivatedGoal {
   todaySuccessCount: number;
   todayStruggleCount: number;
   dailyEntries?: DailyEntry[];
-  successCount: number; // Total success count across all dates
-  struggleCount: number; // Total struggle count across all dates
+  successCount: number;
+  struggleCount: number;
   rewardCurrencyId?: string;
   rewardSuccesses?: number;
   rewardAmount?: number;
@@ -142,7 +142,15 @@ export default function HomeScreen() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   
-  // Quick reflection modal state (1-4 step popup)
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [currencyModalType, setCurrencyModalType] = useState<'claim' | 'pay'>('claim');
+  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string>('');
+  const [selectedCurrencyName, setSelectedCurrencyName] = useState<string>('');
+  const [selectedCurrencySymbol, setSelectedCurrencySymbol] = useState<string>('');
+  const [currencyModalAmount, setCurrencyModalAmount] = useState<string>('');
+  const [currencyModalMaxAmount, setCurrencyModalMaxAmount] = useState<number>(0);
+  const [currencyModalLoading, setCurrencyModalLoading] = useState(false);
+  
   const [showQuickReflectionModal, setShowQuickReflectionModal] = useState(false);
   const [quickReflectionGoalId, setQuickReflectionGoalId] = useState<string | undefined>();
   const [quickReflectionStep, setQuickReflectionStep] = useState(1);
@@ -252,14 +260,12 @@ export default function HomeScreen() {
       setActivatedGoals(goalsData);
       setCurrencies(currenciesData);
       
-      // Build hierarchical category structure
       const groups: Record<string, CategoryGroup> = {};
       
       goalsData.forEach((goal: ActivatedGoal) => {
         const lifeArea = goal.lifeArea;
         
         if (!lifeArea) {
-          // Uncategorized goals
           if (!groups['Uncategorized']) {
             groups['Uncategorized'] = {
               name: 'Uncategorized',
@@ -273,11 +279,9 @@ export default function HomeScreen() {
           return;
         }
         
-        // Determine if this is a top-level or sub-level life area
         const isTopLevel = lifeArea.level === 1;
         
         if (isTopLevel) {
-          // Top-level life area
           if (!groups[lifeArea.id]) {
             groups[lifeArea.id] = {
               name: lifeArea.name,
@@ -289,7 +293,6 @@ export default function HomeScreen() {
           }
           groups[lifeArea.id].goals.push(goal);
         } else {
-          // Sub-level life area - need to find parent
           const parentId = lifeArea.parentId || 'Uncategorized';
           
           if (!groups[parentId]) {
@@ -316,7 +319,6 @@ export default function HomeScreen() {
         }
       });
       
-      // Sort groups alphabetically, with Uncategorized at the end
       const sortedGroups: Record<string, CategoryGroup> = {};
       const categoryKeys = Object.keys(groups).sort((a, b) => {
         if (a === 'Uncategorized') return 1;
@@ -471,9 +473,52 @@ export default function HomeScreen() {
     loadData();
   }, [activeTab]);
 
-  // Helper to determine if currency is reward type
   const isRewardCurrency = (currency: Currency): boolean => {
     return currency.onSuccess === 'ADD';
+  };
+
+  const openCurrencyModal = (currencyId: string, currencyName: string, currencySymbol: string, balance: number, type: 'claim' | 'pay') => {
+    console.log("Opening currency modal:", type, currencyName, balance);
+    setSelectedCurrencyId(currencyId);
+    setSelectedCurrencyName(currencyName);
+    setSelectedCurrencySymbol(currencySymbol);
+    setCurrencyModalType(type);
+    setCurrencyModalMaxAmount(Math.abs(balance));
+    setCurrencyModalAmount(Math.abs(balance).toString());
+    setShowCurrencyModal(true);
+  };
+
+  const handleCurrencyAction = async () => {
+    console.log("Handling currency action:", currencyModalType, selectedCurrencyName, currencyModalAmount);
+    
+    const amount = parseFloat(currencyModalAmount);
+    if (isNaN(amount) || amount <= 0) {
+      showError('Please enter a valid amount');
+      return;
+    }
+    
+    if (amount > currencyModalMaxAmount) {
+      showError(`Amount cannot exceed ${currencyModalMaxAmount}`);
+      return;
+    }
+    
+    setCurrencyModalLoading(true);
+    try {
+      const endpoint = currencyModalType === 'claim' 
+        ? `/api/currencies/${selectedCurrencyId}/claim`
+        : `/api/currencies/${selectedCurrencyId}/pay`;
+      
+      await authenticatedPost(endpoint, { amount });
+      
+      setShowCurrencyModal(false);
+      setCurrencyModalAmount('');
+      await loadReportsData();
+    } catch (error: any) {
+      console.error("Error processing currency action:", error);
+      showError(error.message || `Failed to ${currencyModalType} currency`);
+    } finally {
+      setCurrencyModalLoading(false);
+    }
   };
 
   if (loading) {
@@ -488,7 +533,6 @@ export default function HomeScreen() {
     const typeIcon = goal.type === 'RESTRAINING' ? 'cancel' : 'check-circle';
     const typeColor = goal.type === 'RESTRAINING' ? colors.error : colors.success;
     
-    // Use dailyEntries length for daily counts (resets each day)
     const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
     const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
     const successCount = dailySuccessEntries.length;
@@ -496,7 +540,6 @@ export default function HomeScreen() {
     
     const hasDescription = goal.description && goal.description.trim().length > 0;
     
-    // Calculate "X more until currency" messages using TOTAL counts (not daily)
     const rewardMessage = (() => {
       if (!goal.rewardCurrencyId || !goal.rewardSuccesses || !goal.rewardAmount) return null;
       const currency = currencies.find(c => c.id === goal.rewardCurrencyId);
@@ -564,7 +607,6 @@ export default function HomeScreen() {
           </View>
         </View>
         
-        {/* Currency progress messages */}
         {(rewardMessage || consequenceMessage) && (
           <View style={styles.currencyProgressContainer}>
             {rewardMessage && (
@@ -699,10 +741,8 @@ export default function HomeScreen() {
         
         {!isCollapsed && (
           <View>
-            {/* Render sub-categories first */}
             {Object.values(group.subCategories).map(subCat => renderCategoryGroup(subCat, depth + 1))}
             
-            {/* Then render goals directly in this category */}
             {group.goals.map(goal => renderGoalCard(goal))}
           </View>
         )}
@@ -800,13 +840,16 @@ export default function HomeScreen() {
                   const totalBalanceColor = balance.totalBalance >= 0 ? colors.success : colors.error;
                   const currency = currencies.find(c => c.id === balance.currencyId);
                   
-                  // Determine button type based on balance and currency type
                   let buttonType: 'claim' | 'pay' = 'claim';
                   if (balance.totalBalance > 0) {
                     buttonType = (currency && isRewardCurrency(currency)) ? 'claim' : 'pay';
                   } else if (balance.totalBalance < 0) {
                     buttonType = (currency && isRewardCurrency(currency)) ? 'pay' : 'claim';
                   }
+                  
+                  const buttonText = buttonType === 'claim' ? 'Claim' : 'Pay';
+                  const buttonIcon = buttonType === 'claim' ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill';
+                  const buttonAndroidIcon = buttonType === 'claim' ? 'download' : 'upload';
                   
                   return (
                     <TouchableOpacity 
@@ -827,6 +870,21 @@ export default function HomeScreen() {
                           {totalBalanceText}
                         </Text>
                       </View>
+                      
+                      {balance.totalBalance !== 0 && (
+                        <TouchableOpacity
+                          style={[styles.currencyActionButton, buttonType === 'claim' ? styles.claimButton : styles.payButton]}
+                          onPress={() => openCurrencyModal(balance.currencyId, balance.currencyName, symbolText, balance.totalBalance, buttonType)}
+                        >
+                          <IconSymbol
+                            ios_icon_name={buttonIcon}
+                            android_material_icon_name={buttonAndroidIcon}
+                            size={18}
+                            color={colors.background}
+                          />
+                          <Text style={styles.currencyActionButtonText}>{buttonText}</Text>
+                        </TouchableOpacity>
+                      )}
                       
                       {balance.goalBreakdown && balance.goalBreakdown.length > 0 && (
                         <View style={styles.goalBreakdownSection}>
@@ -1204,7 +1262,6 @@ export default function HomeScreen() {
         )}
       </ScrollView>
 
-      {/* Quick Reflection Modal (1-4 step popup) */}
       <Modal
         visible={showQuickReflectionModal}
         animationType="slide"
@@ -1352,6 +1409,94 @@ export default function HomeScreen() {
                 <Text style={styles.modalButtonPrimaryText}>
                   {quickReflectionStep < 4 ? 'Next' : 'Continue to Full Reflection'}
                 </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showCurrencyModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCurrencyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.currencyModal}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setShowCurrencyModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>{currencyModalType === 'claim' ? 'Claim' : 'Pay'} {selectedCurrencyName}</Text>
+              <View style={{ width: 24 }} />
+            </View>
+            
+            <View style={styles.currencyModalContent}>
+              <Text style={styles.currencyModalLabel}>Amount {selectedCurrencySymbol && `(${selectedCurrencySymbol})`}</Text>
+              <TextInput
+                style={styles.currencyModalInput}
+                value={currencyModalAmount}
+                onChangeText={setCurrencyModalAmount}
+                placeholder="Enter amount"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="numeric"
+              />
+              <Text style={styles.currencyModalHelper}>
+                Maximum: {currencyModalMaxAmount} {selectedCurrencySymbol}
+              </Text>
+              
+              <View style={styles.quickAmountButtons}>
+                <TouchableOpacity
+                  style={styles.quickAmountButton}
+                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount / 4).toFixed(2))}
+                >
+                  <Text style={styles.quickAmountButtonText}>25%</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAmountButton}
+                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount / 2).toFixed(2))}
+                >
+                  <Text style={styles.quickAmountButtonText}>50%</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAmountButton}
+                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount * 0.75).toFixed(2))}
+                >
+                  <Text style={styles.quickAmountButtonText}>75%</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAmountButton}
+                  onPress={() => setCurrencyModalAmount(currencyModalMaxAmount.toString())}
+                >
+                  <Text style={styles.quickAmountButtonText}>100%</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => setShowCurrencyModal(false)}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={handleCurrencyAction}
+                disabled={currencyModalLoading}
+              >
+                {currencyModalLoading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.modalButtonPrimaryText}>
+                    {currencyModalType === 'claim' ? 'Claim' : 'Pay'}
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1545,6 +1690,27 @@ const styles = StyleSheet.create({
   goalBreakdownBalance: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  currencyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  claimButton: {
+    backgroundColor: colors.success,
+  },
+  payButton: {
+    backgroundColor: colors.error,
+  },
+  currencyActionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background,
   },
   drillDownHint: {
     flexDirection: 'row',
@@ -1753,6 +1919,12 @@ const styles = StyleSheet.create({
     width: '90%',
     maxHeight: '80%',
   },
+  currencyModal: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    width: '90%',
+    maxWidth: 400,
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1779,6 +1951,49 @@ const styles = StyleSheet.create({
   modalContent: {
     padding: 20,
     maxHeight: 400,
+  },
+  currencyModalContent: {
+    padding: 20,
+  },
+  currencyModalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  currencyModalInput: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 18,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 8,
+  },
+  currencyModalHelper: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  quickAmountButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickAmountButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  quickAmountButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
   },
   stepContent: {
     gap: 16,

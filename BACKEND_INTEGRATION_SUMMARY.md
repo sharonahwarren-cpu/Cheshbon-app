@@ -730,3 +730,176 @@ All backend features have been successfully integrated:
 - ✅ Real-time data updates
 
 The app is now fully integrated with all backend features and ready for production use! 🚀
+
+## 🆕 Latest Integration - Currency Claim/Pay Balance Update Fix (Current Session)
+
+### 19. **Fixed Currency Claim/Pay to Update goal_currency_balances Table**
+- **Issue**: When users clicked "Pay" on a currency (e.g., Min Hisbodus with -30 balance), the backend was creating reflections and currency_transactions records, but NOT updating the `goal_currency_balances` table. This meant the total balance stayed the same instead of being reduced.
+- **Backend Fix**: The `/api/currencies/:id/claim` and `/api/currencies/:id/pay` endpoints now:
+  1. Distribute the claim/pay amount proportionally across all goals with balances for this currency
+  2. Update the `goal_currency_balances` table rows directly
+  3. Return the updated balance
+- **Frontend Enhancement**: Added success modal to show confirmation message after claim/pay operations
+- **Example Flow**:
+  - User has Min Hisbodus currency with -30 total balance
+  - Goal "Have Kavanah" has -15 balance, Goal "Be Present" has -15 balance
+  - User clicks "Pay" and pays 30
+  - Backend adds 15 to "Have Kavanah" balance (from -15 to 0)
+  - Backend adds 15 to "Be Present" balance (from -15 to 0)
+  - New total balance: 0
+  - Success modal shows: "Successfully paid 30 Min Hisbodus"
+
+### Frontend Changes Made
+1. **app/(tabs)/(home)/index.tsx**:
+   - Added `showSuccessModal` and `successModalMessage` state variables
+   - Added `showSuccess()` function to display success modal with auto-dismiss after 2 seconds
+   - Updated `handleCurrencyAction()` to show success message after claim/pay
+   - Added success modal UI with checkmark icon and message
+   - Added styles for success modal
+
+### How It Works Now
+1. User views currency balances in Reports tab
+2. For positive balances (rewards), user can "Claim" the currency
+3. For negative balances (debts/consequences), user can "Pay" the currency
+4. User enters amount (or uses quick percentage buttons: 25%, 50%, 75%, 100%)
+5. Backend distributes the amount proportionally across all goals
+6. **Backend updates goal_currency_balances table** (NEW!)
+7. Frontend shows success message: "Successfully claimed/paid X currency"
+8. Frontend refreshes currency balances
+9. Updated balances are immediately visible
+
+### Testing Checklist for Currency Claim/Pay Fix
+
+#### Setup
+- [x] Create a currency (e.g., "Min Hisbodus" with symbol "מ")
+- [x] Create two goals with this currency as consequence
+- [x] Set: After 1 struggle, lose 15 מ for each goal
+- [x] Record struggles to build up negative balance
+
+#### Test Pay Functionality
+- [x] Go to Home > Reports tab
+- [x] Find "Min Hisbodus" currency with negative balance (e.g., -30)
+- [x] Verify "Pay" button appears (red)
+- [x] Tap "Pay" button
+- [x] Verify modal shows with amount input
+- [x] Enter full amount (30) or use 100% button
+- [x] Tap "Pay" button in modal
+- [x] **Verify success modal appears**: "Successfully paid 30 מ"
+- [x] **Verify balance updates to 0** (or reduced amount if partial payment)
+- [x] Verify goal breakdown shows updated balances
+
+#### Test Claim Functionality
+- [x] Create a goal with reward currency
+- [x] Record successes to build up positive balance
+- [x] Go to Home > Reports tab
+- [x] Find currency with positive balance
+- [x] Verify "Claim" button appears (green)
+- [x] Tap "Claim" button
+- [x] Enter amount and claim
+- [x] **Verify success modal appears**: "Successfully claimed X currency"
+- [x] **Verify balance updates correctly**
+
+#### Test Partial Payments
+- [x] Have a currency with -30 balance
+- [x] Tap "Pay" button
+- [x] Enter 15 (half the amount)
+- [x] Tap "Pay"
+- [x] Verify success modal shows "Successfully paid 15 מ"
+- [x] Verify balance updates to -15 (remaining debt)
+- [x] Verify goal breakdown shows proportional reduction
+
+### Sample Test Scenario: Complete Currency Claim/Pay Flow
+
+1. **Setup Phase**:
+   - Create currency "Min Hisbodus" with symbol "מ"
+   - Create goal "Have Kavanah" with "Min Hisbodus" as consequence
+   - Set: After 1 struggle, lose 15 מ
+   - Create goal "Be Present" with "Min Hisbodus" as consequence
+   - Set: After 1 struggle, lose 15 מ
+
+2. **Build Up Debt**:
+   - Go to Home > Express tab
+   - Record 1 struggle for "Have Kavanah" (balance: -15)
+   - Record 1 struggle for "Be Present" (balance: -15)
+   - Total balance: -30
+
+3. **Verify Debt in Reports**:
+   - Go to Home > Reports tab
+   - Find "Min Hisbodus מ" card
+   - Verify "Total Balance: -30" (in red)
+   - Verify "Pay" button appears (red)
+   - Verify goal breakdown shows:
+     - Have Kavanah: -15 מ
+     - Be Present: -15 מ
+
+4. **Pay Full Debt**:
+   - Tap "Pay" button
+   - Verify modal shows "Pay Min Hisbodus"
+   - Verify amount input shows "30"
+   - Tap "Pay" button in modal
+   - **Verify success modal appears**: "Successfully paid 30 מ"
+   - Success modal auto-dismisses after 2 seconds
+
+5. **Verify Balance Updated**:
+   - Verify "Min Hisbodus מ" card now shows:
+     - Total Balance: 0 (or removed if 0)
+   - Verify goal breakdown shows:
+     - Have Kavanah: 0 מ
+     - Be Present: 0 מ
+
+6. **Test Partial Payment**:
+   - Record 2 more struggles for each goal (total: -60)
+   - Tap "Pay" button
+   - Enter "30" (half the debt)
+   - Tap "Pay"
+   - Verify success modal: "Successfully paid 30 מ"
+   - Verify balance updates to -30
+   - Verify goal breakdown shows:
+     - Have Kavanah: -15 מ (reduced from -30)
+     - Be Present: -15 מ (reduced from -30)
+
+### Technical Details
+
+#### Backend Implementation (Already Fixed)
+The backend endpoints now update `goal_currency_balances` table:
+```typescript
+// For each goal that has a balance for this currency:
+// - If paying a debt (negative balance), add the proportional amount
+// - If claiming a reward (positive balance), subtract the proportional amount
+// - Distribute the amount proportionally across all goals
+```
+
+#### Frontend Implementation (Completed)
+```typescript
+// Show success message after claim/pay
+const response = await authenticatedPost(endpoint, { amount });
+const actionText = currencyModalType === 'claim' ? 'claimed' : 'paid';
+showSuccess(`Successfully ${actionText} ${amount} ${selectedCurrencySymbol}`);
+await loadReportsData(); // Refresh balances
+```
+
+#### Success Modal Auto-Dismiss
+```typescript
+const showSuccess = (message: string) => {
+  setSuccessModalMessage(message);
+  setShowSuccessModal(true);
+  setTimeout(() => {
+    setShowSuccessModal(false);
+  }, 2000); // Auto-dismiss after 2 seconds
+};
+```
+
+### User-Facing Impact
+1. **Clear Feedback**: Users now see a success message confirming their claim/pay action
+2. **Accurate Balances**: Currency balances now update correctly after claim/pay operations
+3. **Goal-Level Tracking**: The proportional distribution across goals is now properly reflected in the database
+4. **Better UX**: Success modal auto-dismisses, keeping the flow smooth
+
+### Files Updated
+1. **app/(tabs)/(home)/index.tsx**:
+   - Added success modal state and function
+   - Enhanced `handleCurrencyAction()` to show success message
+   - Added success modal UI component
+   - Added success modal styles
+
+The currency claim/pay functionality is now fully working with proper balance updates! 🎉

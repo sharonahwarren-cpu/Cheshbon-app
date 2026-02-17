@@ -124,18 +124,20 @@ export default function ReflectScreen() {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     loadData();
   }, [selectedDate]);
 
   useEffect(() => {
-    if (showSuccessModal && successMessage === 'Reflection saved successfully') {
+    if (showSuccessModal) {
       const timer = setTimeout(() => {
         setShowSuccessModal(false);
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [showSuccessModal, successMessage]);
+  }, [showSuccessModal]);
 
   const loadData = async () => {
     console.log('Loading reflect data for date:', selectedDate.toISOString().split('T')[0]);
@@ -190,7 +192,7 @@ export default function ReflectScreen() {
   };
 
   const handleSaveJournal = async () => {
-    console.log('Saving journal entry and returning to Home...');
+    console.log('Saving journal entry...');
     try {
       setLoading(true);
       const dateString = selectedDate.toISOString().split('T')[0];
@@ -201,12 +203,8 @@ export default function ReflectScreen() {
       });
 
       setJournalEntry(savedEntry?.data || savedEntry);
-      showSuccess('Journal entry saved successfully');
+      showSuccess('Journal saved successfully');
       Keyboard.dismiss();
-      
-      setTimeout(() => {
-        router.push('/(tabs)/(home)');
-      }, 500);
     } catch (error) {
       console.error('Error saving journal:', error);
       showError('Failed to save journal entry');
@@ -278,6 +276,13 @@ export default function ReflectScreen() {
     setShowAddReflectionModal(false);
     showSuccess('Reflection saved successfully');
     loadData();
+  };
+
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category],
+    }));
   };
 
   const dateDisplay = formatDate(selectedDate);
@@ -398,7 +403,7 @@ export default function ReflectScreen() {
                     size={20}
                     color={colors.background}
                   />
-                  <Text style={styles.saveButtonText}>Save & Return to Home</Text>
+                  <Text style={styles.saveButtonText}>Save</Text>
                 </React.Fragment>
               )}
             </TouchableOpacity>
@@ -449,11 +454,21 @@ export default function ReflectScreen() {
                 if (categoryReflections.length === 0) return null;
                 
                 const categoryIcon = getCategoryIcon(category);
+                const isCollapsed = collapsedCategories[category];
                 
                 return (
                   <React.Fragment key={catIndex}>
                     {categoriesEnabled && category !== 'All' && (
-                      <View style={styles.categoryHeader}>
+                      <TouchableOpacity 
+                        style={styles.categoryHeader}
+                        onPress={() => toggleCategory(category)}
+                      >
+                        <IconSymbol
+                          ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
+                          android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
+                          size={20}
+                          color={colors.text}
+                        />
                         <IconSymbol
                           ios_icon_name={categoryIcon.ios}
                           android_material_icon_name={categoryIcon.android}
@@ -464,10 +479,10 @@ export default function ReflectScreen() {
                         <View style={styles.categoryBadge}>
                           <Text style={styles.categoryBadgeText}>{categoryReflections.length}</Text>
                         </View>
-                      </View>
+                      </TouchableOpacity>
                     )}
                     
-                    {categoryReflections.map((reflection, index) => {
+                    {!isCollapsed && categoryReflections.map((reflection, index) => {
                       const typeText = reflection.type;
                       const outcomeText = reflection.outcome ? 
                         (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
