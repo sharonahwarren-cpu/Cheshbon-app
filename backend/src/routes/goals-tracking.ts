@@ -338,4 +338,66 @@ export function registerGoalsTrackingRoutes(app: App) {
       throw error;
     }
   });
+
+  // DELETE /api/goals/:goalId/entries/:entryId - Delete a specific success/struggle entry for a goal
+  app.fastify.delete('/api/goals/:goalId/entries/:entryId', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { goalId, entryId } = request.params as { goalId: string; entryId: string };
+
+    app.logger.info({ userId: session.user.id, goalId, entryId }, 'Deleting goal entry');
+
+    try {
+      // Check if goal exists and belongs to user
+      const goals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.id, goalId))
+        .limit(1);
+
+      if (!goals.length) {
+        app.logger.warn({ userId: session.user.id, goalId }, 'Goal not found');
+        return reply.status(404).send({ error: 'Goal not found' });
+      }
+
+      if (goals[0].userId !== session.user.id) {
+        app.logger.warn(
+          { userId: session.user.id, goalId, ownerId: goals[0].userId },
+          'Unauthorized access to goal'
+        );
+        return reply.status(403).send({ error: 'Unauthorized' });
+      }
+
+      // Check if entry exists and belongs to this goal
+      const entries = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(and(
+          eq(schema.reflections.id, entryId),
+          eq(schema.reflections.userId, session.user.id),
+          eq(schema.reflections.linkedGoalId, goalId)
+        ))
+        .limit(1);
+
+      if (!entries.length) {
+        app.logger.warn({ userId: session.user.id, goalId, entryId }, 'Entry not found or does not belong to this goal');
+        return reply.status(404).send({ error: 'Entry not found' });
+      }
+
+      // Delete the reflection entry
+      await app.db
+        .delete(schema.reflections)
+        .where(eq(schema.reflections.id, entryId));
+
+      app.logger.info({ userId: session.user.id, goalId, entryId }, 'Goal entry deleted successfully');
+      return { success: true };
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, goalId, entryId }, 'Failed to delete goal entry');
+      throw error;
+    }
+  });
 }
