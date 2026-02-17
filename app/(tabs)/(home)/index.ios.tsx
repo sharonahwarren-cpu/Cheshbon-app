@@ -1,5 +1,8 @@
 
+import { useAuth } from "@/contexts/AuthContext";
 import React, { useState, useEffect } from "react";
+import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   StyleSheet,
   View,
@@ -10,12 +13,9 @@ import {
   Modal,
   TextInput,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "@/contexts/AuthContext";
-import { useRouter, useLocalSearchParams } from "expo-router";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
-import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
+import { useRouter, useLocalSearchParams } from "expo-router";
 
 interface CurrencyBalance {
   currencyId: string;
@@ -384,18 +384,14 @@ export default function HomeScreen() {
   };
 
   const handleReflection = (goalId?: string) => {
-    console.log("Opening full reflection screen from Express", goalId ? `for goal: ${goalId}` : "");
+    console.log("Opening Add Reflection modal from Express", goalId ? `for goal: ${goalId}` : "");
     const dateString = selectedDate.toISOString().split('T')[0];
-    const params: any = { 
-      date: dateString,
-      fromExpress: 'true'
-    };
-    if (goalId) {
-      params.goalId = goalId;
-    }
     router.push({
       pathname: '/(tabs)/reflect',
-      params,
+      params: { 
+        date: dateString,
+        fromExpress: 'true'
+      },
     });
   };
 
@@ -806,7 +802,6 @@ export default function HomeScreen() {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {activeTab === 'reports' ? (
           <>
-            {/* Reports content - same as before, omitted for brevity */}
             {currencyBalances.length > 0 && (
               <>
                 <Text style={styles.sectionTitle}>Total Currency Balances</Text>
