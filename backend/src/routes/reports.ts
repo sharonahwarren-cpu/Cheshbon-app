@@ -165,7 +165,7 @@ export function registerReportsRoutes(app: App) {
 
         return {
           id: transaction.id,
-          entryDate: new Date(transaction.createdAt).toISOString().split('T')[0],
+          entryDate: transaction.createdAt,
           type: 'transaction',
           transactionType: isManualClaim ? 'claim' : isManualPay ? 'pay' : transaction.transactionType,
           amount: transaction.amount,
@@ -176,10 +176,17 @@ export function registerReportsRoutes(app: App) {
         };
       });
 
-      // Merge and sort by createdAt descending (newest first)
-      const allEntries = [...currencyReflections, ...currencyTransactionEntries].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      // Merge and sort by appropriate date field descending (newest first)
+      // For reflections: use entryDate, for transactions: use createdAt
+      const allEntries = [...currencyReflections, ...currencyTransactionEntries].sort((a, b) => {
+        const aDate = a.type === 'reflection'
+          ? new Date(a.entryDate).getTime()
+          : new Date((a as typeof currencyTransactionEntries[0]).createdAt).getTime();
+        const bDate = b.type === 'reflection'
+          ? new Date(b.entryDate).getTime()
+          : new Date((b as typeof currencyTransactionEntries[0]).createdAt).getTime();
+        return bDate - aDate;
+      });
 
       app.logger.info({ userId: session.user.id, currencyId, reflectionCount: currencyReflections.length, transactionCount: currencyTransactionEntries.length }, 'Currency reflections and transactions fetched');
       return allEntries;
