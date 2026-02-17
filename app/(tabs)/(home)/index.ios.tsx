@@ -91,6 +91,14 @@ interface ActivatedGoal {
   todaySuccessCount: number;
   todayStruggleCount: number;
   dailyEntries?: DailyEntry[];
+  successCount: number; // Total success count across all dates
+  struggleCount: number; // Total struggle count across all dates
+  rewardCurrencyId?: string;
+  rewardSuccesses?: number;
+  rewardAmount?: number;
+  consequenceCurrencyId?: string;
+  consequenceFailures?: number;
+  consequenceAmount?: number;
 }
 
 interface Currency {
@@ -134,7 +142,7 @@ export default function HomeScreen() {
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   
-  // Quick reflection modal state (1-5 step popup)
+  // Quick reflection modal state (1-4 step popup)
   const [showQuickReflectionModal, setShowQuickReflectionModal] = useState(false);
   const [quickReflectionGoalId, setQuickReflectionGoalId] = useState<string | undefined>();
   const [quickReflectionStep, setQuickReflectionStep] = useState(1);
@@ -222,7 +230,7 @@ export default function HomeScreen() {
       setBehaviorCounts(behaviorCountsData);
       setGoalProgress(goalProgressData);
 
-      console.log("Reports data loaded successfully");
+      console.log("Reports data loaded successfully with currency balances:", currencyData);
     } catch (error) {
       console.error("Error loading reports data:", error);
       throw error;
@@ -233,10 +241,16 @@ export default function HomeScreen() {
     console.log("Loading express data (activated goals) for date:", selectedDate.toISOString());
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
-      const goalsRes = await authenticatedGet(`/api/goals/activated-today?date=${dateString}`);
+      const [goalsRes, currenciesRes] = await Promise.all([
+        authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
+        authenticatedGet('/api/currencies'),
+      ]);
+      
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       
       setActivatedGoals(goalsData);
+      setCurrencies(currenciesData);
       
       // Build hierarchical category structure
       const groups: Record<string, CategoryGroup> = {};
@@ -482,6 +496,31 @@ export default function HomeScreen() {
     
     const hasDescription = goal.description && goal.description.trim().length > 0;
     
+    // Calculate "X more until currency" messages using TOTAL counts (not daily)
+    const rewardMessage = (() => {
+      if (!goal.rewardCurrencyId || !goal.rewardSuccesses || !goal.rewardAmount) return null;
+      const currency = currencies.find(c => c.id === goal.rewardCurrencyId);
+      if (!currency) return null;
+      
+      const totalSuccesses = goal.successCount || 0;
+      const remaining = goal.rewardSuccesses - (totalSuccesses % goal.rewardSuccesses);
+      const symbol = currency.symbol || currency.name;
+      
+      return `${remaining} more ${remaining === 1 ? 'success' : 'successes'} until ${goal.rewardAmount} ${symbol}`;
+    })();
+    
+    const consequenceMessage = (() => {
+      if (!goal.consequenceCurrencyId || !goal.consequenceFailures || !goal.consequenceAmount) return null;
+      const currency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+      if (!currency) return null;
+      
+      const totalStruggles = goal.struggleCount || 0;
+      const remaining = goal.consequenceFailures - (totalStruggles % goal.consequenceFailures);
+      const symbol = currency.symbol || currency.name;
+      
+      return `${remaining} more ${remaining === 1 ? 'struggle' : 'struggles'} until ${goal.consequenceAmount} ${symbol}`;
+    })();
+    
     return (
       <View key={goal.id} style={styles.goalCard}>
         <TouchableOpacity 
@@ -524,6 +563,34 @@ export default function HomeScreen() {
             />
           </View>
         </View>
+        
+        {/* Currency progress messages */}
+        {(rewardMessage || consequenceMessage) && (
+          <View style={styles.currencyProgressContainer}>
+            {rewardMessage && (
+              <View style={styles.currencyProgressRow}>
+                <IconSymbol
+                  ios_icon_name="gift.fill"
+                  android_material_icon_name="card-giftcard"
+                  size={14}
+                  color={colors.success}
+                />
+                <Text style={styles.currencyProgressText}>{rewardMessage}</Text>
+              </View>
+            )}
+            {consequenceMessage && (
+              <View style={styles.currencyProgressRow}>
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle.fill"
+                  android_material_icon_name="warning"
+                  size={14}
+                  color={colors.error}
+                />
+                <Text style={styles.currencyProgressText}>{consequenceMessage}</Text>
+              </View>
+            )}
+          </View>
+        )}
         
         {goal.dailyEntries && goal.dailyEntries.length > 0 && (
           <View style={styles.entriesContainer}>
@@ -1607,6 +1674,21 @@ const styles = StyleSheet.create({
   tallyCount: {
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  currencyProgressContainer: {
+    marginTop: 8,
+    marginBottom: 12,
+    gap: 6,
+  },
+  currencyProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  currencyProgressText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
   entriesContainer: {
     flexDirection: 'row',
