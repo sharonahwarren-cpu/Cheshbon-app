@@ -40,7 +40,7 @@ export function registerReportsRoutes(app: App) {
         .from(schema.goalCurrencyBalances)
         .where(eq(schema.goalCurrencyBalances.userId, session.user.id));
 
-      // Calculate balances for each currency from currency_transactions
+      // Calculate balances for each currency from both currency_transactions and goal_currency_balances
       const balances = userCurrencies.map(currency => {
         let totalBalance = 0;
         const transactionIds: string[] = [];
@@ -50,6 +50,13 @@ export function registerReportsRoutes(app: App) {
           if (transaction.currencyId === currency.id) {
             totalBalance += transaction.amount;
             transactionIds.push(transaction.id);
+          }
+        }
+
+        // ALSO sum all goal_currency_balances for this currency
+        for (const goalBalance of goalBalances) {
+          if (goalBalance.currencyId === currency.id) {
+            totalBalance += goalBalance.balance;
           }
         }
 

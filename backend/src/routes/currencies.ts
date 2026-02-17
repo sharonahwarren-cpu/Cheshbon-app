@@ -31,6 +31,46 @@ export function registerCurrenciesRoutes(app: App) {
     }
   });
 
+  // GET /api/currencies/:id - Get a single currency by ID
+  app.fastify.get('/api/currencies/:id', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { id } = request.params as { id: string };
+
+    app.logger.info({ userId: session.user.id, currencyId: id }, 'Fetching currency');
+
+    try {
+      const currencies = await app.db
+        .select()
+        .from(schema.currencies)
+        .where(eq(schema.currencies.id, id))
+        .limit(1);
+
+      if (!currencies.length) {
+        app.logger.warn({ userId: session.user.id, currencyId: id }, 'Currency not found');
+        return reply.status(404).send({ error: 'Currency not found' });
+      }
+
+      if (currencies[0].userId !== session.user.id) {
+        app.logger.warn(
+          { userId: session.user.id, currencyId: id, ownerId: currencies[0].userId },
+          'Unauthorized access to currency'
+        );
+        return reply.status(403).send({ error: 'Unauthorized' });
+      }
+
+      app.logger.info({ userId: session.user.id, currencyId: id }, 'Currency retrieved successfully');
+      return currencies[0];
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, currencyId: id }, 'Failed to fetch currency');
+      throw error;
+    }
+  });
+
   // POST /api/currencies - Create a new currency
   app.fastify.post('/api/currencies', async (
     request: FastifyRequest,
