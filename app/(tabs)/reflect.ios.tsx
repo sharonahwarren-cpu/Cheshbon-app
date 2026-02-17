@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -79,8 +79,20 @@ interface Goal {
   behaviorCategories?: string[];
   rewardCurrencyId?: string;
   rewardAmount?: number;
+  rewardSuccesses?: number;
   consequenceCurrencyId?: string;
   consequenceAmount?: number;
+  consequenceFailures?: number;
+  successCount?: number;
+  struggleCount?: number;
+}
+
+interface Currency {
+  id: string;
+  name: string;
+  symbol?: string;
+  onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
+  onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
 
 interface UserPreferences {
@@ -102,6 +114,7 @@ export default function ReflectScreen() {
   const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
 
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
@@ -121,10 +134,11 @@ export default function ReflectScreen() {
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
       
-      const [journalRes, reflectionsRes, goalsRes, prefsRes, gainsLossesRes, strategiesRes] = await Promise.all([
+      const [journalRes, reflectionsRes, goalsRes, currenciesRes, prefsRes, gainsLossesRes, strategiesRes] = await Promise.all([
         authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
         authenticatedGet('/api/goals'),
+        authenticatedGet('/api/currencies'),
         authenticatedGet('/api/user-preferences'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
@@ -133,6 +147,7 @@ export default function ReflectScreen() {
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
@@ -141,6 +156,7 @@ export default function ReflectScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       setGoals(goalsData);
+      setCurrencies(currenciesData);
       setUserPreferences(prefsData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
@@ -350,8 +366,8 @@ export default function ReflectScreen() {
               placeholderTextColor={colors.textSecondary}
               multiline
               textAlignVertical="top"
-              returnKeyType="done"
-              blurOnSubmit={true}
+              returnKeyType="default"
+              blurOnSubmit={false}
             />
             <TouchableOpacity
               style={styles.saveButton}
@@ -627,6 +643,7 @@ export default function ReflectScreen() {
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
           goals={goals}
+          currencies={currencies}
           userPreferences={userPreferences}
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
@@ -683,6 +700,7 @@ interface AddReflectionModalProps {
   onSave: (reflection: Reflection) => void;
   selectedDate: Date;
   goals: Goal[];
+  currencies: Currency[];
   userPreferences: UserPreferences;
   editingReflection: Reflection | null;
   gainsLosses: GainLoss[];
@@ -695,12 +713,16 @@ function AddReflectionModal({
   onSave,
   selectedDate,
   goals,
+  currencies,
   userPreferences,
   editingReflection,
   gainsLosses,
   strategies,
 }: AddReflectionModalProps) {
   const router = useRouter();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const descriptionInputRef = useRef<TextInput>(null);
+  
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
   const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Proactive');
@@ -911,6 +933,58 @@ function AddReflectionModal({
     ));
   };
 
+  const getCurrencyFeedback = () => {
+    if (!selectedGoal || !outcome) return null;
+
+    const currency = outcome === 'success' 
+      ? currencies.find(c => c.id === selectedGoal.rewardCurrencyId)
+      : currencies.find(c => c.id === selectedGoal.consequenceCurrencyId);
+
+    if (!currency) return null;
+
+    if (outcome === 'success') {
+      const currentSuccesses = selectedGoal.successCount || 0;
+      const requiredSuccesses = selectedGoal.rewardSuccesses || 0;
+      const rewardAmount = selectedGoal.rewardAmount || 0;
+      const currencySymbol = currency.symbol || '';
+
+      const successesNeeded = requiredSuccesses - currentSuccesses - 1;
+
+      if (successesNeeded <= 0) {
+        return {
+          type: 'success',
+          message: `Earned ${rewardAmount} ${currencySymbol}`,
+        };
+      } else {
+        return {
+          type: 'success',
+          message: `${successesNeeded} more ${successesNeeded === 1 ? 'success' : 'successes'} until ${rewardAmount} ${currencySymbol}`,
+        };
+      }
+    } else {
+      const currentStruggles = selectedGoal.struggleCount || 0;
+      const requiredStruggles = selectedGoal.consequenceFailures || 0;
+      const consequenceAmount = selectedGoal.consequenceAmount || 0;
+      const currencySymbol = currency.symbol || '';
+
+      const strugglesNeeded = requiredStruggles - currentStruggles - 1;
+
+      if (strugglesNeeded <= 0) {
+        return {
+          type: 'struggled',
+          message: `Incurred ${consequenceAmount} ${currencySymbol}`,
+        };
+      } else {
+        return {
+          type: 'struggled',
+          message: `${strugglesNeeded} more ${strugglesNeeded === 1 ? 'struggle' : 'struggles'} until ${consequenceAmount} ${currencySymbol}`,
+        };
+      }
+    }
+  };
+
+  const currencyFeedback = getCurrencyFeedback();
+
   const modalTitle = editingReflection ? 'Edit Reflection' : 'Add Reflection';
   const totalSteps = 5;
   const progressPercent = (step / totalSteps) * 100;
@@ -949,6 +1023,7 @@ function AddReflectionModal({
           </View>
 
           <ScrollView 
+            ref={scrollViewRef}
             style={styles.modalBody} 
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -1031,6 +1106,7 @@ function AddReflectionModal({
                     <Text style={styles.label}>Description</Text>
                   </View>
                   <TextInput
+                    ref={descriptionInputRef}
                     style={[styles.input, styles.textArea]}
                     value={description}
                     onChangeText={setDescription}
@@ -1038,6 +1114,13 @@ function AddReflectionModal({
                     placeholderTextColor={colors.textSecondary}
                     multiline
                     numberOfLines={4}
+                    returnKeyType="default"
+                    blurOnSubmit={false}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
                   />
                 </View>
               </React.Fragment>
@@ -1145,10 +1228,25 @@ function AddReflectionModal({
                         return (
                           <React.Fragment key={index}>
                             <TouchableOpacity
-                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              style={[styles.outcomeButton, isSelected && styles.outcomeButtonSelected]}
                               onPress={() => setOutcome(o)}
                             >
-                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                              {o === 'success' ? (
+                                <IconSymbol
+                                  ios_icon_name="checkmark.circle.fill"
+                                  android_material_icon_name="check-circle"
+                                  size={20}
+                                  color={isSelected ? colors.background : colors.success}
+                                />
+                              ) : (
+                                <IconSymbol
+                                  ios_icon_name="xmark.circle.fill"
+                                  android_material_icon_name="cancel"
+                                  size={20}
+                                  color={isSelected ? colors.background : colors.error}
+                                />
+                              )}
+                              <Text style={[styles.outcomeButtonText, isSelected && styles.outcomeButtonTextSelected]}>
                                 {displayText}
                               </Text>
                             </TouchableOpacity>
@@ -1156,6 +1254,21 @@ function AddReflectionModal({
                         );
                       })}
                     </View>
+                  </View>
+                )}
+
+                {currencyFeedback && (
+                  <View style={[
+                    styles.currencyFeedbackBox,
+                    currencyFeedback.type === 'success' ? styles.currencyFeedbackSuccess : styles.currencyFeedbackStruggled
+                  ]}>
+                    <IconSymbol
+                      ios_icon_name={currencyFeedback.type === 'success' ? "checkmark.circle.fill" : "xmark.circle.fill"}
+                      android_material_icon_name={currencyFeedback.type === 'success' ? "check-circle" : "cancel"}
+                      size={20}
+                      color={colors.background}
+                    />
+                    <Text style={styles.currencyFeedbackText}>{currencyFeedback.message}</Text>
                   </View>
                 )}
               </React.Fragment>
@@ -1370,6 +1483,8 @@ function AddReflectionModal({
                     placeholderTextColor={colors.textSecondary}
                     multiline
                     numberOfLines={3}
+                    returnKeyType="default"
+                    blurOnSubmit={false}
                   />
                 </View>
               </React.Fragment>
@@ -2216,6 +2331,51 @@ const styles = StyleSheet.create({
   optionButtonTextSelected: {
     color: colors.background,
     fontWeight: '600',
+  },
+  outcomeButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  outcomeButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  outcomeButtonText: {
+    fontSize: 14,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  outcomeButtonTextSelected: {
+    color: colors.background,
+    fontWeight: '600',
+  },
+  currencyFeedbackBox: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  currencyFeedbackSuccess: {
+    backgroundColor: colors.success,
+  },
+  currencyFeedbackStruggled: {
+    backgroundColor: colors.error,
+  },
+  currencyFeedbackText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.background,
+    flex: 1,
   },
   goalPickerButton: {
     backgroundColor: colors.card,
