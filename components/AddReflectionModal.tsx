@@ -152,7 +152,6 @@ export function AddReflectionModal({
   const [newItemName, setNewItemName] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [descriptionInputY, setDescriptionInputY] = useState(0);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
@@ -177,24 +176,42 @@ export function AddReflectionModal({
     };
   }, []);
 
-  // Auto-scroll to keep Description input visible when focused
+  // Auto-scroll to keep Description input visible when focused (Step 1)
   const handleDescriptionFocus = () => {
-    console.log('Description input focused');
+    console.log('Description input focused on Step 1');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
       setTimeout(() => {
-        // Scroll to a fixed position that keeps the input visible
-        scrollViewRef.current?.scrollTo({ y: 200, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 150, animated: true });
       }, 100);
     }
   };
 
-  // Keep cursor visible as user types in Description
+  // Keep cursor visible as user types in Description (Step 1)
   const handleDescriptionContentSizeChange = () => {
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
-      console.log('Description content size changed, keyboard height:', keyboardHeight);
+      console.log('Description content size changed, scrolling to keep visible');
       setTimeout(() => {
-        // Scroll down a bit more to keep the growing text visible
-        scrollViewRef.current?.scrollTo({ y: 250, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 200, animated: true });
+      }, 50);
+    }
+  };
+
+  // Auto-scroll to keep Additional Thoughts input visible when focused (Step 3)
+  const handleAdditionalThoughtsFocus = () => {
+    console.log('Additional thoughts input focused on Step 3');
+    if (Platform.OS === 'ios' && scrollViewRef.current) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  };
+
+  // Keep cursor visible as user types in Additional Thoughts (Step 3)
+  const handleAdditionalThoughtsContentSizeChange = () => {
+    if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
+      console.log('Additional thoughts content size changed, scrolling to keep visible');
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 50);
     }
   };
@@ -444,6 +461,12 @@ export function AddReflectionModal({
   const totalSteps = 4;
   const progressPercent = (step / totalSteps) * 100;
 
+  // Calculate bottom padding for ScrollView to ensure content is above the Next button
+  const NEXT_BUTTON_HEIGHT = 70;
+  const scrollViewBottomPadding = Platform.OS === 'ios' && keyboardHeight > 0 
+    ? keyboardHeight + NEXT_BUTTON_HEIGHT + 20
+    : NEXT_BUTTON_HEIGHT + 20;
+
   return (
     <Modal
       visible={visible}
@@ -482,7 +505,7 @@ export function AddReflectionModal({
             style={styles.modalBody} 
             contentContainerStyle={[
               styles.modalBodyContent,
-              Platform.OS === 'ios' && keyboardHeight > 0 && { paddingBottom: keyboardHeight + 40 }
+              { paddingBottom: scrollViewBottomPadding }
             ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -956,6 +979,8 @@ export function AddReflectionModal({
                     multiline
                     textAlignVertical="top"
                     blurOnSubmit={false}
+                    onFocus={handleAdditionalThoughtsFocus}
+                    onContentSizeChange={handleAdditionalThoughtsContentSizeChange}
                   />
                 </View>
               </React.Fragment>
@@ -1373,7 +1398,6 @@ const styles = StyleSheet.create({
   },
   modalBodyContent: {
     padding: 16,
-    paddingBottom: 120,
   },
   modalFooter: {
     padding: 16,
