@@ -512,6 +512,14 @@ export default function SettingsScreen() {
       await authenticatedPost(`/api/life-areas/${lifeAreaId}/goals`, { goalId });
       showSuccess('Goal linked to life area successfully');
       await loadData();
+      
+      // Refresh the selected life area data
+      if (selectedLifeArea && selectedLifeArea.id === lifeAreaId) {
+        const updatedLifeArea = lifeAreas.find(la => la.id === lifeAreaId);
+        if (updatedLifeArea) {
+          setSelectedLifeArea(updatedLifeArea);
+        }
+      }
     } catch (error) {
       console.error('Error linking goal to life area:', error);
       showError('Failed to link goal to life area');
@@ -526,6 +534,14 @@ export default function SettingsScreen() {
       await authenticatedDelete(`/api/life-areas/${lifeAreaId}/goals/${goalId}`);
       showSuccess('Goal unlinked from life area successfully');
       await loadData();
+      
+      // Refresh the selected life area data
+      if (selectedLifeArea && selectedLifeArea.id === lifeAreaId) {
+        const updatedLifeArea = lifeAreas.find(la => la.id === lifeAreaId);
+        if (updatedLifeArea) {
+          setSelectedLifeArea(updatedLifeArea);
+        }
+      }
     } catch (error) {
       console.error('Error unlinking goal from life area:', error);
       showError('Failed to unlink goal from life area');
@@ -536,16 +552,17 @@ export default function SettingsScreen() {
 
   const handleReorderLifeAreas = async (reorderedAreas: LifeArea[]) => {
     try {
-      setLoading(true);
+      // Optimistic update
+      setLifeAreas(reorderedAreas);
+      
       const lifeAreaIds = reorderedAreas.map(area => area.id);
       await authenticatedPut('/api/life-areas/reorder', { lifeAreaIds });
-      showSuccess('Life areas reordered successfully');
-      await loadData();
+      console.log('[Settings] Life areas reordered successfully');
     } catch (error) {
       console.error('Error reordering life areas:', error);
       showError('Failed to reorder life areas');
-    } finally {
-      setLoading(false);
+      // Reload data to revert optimistic update
+      await loadData();
     }
   };
 
@@ -925,7 +942,7 @@ export default function SettingsScreen() {
             <View style={styles.lifeAreaCompactContent}>
               <View style={styles.lifeAreaCompactLeft}>
                 <IconSymbol
-                  ios_icon_name="drag-handle"
+                  ios_icon_name="line.3.horizontal"
                   android_material_icon_name="drag-handle"
                   size={20}
                   color={colors.textSecondary}
@@ -1689,7 +1706,7 @@ export default function SettingsScreen() {
                             None (Top Level)
                           </Text>
                         </TouchableOpacity>
-                        {lifeAreas.map((area, index) => {
+                        {flattenLifeAreas(lifeAreas).map((area, index) => {
                           const isSelected = formData.parentId === area.id;
                           const isCurrentItem = editingItem && editingItem.id === area.id;
                           
@@ -1724,6 +1741,9 @@ export default function SettingsScreen() {
                       onChangeText={(value) => setFormData({ ...formData, icon: value })}
                       placeholder="e.g., 📚, 🏃‍♀️, ✨"
                       placeholderTextColor={colors.textSecondary}
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      keyboardType="default"
                     />
                     {formData.icon && (
                       <View style={styles.iconPreviewContainer}>
@@ -1801,6 +1821,8 @@ export default function SettingsScreen() {
                           placeholder="#FF5733"
                           placeholderTextColor={colors.textSecondary}
                           autoCapitalize="characters"
+                          autoCorrect={false}
+                          keyboardType="default"
                         />
                         <TouchableOpacity
                           style={styles.addCustomColorButton}
@@ -1857,8 +1879,21 @@ export default function SettingsScreen() {
                           
                           return (
                             <View key={idx} style={styles.linkedGoalItem}>
-                              <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
-                              <Text style={[styles.linkedGoalStatus, { color: statusColor }]}>{statusText}</Text>
+                              <View style={styles.linkedGoalInfo}>
+                                <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
+                                <Text style={[styles.linkedGoalStatus, { color: statusColor }]}>{statusText}</Text>
+                              </View>
+                              <TouchableOpacity
+                                onPress={() => handleUnlinkGoalFromLifeArea(goal.id, editingItem.id)}
+                                style={styles.unlinkButton}
+                              >
+                                <IconSymbol
+                                  ios_icon_name="xmark.circle.fill"
+                                  android_material_icon_name="cancel"
+                                  size={20}
+                                  color={colors.error}
+                                />
+                              </TouchableOpacity>
                             </View>
                           );
                         })}
@@ -2275,8 +2310,8 @@ export default function SettingsScreen() {
                           style={styles.iconButton}
                         >
                           <IconSymbol
-                            ios_icon_name="link.slash"
-                            android_material_icon_name="link-off"
+                            ios_icon_name="xmark.circle.fill"
+                            android_material_icon_name="cancel"
                             size={20}
                             color={colors.error}
                           />
@@ -2324,7 +2359,6 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={styles.createGoalButton}
                 onPress={() => {
-                  setShowGoalManagementModal(false);
                   setShowCreateGoalModal(true);
                 }}
               >
@@ -2361,7 +2395,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowCreateGoalModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.topModal]}>
+          <View style={[styles.modalContent, styles.topModal, styles.createGoalModalContent]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create Goal</Text>
               <TouchableOpacity onPress={() => setShowCreateGoalModal(false)}>
@@ -2381,6 +2415,7 @@ export default function SettingsScreen() {
                 style={styles.createGoalButton}
                 onPress={() => {
                   setShowCreateGoalModal(false);
+                  setShowGoalManagementModal(false);
                   setShowModal(false);
                   router.push(`/create-goal?lifeAreaId=${selectedLifeArea?.id}`);
                 }}
@@ -2870,6 +2905,9 @@ const styles = StyleSheet.create({
   topModal: {
     zIndex: 1000,
   },
+  createGoalModalContent: {
+    zIndex: 2000,
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3300,13 +3338,20 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
+  linkedGoalInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
   linkedGoalTitle: {
     fontSize: 14,
     color: colors.text,
-    flex: 1,
+    marginBottom: 2,
   },
   linkedGoalStatus: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  unlinkButton: {
+    padding: 4,
   },
 });
