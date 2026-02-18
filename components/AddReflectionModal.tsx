@@ -294,6 +294,65 @@ export function AddReflectionModal({
   const categoriesEnabled = userPreferences?.reflectionCategoriesEnabled ?? false;
   const availableCategories = userPreferences?.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
+  // Calculate currency effect based on goal and outcome
+  const getCurrencyFeedback = () => {
+    if (!selectedGoal || !outcome) return null;
+
+    const currency = outcome === 'success' 
+      ? currencies.find(c => c.id === selectedGoal.rewardCurrencyId)
+      : currencies.find(c => c.id === selectedGoal.consequenceCurrencyId);
+
+    if (!currency) return null;
+
+    if (outcome === 'success') {
+      if (!selectedGoal.rewardSuccesses || !selectedGoal.rewardAmount) return null;
+      
+      const currentSuccesses = (selectedGoal as any).successCount || 0;
+      const requiredSuccesses = selectedGoal.rewardSuccesses;
+      const rewardAmount = selectedGoal.rewardAmount;
+      const currencySymbol = currency.symbol || '';
+
+      const successesAfterThis = currentSuccesses + 1;
+      const successesUntilNextReward = requiredSuccesses - (successesAfterThis % requiredSuccesses);
+
+      if (successesUntilNextReward === requiredSuccesses || successesAfterThis % requiredSuccesses === 0) {
+        return {
+          type: 'success',
+          message: `Earned ${rewardAmount} ${currencySymbol}!`,
+        };
+      } else {
+        return {
+          type: 'success',
+          message: `${successesUntilNextReward} more ${successesUntilNextReward === 1 ? 'success' : 'successes'} until ${rewardAmount} ${currencySymbol}`,
+        };
+      }
+    } else {
+      if (!selectedGoal.consequenceFailures || !selectedGoal.consequenceAmount) return null;
+      
+      const currentStruggles = (selectedGoal as any).struggleCount || 0;
+      const requiredStruggles = selectedGoal.consequenceFailures;
+      const consequenceAmount = selectedGoal.consequenceAmount;
+      const currencySymbol = currency.symbol || '';
+
+      const strugglesAfterThis = currentStruggles + 1;
+      const strugglesUntilNextConsequence = requiredStruggles - (strugglesAfterThis % requiredStruggles);
+
+      if (strugglesUntilNextConsequence === requiredStruggles || strugglesAfterThis % requiredStruggles === 0) {
+        return {
+          type: 'struggled',
+          message: `Incurred ${consequenceAmount} ${currencySymbol}!`,
+        };
+      } else {
+        return {
+          type: 'struggled',
+          message: `${strugglesUntilNextConsequence} more ${strugglesUntilNextConsequence === 1 ? 'struggle' : 'struggles'} until ${consequenceAmount} ${currencySymbol}`,
+        };
+      }
+    }
+  };
+
+  const currencyFeedback = getCurrencyFeedback();
+
   return (
     <Modal
       visible={visible}
@@ -485,6 +544,21 @@ export function AddReflectionModal({
                       </Text>
                     </TouchableOpacity>
                   </View>
+                  
+                  {currencyFeedback && (
+                    <View style={[
+                      styles.currencyFeedbackBox,
+                      currencyFeedback.type === 'success' ? styles.currencyFeedbackSuccess : styles.currencyFeedbackStruggled
+                    ]}>
+                      <IconSymbol
+                        ios_icon_name={currencyFeedback.type === 'success' ? "gift.fill" : "exclamationmark.triangle.fill"}
+                        android_material_icon_name={currencyFeedback.type === 'success' ? "card-giftcard" : "warning"}
+                        size={20}
+                        color={colors.background}
+                      />
+                      <Text style={styles.currencyFeedbackText}>{currencyFeedback.message}</Text>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -1362,5 +1436,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.background,
+  },
+  currencyFeedbackBox: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  currencyFeedbackSuccess: {
+    backgroundColor: colors.success,
+  },
+  currencyFeedbackStruggled: {
+    backgroundColor: colors.error,
+  },
+  currencyFeedbackText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.background,
+    flex: 1,
   },
 });
