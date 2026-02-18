@@ -17,8 +17,11 @@ export const lifeAreas = pgTable('life_areas', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
-  parentId: uuid('parent_id').references(() => lifeAreas.id, { onDelete: 'cascade' }),
-  level: integer('level').notNull(),
+  parentId: uuid('parent_id').references(() => lifeAreas.id, { onDelete: 'set null' }),
+  icon: text('icon'),
+  color: text('color'),
+  displayOrder: integer('display_order').default(0).notNull(),
+  showProgress: boolean('show_progress').default(true).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
