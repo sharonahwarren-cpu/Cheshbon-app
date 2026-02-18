@@ -104,6 +104,7 @@ interface UserPreferences {
 export default function ReflectScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string; reflectionId?: string; openModal?: string; goalId?: string }>();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -322,6 +323,12 @@ export default function ReflectScreen() {
     }));
   };
 
+  const handleJournalFocus = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }, 100);
+  };
+
   const dateDisplay = formatDate(selectedDate);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
@@ -350,7 +357,11 @@ export default function ReflectScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.container}>
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reflect</Text>
           <TouchableOpacity onPress={() => router.push('/search-journals')}>
@@ -402,7 +413,13 @@ export default function ReflectScreen() {
           />
         )}
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <IconSymbol
@@ -424,6 +441,7 @@ export default function ReflectScreen() {
               returnKeyType="default"
               blurOnSubmit={false}
               autoFocus={false}
+              onFocus={handleJournalFocus}
             />
             <TouchableOpacity
               style={styles.saveButton}
@@ -700,7 +718,7 @@ export default function ReflectScreen() {
             )}
           </View>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
 
       {showAddReflectionModal && (
         <AddReflectionModal
@@ -848,7 +866,7 @@ const styles = StyleSheet.create({
     padding: 20,
     fontSize: 16,
     color: colors.text,
-    minHeight: 150,
+    height: 150,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: colors.border,

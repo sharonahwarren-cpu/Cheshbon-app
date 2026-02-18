@@ -336,6 +336,12 @@ export default function ReflectScreen() {
     }));
   };
 
+  const handleJournalFocus = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }, 100);
+  };
+
   const dateDisplay = formatDate(selectedDate);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
@@ -447,11 +453,7 @@ export default function ReflectScreen() {
               multiline
               textAlignVertical="top"
               blurOnSubmit={false}
-              onFocus={() => {
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-                }, 100);
-              }}
+              onFocus={handleJournalFocus}
             />
             <TouchableOpacity
               style={styles.saveButton}
@@ -882,8 +884,7 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     color: colors.text,
-    minHeight: 120,
-    maxHeight: 200,
+    height: 150,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: colors.border,
