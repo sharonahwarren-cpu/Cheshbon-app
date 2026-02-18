@@ -5,7 +5,6 @@ import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/util
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
-import { AddReflectionModal } from "@/components/AddReflectionModal";
 import {
   StyleSheet,
   View,
@@ -126,30 +125,6 @@ interface Currency {
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
 
-interface GainLoss {
-  id: string;
-  name: string;
-  type: 'Gain' | 'Loss';
-  category?: string;
-  subCategory?: string;
-}
-
-interface Strategy {
-  id: string;
-  name: string;
-  description?: string;
-  category?: string;
-  successCount: number;
-  failureCount: number;
-  timesUsed: number;
-  successRate: number;
-}
-
-interface UserPreferences {
-  reflectionCategoriesEnabled?: boolean;
-  reflectionCategories?: string[];
-}
-
 export default function HomeScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -187,13 +162,6 @@ export default function HomeScreen() {
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
-  
-  const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
-  const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
-  const [goals, setGoals] = useState<any[]>([]);
-  const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
   useEffect(() => {
     console.log("HomeScreen mounted");
@@ -229,43 +197,11 @@ export default function HomeScreen() {
       } else {
         await loadExpressData();
       }
-      await loadModalData();
     } catch (error: any) {
       console.error("Error loading data:", error);
       showError(error.message || "Failed to load data");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadModalData = async () => {
-    console.log("Loading data for AddReflectionModal");
-    try {
-      const goalsRes = await authenticatedGet('/api/goals');
-      const gainsLossesRes = await authenticatedGet('/api/gains-losses');
-      const strategiesRes = await authenticatedGet('/api/strategies');
-      
-      let preferencesData = {};
-      try {
-        const preferencesRes = await authenticatedGet('/api/preferences');
-        preferencesData = preferencesRes?.data || preferencesRes || {};
-      } catch (prefError) {
-        console.log("Preferences endpoint not available, using defaults");
-        preferencesData = {};
-      }
-
-      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
-      const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
-      const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
-
-      setGoals(goalsData);
-      setGainsLosses(gainsLossesData);
-      setStrategies(strategiesData);
-      setUserPreferences(preferencesData);
-      
-      console.log("Modal data loaded successfully");
-    } catch (error) {
-      console.error("Error loading modal data:", error);
     }
   };
 
@@ -447,17 +383,16 @@ export default function HomeScreen() {
   };
 
   const openAddReflectionModal = (goalId?: string) => {
-    console.log("Opening Add Reflection modal directly in Express screen", goalId ? `for goal: ${goalId}` : "");
-    setPrefilledGoalId(goalId);
-    setShowAddReflectionModal(true);
-  };
-
-  const handleReflectionSaved = async () => {
-    console.log("Reflection saved, closing modal and refreshing Express data");
-    setShowAddReflectionModal(false);
-    setPrefilledGoalId(undefined);
-    showSuccess("Reflection saved successfully!");
-    await loadExpressData();
+    console.log("Opening Add Reflection modal directly from Express", goalId ? `for goal: ${goalId}` : "");
+    const dateString = selectedDate.toISOString().split('T')[0];
+    router.push({
+      pathname: '/(tabs)/reflect',
+      params: { 
+        date: dateString,
+        openModal: 'true',
+        ...(goalId && { goalId }),
+      },
+    });
   };
 
   const toggleCategory = (categoryKey: string) => {
@@ -1308,24 +1243,6 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
-
-      <AddReflectionModal
-        visible={showAddReflectionModal}
-        onClose={() => {
-          console.log("Closing AddReflectionModal from Express screen");
-          setShowAddReflectionModal(false);
-          setPrefilledGoalId(undefined);
-        }}
-        onSave={handleReflectionSaved}
-        selectedDate={selectedDate}
-        goals={goals}
-        currencies={currencies}
-        userPreferences={userPreferences}
-        editingReflection={null}
-        gainsLosses={gainsLosses}
-        strategies={strategies}
-        prefilledGoalId={prefilledGoalId}
-      />
 
       <Modal
         visible={showCurrencyModal}
