@@ -572,7 +572,6 @@ export default function HomeScreen() {
 
     let totalTally = 0;
     let currencyUsed: Currency | null = null;
-    let isRewardType = true;
 
     // Calculate reward currency impact
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
@@ -588,9 +587,7 @@ export default function HomeScreen() {
             totalTally -= rewardAmount;
           }
           
-          // Reward currency is a reward type (gift icon)
           currencyUsed = rewardCurrency;
-          isRewardType = true;
         }
       }
     }
@@ -609,9 +606,7 @@ export default function HomeScreen() {
             totalTally -= consequenceAmount;
           }
           
-          // Consequence currency is a consequence type (wallet icon)
           currencyUsed = consequenceCurrency;
-          isRewardType = false;
         }
       }
     }
@@ -627,10 +622,8 @@ export default function HomeScreen() {
       
       if (hasRewardImpact && !hasConsequenceImpact) {
         currencyUsed = rewardCurrency || null;
-        isRewardType = true;
       } else if (hasConsequenceImpact && !hasRewardImpact) {
         currencyUsed = consequenceCurrency || null;
-        isRewardType = false;
       } else if (hasRewardImpact && hasConsequenceImpact) {
         // Both have impact - show the currency symbol of the one with larger absolute impact
         const rewardImpact = Math.abs(Math.floor(successCount / (goal.rewardSuccesses || 1)) * (goal.rewardAmount || 0));
@@ -638,17 +631,14 @@ export default function HomeScreen() {
         
         if (consequenceImpact > rewardImpact) {
           currencyUsed = consequenceCurrency || null;
-          isRewardType = false;
         } else {
           currencyUsed = rewardCurrency || null;
-          isRewardType = true;
         }
       }
     }
     
     return {
       tally: Math.abs(totalTally),
-      isReward: isRewardType,
       hasValue: totalTally !== 0,
       currencySymbol: currencyUsed?.symbol || '',
     };
@@ -675,9 +665,6 @@ export default function HomeScreen() {
     
     const currencyTally = calculateDailyCurrencyTally(goal);
     const tallyText = currencyTally.tally.toString();
-    const tallyIcon = currencyTally.isReward ? 'card-giftcard' : 'account-balance-wallet';
-    const tallyIosIcon = currencyTally.isReward ? 'gift.fill' : 'creditcard.fill';
-    const tallyColor = currencyTally.isReward ? colors.success : colors.error;
     const currencySymbolText = currencyTally.currencySymbol;
     
     return (
@@ -705,18 +692,12 @@ export default function HomeScreen() {
           
           {currencyTally.hasValue && (
             <View style={styles.currencyTallyBadge}>
-              <IconSymbol
-                ios_icon_name={tallyIosIcon}
-                android_material_icon_name={tallyIcon}
-                size={14}
-                color={tallyColor}
-              />
               {currencySymbolText && (
-                <Text style={[styles.currencySymbolText, { color: tallyColor }]}>
+                <Text style={styles.currencySymbolText}>
                   {currencySymbolText}
                 </Text>
               )}
-              <Text style={[styles.currencyTallyText, { color: tallyColor }]}>
+              <Text style={styles.currencyTallyText}>
                 {tallyText}
               </Text>
             </View>
@@ -1892,12 +1873,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   currencySymbolText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
+    color: colors.text,
   },
   currencyTallyText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
+    color: colors.text,
   },
   tallyRow: {
     flexDirection: 'row',

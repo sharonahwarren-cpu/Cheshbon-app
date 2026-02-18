@@ -564,7 +564,6 @@ export default function HomeScreen() {
 
     let totalTally = 0;
     let currencyUsed: Currency | null = null;
-    let isRewardType = true;
 
     // Calculate reward currency impact
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
@@ -580,9 +579,7 @@ export default function HomeScreen() {
             totalTally -= rewardAmount;
           }
           
-          // Reward currency is a reward type (gift icon)
           currencyUsed = rewardCurrency;
-          isRewardType = true;
         }
       }
     }
@@ -601,9 +598,7 @@ export default function HomeScreen() {
             totalTally -= consequenceAmount;
           }
           
-          // Consequence currency is a consequence type (wallet icon)
           currencyUsed = consequenceCurrency;
-          isRewardType = false;
         }
       }
     }
@@ -619,10 +614,8 @@ export default function HomeScreen() {
       
       if (hasRewardImpact && !hasConsequenceImpact) {
         currencyUsed = rewardCurrency || null;
-        isRewardType = true;
       } else if (hasConsequenceImpact && !hasRewardImpact) {
         currencyUsed = consequenceCurrency || null;
-        isRewardType = false;
       } else if (hasRewardImpact && hasConsequenceImpact) {
         // Both have impact - show the currency symbol of the one with larger absolute impact
         const rewardImpact = Math.abs(Math.floor(successCount / (goal.rewardSuccesses || 1)) * (goal.rewardAmount || 0));
@@ -630,17 +623,14 @@ export default function HomeScreen() {
         
         if (consequenceImpact > rewardImpact) {
           currencyUsed = consequenceCurrency || null;
-          isRewardType = false;
         } else {
           currencyUsed = rewardCurrency || null;
-          isRewardType = true;
         }
       }
     }
     
     return {
       tally: Math.abs(totalTally),
-      isReward: isRewardType,
       hasValue: totalTally !== 0,
       currencySymbol: currencyUsed?.symbol || '',
     };
@@ -667,9 +657,6 @@ export default function HomeScreen() {
     
     const currencyTally = calculateDailyCurrencyTally(goal);
     const tallyText = currencyTally.tally.toString();
-    const tallyIcon = currencyTally.isReward ? 'card-giftcard' : 'account-balance-wallet';
-    const tallyIosIcon = currencyTally.isReward ? 'gift.fill' : 'creditcard.fill';
-    const tallyColor = currencyTally.isReward ? colors.success : colors.error;
     const currencySymbolText = currencyTally.currencySymbol;
     
     return (
@@ -697,18 +684,12 @@ export default function HomeScreen() {
           
           {currencyTally.hasValue && (
             <View style={styles.currencyTallyBadge}>
-              <IconSymbol
-                ios_icon_name={tallyIosIcon}
-                android_material_icon_name={tallyIcon}
-                size={14}
-                color={tallyColor}
-              />
               {currencySymbolText && (
-                <Text style={[styles.currencySymbolText, { color: tallyColor }]}>
+                <Text style={styles.currencySymbolText}>
                   {currencySymbolText}
                 </Text>
               )}
-              <Text style={[styles.currencyTallyText, { color: tallyColor }]}>
+              <Text style={styles.currencyTallyText}>
                 {tallyText}
               </Text>
             </View>
@@ -980,9 +961,18 @@ export default function HomeScreen() {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {activeTab === 'reports' ? (
-          <>
-            {/* Reports content - keeping existing code */}
-          </>
+          <View style={styles.emptyState}>
+            <IconSymbol
+              ios_icon_name="chart.bar"
+              android_material_icon_name="assessment"
+              size={64}
+              color={colors.muted}
+            />
+            <Text style={styles.emptyStateTitle}>Reports Coming Soon</Text>
+            <Text style={styles.emptyStateText}>
+              View detailed reports in Settings
+            </Text>
+          </View>
         ) : (
           <>
             {Object.keys(categoryGroups).length === 0 ? (
@@ -1256,12 +1246,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   currencySymbolText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
+    color: colors.text,
   },
   currencyTallyText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
+    color: colors.text,
   },
   tallyRow: {
     flexDirection: 'row',
@@ -1384,145 +1376,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  reportCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  reportHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  reportTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  reportSymbol: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  reportRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  reportLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  reportValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  reportSubtitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  goalTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: colors.cardBorder,
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 4,
-  },
-  goalBreakdownSection: {
-    marginTop: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  goalBreakdownTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  goalBreakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  goalBreakdownGoal: {
-    fontSize: 14,
-    color: colors.text,
-    flex: 1,
-  },
-  goalBreakdownBalance: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  currencyActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginTop: 12,
-  },
-  claimButton: {
-    backgroundColor: colors.success,
-  },
-  payButton: {
-    backgroundColor: colors.error,
-  },
-  currencyActionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.background,
-  },
-  drillDownHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  drillDownText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  currencySection: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
 });
