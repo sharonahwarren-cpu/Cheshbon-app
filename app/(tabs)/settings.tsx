@@ -20,6 +20,7 @@ import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDel
 import DateTimePicker from '@react-native-community/datetimepicker';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ColorPicker, HueSlider } from 'react-native-color-picker';
 
 interface LifeArea {
   id: string;
@@ -162,10 +163,6 @@ export default function SettingsScreen() {
   const [selectedCurrencyBalance, setSelectedCurrencyBalance] = useState<number>(0);
   const [currencyAmount, setCurrencyAmount] = useState<string>('');
 
-  // Life Area goal management modal
-  const [showGoalManagementModal, setShowGoalManagementModal] = useState(false);
-  const [selectedLifeArea, setSelectedLifeArea] = useState<LifeArea | null>(null);
-
   // Parent Life Area picker state
   const [showParentPicker, setShowParentPicker] = useState(false);
   
@@ -177,13 +174,14 @@ export default function SettingsScreen() {
   // Icon picker state (for image upload)
   const [uploadingIcon, setUploadingIcon] = useState(false);
 
+  // Goal dropdown state for Edit Life Area
+  const [showGoalDropdown, setShowGoalDropdown] = useState(false);
+  const [showCreateGoalModal, setShowCreateGoalModal] = useState(false);
+
   const [formData, setFormData] = useState<any>({});
   
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState(new Date());
-
-  // Create Goal Modal state
-  const [showCreateGoalModal, setShowCreateGoalModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -511,13 +509,16 @@ export default function SettingsScreen() {
       setLoading(true);
       await authenticatedPost(`/api/life-areas/${lifeAreaId}/goals`, { goalId });
       showSuccess('Goal linked to life area successfully');
+      
+      // Reload data to get updated life areas with linked goals
       await loadData();
       
-      // Refresh the selected life area data
-      if (selectedLifeArea && selectedLifeArea.id === lifeAreaId) {
+      // Update the formData to show the newly linked goal immediately
+      if (editingItem && editingItem.id === lifeAreaId) {
         const updatedLifeArea = lifeAreas.find(la => la.id === lifeAreaId);
         if (updatedLifeArea) {
-          setSelectedLifeArea(updatedLifeArea);
+          setEditingItem(updatedLifeArea);
+          setFormData(updatedLifeArea);
         }
       }
     } catch (error) {
@@ -533,13 +534,16 @@ export default function SettingsScreen() {
       setLoading(true);
       await authenticatedDelete(`/api/life-areas/${lifeAreaId}/goals/${goalId}`);
       showSuccess('Goal unlinked from life area successfully');
+      
+      // Reload data to get updated life areas
       await loadData();
       
-      // Refresh the selected life area data
-      if (selectedLifeArea && selectedLifeArea.id === lifeAreaId) {
+      // Update the formData to remove the unlinked goal immediately
+      if (editingItem && editingItem.id === lifeAreaId) {
         const updatedLifeArea = lifeAreas.find(la => la.id === lifeAreaId);
         if (updatedLifeArea) {
-          setSelectedLifeArea(updatedLifeArea);
+          setEditingItem(updatedLifeArea);
+          setFormData(updatedLifeArea);
         }
       }
     } catch (error) {
@@ -552,9 +556,12 @@ export default function SettingsScreen() {
 
   const handleReorderLifeAreas = async (reorderedAreas: LifeArea[]) => {
     try {
+      console.log('[Settings] Reordering life areas, count:', reorderedAreas.length);
+      
       // Optimistic update
       setLifeAreas(reorderedAreas);
       
+      // Send only the IDs in the new order to the backend
       const lifeAreaIds = reorderedAreas.map(area => area.id);
       await authenticatedPut('/api/life-areas/reorder', { lifeAreaIds });
       console.log('[Settings] Life areas reordered successfully');
@@ -1640,6 +1647,13 @@ export default function SettingsScreen() {
 
     const modalTitle = editingItem ? `Edit ${modalType}` : `Add ${modalType}`;
 
+    // Get available goals for linking (not already linked to this life area)
+    const availableGoals = goals.filter(g => {
+      if (!editingItem) return true;
+      const linkedGoalIds = editingItem.goals?.map((goal: any) => goal.id) || [];
+      return !linkedGoalIds.includes(g.id);
+    });
+
     return (
       <Modal
         visible={showModal}
@@ -1774,62 +1788,51 @@ export default function SettingsScreen() {
                       />
                     </TouchableOpacity>
                     {showColorPicker && (
-                      <View style={styles.colorGrid}>
-                        <TouchableOpacity
-                          style={[styles.colorOption, { backgroundColor: colors.border }, !formData.color && styles.colorOptionSelected]}
-                          onPress={() => {
-                            setFormData({ ...formData, color: null });
-                            setShowColorPicker(false);
+                      <View style={styles.colorPickerContainer}>
+                        <ColorPicker
+                          color={formData.color || '#FF6B6B'}
+                          onColorChange={(color) => {
+                            const hexColor = color.toUpperCase();
+                            setFormData({ ...formData, color: hexColor });
                           }}
-                        >
-                          <Text style={styles.colorOptionText}>None</Text>
-                        </TouchableOpacity>
-                        {COLOR_OPTIONS.map((color, index) => {
-                          const isSelected = formData.color === color;
-                          
-                          return (
-                            <React.Fragment key={index}>
-                              <TouchableOpacity
-                                style={[styles.colorOption, { backgroundColor: color }, isSelected && styles.colorOptionSelected]}
-                                onPress={() => {
-                                  setFormData({ ...formData, color });
-                                  setShowColorPicker(false);
-                                }}
-                              />
-                            </React.Fragment>
-                          );
-                        })}
-                        <TouchableOpacity
-                          style={[styles.colorOption, styles.customColorOption]}
-                          onPress={() => setShowCustomColorInput(!showCustomColorInput)}
-                        >
-                          <IconSymbol
-                            ios_icon_name="plus"
-                            android_material_icon_name="add"
-                            size={20}
-                            color={colors.text}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                    {showCustomColorInput && (
-                      <View style={styles.customColorInputContainer}>
-                        <TextInput
-                          style={styles.customColorInput}
-                          value={customColor}
-                          onChangeText={setCustomColor}
-                          placeholder="#FF5733"
-                          placeholderTextColor={colors.textSecondary}
-                          autoCapitalize="characters"
-                          autoCorrect={false}
-                          keyboardType="default"
+                          style={styles.colorWheel}
+                          sliderComponent={HueSlider}
                         />
-                        <TouchableOpacity
-                          style={styles.addCustomColorButton}
-                          onPress={addCustomColor}
-                        >
-                          <Text style={styles.addCustomColorButtonText}>Add</Text>
-                        </TouchableOpacity>
+                        <View style={styles.customColorInputContainer}>
+                          <TextInput
+                            style={styles.customColorInput}
+                            value={customColor}
+                            onChangeText={setCustomColor}
+                            placeholder="#RRGGBB"
+                            placeholderTextColor={colors.textSecondary}
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                            keyboardType="default"
+                          />
+                          <TouchableOpacity
+                            style={styles.addCustomColorButton}
+                            onPress={addCustomColor}
+                          >
+                            <Text style={styles.addCustomColorButtonText}>Add</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <View style={styles.colorGrid}>
+                          {COLOR_OPTIONS.map((color, index) => {
+                            const isSelected = formData.color === color;
+                            
+                            return (
+                              <React.Fragment key={index}>
+                                <TouchableOpacity
+                                  style={[styles.colorOption, { backgroundColor: color }, isSelected && styles.colorOptionSelected]}
+                                  onPress={() => {
+                                    setFormData({ ...formData, color });
+                                    setShowColorPicker(false);
+                                  }}
+                                />
+                              </React.Fragment>
+                            );
+                          })}
+                        </View>
                       </View>
                     )}
                   </View>
@@ -1851,26 +1854,9 @@ export default function SettingsScreen() {
 
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>Linked Goals</Text>
-                    <Text style={styles.helperText}>Manage which goals are linked to this life area</Text>
-                    <TouchableOpacity
-                      style={styles.manageGoalsButton}
-                      onPress={() => {
-                        if (editingItem) {
-                          setSelectedLifeArea(editingItem);
-                          setShowGoalManagementModal(true);
-                        } else {
-                          showError('Please save the life area first before linking goals');
-                        }
-                      }}
-                    >
-                      <IconSymbol
-                        ios_icon_name="link"
-                        android_material_icon_name="link"
-                        size={20}
-                        color={colors.background}
-                      />
-                      <Text style={styles.manageGoalsButtonText}>Manage Linked Goals</Text>
-                    </TouchableOpacity>
+                    <Text style={styles.helperText}>Select goals to link to this life area</Text>
+                    
+                    {/* Show currently linked goals */}
                     {editingItem && editingItem.goals && editingItem.goals.length > 0 && (
                       <View style={styles.linkedGoalsList}>
                         {editingItem.goals.map((goal: any, idx: number) => {
@@ -1897,6 +1883,57 @@ export default function SettingsScreen() {
                             </View>
                           );
                         })}
+                      </View>
+                    )}
+                    
+                    {/* Dropdown to select and link new goals */}
+                    <TouchableOpacity
+                      style={styles.goalDropdownButton}
+                      onPress={() => setShowGoalDropdown(!showGoalDropdown)}
+                    >
+                      <Text style={styles.goalDropdownText}>Select a goal to link...</Text>
+                      <IconSymbol
+                        ios_icon_name={showGoalDropdown ? "chevron.up" : "chevron.down"}
+                        android_material_icon_name={showGoalDropdown ? "arrow-drop-up" : "arrow-drop-down"}
+                        size={24}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    
+                    {showGoalDropdown && (
+                      <View style={styles.goalDropdownContainer}>
+                        <ScrollView style={styles.goalDropdownList}>
+                          {availableGoals.map((goal, index) => (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={styles.goalDropdownItem}
+                                onPress={() => {
+                                  if (editingItem) {
+                                    handleLinkGoalToLifeArea(goal.id, editingItem.id);
+                                  }
+                                  setShowGoalDropdown(false);
+                                }}
+                              >
+                                <Text style={styles.goalDropdownItemText}>{goal.title}</Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          ))}
+                          <TouchableOpacity
+                            style={styles.createNewGoalButton}
+                            onPress={() => {
+                              setShowGoalDropdown(false);
+                              setShowCreateGoalModal(true);
+                            }}
+                          >
+                            <IconSymbol
+                              ios_icon_name="plus.circle.fill"
+                              android_material_icon_name="add-circle"
+                              size={20}
+                              color={colors.primary}
+                            />
+                            <Text style={styles.createNewGoalText}>Create New Goal</Text>
+                          </TouchableOpacity>
+                        </ScrollView>
                       </View>
                     )}
                   </View>
@@ -2260,175 +2297,6 @@ export default function SettingsScreen() {
     );
   };
 
-  const renderGoalManagementModal = () => {
-    if (!selectedLifeArea) return null;
-
-    const linkedGoals = goals.filter(g => g.lifeAreaId === selectedLifeArea.id);
-    const unlinkedGoals = goals.filter(g => !g.lifeAreaId || g.lifeAreaId !== selectedLifeArea.id);
-
-    return (
-      <Modal
-        visible={showGoalManagementModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowGoalManagementModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.topModal]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Manage Goals for {selectedLifeArea.name}</Text>
-              <TouchableOpacity onPress={() => setShowGoalManagementModal(false)}>
-                <IconSymbol
-                  ios_icon_name="xmark"
-                  android_material_icon_name="close"
-                  size={24}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalBody}>
-              <Text style={styles.sectionSubtitle}>Linked Goals</Text>
-              {linkedGoals.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>No goals linked to this life area yet.</Text>
-                </View>
-              ) : (
-                linkedGoals.map((goal, index) => {
-                  const statusText = goal.status === 'ACTIVE' ? 'Active' : 'Deactivated';
-                  const statusColor = goal.status === 'ACTIVE' ? colors.success : colors.textSecondary;
-                  
-                  return (
-                    <React.Fragment key={index}>
-                      <View style={styles.goalManagementItem}>
-                        <View style={styles.goalManagementInfo}>
-                          <Text style={styles.goalManagementTitle}>{goal.title}</Text>
-                          <Text style={[styles.goalManagementStatus, { color: statusColor }]}>{statusText}</Text>
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => handleUnlinkGoalFromLifeArea(goal.id, selectedLifeArea.id)}
-                          style={styles.iconButton}
-                        >
-                          <IconSymbol
-                            ios_icon_name="xmark.circle.fill"
-                            android_material_icon_name="cancel"
-                            size={20}
-                            color={colors.error}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </React.Fragment>
-                  );
-                })
-              )}
-
-              <Text style={styles.sectionSubtitle}>Available Goals</Text>
-              {unlinkedGoals.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>All goals are already linked.</Text>
-                </View>
-              ) : (
-                unlinkedGoals.map((goal, index) => {
-                  const statusText = goal.status === 'ACTIVE' ? 'Active' : 'Deactivated';
-                  const statusColor = goal.status === 'ACTIVE' ? colors.success : colors.textSecondary;
-                  
-                  return (
-                    <React.Fragment key={index}>
-                      <View style={styles.goalManagementItem}>
-                        <View style={styles.goalManagementInfo}>
-                          <Text style={styles.goalManagementTitle}>{goal.title}</Text>
-                          <Text style={[styles.goalManagementStatus, { color: statusColor }]}>{statusText}</Text>
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => handleLinkGoalToLifeArea(goal.id, selectedLifeArea.id)}
-                          style={styles.iconButton}
-                        >
-                          <IconSymbol
-                            ios_icon_name="link"
-                            android_material_icon_name="link"
-                            size={20}
-                            color={colors.primary}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </React.Fragment>
-                  );
-                })
-              )}
-
-              <TouchableOpacity
-                style={styles.createGoalButton}
-                onPress={() => {
-                  setShowCreateGoalModal(true);
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="plus"
-                  android_material_icon_name="add"
-                  size={20}
-                  color={colors.background}
-                />
-                <Text style={styles.createGoalButtonText}>Create New Goal for this Life Area</Text>
-              </TouchableOpacity>
-            </ScrollView>
-
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.button, styles.buttonPrimary]}
-                onPress={() => setShowGoalManagementModal(false)}
-              >
-                <Text style={styles.buttonPrimaryText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
-  const renderCreateGoalModal = () => {
-    return (
-      <Modal
-        visible={showCreateGoalModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCreateGoalModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.topModal, styles.createGoalModalContent]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Goal</Text>
-              <TouchableOpacity onPress={() => setShowCreateGoalModal(false)}>
-                <IconSymbol
-                  ios_icon_name="xmark"
-                  android_material_icon_name="close"
-                  size={24}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalBody}>
-              <Text style={styles.helperText}>
-                This will open the Create Goal screen. After creating the goal, you can return here to continue editing the life area.
-              </Text>
-              <TouchableOpacity
-                style={styles.createGoalButton}
-                onPress={() => {
-                  setShowCreateGoalModal(false);
-                  setShowGoalManagementModal(false);
-                  setShowModal(false);
-                  router.push(`/create-goal?lifeAreaId=${selectedLifeArea?.id}`);
-                }}
-              >
-                <Text style={styles.createGoalButtonText}>Open Create Goal Screen</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -2452,8 +2320,41 @@ export default function SettingsScreen() {
       )}
 
       {renderEditModal()}
-      {renderGoalManagementModal()}
-      {renderCreateGoalModal()}
+
+      {/* Create Goal Modal */}
+      <Modal
+        visible={showCreateGoalModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateGoalModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Create New Goal</Text>
+            <Text style={styles.alertMessage}>
+              This will open the Create Goal screen. After creating the goal, you can return here to link it to this life area.
+            </Text>
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => setShowCreateGoalModal(false)}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={() => {
+                  setShowCreateGoalModal(false);
+                  setShowModal(false);
+                  router.push(`/create-goal?lifeAreaId=${editingItem?.id}`);
+                }}
+              >
+                <Text style={styles.alertButtonText}>Create Goal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Currency Claim/Pay Modal */}
       <Modal
@@ -3191,6 +3092,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginTop: 12,
+    marginBottom: 12,
   },
   customColorInput: {
     flex: 1,
@@ -3311,6 +3213,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
+  colorPickerContainer: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  colorWheel: {
+    height: 200,
+    marginBottom: 12,
+  },
   manageGoalsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3329,6 +3243,7 @@ const styles = StyleSheet.create({
   linkedGoalsList: {
     marginTop: 12,
     gap: 8,
+    marginBottom: 12,
   },
   linkedGoalItem: {
     flexDirection: 'row',
@@ -3353,5 +3268,54 @@ const styles = StyleSheet.create({
   },
   unlinkButton: {
     padding: 4,
+  },
+  goalDropdownButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 8,
+  },
+  goalDropdownText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  goalDropdownContainer: {
+    marginTop: 8,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: 250,
+  },
+  goalDropdownList: {
+    maxHeight: 200,
+  },
+  goalDropdownItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  goalDropdownItemText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  createNewGoalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  createNewGoalText: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '600',
   },
 });
