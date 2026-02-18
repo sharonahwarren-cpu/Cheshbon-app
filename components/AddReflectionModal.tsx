@@ -529,23 +529,17 @@ export function AddReflectionModal({
                     />
                     <Text style={styles.label}>Description</Text>
                   </View>
-                  <ScrollView
-                    style={styles.textAreaScrollContainer}
-                    nestedScrollEnabled={true}
-                    showsVerticalScrollIndicator={true}
-                  >
-                    <TextInput
-                      ref={descriptionInputRef}
-                      style={styles.textAreaInput}
-                      value={description}
-                      onChangeText={setDescription}
-                      placeholder={getDescriptionPlaceholder()}
-                      placeholderTextColor={colors.textSecondary}
-                      multiline
-                      scrollEnabled={false}
-                      blurOnSubmit={false}
-                    />
-                  </ScrollView>
+                  <TextInput
+                    ref={descriptionInputRef}
+                    style={[styles.input, styles.textArea]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder={getDescriptionPlaceholder()}
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    textAlignVertical="top"
+                    blurOnSubmit={false}
+                  />
                 </View>
               </React.Fragment>
             )}
@@ -901,23 +895,17 @@ export function AddReflectionModal({
                     />
                     <Text style={styles.label}>Notes on weighing up gains and losses (Optional)</Text>
                   </View>
-                  <ScrollView
-                    style={styles.textAreaScrollContainer}
-                    nestedScrollEnabled={true}
-                    showsVerticalScrollIndicator={true}
-                  >
-                    <TextInput
-                      ref={additionalThoughtsInputRef}
-                      style={styles.textAreaInput}
-                      value={additionalThoughts}
-                      onChangeText={setAdditionalThoughts}
-                      placeholder="Notes on weighing up gains and losses..."
-                      placeholderTextColor={colors.textSecondary}
-                      multiline
-                      scrollEnabled={false}
-                      blurOnSubmit={false}
-                    />
-                  </ScrollView>
+                  <TextInput
+                    ref={additionalThoughtsInputRef}
+                    style={[styles.input, styles.textArea]}
+                    value={additionalThoughts}
+                    onChangeText={setAdditionalThoughts}
+                    placeholder="Notes on weighing up gains and losses..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    textAlignVertical="top"
+                    blurOnSubmit={false}
+                  />
                 </View>
               </React.Fragment>
             )}
@@ -1371,21 +1359,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   textArea: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  textAreaScrollContainer: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    minHeight: 120,
     maxHeight: 200,
-  },
-  textAreaInput: {
-    padding: 14,
-    fontSize: 16,
-    color: colors.text,
-    minHeight: 140,
     textAlignVertical: 'top',
   },
   optionsGrid: {
