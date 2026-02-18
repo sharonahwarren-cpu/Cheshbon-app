@@ -13,7 +13,7 @@ import {
   Platform,
   Keyboard,
   LayoutAnimation,
-  findNodeHandle,
+  Dimensions,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -152,6 +152,7 @@ export function AddReflectionModal({
   const [newItemName, setNewItemName] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [descriptionInputY, setDescriptionInputY] = useState(0);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
@@ -161,10 +162,12 @@ export function AddReflectionModal({
     if (Platform.OS !== 'ios') return;
 
     const keyboardWillShowListener = Keyboard.addListener('keyboardWillShow', (e) => {
+      console.log('Keyboard will show, height:', e.endCoordinates.height);
       setKeyboardHeight(e.endCoordinates.height);
     });
 
     const keyboardWillHideListener = Keyboard.addListener('keyboardWillHide', () => {
+      console.log('Keyboard will hide');
       setKeyboardHeight(0);
     });
 
@@ -176,35 +179,22 @@ export function AddReflectionModal({
 
   // Auto-scroll to keep Description input visible when focused
   const handleDescriptionFocus = () => {
-    if (Platform.OS === 'ios' && descriptionInputRef.current && scrollViewRef.current) {
+    console.log('Description input focused');
+    if (Platform.OS === 'ios' && scrollViewRef.current) {
       setTimeout(() => {
-        descriptionInputRef.current?.measureLayout(
-          findNodeHandle(scrollViewRef.current) as number,
-          (x, y) => {
-            // Scroll to position the input above the keyboard with extra padding
-            const scrollToY = Math.max(0, y - 100);
-            scrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
-          },
-          () => {}
-        );
+        // Scroll to a fixed position that keeps the input visible
+        scrollViewRef.current?.scrollTo({ y: 200, animated: true });
       }, 100);
     }
   };
 
   // Keep cursor visible as user types in Description
   const handleDescriptionContentSizeChange = () => {
-    if (Platform.OS === 'ios' && descriptionInputRef.current && scrollViewRef.current && keyboardHeight > 0) {
+    if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
+      console.log('Description content size changed, keyboard height:', keyboardHeight);
       setTimeout(() => {
-        descriptionInputRef.current?.measureLayout(
-          findNodeHandle(scrollViewRef.current) as number,
-          (x, y, width, height) => {
-            // Calculate position to keep the bottom of the text input visible above keyboard
-            const inputBottom = y + height;
-            const scrollToY = Math.max(0, inputBottom - 150);
-            scrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
-          },
-          () => {}
-        );
+        // Scroll down a bit more to keep the growing text visible
+        scrollViewRef.current?.scrollTo({ y: 250, animated: true });
       }, 50);
     }
   };
@@ -490,7 +480,10 @@ export function AddReflectionModal({
           <ScrollView 
             ref={scrollViewRef}
             style={styles.modalBody} 
-            contentContainerStyle={styles.modalBodyContent}
+            contentContainerStyle={[
+              styles.modalBodyContent,
+              Platform.OS === 'ios' && keyboardHeight > 0 && { paddingBottom: keyboardHeight + 40 }
+            ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
