@@ -21,9 +21,21 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 interface LifeArea {
   id: string;
   name: string;
-  parentId?: string;
-  level: number;
+  parentId?: string | null;
+  icon?: string;
+  color?: string;
+  displayOrder: number;
+  showProgress: boolean;
   children?: LifeArea[];
+  goals?: Array<{
+    id: string;
+    title: string;
+    status: 'ACTIVE' | 'DEACTIVATED';
+    successCount: number;
+    struggleCount: number;
+  }>;
+  successPercentage?: number;
+  percentageColor?: 'green' | 'red';
 }
 
 interface Strategy {
@@ -224,8 +236,11 @@ export default function SettingsScreen() {
         return { ...goal, status: goal.status || 'ACTIVE' };
       });
       
+      console.log('[Settings iOS] Life areas loaded:', lifeAreasData);
+      
       setGoals(goalsWithBalances);
-      setLifeAreas(buildLifeAreaHierarchy(lifeAreasData));
+      // Life Areas API now returns nested structure with goals and success percentages
+      setLifeAreas(lifeAreasData);
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
@@ -255,41 +270,6 @@ export default function SettingsScreen() {
       console.error('Error loading reports data:', error);
       showError('Failed to load reports data');
     }
-  };
-
-  const buildLifeAreaHierarchy = (areas: LifeArea[]): LifeArea[] => {
-    console.log('Building life area hierarchy from:', areas);
-    
-    if (!Array.isArray(areas)) {
-      console.warn('buildLifeAreaHierarchy received non-array:', areas);
-      return [];
-    }
-    
-    if (areas.length === 0) {
-      console.log('No life areas to build hierarchy from');
-      return [];
-    }
-    
-    const areaMap = new Map<string, LifeArea>();
-    areas.forEach(area => {
-      areaMap.set(area.id, { ...area, children: [] });
-    });
-
-    const rootAreas: LifeArea[] = [];
-    areaMap.forEach(area => {
-      if (area.parentId) {
-        const parent = areaMap.get(area.parentId);
-        if (parent) {
-          parent.children = parent.children || [];
-          parent.children.push(area);
-        }
-      } else {
-        rootAreas.push(area);
-      }
-    });
-
-    console.log('Built hierarchy with root areas:', rootAreas);
-    return rootAreas;
   };
 
   const showError = (message: string) => {
@@ -621,6 +601,588 @@ export default function SettingsScreen() {
 
     return [...activeGoals, ...deactivatedGoals];
   }, [goals]);
+
+  const flattenLifeAreas = (areas: LifeArea[], depth: number = 0): Array<LifeArea & { depth: number }> => {
+    let result: Array<LifeArea & { depth: number }> = [];
+    areas.forEach(area => {
+      result.push({ ...area, depth });
+      if (area.children && area.children.length > 0) {
+        result = result.concat(flattenLifeAreas(area.children, depth + 1));
+      }
+    });
+    return result;
+  };
+
+  const renderLifeAreas = () => {
+    const flatAreas = flattenLifeAreas(lifeAreas);
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Life Areas</Text>
+          <TouchableOpacity onPress={() => openAddModal('lifeArea')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.listContainer}>
+          {flatAreas.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
+            </View>
+          ) : (
+            flatAreas.map((area, index) => {
+              const iconName = area.icon;
+              const areaColor = area.color || colors.primary;
+              const percentage = area.successPercentage || 0;
+              const percentageText = `${Math.round(percentage)}%`;
+              const percentageColor = (area.percentageColor === 'green') ? colors.success : colors.error;
+              
+              return (
+                <React.Fragment key={index}>
+                  <View
+                    style={[
+                      styles.lifeAreaCardCompact,
+                      { marginLeft: area.depth * 16, borderLeftColor: areaColor },
+                    ]}
+                  >
+                    <View style={styles.lifeAreaCompactContent}>
+                      <View style={styles.lifeAreaCompactLeft}>
+                        {iconName ? (
+                          <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
+                        ) : (
+                          <View style={styles.iconPlaceholder} />
+                        )}
+                        <Text style={styles.lifeAreaCompactName}>{area.name}</Text>
+                        {area.showProgress && (
+                          <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
+                            {percentageText}
+                          </Text>
+                        )}
+                      </View>
+                      <View style={styles.lifeAreaCompactActions}>
+                        <TouchableOpacity
+                          onPress={() => openEditModal('lifeArea', area)}
+                          style={styles.iconButtonCompact}
+                        >
+                          <IconSymbol
+                            ios_icon_name="pencil"
+                            android_material_icon_name="edit"
+                            size={16}
+                            color={colors.primary}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => handleDeleteItem('lifeArea', area.id)}
+                          style={styles.iconButtonCompact}
+                        >
+                          <IconSymbol
+                            ios_icon_name="trash"
+                            android_material_icon_name="delete"
+                            size={16}
+                            color={colors.error}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </React.Fragment>
+              );
+            })
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderStrategies = () => {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Strategies</Text>
+          <TouchableOpacity onPress={() => openAddModal('strategy')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.listContainer}>
+          {strategies.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No strategies yet. Create one to help achieve your goals!</Text>
+            </View>
+          ) : (
+            strategies.map((strategy, index) => {
+              const linkedGoalsCount = strategy.linkedGoalIds?.length || 0;
+              const linkedGoalsText = `${linkedGoalsCount} linked goals`;
+              
+              return (
+                <React.Fragment key={index}>
+                  <View style={styles.listItem}>
+                    <View style={styles.listItemContent}>
+                      <Text style={styles.listItemTitle}>{strategy.name}</Text>
+                      {strategy.description && (
+                        <Text style={styles.listItemSubtitle}>{strategy.description}</Text>
+                      )}
+                      <Text style={styles.listItemSubtitle}>{linkedGoalsText}</Text>
+                    </View>
+                    <View style={styles.listItemActions}>
+                      <TouchableOpacity
+                        onPress={() => openEditModal('strategy', strategy)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteItem('strategy', strategy.id)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={20}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </React.Fragment>
+              );
+            })
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderCurrencies = () => {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Currencies</Text>
+          <TouchableOpacity onPress={() => openAddModal('currency')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.listContainer}>
+          {currencies.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No currencies yet. Create one to get started!</Text>
+            </View>
+          ) : (
+            currencies.map((currency, index) => {
+              const symbolText = currency.symbol || '';
+              const typeText = currency.type === 'reward' ? 'Reward' : 'Consequence';
+              const onSuccessAction = getCurrencyActionText(currency, true);
+              const onFailureAction = getCurrencyActionText(currency, false);
+              const onSuccessText = `On Success: ${onSuccessAction}`;
+              const onFailureText = `On Failure: ${onFailureAction}`;
+              
+              return (
+                <React.Fragment key={index}>
+                  <View style={styles.listItem}>
+                    <View style={styles.listItemContent}>
+                      <View style={styles.currencyHeader}>
+                        <Text style={styles.listItemTitle}>{currency.name}</Text>
+                        {symbolText && <Text style={styles.currencySymbol}>{symbolText}</Text>}
+                      </View>
+                      <Text style={[styles.currencyTypeText, currency.type === 'reward' ? styles.currencyTypeReward : styles.currencyTypeConsequence]}>
+                        {typeText}
+                      </Text>
+                      <Text style={styles.listItemSubtitle}>{onSuccessText}</Text>
+                      <Text style={styles.listItemSubtitle}>{onFailureText}</Text>
+                    </View>
+                    <View style={styles.listItemActions}>
+                      <TouchableOpacity
+                        onPress={() => openEditModal('currency', currency)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteItem('currency', currency.id)}
+                        style={styles.iconButton}
+                      >
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={20}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </React.Fragment>
+              );
+            })
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderGainsLosses = () => {
+    const gains = gainsLosses.filter(gl => gl.type === 'Gain');
+    const losses = gainsLosses.filter(gl => gl.type === 'Loss');
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Gains and Losses</Text>
+          <TouchableOpacity onPress={() => openAddModal('gainLoss')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.listContainer}>
+          {gainsLosses.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No gains or losses yet. Create some to track in reflections!</Text>
+            </View>
+          ) : (
+            <>
+              {gains.length > 0 && (
+                <>
+                  <Text style={styles.sectionSubtitle}>Gains</Text>
+                  {gains.map((gain, index) => {
+                    const categoryText = gain.category ? `${gain.category}${gain.subCategory ? ` > ${gain.subCategory}` : ''}` : '';
+                    
+                    return (
+                      <React.Fragment key={index}>
+                        <View style={styles.listItem}>
+                          <View style={styles.listItemContent}>
+                            <Text style={styles.listItemTitle}>{gain.name}</Text>
+                            {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                          </View>
+                          <View style={styles.listItemActions}>
+                            <TouchableOpacity
+                              onPress={() => openEditModal('gainLoss', gain)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="pencil"
+                                android_material_icon_name="edit"
+                                size={20}
+                                color={colors.primary}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteItem('gainLoss', gain.id)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="trash"
+                                android_material_icon_name="delete"
+                                size={20}
+                                color={colors.error}
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              )}
+
+              {losses.length > 0 && (
+                <>
+                  <Text style={styles.sectionSubtitle}>Losses</Text>
+                  {losses.map((loss, index) => {
+                    const categoryText = loss.category ? `${loss.category}${loss.subCategory ? ` > ${loss.subCategory}` : ''}` : '';
+                    
+                    return (
+                      <React.Fragment key={index}>
+                        <View style={styles.listItem}>
+                          <View style={styles.listItemContent}>
+                            <Text style={styles.listItemTitle}>{loss.name}</Text>
+                            {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                          </View>
+                          <View style={styles.listItemActions}>
+                            <TouchableOpacity
+                              onPress={() => openEditModal('gainLoss', loss)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="pencil"
+                                android_material_icon_name="edit"
+                                size={20}
+                                color={colors.primary}
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteItem('gainLoss', loss.id)}
+                              style={styles.iconButton}
+                            >
+                              <IconSymbol
+                                ios_icon_name="trash"
+                                android_material_icon_name="delete"
+                                size={20}
+                                color={colors.error}
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              )}
+            </>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderNotifications = () => {
+    const alarms = preferences.notificationAlarms || [];
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <TouchableOpacity onPress={() => openAddModal('alarm')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <ScrollView style={styles.formContainer}>
+          <View style={styles.formGroup}>
+            <View style={styles.switchRow}>
+              <Text style={styles.label}>Enable Notifications</Text>
+              <Switch
+                value={preferences.notificationsEnabled}
+                onValueChange={(value) => {
+                  setPreferences({ ...preferences, notificationsEnabled: value });
+                  handleSavePreferences();
+                }}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.background}
+              />
+            </View>
+          </View>
+
+          {preferences.notificationsEnabled && (
+            <>
+              <Text style={styles.sectionSubtitle}>Notification Alarms</Text>
+              {alarms.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No notification alarms set. Tap + to add one.</Text>
+                </View>
+              ) : (
+                alarms.map((alarm, index) => {
+                  const frequencyText = alarm.frequency.charAt(0).toUpperCase() + alarm.frequency.slice(1);
+                  const timeText = formatTime(alarm.time);
+                  let scheduleText = frequencyText;
+                  if (alarm.dayOfWeek) {
+                    scheduleText += ` - ${alarm.dayOfWeek}`;
+                  }
+                  if (alarm.dayOfMonth) {
+                    scheduleText += ` - Day ${alarm.dayOfMonth}`;
+                  }
+                  
+                  return (
+                    <React.Fragment key={index}>
+                      <View style={styles.alarmItem}>
+                        <View style={styles.alarmContent}>
+                          <Text style={styles.alarmName}>{alarm.name}</Text>
+                          <Text style={styles.alarmTime}>{timeText}</Text>
+                          <Text style={styles.alarmSchedule}>{scheduleText}</Text>
+                        </View>
+                        <View style={styles.listItemActions}>
+                          <TouchableOpacity
+                            onPress={() => openEditModal('alarm', alarm)}
+                            style={styles.iconButton}
+                          >
+                            <IconSymbol
+                              ios_icon_name="pencil"
+                              android_material_icon_name="edit"
+                              size={20}
+                              color={colors.primary}
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteItem('alarm', alarm.id)}
+                            style={styles.iconButton}
+                          >
+                            <IconSymbol
+                              ios_icon_name="trash"
+                              android_material_icon_name="delete"
+                              size={20}
+                              color={colors.error}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderReflectionPreferences = () => {
+    const allCategories = ['Action', 'Speech', 'Thought', 'Feeling'];
+    const selectedCategories = preferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+
+    const toggleCategory = (category: string) => {
+      const currentCategories = preferences.reflectionCategories || [];
+      const newCategories = currentCategories.includes(category)
+        ? currentCategories.filter(c => c !== category)
+        : [...currentCategories, category];
+      
+      setPreferences({ ...preferences, reflectionCategories: newCategories });
+    };
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Reflection Preferences</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ScrollView style={styles.formContainer}>
+          <View style={styles.formGroup}>
+            <View style={styles.switchRow}>
+              <Text style={styles.label}>Enable Categories in Reflections</Text>
+              <Switch
+                value={preferences.reflectionCategoriesEnabled !== false}
+                onValueChange={(value) => {
+                  setPreferences({ ...preferences, reflectionCategoriesEnabled: value });
+                }}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.background}
+              />
+            </View>
+            <Text style={styles.helperText}>
+              When enabled, you can categorize reflections as Action, Speech, Thought, or Feeling
+            </Text>
+          </View>
+
+          {preferences.reflectionCategoriesEnabled !== false && (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Available Categories</Text>
+              <Text style={styles.helperText}>
+                Select which categories you want to use in your reflections
+              </Text>
+              <View style={styles.optionsGrid}>
+                {allCategories.map((category, index) => {
+                  const isSelected = selectedCategories.includes(category);
+                  
+                  return (
+                    <React.Fragment key={index}>
+                      <TouchableOpacity
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => toggleCategory(category)}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {category}
+                        </Text>
+                      </TouchableOpacity>
+                    </React.Fragment>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.savePreferencesButton}
+            onPress={handleSavePreferences}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.background} />
+            ) : (
+              <Text style={styles.savePreferencesButtonText}>Save Preferences</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  };
 
   const renderGoals = () => {
     return (
@@ -957,6 +1519,12 @@ export default function SettingsScreen() {
         <>
           {currentSection === 'main' && renderMainMenu()}
           {currentSection === 'goals' && renderGoals()}
+          {currentSection === 'lifeAreas' && renderLifeAreas()}
+          {currentSection === 'strategies' && renderStrategies()}
+          {currentSection === 'currencies' && renderCurrencies()}
+          {currentSection === 'gainsLosses' && renderGainsLosses()}
+          {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
+          {currentSection === 'notifications' && renderNotifications()}
           {currentSection === 'reports' && renderReports()}
         </>
       )}
@@ -1650,5 +2218,93 @@ const styles = StyleSheet.create({
   colorPreviewText: {
     fontSize: 16,
     color: colors.textSecondary,
+  },
+  lifeAreaCardCompact: {
+    backgroundColor: colors.card,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+  },
+  lifeAreaCompactContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  lifeAreaCompactLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  lifeAreaIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  lifeAreaCompactName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  lifeAreaCompactPercentage: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  lifeAreaCompactActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  iconButtonCompact: {
+    padding: 4,
+  },
+  currencyTypeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  currencyTypeReward: {
+    color: colors.success,
+  },
+  currencyTypeConsequence: {
+    color: colors.error,
+  },
+  formContainer: {
+    flex: 1,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  optionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  optionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  optionButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  optionButtonText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  optionButtonTextSelected: {
+    color: colors.background,
+    fontWeight: '600',
   },
 });
