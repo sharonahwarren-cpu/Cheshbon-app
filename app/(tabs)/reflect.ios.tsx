@@ -1,5 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import {
   View,
   Text,
@@ -12,12 +14,10 @@ import {
   KeyboardAvoidingView,
   Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import React, { useState, useEffect, useRef } from 'react';
 import { AddReflectionModal } from '@/components/AddReflectionModal';
 
 interface JournalEntry {
@@ -130,7 +130,6 @@ export default function ReflectScreen() {
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    // Handle date parameter from navigation
     if (params.date) {
       const dateFromParam = new Date(params.date);
       if (!isNaN(dateFromParam.getTime())) {
@@ -140,14 +139,12 @@ export default function ReflectScreen() {
   }, [params.date]);
 
   useEffect(() => {
-    // Handle openModal parameter from Express tab
     if (params.openModal === 'true') {
-      console.log('[Reflect iOS] openModal parameter detected, opening AddReflectionModal');
+      console.log('[Reflect] openModal parameter detected, opening AddReflectionModal');
       if (params.goalId) {
-        console.log('[Reflect iOS] Pre-filling with goalId:', params.goalId);
+        console.log('[Reflect] Pre-filling with goalId:', params.goalId);
         setPrefilledGoalId(params.goalId);
       }
-      // Wait for data to load before opening modal
       setTimeout(() => {
         setShowAddReflectionModal(true);
       }, 500);
@@ -159,12 +156,17 @@ export default function ReflectScreen() {
   }, [selectedDate]);
 
   useEffect(() => {
-    // Handle reflectionId parameter - open edit modal for that reflection
     if (params.reflectionId && reflections.length > 0) {
       const reflection = reflections.find(r => r.id === params.reflectionId);
       if (reflection) {
-        console.log('[Reflect iOS] Opening reflection from history:', reflection.id);
+        console.log('[Reflect] Opening reflection from currency history:', {
+          id: reflection.id,
+          entryDate: reflection.entryDate,
+          description: reflection.description.substring(0, 50)
+        });
         openEditReflectionModal(reflection);
+      } else {
+        console.log('[Reflect] Reflection not found in current date:', params.reflectionId);
       }
     }
   }, [params.reflectionId, reflections]);
@@ -179,7 +181,7 @@ export default function ReflectScreen() {
   }, [showSuccessModal]);
 
   const loadData = async () => {
-    console.log('[Reflect iOS] Loading reflect data for date:', selectedDate.toISOString().split('T')[0]);
+    console.log('Loading reflect data for date:', selectedDate.toISOString().split('T')[0]);
     setLoading(true);
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
@@ -211,9 +213,9 @@ export default function ReflectScreen() {
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
 
-      console.log('[Reflect iOS] Reflect data loaded successfully');
+      console.log('Reflect data loaded successfully');
     } catch (error) {
-      console.error('[Reflect iOS] Error loading reflect data:', error);
+      console.error('Error loading reflect data:', error);
       showError('Failed to load reflect data');
     } finally {
       setLoading(false);
@@ -231,7 +233,7 @@ export default function ReflectScreen() {
   };
 
   const handleSaveJournal = async () => {
-    console.log('[Reflect iOS] Saving journal entry...');
+    console.log('Saving journal entry...');
     try {
       setLoading(true);
       const dateString = selectedDate.toISOString().split('T')[0];
@@ -245,7 +247,7 @@ export default function ReflectScreen() {
       showSuccess('Journal saved successfully');
       Keyboard.dismiss();
     } catch (error) {
-      console.error('[Reflect iOS] Error saving journal:', error);
+      console.error('Error saving journal:', error);
       showError('Failed to save journal entry');
     } finally {
       setLoading(false);
@@ -282,14 +284,14 @@ export default function ReflectScreen() {
   };
 
   const handleDeleteReflection = async (id: string) => {
-    console.log('[Reflect iOS] Deleting reflection:', id);
+    console.log('Deleting reflection:', id);
     try {
       setLoading(true);
       await authenticatedDelete(`/api/reflections/${id}`);
       setReflections(reflections.filter(r => r.id !== id));
       showSuccess('Reflection deleted successfully');
     } catch (error) {
-      console.error('[Reflect iOS] Error deleting reflection:', error);
+      console.error('Error deleting reflection:', error);
       showError('Failed to delete reflection');
     } finally {
       setLoading(false);
@@ -297,21 +299,19 @@ export default function ReflectScreen() {
   };
 
   const openAddReflectionModal = () => {
-    console.log('[Reflect iOS] Opening AddReflectionModal for new reflection');
     setEditingReflection(null);
     setPrefilledGoalId(undefined);
     setShowAddReflectionModal(true);
   };
 
   const openEditReflectionModal = (reflection: Reflection) => {
-    console.log('[Reflect iOS] Opening AddReflectionModal for editing reflection:', reflection.id);
     setEditingReflection(reflection);
     setPrefilledGoalId(undefined);
     setShowAddReflectionModal(true);
   };
 
   const handleReflectionSaved = (reflection: Reflection) => {
-    console.log('[Reflect iOS] Reflection saved, updating list and closing modal');
+    console.log('[Reflect] Reflection saved, updating list and closing modal');
     if (editingReflection) {
       setReflections(reflections.map(r => r.id === reflection.id ? reflection : r));
     } else {
@@ -320,7 +320,13 @@ export default function ReflectScreen() {
     setShowAddReflectionModal(false);
     setEditingReflection(null);
     showSuccess('Reflection saved successfully');
-    loadData();
+    
+    if (params.reflectionId) {
+      console.log('[Reflect] Came from currency history, navigating back after save');
+      setTimeout(() => {
+        router.back();
+      }, 1500);
+    }
   };
 
   const toggleCategory = (category: string) => {
@@ -328,6 +334,15 @@ export default function ReflectScreen() {
       ...prev,
       [category]: !prev[category],
     }));
+  };
+
+  const getCategoryIcon = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
   };
 
   const dateDisplay = formatDate(selectedDate);
@@ -345,20 +360,15 @@ export default function ReflectScreen() {
     groupedReflections['All'] = reflections;
   }
 
-  const getCategoryIcon = (category: string) => {
-    const categoryLower = category.toLowerCase();
-    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
-    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
-    if (categoryLower === 'thought') return { ios: 'cloud.fill', android: 'cloud' };
-    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
-    return { ios: 'sparkles', android: 'auto-awesome' };
-  };
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.container}>
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reflect</Text>
           <TouchableOpacity onPress={() => router.push('/search-journals')}>
@@ -410,13 +420,19 @@ export default function ReflectScreen() {
           />
         )}
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <IconSymbol
                 ios_icon_name="book.fill"
                 android_material_icon_name="menu-book"
-                size={24}
+                size={20}
                 color={colors.primary}
               />
               <Text style={styles.sectionTitle}>Daily Journal</Text>
@@ -429,9 +445,7 @@ export default function ReflectScreen() {
               placeholderTextColor={colors.textSecondary}
               multiline
               textAlignVertical="top"
-              returnKeyType="default"
               blurOnSubmit={false}
-              autoFocus={false}
             />
             <TouchableOpacity
               style={styles.saveButton}
@@ -467,7 +481,7 @@ export default function ReflectScreen() {
                 <IconSymbol
                   ios_icon_name="lightbulb.fill"
                   android_material_icon_name="lightbulb"
-                  size={24}
+                  size={20}
                   color={colors.primary}
                 />
                 <Text style={styles.sectionTitle}>Reflections</Text>
@@ -708,13 +722,14 @@ export default function ReflectScreen() {
             )}
           </View>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
 
       <AddReflectionModal
         visible={showAddReflectionModal}
         onClose={() => {
-          console.log('[Reflect iOS] Closing modal without saving');
+          console.log('[Reflect] Closing modal without saving');
           setShowAddReflectionModal(false);
+          setEditingReflection(null);
           setPrefilledGoalId(undefined);
         }}
         onSave={handleReflectionSaved}
@@ -783,10 +798,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
   },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -795,11 +810,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
     backgroundColor: colors.card,
     marginHorizontal: 20,
     borderRadius: 16,
-    marginBottom: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -817,31 +832,34 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dateText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -851,10 +869,11 @@ const styles = StyleSheet.create({
   journalInput: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     fontSize: 16,
     color: colors.text,
-    minHeight: 150,
+    minHeight: 120,
+    maxHeight: 200,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: colors.border,
@@ -867,7 +886,7 @@ const styles = StyleSheet.create({
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     alignItems: 'center',
     marginTop: 12,
     flexDirection: 'row',
@@ -912,14 +931,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     backgroundColor: colors.card,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   categoryTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.text,
     flex: 1,
@@ -938,8 +957,8 @@ const styles = StyleSheet.create({
   reflectionCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: '#000',
@@ -952,7 +971,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   reflectionBadges: {
     flexDirection: 'row',
@@ -992,12 +1011,12 @@ const styles = StyleSheet.create({
   reflectionDescription: {
     fontSize: 15,
     color: colors.text,
-    marginBottom: 12,
+    marginBottom: 10,
     lineHeight: 22,
   },
   linkedGoalSection: {
     backgroundColor: colors.primary + '10',
-    padding: 12,
+    padding: 10,
     borderRadius: 12,
     marginBottom: 8,
   },
@@ -1159,30 +1178,29 @@ const styles = StyleSheet.create({
   alertModal: {
     backgroundColor: colors.background,
     borderRadius: 16,
-    padding: 24,
+    padding: 20,
     margin: 20,
-    minWidth: 280,
   },
   alertTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   alertMessage: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.textSecondary,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   alertButton: {
     backgroundColor: colors.primary,
-    padding: 16,
+    padding: 14,
     borderRadius: 12,
     alignItems: 'center',
   },
   alertButtonText: {
     color: colors.background,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   successFlashModal: {

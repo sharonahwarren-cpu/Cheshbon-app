@@ -303,14 +303,12 @@ export default function ReflectScreen() {
   };
 
   const openAddReflectionModal = () => {
-    console.log('[Reflect] Opening AddReflectionModal for new reflection');
     setEditingReflection(null);
     setPrefilledGoalId(undefined);
     setShowAddReflectionModal(true);
   };
 
   const openEditReflectionModal = (reflection: Reflection) => {
-    console.log('[Reflect] Opening AddReflectionModal for editing reflection:', reflection.id);
     setEditingReflection(reflection);
     setPrefilledGoalId(undefined);
     setShowAddReflectionModal(true);
@@ -343,6 +341,15 @@ export default function ReflectScreen() {
     }));
   };
 
+  const getCategoryIcon = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
+  };
+
   const dateDisplay = formatDate(selectedDate);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
@@ -357,15 +364,6 @@ export default function ReflectScreen() {
   } else {
     groupedReflections['All'] = reflections;
   }
-
-  const getCategoryIcon = (category: string) => {
-    const categoryLower = category.toLowerCase();
-    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
-    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
-    if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
-    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
-    return { ios: 'sparkles', android: 'auto-awesome' };
-  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -1194,7 +1192,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     margin: 20,
-    minWidth: 280,
   },
   alertTitle: {
     fontSize: 18,
