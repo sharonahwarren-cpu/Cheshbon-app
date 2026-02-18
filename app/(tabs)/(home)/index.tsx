@@ -564,6 +564,57 @@ export default function HomeScreen() {
     }
   };
 
+  const calculateDailyCurrencyTally = (goal: ActivatedGoal) => {
+    const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
+    const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
+    const successCount = dailySuccessEntries.length;
+    const struggleCount = dailyStruggleEntries.length;
+
+    let rewardTally = 0;
+    let consequenceTally = 0;
+    let isReward = true;
+
+    if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
+      const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
+      if (rewardCurrency) {
+        const completedRewardSets = Math.floor(successCount / goal.rewardSuccesses);
+        const rewardAmount = completedRewardSets * goal.rewardAmount;
+        
+        if (rewardCurrency.onSuccess === 'ADD') {
+          rewardTally += rewardAmount;
+          isReward = true;
+        } else if (rewardCurrency.onSuccess === 'SUBTRACT') {
+          rewardTally -= rewardAmount;
+          isReward = false;
+        }
+      }
+    }
+
+    if (goal.consequenceCurrencyId && goal.consequenceAmount && goal.consequenceFailures) {
+      const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+      if (consequenceCurrency) {
+        const completedConsequenceSets = Math.floor(struggleCount / goal.consequenceFailures);
+        const consequenceAmount = completedConsequenceSets * goal.consequenceAmount;
+        
+        if (consequenceCurrency.onFailure === 'ADD') {
+          consequenceTally += consequenceAmount;
+          isReward = true;
+        } else if (consequenceCurrency.onFailure === 'SUBTRACT') {
+          consequenceTally -= consequenceAmount;
+          isReward = false;
+        }
+      }
+    }
+
+    const totalTally = rewardTally + consequenceTally;
+    
+    return {
+      tally: totalTally,
+      isReward: totalTally >= 0 ? isReward : !isReward,
+      hasValue: totalTally !== 0,
+    };
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -583,27 +634,49 @@ export default function HomeScreen() {
     
     const hasDescription = goal.description && goal.description.trim().length > 0;
     
+    const currencyTally = calculateDailyCurrencyTally(goal);
+    const tallyText = Math.abs(currencyTally.tally).toString();
+    const tallyIcon = currencyTally.isReward ? 'card-giftcard' : 'account-balance-wallet';
+    const tallyIosIcon = currencyTally.isReward ? 'gift.fill' : 'creditcard.fill';
+    const tallyColor = currencyTally.isReward ? colors.success : colors.error;
+    
     return (
       <View key={goal.id} style={styles.goalCard}>
-        <TouchableOpacity 
-          style={styles.goalTitleRow}
-          onPress={() => handleEditGoal(goal.id)}
-        >
-          <IconSymbol
-            ios_icon_name={goal.type === 'RESTRAINING' ? 'xmark.circle.fill' : 'checkmark.circle.fill'}
-            android_material_icon_name={typeIcon}
-            size={20}
-            color={typeColor}
-          />
-          <View style={styles.goalTitleContainer}>
-            <Text style={styles.goalCardTitle}>{goal.title}</Text>
-            {hasDescription && (
-              <Text style={styles.goalDescription} numberOfLines={2}>
-                {goal.description}
+        <View style={styles.goalCardHeader}>
+          <TouchableOpacity 
+            style={styles.goalTitleRow}
+            onPress={() => handleEditGoal(goal.id)}
+          >
+            <IconSymbol
+              ios_icon_name={goal.type === 'RESTRAINING' ? 'xmark.circle.fill' : 'checkmark.circle.fill'}
+              android_material_icon_name={typeIcon}
+              size={20}
+              color={typeColor}
+            />
+            <View style={styles.goalTitleContainer}>
+              <Text style={styles.goalCardTitle}>{goal.title}</Text>
+              {hasDescription && (
+                <Text style={styles.goalDescription} numberOfLines={2}>
+                  {goal.description}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+          
+          {currencyTally.hasValue && (
+            <View style={styles.currencyTallyBadge}>
+              <IconSymbol
+                ios_icon_name={tallyIosIcon}
+                android_material_icon_name={tallyIcon}
+                size={14}
+                color={tallyColor}
+              />
+              <Text style={[styles.currencyTallyText, { color: tallyColor }]}>
+                {tallyText}
               </Text>
-            )}
-          </View>
-        </TouchableOpacity>
+            </View>
+          )}
+        </View>
         
         <View style={styles.tallyRow}>
           <View style={styles.tallySection}>
@@ -1736,11 +1809,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
+  goalCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   goalTitleRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    marginBottom: 12,
+    flex: 1,
   },
   goalTitleContainer: {
     flex: 1,
@@ -1755,6 +1834,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     lineHeight: 16,
+  },
+  currencyTallyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  currencyTallyText: {
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   tallyRow: {
     flexDirection: 'row',
