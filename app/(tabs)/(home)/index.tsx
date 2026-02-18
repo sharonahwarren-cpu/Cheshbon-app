@@ -334,6 +334,7 @@ export default function HomeScreen() {
       const prefsData = prefsRes?.data || prefsRes || {};
       
       console.log('[Express] Loaded currencies for modal:', currenciesData.length, 'currencies');
+      console.log('[Express] Currency data sample:', currenciesData.slice(0, 2));
       
       setActivatedGoals(goalsData);
       setCurrencies(currenciesData);
