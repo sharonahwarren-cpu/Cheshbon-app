@@ -25,8 +25,11 @@ interface Goal {
 interface LifeArea {
   id: string;
   name: string;
-  parentId?: string;
-  level: number;
+  parentId?: string | null;
+  icon?: string;
+  color?: string;
+  displayOrder?: number;
+  showProgress?: boolean;
   children?: LifeArea[];
 }
 
