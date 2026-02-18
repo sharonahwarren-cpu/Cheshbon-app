@@ -311,19 +311,22 @@ export default function HomeScreen() {
     console.log("Loading express data (activated goals) for date:", selectedDate.toISOString());
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
-      const [goalsRes, gainsLossesRes, strategiesRes, prefsRes] = await Promise.all([
+      const [goalsRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes] = await Promise.all([
         authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
+        authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/user-preferences'),
       ]);
       
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
       
       setActivatedGoals(goalsData);
+      setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
       setUserPreferences(prefsData);
@@ -397,7 +400,7 @@ export default function HomeScreen() {
       });
       
       setCategoryGroups(sortedGroups);
-      console.log("Express data loaded successfully with nested categories:", sortedGroups);
+      console.log("Express data loaded successfully with nested categories and currencies:", sortedGroups);
     } catch (error) {
       console.error("Error loading express data:", error);
       throw error;
@@ -710,7 +713,7 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="checkmark"
               android_material_icon_name="check"
-              size={18}
+              size={16}
               color="#FFFFFF"
             />
             <Text style={styles.actionButtonText}>Success</Text>
@@ -723,7 +726,7 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="xmark"
               android_material_icon_name="close"
-              size={18}
+              size={16}
               color="#FFFFFF"
             />
             <Text style={styles.actionButtonText}>Struggle</Text>
@@ -1507,7 +1510,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 8,
-    gap: 6,
+    gap: 4,
   },
   successButton: {
     backgroundColor: colors.success,
@@ -1521,7 +1524,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   actionButtonText: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: '#FFFFFF',
   },
