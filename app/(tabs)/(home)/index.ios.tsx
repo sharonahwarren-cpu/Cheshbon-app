@@ -556,14 +556,13 @@ export default function HomeScreen() {
     }
   };
 
-  const calculateDailyCurrencyTally = (goal: ActivatedGoal) => {
+  const calculateDailyCurrencyTallies = (goal: ActivatedGoal) => {
     const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
     const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
     const successCount = dailySuccessEntries.length;
     const struggleCount = dailyStruggleEntries.length;
 
-    let totalTally = 0;
-    let currencyUsed: Currency | null = null;
+    const tallies: Array<{ tally: number; currencySymbol: string; hasValue: boolean }> = [];
 
     // Calculate reward currency impact
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
@@ -572,14 +571,21 @@ export default function HomeScreen() {
         const completedRewardSets = Math.floor(successCount / goal.rewardSuccesses);
         if (completedRewardSets > 0) {
           const rewardAmount = completedRewardSets * goal.rewardAmount;
+          let rewardTally = 0;
           
           if (rewardCurrency.onSuccess === 'ADD') {
-            totalTally += rewardAmount;
+            rewardTally = rewardAmount;
           } else if (rewardCurrency.onSuccess === 'SUBTRACT') {
-            totalTally -= rewardAmount;
+            rewardTally = -rewardAmount;
           }
           
-          currencyUsed = rewardCurrency;
+          if (rewardTally !== 0) {
+            tallies.push({
+              tally: Math.abs(rewardTally),
+              currencySymbol: rewardCurrency.symbol || '',
+              hasValue: true,
+            });
+          }
         }
       }
     }
@@ -591,49 +597,29 @@ export default function HomeScreen() {
         const completedConsequenceSets = Math.floor(struggleCount / goal.consequenceFailures);
         if (completedConsequenceSets > 0) {
           const consequenceAmount = completedConsequenceSets * goal.consequenceAmount;
+          let consequenceTally = 0;
           
           if (consequenceCurrency.onFailure === 'ADD') {
-            totalTally += consequenceAmount;
+            consequenceTally = consequenceAmount;
           } else if (consequenceCurrency.onFailure === 'SUBTRACT') {
-            totalTally -= consequenceAmount;
+            consequenceTally = -consequenceAmount;
           }
           
-          currencyUsed = consequenceCurrency;
-        }
-      }
-    }
-
-    // If both reward and consequence are present, determine which one to show based on which has a value
-    // Priority: show the one that actually has an impact today
-    if (goal.rewardCurrencyId && goal.consequenceCurrencyId) {
-      const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
-      const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
-      
-      const hasRewardImpact = rewardCurrency && goal.rewardSuccesses && Math.floor(successCount / goal.rewardSuccesses) > 0;
-      const hasConsequenceImpact = consequenceCurrency && goal.consequenceFailures && Math.floor(struggleCount / goal.consequenceFailures) > 0;
-      
-      if (hasRewardImpact && !hasConsequenceImpact) {
-        currencyUsed = rewardCurrency || null;
-      } else if (hasConsequenceImpact && !hasRewardImpact) {
-        currencyUsed = consequenceCurrency || null;
-      } else if (hasRewardImpact && hasConsequenceImpact) {
-        // Both have impact - show the currency symbol of the one with larger absolute impact
-        const rewardImpact = Math.abs(Math.floor(successCount / (goal.rewardSuccesses || 1)) * (goal.rewardAmount || 0));
-        const consequenceImpact = Math.abs(Math.floor(struggleCount / (goal.consequenceFailures || 1)) * (goal.consequenceAmount || 0));
-        
-        if (consequenceImpact > rewardImpact) {
-          currencyUsed = consequenceCurrency || null;
-        } else {
-          currencyUsed = rewardCurrency || null;
+          if (consequenceTally !== 0) {
+            // Only add if it's a different currency than reward
+            if (goal.rewardCurrencyId !== goal.consequenceCurrencyId) {
+              tallies.push({
+                tally: Math.abs(consequenceTally),
+                currencySymbol: consequenceCurrency.symbol || '',
+                hasValue: true,
+              });
+            }
+          }
         }
       }
     }
     
-    return {
-      tally: Math.abs(totalTally),
-      hasValue: totalTally !== 0,
-      currencySymbol: currencyUsed?.symbol || '',
-    };
+    return tallies;
   };
 
   if (loading) {
@@ -655,9 +641,8 @@ export default function HomeScreen() {
     
     const hasDescription = goal.description && goal.description.trim().length > 0;
     
-    const currencyTally = calculateDailyCurrencyTally(goal);
-    const tallyText = currencyTally.tally.toString();
-    const currencySymbolText = currencyTally.currencySymbol;
+    const currencyTallies = calculateDailyCurrencyTallies(goal);
+    const hasCurrencyTallies = currencyTallies.length > 0;
     
     return (
       <View key={goal.id} style={styles.goalCard}>
@@ -682,16 +667,25 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
           
-          {currencyTally.hasValue && (
-            <View style={styles.currencyTallyBadge}>
-              {currencySymbolText && (
-                <Text style={styles.currencySymbolText}>
-                  {currencySymbolText}
-                </Text>
-              )}
-              <Text style={styles.currencyTallyText}>
-                {tallyText}
-              </Text>
+          {hasCurrencyTallies && (
+            <View style={styles.currencyTalliesContainer}>
+              {currencyTallies.map((tally, index) => {
+                const tallyText = tally.tally.toString();
+                const currencySymbolText = tally.currencySymbol;
+                
+                return (
+                  <View key={index} style={styles.currencyTallyBadge}>
+                    {currencySymbolText && (
+                      <Text style={styles.currencySymbolText}>
+                        {currencySymbolText}
+                      </Text>
+                    )}
+                    <Text style={styles.currencyTallyText}>
+                      {tallyText}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
@@ -1233,6 +1227,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     lineHeight: 16,
+  },
+  currencyTalliesContainer: {
+    flexDirection: 'column',
+    gap: 4,
   },
   currencyTallyBadge: {
     flexDirection: 'row',
