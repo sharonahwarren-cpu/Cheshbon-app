@@ -37,6 +37,7 @@ interface Currency {
   id: string;
   name: string;
   symbol?: string;
+  type?: 'reward' | 'consequence';
   onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
@@ -314,6 +315,7 @@ export default function SettingsScreen() {
       setFormData({
         name: '',
         symbol: '',
+        type: 'consequence',
         onSuccess: 'ADD',
         onFailure: 'ADD',
       });

@@ -38,6 +38,7 @@ interface Currency {
   id: string;
   name: string;
   symbol?: string;
+  type?: 'reward' | 'consequence';
   onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
@@ -329,8 +330,9 @@ export default function SettingsScreen() {
       setFormData({
         name: '',
         symbol: '',
-        onSuccess: 'ADD',
-        onFailure: 'ADD',
+        type: 'consequence', // Default to consequence as per requirements
+        onSuccess: 'NONE',
+        onFailure: 'NONE',
       });
     } else {
       setFormData({});
@@ -990,6 +992,7 @@ export default function SettingsScreen() {
           ) : (
             currencies.map((currency, index) => {
               const symbolText = currency.symbol || '';
+              const typeText = currency.type === 'reward' ? 'Reward' : 'Consequence';
               const onSuccessAction = getCurrencyActionText(currency, true);
               const onFailureAction = getCurrencyActionText(currency, false);
               const onSuccessText = `On Success: ${onSuccessAction}`;
@@ -1003,6 +1006,9 @@ export default function SettingsScreen() {
                         <Text style={styles.listItemTitle}>{currency.name}</Text>
                         {symbolText && <Text style={styles.currencySymbol}>{symbolText}</Text>}
                       </View>
+                      <Text style={[styles.currencyTypeText, currency.type === 'reward' ? styles.currencyTypeReward : styles.currencyTypeConsequence]}>
+                        {typeText}
+                      </Text>
                       <Text style={styles.listItemSubtitle}>{onSuccessText}</Text>
                       <Text style={styles.listItemSubtitle}>{onFailureText}</Text>
                     </View>
@@ -1658,6 +1664,34 @@ export default function SettingsScreen() {
                   </View>
 
                   <View style={styles.formGroup}>
+                    <Text style={styles.label}>Currency Type *</Text>
+                    <Text style={styles.helperText}>
+                      Reward currencies can be claimed (e.g., treats). Consequence currencies must be paid (e.g., fines, pushups).
+                    </Text>
+                    <View style={styles.optionsGrid}>
+                      {[
+                        { value: 'reward', label: 'Reward (Can be claimed)' },
+                        { value: 'consequence', label: 'Consequence (Must be paid)' }
+                      ].map((option, index) => {
+                        const isSelected = (formData.type || 'consequence') === option.value;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, type: option.value })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
                     <Text style={styles.label}>On Success (Reward)</Text>
                     <Text style={styles.helperText}>How does this currency change when a goal succeeds?</Text>
                     <View style={styles.optionsGrid}>
@@ -2154,6 +2188,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.primary,
+  },
+  currencyTypeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  currencyTypeReward: {
+    color: colors.success,
+  },
+  currencyTypeConsequence: {
+    color: colors.error,
   },
   formContainer: {
     flex: 1,
