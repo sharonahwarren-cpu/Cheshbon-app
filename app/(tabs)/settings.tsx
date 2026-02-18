@@ -18,6 +18,8 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 interface LifeArea {
   id: string;
@@ -122,7 +124,7 @@ const ICON_OPTIONS = [
 
 const COLOR_OPTIONS = [
   '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
-  '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788'
+  '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788', '#E74C3C'
 ];
 
 export default function SettingsScreen() {
@@ -169,6 +171,8 @@ export default function SettingsScreen() {
   
   // Color picker state
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [customColor, setCustomColor] = useState('');
+  const [showCustomColorInput, setShowCustomColorInput] = useState(false);
   
   // Icon picker state (for image upload)
   const [uploadingIcon, setUploadingIcon] = useState(false);
@@ -178,8 +182,8 @@ export default function SettingsScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState(new Date());
 
-  // Drag and drop state for reordering
-  const [isDragging, setIsDragging] = useState(false);
+  // Create Goal Modal state
+  const [showCreateGoalModal, setShowCreateGoalModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -346,7 +350,7 @@ export default function SettingsScreen() {
       setFormData({
         name: '',
         parentId: null,
-        icon: null,
+        icon: '',
         color: null,
         displayOrder: lifeAreas.length,
         showProgress: true,
@@ -545,24 +549,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const moveLifeAreaUp = (index: number) => {
-    if (index === 0) return;
-    const newAreas = [...lifeAreas];
-    const temp = newAreas[index - 1];
-    newAreas[index - 1] = newAreas[index];
-    newAreas[index] = temp;
-    handleReorderLifeAreas(newAreas);
-  };
-
-  const moveLifeAreaDown = (index: number) => {
-    if (index === lifeAreas.length - 1) return;
-    const newAreas = [...lifeAreas];
-    const temp = newAreas[index + 1];
-    newAreas[index + 1] = newAreas[index];
-    newAreas[index] = temp;
-    handleReorderLifeAreas(newAreas);
-  };
-
   const formatTime = (time: string) => {
     const [hours, minutes] = time.split(':');
     const hour = parseInt(hours);
@@ -579,6 +565,20 @@ export default function SettingsScreen() {
       const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
       const timeString = `${hours}:${minutes}`;
       setFormData({ ...formData, time: timeString });
+    }
+  };
+
+  const addCustomColor = () => {
+    if (customColor && /^#[0-9A-F]{6}$/i.test(customColor)) {
+      if (!COLOR_OPTIONS.includes(customColor.toUpperCase())) {
+        COLOR_OPTIONS.push(customColor.toUpperCase());
+      }
+      setFormData({ ...formData, color: customColor.toUpperCase() });
+      setCustomColor('');
+      setShowCustomColorInput(false);
+      setShowColorPicker(false);
+    } else {
+      showError('Please enter a valid hex color (e.g., #FF5733)');
     }
   };
 
@@ -889,68 +889,62 @@ export default function SettingsScreen() {
     );
   };
 
+  const flattenLifeAreas = (areas: LifeArea[], depth: number = 0): Array<LifeArea & { depth: number }> => {
+    let result: Array<LifeArea & { depth: number }> = [];
+    areas.forEach(area => {
+      result.push({ ...area, depth });
+      if (area.children && area.children.length > 0) {
+        result = result.concat(flattenLifeAreas(area.children, depth + 1));
+      }
+    });
+    return result;
+  };
+
   const renderLifeAreas = () => {
-    const renderLifeAreaItem = (area: LifeArea, depth: number = 0, index: number = 0, parentArray: LifeArea[] = []) => {
-      const iconName = area.icon;
-      const areaColor = area.color || colors.primary;
-      const percentage = area.successPercentage || 0;
+    const flatAreas = flattenLifeAreas(lifeAreas);
+
+    const renderItem = ({ item, drag, isActive }: RenderItemParams<LifeArea & { depth: number }>) => {
+      const iconName = item.icon;
+      const areaColor = item.color || colors.primary;
+      const percentage = item.successPercentage || 0;
       const percentageText = `${Math.round(percentage)}%`;
-      const percentageColor = (area.percentageColor === 'green') ? colors.success : colors.error;
-      const goalsCount = area.goals?.length || 0;
-      const activeGoalsCount = area.goals?.filter(g => g.status === 'ACTIVE').length || 0;
+      const percentageColor = (item.percentageColor === 'green') ? colors.success : colors.error;
+      const activeGoalsCount = item.goals?.filter(g => g.status === 'ACTIVE').length || 0;
       
       return (
-        <React.Fragment key={area.id}>
-          <View style={[styles.lifeAreaCardCompact, { marginLeft: depth * 16, borderLeftColor: areaColor }]}>
+        <ScaleDecorator>
+          <TouchableOpacity
+            onLongPress={drag}
+            disabled={isActive}
+            style={[
+              styles.lifeAreaCardCompact,
+              { marginLeft: item.depth * 16, borderLeftColor: areaColor },
+              isActive && styles.lifeAreaDragging,
+            ]}
+          >
             <View style={styles.lifeAreaCompactContent}>
               <View style={styles.lifeAreaCompactLeft}>
+                <IconSymbol
+                  ios_icon_name="drag-handle"
+                  android_material_icon_name="drag-handle"
+                  size={20}
+                  color={colors.textSecondary}
+                />
                 {iconName ? (
-                  <IconSymbol
-                    ios_icon_name="star.fill"
-                    android_material_icon_name={iconName}
-                    size={20}
-                    color={areaColor}
-                  />
+                  <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
                 ) : (
                   <View style={styles.iconPlaceholder} />
                 )}
-                <Text style={styles.lifeAreaCompactName}>{area.name}</Text>
-                <Text style={styles.lifeAreaCompactGoals}>({activeGoalsCount})</Text>
-                {area.showProgress && (
+                <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
+                {item.showProgress && (
                   <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
                     {percentageText}
                   </Text>
                 )}
               </View>
               <View style={styles.lifeAreaCompactActions}>
-                {depth === 0 && index > 0 && (
-                  <TouchableOpacity
-                    onPress={() => moveLifeAreaUp(index)}
-                    style={styles.iconButtonCompact}
-                  >
-                    <IconSymbol
-                      ios_icon_name="arrow.up"
-                      android_material_icon_name="arrow-upward"
-                      size={16}
-                      color={colors.textSecondary}
-                    />
-                  </TouchableOpacity>
-                )}
-                {depth === 0 && index < parentArray.length - 1 && (
-                  <TouchableOpacity
-                    onPress={() => moveLifeAreaDown(index)}
-                    style={styles.iconButtonCompact}
-                  >
-                    <IconSymbol
-                      ios_icon_name="arrow.down"
-                      android_material_icon_name="arrow-downward"
-                      size={16}
-                      color={colors.textSecondary}
-                    />
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity
-                  onPress={() => openEditModal('lifeArea', area)}
+                  onPress={() => openEditModal('lifeArea', item)}
                   style={styles.iconButtonCompact}
                 >
                   <IconSymbol
@@ -961,7 +955,7 @@ export default function SettingsScreen() {
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => handleDeleteItem('lifeArea', area.id)}
+                  onPress={() => handleDeleteItem('lifeArea', item.id)}
                   style={styles.iconButtonCompact}
                 >
                   <IconSymbol
@@ -973,14 +967,13 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-          {area.children && area.children.map((child, childIndex) => renderLifeAreaItem(child, depth + 1, childIndex, area.children || []))}
-        </React.Fragment>
+          </TouchableOpacity>
+        </ScaleDecorator>
       );
     };
 
     return (
-      <View style={styles.container}>
+      <GestureHandlerRootView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setCurrentSection('main')}>
             <IconSymbol
@@ -1000,16 +993,20 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.listContainer}>
-          {lifeAreas.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
-            </View>
-          ) : (
-            lifeAreas.map((area, index) => renderLifeAreaItem(area, 0, index, lifeAreas))
-          )}
-        </ScrollView>
-      </View>
+        {flatAreas.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
+          </View>
+        ) : (
+          <DraggableFlatList
+            data={flatAreas}
+            renderItem={renderItem}
+            keyExtractor={(item) => item.id}
+            onDragEnd={({ data }) => handleReorderLifeAreas(data)}
+            containerStyle={styles.listContainer}
+          />
+        )}
+      </GestureHandlerRootView>
     );
   };
 
@@ -1720,29 +1717,20 @@ export default function SettingsScreen() {
 
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>Icon</Text>
-                    <Text style={styles.helperText}>Upload an icon from your device (feature coming soon)</Text>
-                    <View style={styles.iconUploadContainer}>
-                      {formData.icon ? (
-                        <View style={styles.iconPreview}>
-                          <IconSymbol
-                            ios_icon_name="star.fill"
-                            android_material_icon_name={formData.icon}
-                            size={48}
-                            color={colors.primary}
-                          />
-                          <TouchableOpacity
-                            style={styles.removeIconButton}
-                            onPress={() => setFormData({ ...formData, icon: null })}
-                          >
-                            <Text style={styles.removeIconText}>Remove</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <View style={styles.iconPlaceholderLarge}>
-                          <Text style={styles.iconPlaceholderText}>No icon set</Text>
-                        </View>
-                      )}
-                    </View>
+                    <Text style={styles.helperText}>Enter an emoji or symbol from your keyboard</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.icon || ''}
+                      onChangeText={(value) => setFormData({ ...formData, icon: value })}
+                      placeholder="e.g., 📚, 🏃‍♀️, ✨"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                    {formData.icon && (
+                      <View style={styles.iconPreviewContainer}>
+                        <Text style={styles.iconPreviewText}>Preview:</Text>
+                        <Text style={styles.iconPreview}>{formData.icon}</Text>
+                      </View>
+                    )}
                   </View>
 
                   <View style={styles.formGroup}>
@@ -1791,6 +1779,35 @@ export default function SettingsScreen() {
                             </React.Fragment>
                           );
                         })}
+                        <TouchableOpacity
+                          style={[styles.colorOption, styles.customColorOption]}
+                          onPress={() => setShowCustomColorInput(!showCustomColorInput)}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus"
+                            android_material_icon_name="add"
+                            size={20}
+                            color={colors.text}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    {showCustomColorInput && (
+                      <View style={styles.customColorInputContainer}>
+                        <TextInput
+                          style={styles.customColorInput}
+                          value={customColor}
+                          onChangeText={setCustomColor}
+                          placeholder="#FF5733"
+                          placeholderTextColor={colors.textSecondary}
+                          autoCapitalize="characters"
+                        />
+                        <TouchableOpacity
+                          style={styles.addCustomColorButton}
+                          onPress={addCustomColor}
+                        >
+                          <Text style={styles.addCustomColorButtonText}>Add</Text>
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
@@ -2222,7 +2239,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowGoalManagementModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, styles.topModal]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Manage Goals for {selectedLifeArea.name}</Text>
               <TouchableOpacity onPress={() => setShowGoalManagementModal(false)}>
@@ -2308,7 +2325,7 @@ export default function SettingsScreen() {
                 style={styles.createGoalButton}
                 onPress={() => {
                   setShowGoalManagementModal(false);
-                  router.push(`/create-goal?lifeAreaId=${selectedLifeArea.id}`);
+                  setShowCreateGoalModal(true);
                 }}
               >
                 <IconSymbol
@@ -2327,6 +2344,48 @@ export default function SettingsScreen() {
                 onPress={() => setShowGoalManagementModal(false)}
               >
                 <Text style={styles.buttonPrimaryText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderCreateGoalModal = () => {
+    return (
+      <Modal
+        visible={showCreateGoalModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCreateGoalModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, styles.topModal]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Create Goal</Text>
+              <TouchableOpacity onPress={() => setShowCreateGoalModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.helperText}>
+                This will open the Create Goal screen. After creating the goal, you can return here to continue editing the life area.
+              </Text>
+              <TouchableOpacity
+                style={styles.createGoalButton}
+                onPress={() => {
+                  setShowCreateGoalModal(false);
+                  setShowModal(false);
+                  router.push(`/create-goal?lifeAreaId=${selectedLifeArea?.id}`);
+                }}
+              >
+                <Text style={styles.createGoalButtonText}>Open Create Goal Screen</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2359,6 +2418,7 @@ export default function SettingsScreen() {
 
       {renderEditModal()}
       {renderGoalManagementModal()}
+      {renderCreateGoalModal()}
 
       {/* Currency Claim/Pay Modal */}
       <Modal
@@ -2807,6 +2867,9 @@ const styles = StyleSheet.create({
     width: '100%',
     maxHeight: '80%',
   },
+  topModal: {
+    zIndex: 1000,
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2993,13 +3056,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  // Life Area compact styles
+  // Life Area compact styles with drag and drop
   lifeAreaCardCompact: {
     backgroundColor: colors.card,
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
     borderLeftWidth: 3,
+  },
+  lifeAreaDragging: {
+    opacity: 0.7,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   lifeAreaCompactContent: {
     flexDirection: 'row',
@@ -3012,14 +3083,14 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
   },
+  lifeAreaIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
   lifeAreaCompactName: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text,
-  },
-  lifeAreaCompactGoals: {
-    fontSize: 13,
-    color: colors.textSecondary,
   },
   lifeAreaCompactPercentage: {
     fontSize: 13,
@@ -3053,6 +3124,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginTop: 12,
   },
   colorOption: {
     width: 56,
@@ -3069,6 +3141,39 @@ const styles = StyleSheet.create({
   colorOptionText: {
     fontSize: 12,
     color: colors.text,
+    fontWeight: '600',
+  },
+  customColorOption: {
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  customColorInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  customColorInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  addCustomColorButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addCustomColorButtonText: {
+    color: colors.background,
+    fontSize: 14,
     fontWeight: '600',
   },
   goalManagementItem: {
@@ -3126,39 +3231,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  iconUploadContainer: {
-    alignItems: 'center',
-    padding: 20,
-  },
-  iconPreview: {
+  iconPreviewContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  removeIconButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: colors.error,
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: colors.card,
     borderRadius: 8,
   },
-  removeIconText: {
-    color: colors.background,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  iconPlaceholderLarge: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconPlaceholderText: {
+  iconPreviewText: {
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  iconPreview: {
+    fontSize: 32,
   },
   colorPickerButton: {
     backgroundColor: colors.card,
