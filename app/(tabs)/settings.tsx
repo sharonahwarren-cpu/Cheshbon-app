@@ -164,6 +164,15 @@ export default function SettingsScreen() {
   const [showGoalManagementModal, setShowGoalManagementModal] = useState(false);
   const [selectedLifeArea, setSelectedLifeArea] = useState<LifeArea | null>(null);
 
+  // Parent Life Area picker state
+  const [showParentPicker, setShowParentPicker] = useState(false);
+  
+  // Color picker state
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  
+  // Icon picker state (for image upload)
+  const [uploadingIcon, setUploadingIcon] = useState(false);
+
   const [formData, setFormData] = useState<any>({});
   
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -337,7 +346,7 @@ export default function SettingsScreen() {
       setFormData({
         name: '',
         parentId: null,
-        icon: 'favorite',
+        icon: null,
         color: null,
         displayOrder: lifeAreas.length,
         showProgress: true,
@@ -882,7 +891,7 @@ export default function SettingsScreen() {
 
   const renderLifeAreas = () => {
     const renderLifeAreaItem = (area: LifeArea, depth: number = 0, index: number = 0, parentArray: LifeArea[] = []) => {
-      const iconName = area.icon || 'favorite';
+      const iconName = area.icon;
       const areaColor = area.color || colors.primary;
       const percentage = area.successPercentage || 0;
       const percentageText = `${Math.round(percentage)}%`;
@@ -895,12 +904,16 @@ export default function SettingsScreen() {
           <View style={[styles.lifeAreaCardCompact, { marginLeft: depth * 16, borderLeftColor: areaColor }]}>
             <View style={styles.lifeAreaCompactContent}>
               <View style={styles.lifeAreaCompactLeft}>
-                <IconSymbol
-                  ios_icon_name="star.fill"
-                  android_material_icon_name={iconName}
-                  size={20}
-                  color={areaColor}
-                />
+                {iconName ? (
+                  <IconSymbol
+                    ios_icon_name="star.fill"
+                    android_material_icon_name={iconName}
+                    size={20}
+                    color={areaColor}
+                  />
+                ) : (
+                  <View style={styles.iconPlaceholder} />
+                )}
                 <Text style={styles.lifeAreaCompactName}>{area.name}</Text>
                 <Text style={styles.lifeAreaCompactGoals}>({activeGoalsCount})</Text>
                 {area.showProgress && (
@@ -936,20 +949,6 @@ export default function SettingsScreen() {
                     />
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  onPress={() => {
-                    setSelectedLifeArea(area);
-                    setShowGoalManagementModal(true);
-                  }}
-                  style={styles.iconButtonCompact}
-                >
-                  <IconSymbol
-                    ios_icon_name="link"
-                    android_material_icon_name="link"
-                    size={16}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => openEditModal('lifeArea', area)}
                   style={styles.iconButtonCompact}
@@ -1663,87 +1662,137 @@ export default function SettingsScreen() {
                   </View>
 
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Parent Life Area (Optional)</Text>
-                    <Text style={styles.helperText}>Choose a parent to create nested life areas</Text>
-                    <ScrollView style={styles.pickerContainer}>
-                      <TouchableOpacity
-                        style={[styles.pickerItem, !formData.parentId && styles.pickerItemSelected]}
-                        onPress={() => setFormData({ ...formData, parentId: null })}
-                      >
-                        <Text style={[styles.pickerItemText, !formData.parentId && styles.pickerItemTextSelected]}>
-                          None (Top Level)
-                        </Text>
-                      </TouchableOpacity>
-                      {lifeAreas.map((area, index) => {
-                        const isSelected = formData.parentId === area.id;
-                        const isCurrentItem = editingItem && editingItem.id === area.id;
-                        
-                        if (isCurrentItem) return null;
-                        
-                        return (
-                          <React.Fragment key={index}>
-                            <TouchableOpacity
-                              style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                              onPress={() => setFormData({ ...formData, parentId: area.id })}
-                            >
-                              <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
-                                {area.name}
-                              </Text>
-                            </TouchableOpacity>
-                          </React.Fragment>
-                        );
-                      })}
-                    </ScrollView>
+                    <Text style={styles.label}>Parent Life Area</Text>
+                    <TouchableOpacity
+                      style={styles.parentPickerButton}
+                      onPress={() => setShowParentPicker(!showParentPicker)}
+                    >
+                      <Text style={styles.parentPickerText}>
+                        {formData.parentId 
+                          ? lifeAreas.find(a => a.id === formData.parentId)?.name || 'None'
+                          : 'None'}
+                      </Text>
+                      <IconSymbol
+                        ios_icon_name={showParentPicker ? "chevron.up" : "chevron.down"}
+                        android_material_icon_name={showParentPicker ? "arrow-drop-up" : "arrow-drop-down"}
+                        size={24}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    {showParentPicker && (
+                      <ScrollView style={styles.pickerContainer}>
+                        <TouchableOpacity
+                          style={[styles.pickerItem, !formData.parentId && styles.pickerItemSelected]}
+                          onPress={() => {
+                            setFormData({ ...formData, parentId: null });
+                            setShowParentPicker(false);
+                          }}
+                        >
+                          <Text style={[styles.pickerItemText, !formData.parentId && styles.pickerItemTextSelected]}>
+                            None (Top Level)
+                          </Text>
+                        </TouchableOpacity>
+                        {lifeAreas.map((area, index) => {
+                          const isSelected = formData.parentId === area.id;
+                          const isCurrentItem = editingItem && editingItem.id === area.id;
+                          
+                          if (isCurrentItem) return null;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                                onPress={() => {
+                                  setFormData({ ...formData, parentId: area.id });
+                                  setShowParentPicker(false);
+                                }}
+                              >
+                                <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                                  {area.name}
+                                </Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
                   </View>
 
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>Icon</Text>
-                    <View style={styles.iconGrid}>
-                      {ICON_OPTIONS.map((icon, index) => {
-                        const isSelected = (formData.icon || 'favorite') === icon;
-                        
-                        return (
-                          <React.Fragment key={index}>
-                            <TouchableOpacity
-                              style={[styles.iconOption, isSelected && styles.iconOptionSelected]}
-                              onPress={() => setFormData({ ...formData, icon })}
-                            >
-                              <IconSymbol
-                                ios_icon_name="star.fill"
-                                android_material_icon_name={icon}
-                                size={28}
-                                color={isSelected ? colors.background : colors.text}
-                              />
-                            </TouchableOpacity>
-                          </React.Fragment>
-                        );
-                      })}
+                    <Text style={styles.helperText}>Upload an icon from your device (feature coming soon)</Text>
+                    <View style={styles.iconUploadContainer}>
+                      {formData.icon ? (
+                        <View style={styles.iconPreview}>
+                          <IconSymbol
+                            ios_icon_name="star.fill"
+                            android_material_icon_name={formData.icon}
+                            size={48}
+                            color={colors.primary}
+                          />
+                          <TouchableOpacity
+                            style={styles.removeIconButton}
+                            onPress={() => setFormData({ ...formData, icon: null })}
+                          >
+                            <Text style={styles.removeIconText}>Remove</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.iconPlaceholderLarge}>
+                          <Text style={styles.iconPlaceholderText}>No icon set</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
 
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Color (Optional)</Text>
-                    <Text style={styles.helperText}>Choose a color for this life area</Text>
-                    <View style={styles.colorGrid}>
-                      <TouchableOpacity
-                        style={[styles.colorOption, { backgroundColor: colors.border }, !formData.color && styles.colorOptionSelected]}
-                        onPress={() => setFormData({ ...formData, color: null })}
-                      >
-                        <Text style={styles.colorOptionText}>None</Text>
-                      </TouchableOpacity>
-                      {COLOR_OPTIONS.map((color, index) => {
-                        const isSelected = formData.color === color;
-                        
-                        return (
-                          <React.Fragment key={index}>
-                            <TouchableOpacity
-                              style={[styles.colorOption, { backgroundColor: color }, isSelected && styles.colorOptionSelected]}
-                              onPress={() => setFormData({ ...formData, color })}
-                            />
-                          </React.Fragment>
-                        );
-                      })}
-                    </View>
+                    <Text style={styles.label}>Color</Text>
+                    <TouchableOpacity
+                      style={styles.colorPickerButton}
+                      onPress={() => setShowColorPicker(!showColorPicker)}
+                    >
+                      <View style={styles.colorPreview}>
+                        {formData.color ? (
+                          <View style={[styles.colorSwatch, { backgroundColor: formData.color }]} />
+                        ) : (
+                          <Text style={styles.colorPreviewText}>No color selected</Text>
+                        )}
+                      </View>
+                      <IconSymbol
+                        ios_icon_name={showColorPicker ? "chevron.up" : "chevron.down"}
+                        android_material_icon_name={showColorPicker ? "arrow-drop-up" : "arrow-drop-down"}
+                        size={24}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    {showColorPicker && (
+                      <View style={styles.colorGrid}>
+                        <TouchableOpacity
+                          style={[styles.colorOption, { backgroundColor: colors.border }, !formData.color && styles.colorOptionSelected]}
+                          onPress={() => {
+                            setFormData({ ...formData, color: null });
+                            setShowColorPicker(false);
+                          }}
+                        >
+                          <Text style={styles.colorOptionText}>None</Text>
+                        </TouchableOpacity>
+                        {COLOR_OPTIONS.map((color, index) => {
+                          const isSelected = formData.color === color;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.colorOption, { backgroundColor: color }, isSelected && styles.colorOptionSelected]}
+                                onPress={() => {
+                                  setFormData({ ...formData, color });
+                                  setShowColorPicker(false);
+                                }}
+                              />
+                            </React.Fragment>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
 
                   <View style={styles.formGroup}>
@@ -1759,6 +1808,45 @@ export default function SettingsScreen() {
                     <Text style={styles.helperText}>
                       Display success percentage based on active goals in this life area
                     </Text>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Linked Goals</Text>
+                    <Text style={styles.helperText}>Manage which goals are linked to this life area</Text>
+                    <TouchableOpacity
+                      style={styles.manageGoalsButton}
+                      onPress={() => {
+                        if (editingItem) {
+                          setSelectedLifeArea(editingItem);
+                          setShowGoalManagementModal(true);
+                        } else {
+                          showError('Please save the life area first before linking goals');
+                        }
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="link"
+                        android_material_icon_name="link"
+                        size={20}
+                        color={colors.background}
+                      />
+                      <Text style={styles.manageGoalsButtonText}>Manage Linked Goals</Text>
+                    </TouchableOpacity>
+                    {editingItem && editingItem.goals && editingItem.goals.length > 0 && (
+                      <View style={styles.linkedGoalsList}>
+                        {editingItem.goals.map((goal: any, idx: number) => {
+                          const statusText = goal.status === 'ACTIVE' ? 'Active' : 'Deactivated';
+                          const statusColor = goal.status === 'ACTIVE' ? colors.success : colors.textSecondary;
+                          
+                          return (
+                            <View key={idx} style={styles.linkedGoalItem}>
+                              <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
+                              <Text style={[styles.linkedGoalStatus, { color: statusColor }]}>{statusText}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
                   </View>
                 </>
               )}
@@ -3018,6 +3106,120 @@ const styles = StyleSheet.create({
   createGoalButtonText: {
     color: colors.background,
     fontSize: 16,
+    fontWeight: '600',
+  },
+  iconPlaceholder: {
+    width: 20,
+    height: 20,
+  },
+  parentPickerButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  parentPickerText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  iconUploadContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  iconPreview: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  removeIconButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.error,
+    borderRadius: 8,
+  },
+  removeIconText: {
+    color: colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  iconPlaceholderLarge: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconPlaceholderText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  colorPickerButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  colorPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  colorSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  colorPreviewText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  manageGoalsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  manageGoalsButtonText: {
+    color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  linkedGoalsList: {
+    marginTop: 12,
+    gap: 8,
+  },
+  linkedGoalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    padding: 12,
+    borderRadius: 8,
+  },
+  linkedGoalTitle: {
+    fontSize: 14,
+    color: colors.text,
+    flex: 1,
+  },
+  linkedGoalStatus: {
+    fontSize: 12,
     fontWeight: '600',
   },
 });

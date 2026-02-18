@@ -140,6 +140,15 @@ export default function SettingsScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState(new Date());
 
+  // Parent Life Area picker state
+  const [showParentPicker, setShowParentPicker] = useState(false);
+  
+  // Color picker state
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  
+  // Icon picker state (for image upload)
+  const [uploadingIcon, setUploadingIcon] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -318,6 +327,15 @@ export default function SettingsScreen() {
         type: 'consequence',
         onSuccess: 'ADD',
         onFailure: 'ADD',
+      });
+    } else if (type === 'lifeArea') {
+      setFormData({
+        name: '',
+        parentId: null,
+        icon: null,
+        color: null,
+        displayOrder: lifeAreas.length,
+        showProgress: true,
       });
     } else {
       setFormData({});
@@ -1554,5 +1572,83 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontSize: 16,
     fontWeight: '600',
+  },
+  iconPlaceholder: {
+    width: 20,
+    height: 20,
+  },
+  parentPickerButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  parentPickerText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  iconUploadContainer: {
+    alignItems: 'center',
+    padding: 20,
+  },
+  iconPreview: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  removeIconButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.error,
+    borderRadius: 8,
+  },
+  removeIconText: {
+    color: colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  iconPlaceholderLarge: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconPlaceholderText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  colorPickerButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  colorPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  colorSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  colorPreviewText: {
+    fontSize: 16,
+    color: colors.textSecondary,
   },
 });
