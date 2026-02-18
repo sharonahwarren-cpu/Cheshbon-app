@@ -16,9 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedDelete } from '@/utils/api';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { AddReflectionModal } from '@/components/AddReflectionModal';
 
 interface JournalEntry {
   id: string;
@@ -712,23 +711,24 @@ export default function ReflectScreen() {
         </ScrollView>
       </View>
 
-      <AddReflectionModal
-        visible={showAddReflectionModal}
-        onClose={() => {
-          setShowAddReflectionModal(false);
-          setPrefilledGoalId(undefined);
-        }}
-        onSave={handleReflectionSaved}
-        selectedDate={selectedDate}
-        goals={goals}
-        currencies={currencies}
-        userPreferences={userPreferences}
-        editingReflection={editingReflection}
-        gainsLosses={gainsLosses}
-        strategies={strategies}
-        prefilledGoalId={prefilledGoalId}
-        sourceScreen="reflect"
-      />
+      {showAddReflectionModal && (
+        <AddReflectionModal
+          visible={showAddReflectionModal}
+          onClose={() => {
+            setShowAddReflectionModal(false);
+            setPrefilledGoalId(undefined);
+          }}
+          onSave={handleReflectionSaved}
+          selectedDate={selectedDate}
+          goals={goals}
+          currencies={currencies}
+          userPreferences={userPreferences}
+          editingReflection={editingReflection}
+          gainsLosses={gainsLosses}
+          strategies={strategies}
+          prefilledGoalId={prefilledGoalId}
+        />
+      )}
 
       <Modal
         visible={showErrorModal}
@@ -769,6 +769,1198 @@ export default function ReflectScreen() {
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+interface AddReflectionModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onSave: (reflection: Reflection) => void;
+  selectedDate: Date;
+  goals: Goal[];
+  currencies: Currency[];
+  userPreferences: UserPreferences;
+  editingReflection: Reflection | null;
+  gainsLosses: GainLoss[];
+  strategies: Strategy[];
+  prefilledGoalId?: string;
+}
+
+function AddReflectionModal({
+  visible,
+  onClose,
+  onSave,
+  selectedDate,
+  goals,
+  currencies,
+  userPreferences,
+  editingReflection,
+  gainsLosses,
+  strategies,
+  prefilledGoalId,
+}: AddReflectionModalProps) {
+  const router = useRouter();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const descriptionInputRef = useRef<TextInput>(null);
+  const additionalThoughtsInputRef = useRef<TextInput>(null);
+  const newGainInputRef = useRef<TextInput>(null);
+  const newLossInputRef = useRef<TextInput>(null);
+  const newStrategyNameInputRef = useRef<TextInput>(null);
+  const newStrategyDescInputRef = useRef<TextInput>(null);
+  
+  const [step, setStep] = useState(1);
+  const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
+  const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Proactive');
+  const [description, setDescription] = useState(editingReflection?.description || '');
+  const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId || prefilledGoalId);
+  const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(editingReflection?.outcome);
+  const [gainedIds, setGainedIds] = useState<string[]>(editingReflection?.gainedIds || []);
+  const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
+  const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(editingReflection?.wasWorthIt);
+  const [additionalThoughts, setAdditionalThoughts] = useState(editingReflection?.additionalThoughts || '');
+  const [strategyEffectiveness, setStrategyEffectiveness] = useState<Array<{strategyId: string; worked: boolean}>>(editingReflection?.strategyEffectiveness || []);
+  const [loading, setLoading] = useState(false);
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
+  const [goalSearchQuery, setGoalSearchQuery] = useState('');
+  const [showGainsPicker, setShowGainsPicker] = useState(false);
+  const [showLossesPicker, setShowLossesPicker] = useState(false);
+  const [showStrategyPicker, setShowStrategyPicker] = useState(false);
+  const [showCreateGainModal, setShowCreateGainModal] = useState(false);
+  const [showCreateLossModal, setShowCreateLossModal] = useState(false);
+  const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemDescription, setNewItemDescription] = useState('');
+
+  const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
+  const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+
+  const filteredGoals = goals.filter(goal => {
+    if (!category) return true;
+    if (!goal.behaviorCategories) return true;
+    return goal.behaviorCategories.includes(category);
+  }).filter(goal => {
+    if (!goalSearchQuery) return true;
+    return goal.title.toLowerCase().includes(goalSearchQuery.toLowerCase());
+  });
+
+  const selectedGoal = goals.find(g => g.id === linkedGoalId);
+
+  const getCategoryIcon = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'cloud.fill', android: 'cloud' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
+  };
+
+  const getDescriptionPlaceholder = () => {
+    if (!category) {
+      return type === 'Proactive' 
+        ? 'I chose to or didn\'t refrain from...' 
+        : 'I refrained from or didn\'t...';
+    }
+
+    if (type === 'Proactive') {
+      if (category === 'Action') return 'Describe what you chose to do';
+      if (category === 'Speech') return 'Describe what you chose to say';
+      if (category === 'Thought' || category === 'Feeling') return 'Describe what you chose to think/feel';
+    } else {
+      if (category === 'Action') return 'Describe what you refrained from doing';
+      if (category === 'Speech') return 'Describe what you refrained from saying';
+      if (category === 'Thought' || category === 'Feeling') return 'Describe what you refrained from thinking/feeling';
+    }
+
+    return 'Describe your reflection';
+  };
+
+  const handleNext = () => {
+    if (step === 1 && !description.trim()) {
+      alert('Please enter a description');
+      return;
+    }
+    Keyboard.dismiss();
+    setStep(step + 1);
+  };
+
+  const handleBack = () => {
+    if (step > 1) {
+      Keyboard.dismiss();
+      setStep(step - 1);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!description.trim()) {
+      alert('Please enter a description');
+      return;
+    }
+
+    console.log('Saving reflection...');
+    setLoading(true);
+    try {
+      const dateString = selectedDate.toISOString().split('T')[0];
+      
+      const payload = {
+        date: dateString,
+        category: categoriesEnabled ? category : undefined,
+        type,
+        description,
+        linkedGoalId: linkedGoalId || undefined,
+        outcome: linkedGoalId ? outcome : undefined,
+        gainedIds: gainedIds.length > 0 ? gainedIds : undefined,
+        lostIds: lostIds.length > 0 ? lostIds : undefined,
+        wasWorthIt: wasWorthIt !== undefined ? wasWorthIt : undefined,
+        additionalThoughts: additionalThoughts.trim() || undefined,
+        strategyEffectiveness: strategyEffectiveness.length > 0 ? strategyEffectiveness : undefined,
+      };
+
+      let savedReflection;
+      if (editingReflection) {
+        savedReflection = await authenticatedPut(`/api/reflections/${editingReflection.id}`, payload);
+      } else {
+        savedReflection = await authenticatedPost('/api/reflections', payload);
+      }
+
+      onSave(savedReflection?.data || savedReflection);
+    } catch (error) {
+      console.error('Error saving reflection:', error);
+      alert('Failed to save reflection');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateGoal = () => {
+    onClose();
+    router.push('/create-goal');
+  };
+
+  const handleCreateGain = async () => {
+    if (!newItemName.trim()) {
+      alert('Please enter a name');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const newGain = await authenticatedPost('/api/gains-losses', {
+        name: newItemName,
+        type: 'Gain',
+      });
+      
+      gainsLosses.push(newGain?.data || newGain);
+      gainedIds.push((newGain?.data || newGain).id);
+      setNewItemName('');
+      setShowCreateGainModal(false);
+    } catch (error) {
+      console.error('Error creating gain:', error);
+      alert('Failed to create gain');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateLoss = async () => {
+    if (!newItemName.trim()) {
+      alert('Please enter a name');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const newLoss = await authenticatedPost('/api/gains-losses', {
+        name: newItemName,
+        type: 'Loss',
+      });
+      
+      gainsLosses.push(newLoss?.data || newLoss);
+      lostIds.push((newLoss?.data || newLoss).id);
+      setNewItemName('');
+      setShowCreateLossModal(false);
+    } catch (error) {
+      console.error('Error creating loss:', error);
+      alert('Failed to create loss');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateStrategy = async () => {
+    if (!newItemName.trim()) {
+      alert('Please enter a name');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const newStrategy = await authenticatedPost('/api/strategies', {
+        name: newItemName,
+        description: newItemDescription || undefined,
+        category: category || undefined,
+      });
+      
+      strategies.push(newStrategy?.data || newStrategy);
+      setNewItemName('');
+      setNewItemDescription('');
+      setShowCreateStrategyModal(false);
+    } catch (error) {
+      console.error('Error creating strategy:', error);
+      alert('Failed to create strategy');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleStrategy = (strategyId: string) => {
+    const existing = strategyEffectiveness.find(se => se.strategyId === strategyId);
+    if (existing) {
+      setStrategyEffectiveness(strategyEffectiveness.filter(se => se.strategyId !== strategyId));
+    } else {
+      setStrategyEffectiveness([...strategyEffectiveness, { strategyId, worked: true }]);
+    }
+  };
+
+  const setStrategyWorked = (strategyId: string, worked: boolean) => {
+    setStrategyEffectiveness(strategyEffectiveness.map(se => 
+      se.strategyId === strategyId ? { ...se, worked } : se
+    ));
+  };
+
+  const getCurrencyFeedback = () => {
+    if (!selectedGoal || !outcome) return null;
+
+    const currency = outcome === 'success' 
+      ? currencies.find(c => c.id === selectedGoal.rewardCurrencyId)
+      : currencies.find(c => c.id === selectedGoal.consequenceCurrencyId);
+
+    if (!currency) return null;
+
+    if (outcome === 'success') {
+      if (!selectedGoal.rewardSuccesses || !selectedGoal.rewardAmount) return null;
+      
+      const currentSuccesses = selectedGoal.successCount || 0;
+      const requiredSuccesses = selectedGoal.rewardSuccesses;
+      const rewardAmount = selectedGoal.rewardAmount;
+      const currencySymbol = currency.symbol || '';
+
+      const successesAfterThis = currentSuccesses + 1;
+      const successesUntilNextReward = requiredSuccesses - (successesAfterThis % requiredSuccesses);
+
+      if (successesUntilNextReward === requiredSuccesses || successesAfterThis % requiredSuccesses === 0) {
+        return {
+          type: 'success',
+          message: `Earned ${rewardAmount} ${currencySymbol}!`,
+        };
+      } else {
+        return {
+          type: 'success',
+          message: `${successesUntilNextReward} more ${successesUntilNextReward === 1 ? 'success' : 'successes'} until ${rewardAmount} ${currencySymbol}`,
+        };
+      }
+    } else {
+      if (!selectedGoal.consequenceFailures || !selectedGoal.consequenceAmount) return null;
+      
+      const currentStruggles = selectedGoal.struggleCount || 0;
+      const requiredStruggles = selectedGoal.consequenceFailures;
+      const consequenceAmount = selectedGoal.consequenceAmount;
+      const currencySymbol = currency.symbol || '';
+
+      const strugglesAfterThis = currentStruggles + 1;
+      const strugglesUntilNextConsequence = requiredStruggles - (strugglesAfterThis % requiredStruggles);
+
+      if (strugglesUntilNextConsequence === requiredStruggles || strugglesAfterThis % requiredStruggles === 0) {
+        return {
+          type: 'struggled',
+          message: `Incurred ${consequenceAmount} ${currencySymbol}!`,
+        };
+      } else {
+        return {
+          type: 'struggled',
+          message: `${strugglesUntilNextConsequence} more ${strugglesUntilNextConsequence === 1 ? 'struggle' : 'struggles'} until ${consequenceAmount} ${currencySymbol}`,
+        };
+      }
+    }
+  };
+
+  const currencyFeedback = getCurrencyFeedback();
+
+  const modalTitle = editingReflection ? 'Edit Reflection' : 'Add Reflection';
+  const totalSteps = 4;
+  const progressPercent = (step / totalSteps) * 100;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView 
+        behavior="padding"
+        style={styles.modalOverlay}
+        keyboardVerticalOffset={0}
+      >
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={step > 1 ? handleBack : onClose} style={styles.backButton}>
+              <IconSymbol
+                ios_icon_name={step > 1 ? "chevron.left" : "xmark"}
+                android_material_icon_name={step > 1 ? "arrow-back" : "close"}
+                size={24}
+                color={colors.text}
+              />
+            </TouchableOpacity>
+            <View style={styles.modalTitleContainer}>
+              <Text style={styles.modalTitle}>{modalTitle}</Text>
+              <Text style={styles.stepIndicator}>Step {step} of {totalSteps}</Text>
+            </View>
+            <View style={styles.backButton} />
+          </View>
+
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+          </View>
+
+          <ScrollView 
+            ref={scrollViewRef}
+            style={styles.modalBody} 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {step === 1 && (
+              <React.Fragment>
+                {categoriesEnabled && (
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
+                      <IconSymbol
+                        ios_icon_name="tag.fill"
+                        android_material_icon_name="label"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.label}>Category (Optional)</Text>
+                    </View>
+                    <View style={styles.optionsGrid}>
+                      {availableCategories.map((cat, index) => {
+                        const isSelected = category === cat;
+                        const catIcon = getCategoryIcon(cat);
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setCategory(isSelected ? undefined : cat)}
+                            >
+                              <IconSymbol
+                                ios_icon_name={catIcon.ios}
+                                android_material_icon_name={catIcon.android}
+                                size={16}
+                                color={isSelected ? colors.background : colors.primary}
+                              />
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {cat}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="arrow.triangle.2.circlepath"
+                      android_material_icon_name="sync"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Type</Text>
+                  </View>
+                  <View style={styles.optionsColumn}>
+                    {(['Proactive', 'Restraint'] as const).map((t, index) => {
+                      const isSelected = type === t;
+                      const displayText = t === 'Proactive' 
+                        ? 'Proactive (I chose to or didn\'t refrain from…)' 
+                        : 'Restraint (I refrained from or didn\'t…)';
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <TouchableOpacity
+                            style={[styles.optionButtonLarge, isSelected && styles.optionButtonSelected]}
+                            onPress={() => setType(t)}
+                          >
+                            <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                              {displayText}
+                            </Text>
+                          </TouchableOpacity>
+                        </React.Fragment>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="text.alignleft"
+                      android_material_icon_name="description"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Description</Text>
+                  </View>
+                  <TextInput
+                    ref={descriptionInputRef}
+                    style={[styles.input, styles.textArea]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder={getDescriptionPlaceholder()}
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={4}
+                    returnKeyType="default"
+                    blurOnSubmit={false}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
+                  />
+                </View>
+              </React.Fragment>
+            )}
+
+            {step === 2 && (
+              <React.Fragment>
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="target"
+                      android_material_icon_name="flag"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Link to a Goal (Optional)</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowGoalPicker(!showGoalPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {selectedGoal ? selectedGoal.title : 'Select a goal...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+
+                  {showGoalPicker && (
+                    <View style={styles.goalPickerContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        value={goalSearchQuery}
+                        onChangeText={setGoalSearchQuery}
+                        placeholder="Search goals..."
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                      <ScrollView style={styles.goalList}>
+                        <TouchableOpacity
+                          style={styles.goalItem}
+                          onPress={() => {
+                            setLinkedGoalId(undefined);
+                            setOutcome(undefined);
+                            setShowGoalPicker(false);
+                          }}
+                        >
+                          <Text style={styles.goalItemText}>None</Text>
+                        </TouchableOpacity>
+                        {filteredGoals.map((goal, index) => {
+                          const isSelected = linkedGoalId === goal.id;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  setLinkedGoalId(goal.id);
+                                  setShowGoalPicker(false);
+                                }}
+                              >
+                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                  {goal.title}
+                                </Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={handleCreateGoal}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Create New Goal</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {linkedGoalId && (
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
+                      <IconSymbol
+                        ios_icon_name="chart.bar.fill"
+                        android_material_icon_name="bar-chart"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.label}>Outcome</Text>
+                    </View>
+                    <View style={styles.optionsGrid}>
+                      {(['success', 'struggled'] as const).map((o, index) => {
+                        const isSelected = outcome === o;
+                        const displayText = o === 'success' ? 'Success' : 'Struggled';
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.outcomeButton, isSelected && styles.outcomeButtonSelected]}
+                              onPress={() => setOutcome(o)}
+                            >
+                              {o === 'success' ? (
+                                <IconSymbol
+                                  ios_icon_name="checkmark.circle.fill"
+                                  android_material_icon_name="check-circle"
+                                  size={20}
+                                  color={isSelected ? colors.background : colors.success}
+                                />
+                              ) : (
+                                <IconSymbol
+                                  ios_icon_name="xmark.circle.fill"
+                                  android_material_icon_name="cancel"
+                                  size={20}
+                                  color={isSelected ? colors.background : colors.error}
+                                />
+                              )}
+                              <Text style={[styles.outcomeButtonText, isSelected && styles.outcomeButtonTextSelected]}>
+                                {displayText}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {currencyFeedback && (
+                  <View style={[
+                    styles.currencyFeedbackBox,
+                    currencyFeedback.type === 'success' ? styles.currencyFeedbackSuccess : styles.currencyFeedbackStruggled
+                  ]}>
+                    <IconSymbol
+                      ios_icon_name={currencyFeedback.type === 'success' ? "gift.fill" : "exclamationmark.triangle.fill"}
+                      android_material_icon_name={currencyFeedback.type === 'success' ? "card-giftcard" : "warning"}
+                      size={20}
+                      color={colors.background}
+                    />
+                    <Text style={styles.currencyFeedbackText}>{currencyFeedback.message}</Text>
+                  </View>
+                )}
+              </React.Fragment>
+            )}
+
+            {step === 3 && (
+              <React.Fragment>
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="arrow.up.circle.fill"
+                      android_material_icon_name="trending-up"
+                      size={20}
+                      color={colors.success}
+                    />
+                    <Text style={styles.label}>What was Gained (Optional)</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowGainsPicker(!showGainsPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {gainedIds.length > 0 ? `${gainedIds.length} gains selected` : 'Select gains...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+
+                  {showGainsPicker && (
+                    <View style={styles.goalPickerContainer}>
+                      <ScrollView style={styles.goalList}>
+                        {gainsLosses.filter(gl => gl.type === 'Gain').map((gain, index) => {
+                          const isSelected = gainedIds.includes(gain.id);
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  if (isSelected) {
+                                    setGainedIds(gainedIds.filter(id => id !== gain.id));
+                                  } else {
+                                    setGainedIds([...gainedIds, gain.id]);
+                                  }
+                                }}
+                              >
+                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                  {gain.name}
+                                  {gain.category && ` (${gain.category})`}
+                                </Text>
+                                {isSelected && (
+                                  <IconSymbol
+                                    ios_icon_name="checkmark.circle.fill"
+                                    android_material_icon_name="check-circle"
+                                    size={20}
+                                    color={colors.primary}
+                                  />
+                                )}
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={() => setShowCreateGainModal(true)}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Add New Gain</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="arrow.down.circle.fill"
+                      android_material_icon_name="trending-down"
+                      size={20}
+                      color={colors.error}
+                    />
+                    <Text style={styles.label}>What was Lost (Optional)</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowLossesPicker(!showLossesPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {lostIds.length > 0 ? `${lostIds.length} losses selected` : 'Select losses...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+
+                  {showLossesPicker && (
+                    <View style={styles.goalPickerContainer}>
+                      <ScrollView style={styles.goalList}>
+                        {gainsLosses.filter(gl => gl.type === 'Loss').map((loss, index) => {
+                          const isSelected = lostIds.includes(loss.id);
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  if (isSelected) {
+                                    setLostIds(lostIds.filter(id => id !== loss.id));
+                                  } else {
+                                    setLostIds([...lostIds, loss.id]);
+                                  }
+                                }}
+                              >
+                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                  {loss.name}
+                                  {loss.category && ` (${loss.category})`}
+                                </Text>
+                                {isSelected && (
+                                  <IconSymbol
+                                    ios_icon_name="checkmark.circle.fill"
+                                    android_material_icon_name="check-circle"
+                                    size={20}
+                                    color={colors.primary}
+                                  />
+                                )}
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={() => setShowCreateLossModal(true)}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Add New Loss</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="questionmark.circle.fill"
+                      android_material_icon_name="help"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Was it worth it?</Text>
+                  </View>
+                  <View style={styles.optionsColumn}>
+                    {[
+                      { label: 'Yes, worth it', value: true },
+                      { label: 'No, not worth it', value: false },
+                    ].map((option, index) => {
+                      const isSelected = wasWorthIt === option.value;
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <TouchableOpacity
+                            style={[styles.optionButtonLarge, isSelected && styles.optionButtonSelected]}
+                            onPress={() => setWasWorthIt(option.value)}
+                          >
+                            <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        </React.Fragment>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="text.bubble.fill"
+                      android_material_icon_name="chat-bubble"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Notes on weighing up gains and losses (Optional)</Text>
+                  </View>
+                  <TextInput
+                    ref={additionalThoughtsInputRef}
+                    style={[styles.input, styles.textArea]}
+                    value={additionalThoughts}
+                    onChangeText={setAdditionalThoughts}
+                    placeholder="Any additional reflections..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={3}
+                    returnKeyType="default"
+                    blurOnSubmit={false}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
+                  />
+                </View>
+              </React.Fragment>
+            )}
+
+            {step === 4 && (
+              <React.Fragment>
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="lightbulb.fill"
+                      android_material_icon_name="lightbulb"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Strategies (Optional)</Text>
+                  </View>
+                  <Text style={styles.helperText}>
+                    Select strategies you used or want to use for this reflection
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowStrategyPicker(!showStrategyPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {strategyEffectiveness.length > 0 ? `${strategyEffectiveness.length} strategies selected` : 'Select strategies...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+
+                  {showStrategyPicker && (
+                    <View style={styles.goalPickerContainer}>
+                      <ScrollView style={styles.goalList}>
+                        {strategies.map((strategy, index) => {
+                          const isSelected = strategyEffectiveness.some(se => se.strategyId === strategy.id);
+                          const successRateText = `${Math.round(strategy.successRate)}%`;
+                          const timesUsedText = `${strategy.timesUsed} times`;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.strategyListItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => toggleStrategy(strategy.id)}
+                              >
+                                <View style={styles.strategyListItemContent}>
+                                  <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                    {strategy.name}
+                                  </Text>
+                                  <View style={styles.strategyStats}>
+                                    <Text style={styles.strategyStatText}>{successRateText}</Text>
+                                    <Text style={styles.strategyStatText}>•</Text>
+                                    <Text style={styles.strategyStatText}>{timesUsedText}</Text>
+                                  </View>
+                                </View>
+                                {isSelected && (
+                                  <IconSymbol
+                                    ios_icon_name="checkmark.circle.fill"
+                                    android_material_icon_name="check-circle"
+                                    size={20}
+                                    color={colors.primary}
+                                  />
+                                )}
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={() => setShowCreateStrategyModal(true)}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Add New Strategy</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {strategyEffectiveness.length > 0 && (
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Did these strategies work?</Text>
+                    {strategyEffectiveness.map((se, index) => {
+                      const strategy = strategies.find(s => s.id === se.strategyId);
+                      if (!strategy) return null;
+                      
+                      const successRateText = `${Math.round(strategy.successRate)}%`;
+                      const fractionText = `${strategy.successCount}/${strategy.timesUsed}`;
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <View style={styles.strategyEffectivenessCard}>
+                            <View style={styles.strategyEffectivenessHeader}>
+                              <Text style={styles.strategyEffectivenessName}>{strategy.name}</Text>
+                              <Text style={styles.strategyEffectivenessRate}>
+                                {successRateText} ({fractionText})
+                              </Text>
+                            </View>
+                            {strategy.description && (
+                              <Text style={styles.strategyEffectivenessDescription}>
+                                {strategy.description}
+                              </Text>
+                            )}
+                            <View style={styles.strategyEffectivenessButtons}>
+                              <TouchableOpacity
+                                style={[
+                                  styles.strategyEffectivenessButton,
+                                  se.worked && styles.strategyEffectivenessButtonWorked
+                                ]}
+                                onPress={() => setStrategyWorked(se.strategyId, true)}
+                              >
+                                <IconSymbol
+                                  ios_icon_name="checkmark.circle.fill"
+                                  android_material_icon_name="check-circle"
+                                  size={20}
+                                  color={se.worked ? colors.background : colors.success}
+                                />
+                                <Text style={[
+                                  styles.strategyEffectivenessButtonText,
+                                  se.worked && styles.strategyEffectivenessButtonTextSelected
+                                ]}>
+                                  Worked
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[
+                                  styles.strategyEffectivenessButton,
+                                  !se.worked && styles.strategyEffectivenessButtonDidntWork
+                                ]}
+                                onPress={() => setStrategyWorked(se.strategyId, false)}
+                              >
+                                <IconSymbol
+                                  ios_icon_name="xmark.circle.fill"
+                                  android_material_icon_name="cancel"
+                                  size={20}
+                                  color={!se.worked ? colors.background : colors.error}
+                                />
+                                <Text style={[
+                                  styles.strategyEffectivenessButtonText,
+                                  !se.worked && styles.strategyEffectivenessButtonTextSelected
+                                ]}>
+                                  Didn't work
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </React.Fragment>
+                      );
+                    })}
+                  </View>
+                )}
+              </React.Fragment>
+            )}
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            {step < totalSteps ? (
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleNext}
+              >
+                <Text style={styles.buttonPrimaryText}>Next</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={20}
+                  color={colors.background}
+                />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSave}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <React.Fragment>
+                    <IconSymbol
+                      ios_icon_name="checkmark.circle.fill"
+                      android_material_icon_name="check-circle"
+                      size={20}
+                      color={colors.background}
+                    />
+                    <Text style={styles.buttonPrimaryText}>Save Reflection</Text>
+                  </React.Fragment>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      <Modal
+        visible={showCreateGainModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateGainModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior="padding"
+          style={styles.modalOverlay}
+        >
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Add New Gain</Text>
+            <TextInput
+              ref={newGainInputRef}
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Gain name..."
+              placeholderTextColor={colors.textSecondary}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleCreateGain}
+              blurOnSubmit={false}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setShowCreateGainModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateGain}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={showCreateLossModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateLossModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior="padding"
+          style={styles.modalOverlay}
+        >
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Add New Loss</Text>
+            <TextInput
+              ref={newLossInputRef}
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Loss name..."
+              placeholderTextColor={colors.textSecondary}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleCreateLoss}
+              blurOnSubmit={false}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setShowCreateLossModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateLoss}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={showCreateStrategyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateStrategyModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior="padding"
+          style={styles.modalOverlay}
+        >
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Add New Strategy</Text>
+            <TextInput
+              ref={newStrategyNameInputRef}
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Strategy name..."
+              placeholderTextColor={colors.textSecondary}
+              autoFocus
+              returnKeyType="next"
+              onSubmitEditing={() => newStrategyDescInputRef.current?.focus()}
+              blurOnSubmit={false}
+            />
+            <TextInput
+              ref={newStrategyDescInputRef}
+              style={[styles.input, styles.textArea, { marginTop: 12 }]}
+              value={newItemDescription}
+              onChangeText={setNewItemDescription}
+              placeholder="Description (optional)..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={3}
+              returnKeyType="done"
+              onSubmitEditing={handleCreateStrategy}
+              blurOnSubmit={false}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setNewItemDescription('');
+                  setShowCreateStrategyModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateStrategy}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </Modal>
   );
 }
 
@@ -1155,15 +2347,353 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  stepIndicator: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: colors.border,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+  },
+  modalBody: {
+    padding: 20,
+    maxHeight: '70%',
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  formGroup: {
+    marginBottom: 24,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  helperText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 12,
+  },
+  input: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  textArea: {
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  optionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  optionsColumn: {
+    gap: 12,
+  },
+  optionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  optionButtonLarge: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  optionButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  optionButtonText: {
+    fontSize: 14,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  optionButtonTextSelected: {
+    color: colors.background,
+    fontWeight: '600',
+  },
+  outcomeButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  outcomeButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  outcomeButtonText: {
+    fontSize: 14,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  outcomeButtonTextSelected: {
+    color: colors.background,
+    fontWeight: '600',
+  },
+  currencyFeedbackBox: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  currencyFeedbackSuccess: {
+    backgroundColor: colors.success,
+  },
+  currencyFeedbackStruggled: {
+    backgroundColor: colors.error,
+  },
+  currencyFeedbackText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.background,
+    flex: 1,
+  },
+  goalPickerButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  goalPickerText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  goalPickerContainer: {
+    marginTop: 8,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: 300,
+  },
+  searchInput: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: colors.text,
+    margin: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  goalList: {
+    maxHeight: 240,
+  },
+  goalItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  goalItemSelected: {
+    backgroundColor: colors.primary + '20',
+  },
+  goalItemText: {
+    fontSize: 16,
+    color: colors.text,
+    flex: 1,
+  },
+  goalItemTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  createNewButton: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  createNewText: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  strategyListItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  strategyListItemContent: {
+    flex: 1,
+  },
+  strategyStats: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  strategyStatText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  strategyEffectivenessCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  strategyEffectivenessHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  strategyEffectivenessName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+  },
+  strategyEffectivenessRate: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  strategyEffectivenessDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 12,
+  },
+  strategyEffectivenessButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  strategyEffectivenessButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  strategyEffectivenessButtonWorked: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
+  strategyEffectivenessButtonDidntWork: {
+    backgroundColor: colors.error,
+    borderColor: colors.error,
+  },
+  strategyEffectivenessButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  strategyEffectivenessButtonTextSelected: {
+    color: colors.background,
+  },
+  button: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  buttonPrimary: {
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  buttonPrimaryText: {
+    color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
   },
   alertModal: {
     backgroundColor: colors.background,
     borderRadius: 16,
     padding: 24,
     margin: 20,
-    minWidth: 280,
   },
   alertTitle: {
     fontSize: 20,
@@ -1176,14 +2706,30 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: 20,
   },
+  alertButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
   alertButton: {
+    flex: 1,
     backgroundColor: colors.primary,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
+  alertButtonSecondary: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   alertButtonText: {
     color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  alertButtonSecondaryText: {
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },
