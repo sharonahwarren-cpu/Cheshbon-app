@@ -176,13 +176,13 @@ export function AddReflectionModal({
       }
     } else {
       if (category === 'Thought') {
-        return 'What did you think (or not refrain yourself from thinking)?';
+        return 'What did you think (or not restrain yourself from thinking)?';
       } else if (category === 'Action') {
-        return 'What did you do (or not refrain yourself from doing)?';
+        return 'What did you do (or not restrain yourself from doing)?';
       } else if (category === 'Speech') {
-        return 'What did you say (or not refrain yourself from saying)?';
+        return 'What did you say (or not restrain yourself from saying)?';
       } else if (category === 'Feeling') {
-        return 'What did you feel (or not refrain yourself from feeling)?';
+        return 'What did you feel (or not restrain yourself from feeling)?';
       } else {
         return 'What proactive action did you take?';
       }
