@@ -973,7 +973,7 @@ export function AddReflectionModal({
                   </View>
                   <TextInput
                     ref={additionalThoughtsInputRef}
-                    style={[styles.input, styles.textArea]}
+                    style={[styles.input, styles.textAreaFixed]}
                     value={additionalThoughts}
                     onChangeText={setAdditionalThoughts}
                     placeholder="Notes on weighing up gains and losses..."
@@ -1438,6 +1438,10 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 120,
     maxHeight: 200,
+    textAlignVertical: 'top',
+  },
+  textAreaFixed: {
+    height: 120,
     textAlignVertical: 'top',
   },
   optionsGrid: {
