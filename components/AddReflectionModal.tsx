@@ -160,10 +160,33 @@ export function AddReflectionModal({
   };
 
   const getDescriptionPlaceholder = () => {
+    const categoryLower = category.toLowerCase();
+    
     if (type === 'Restraint') {
-      return 'What did you restrain from doing?';
+      if (category === 'Thought') {
+        return 'What did you restrain from thinking (or not think)?';
+      } else if (category === 'Action') {
+        return 'What did you restrain yourself from doing (or not do)?';
+      } else if (category === 'Speech') {
+        return 'What did you restrain yourself from saying (or not say)?';
+      } else if (category === 'Feeling') {
+        return 'What did you restrain yourself from feeling (or not feel)?';
+      } else {
+        return 'What did you restrain from doing?';
+      }
+    } else {
+      if (category === 'Thought') {
+        return 'What did you think (or not refrain yourself from thinking)?';
+      } else if (category === 'Action') {
+        return 'What did you do (or not refrain yourself from doing)?';
+      } else if (category === 'Speech') {
+        return 'What did you say (or not refrain yourself from saying)?';
+      } else if (category === 'Feeling') {
+        return 'What did you feel (or not refrain yourself from feeling)?';
+      } else {
+        return 'What proactive action did you take?';
+      }
     }
-    return 'What proactive action did you take?';
   };
 
   const handleNext = () => {
@@ -352,6 +375,7 @@ export function AddReflectionModal({
   };
 
   const currencyFeedback = getCurrencyFeedback();
+  const placeholderText = getDescriptionPlaceholder();
 
   return (
     <Modal
@@ -471,7 +495,7 @@ export function AddReflectionModal({
                   style={styles.textArea}
                   value={description}
                   onChangeText={setDescription}
-                  placeholder={getDescriptionPlaceholder()}
+                  placeholder={placeholderText}
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   numberOfLines={4}
