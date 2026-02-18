@@ -21,6 +21,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ColorPicker, HueSlider } from 'react-native-color-picker';
+import Slider from '@react-native-community/slider';
 
 interface LifeArea {
   id: string;
@@ -558,13 +559,43 @@ export default function SettingsScreen() {
     try {
       console.log('[Settings] Reordering life areas, count:', reorderedAreas.length);
       
-      // Optimistic update
-      setLifeAreas(reorderedAreas);
+      // Rebuild the hierarchy from the flat reordered list
+      // The reordered list is flat, so we need to reconstruct the nested structure
+      const rebuiltHierarchy: LifeArea[] = [];
+      const areaMap = new Map<string, LifeArea>();
+      
+      // First pass: create a map of all areas
+      reorderedAreas.forEach(area => {
+        areaMap.set(area.id, { ...area, children: [] });
+      });
+      
+      // Second pass: build the hierarchy
+      reorderedAreas.forEach(area => {
+        const areaWithChildren = areaMap.get(area.id)!;
+        if (area.parentId) {
+          const parent = areaMap.get(area.parentId);
+          if (parent) {
+            parent.children = parent.children || [];
+            parent.children.push(areaWithChildren);
+          } else {
+            // Parent not found, treat as top-level
+            rebuiltHierarchy.push(areaWithChildren);
+          }
+        } else {
+          rebuiltHierarchy.push(areaWithChildren);
+        }
+      });
+      
+      // Optimistic update with rebuilt hierarchy
+      setLifeAreas(rebuiltHierarchy);
       
       // Send only the IDs in the new order to the backend
       const lifeAreaIds = reorderedAreas.map(area => area.id);
       await authenticatedPut('/api/life-areas/reorder', { lifeAreaIds });
       console.log('[Settings] Life areas reordered successfully');
+      
+      // Reload to get the correct structure from backend
+      await loadData();
     } catch (error) {
       console.error('Error reordering life areas:', error);
       showError('Failed to reorder life areas');
@@ -1796,7 +1827,7 @@ export default function SettingsScreen() {
                             setFormData({ ...formData, color: hexColor });
                           }}
                           style={styles.colorWheel}
-                          sliderComponent={HueSlider}
+                          sliderComponent={Slider}
                         />
                         <View style={styles.customColorInputContainer}>
                           <TextInput

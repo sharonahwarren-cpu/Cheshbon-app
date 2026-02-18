@@ -391,7 +391,11 @@ export function AddReflectionModal({
   };
 
   const handleCreateGoal = () => {
-    router.push('/create-goal');
+    console.log('[AddReflectionModal] Navigating to create goal screen');
+    onClose(); // Close the reflection modal first
+    setTimeout(() => {
+      router.push('/create-goal');
+    }, 300);
   };
 
   const handleCreateGain = async () => {
