@@ -154,6 +154,7 @@ export function AddReflectionModal({
       'Action': { ios: 'figure.walk', android: 'directions-walk' },
       'Speech': { ios: 'bubble.left.fill', android: 'chat' },
       'Thought': { ios: 'brain.head.profile', android: 'psychology' },
+      'Feeling': { ios: 'heart.fill', android: 'favorite' },
     };
     return iconMap[category] || { ios: 'circle.fill', android: 'circle' };
   };
@@ -186,7 +187,7 @@ export function AddReflectionModal({
     setLoading(true);
     try {
       const reflectionData = {
-        entryDate: selectedDate.toISOString().split('T')[0],
+        date: selectedDate.toISOString().split('T')[0],
         category: category || undefined,
         type,
         description: description.trim(),
@@ -200,6 +201,8 @@ export function AddReflectionModal({
         strategyEffectiveness: strategyEffectiveness.length > 0 ? strategyEffectiveness : undefined,
       };
 
+      console.log('[AddReflectionModal] Sending reflection data:', reflectionData);
+
       let savedReflection;
       if (editingReflection) {
         savedReflection = await authenticatedPut(`/api/reflections/${editingReflection.id}`, reflectionData);
@@ -207,6 +210,7 @@ export function AddReflectionModal({
         savedReflection = await authenticatedPost('/api/reflections', reflectionData);
       }
 
+      console.log('[AddReflectionModal] Reflection saved successfully:', savedReflection);
       onSave(savedReflection);
       
       setStep(1);
@@ -225,7 +229,7 @@ export function AddReflectionModal({
       
       onClose();
     } catch (error: any) {
-      console.error("Error saving reflection:", error);
+      console.error("[AddReflectionModal] Error saving reflection:", error);
     } finally {
       setLoading(false);
     }
@@ -349,15 +353,17 @@ export function AddReflectionModal({
                           style={[styles.categoryButton, isSelected && styles.categoryButtonActive]}
                           onPress={() => setCategory(isSelected ? '' : cat)}
                         >
-                          <IconSymbol
-                            ios_icon_name={icon.ios}
-                            android_material_icon_name={icon.android}
-                            size={20}
-                            color={isSelected ? colors.background : colors.text}
-                          />
-                          <Text style={[styles.categoryButtonText, isSelected && styles.categoryButtonTextActive]}>
-                            {cat}
-                          </Text>
+                          <View style={styles.categoryButtonContent}>
+                            <IconSymbol
+                              ios_icon_name={icon.ios}
+                              android_material_icon_name={icon.android}
+                              size={24}
+                              color={isSelected ? colors.background : colors.text}
+                            />
+                            <Text style={[styles.categoryButtonText, isSelected && styles.categoryButtonTextActive]}>
+                              {cat}
+                            </Text>
+                          </View>
                         </TouchableOpacity>
                       );
                     })}
@@ -1025,16 +1031,13 @@ const styles = StyleSheet.create({
   },
   categoryButtons: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   categoryButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    minWidth: '47%',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     borderRadius: 12,
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -1044,10 +1047,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
+  categoryButtonContent: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   categoryButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
+    textAlign: 'center',
   },
   categoryButtonTextActive: {
     color: colors.background,
