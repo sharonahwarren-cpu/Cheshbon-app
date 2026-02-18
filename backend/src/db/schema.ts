@@ -1,5 +1,7 @@
-import { pgTable, uuid, text, integer, boolean, timestamp, jsonb, date, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, boolean, timestamp, jsonb, date, uniqueIndex, pgEnum } from 'drizzle-orm/pg-core';
 import { user } from './auth-schema.js';
+
+export const currencyTypeEnum = pgEnum('currency_type', ['reward', 'consequence']);
 
 export const journalEntries = pgTable('journal_entries', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -40,6 +42,7 @@ export const currencies = pgTable('currencies', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   symbol: text('symbol'),
+  type: currencyTypeEnum('type').notNull().default('consequence'),
   onSuccess: text('on_success').default('NONE'),
   onFailure: text('on_failure').default('NONE'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

@@ -82,12 +82,13 @@ export function registerCurrenciesRoutes(app: App) {
     const body = request.body as {
       name: string;
       symbol?: string;
+      type?: 'reward' | 'consequence';
       onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
       onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
     };
 
     app.logger.info(
-      { userId: session.user.id, name: body.name, onSuccess: body.onSuccess, onFailure: body.onFailure },
+      { userId: session.user.id, name: body.name, type: body.type, onSuccess: body.onSuccess, onFailure: body.onFailure },
       'Creating currency'
     );
 
@@ -98,6 +99,7 @@ export function registerCurrenciesRoutes(app: App) {
           userId: session.user.id,
           name: body.name,
           symbol: body.symbol || null,
+          type: (body.type || 'consequence') as 'reward' | 'consequence',
           onSuccess: body.onSuccess || 'NONE',
           onFailure: body.onFailure || 'NONE',
         })
@@ -127,6 +129,7 @@ export function registerCurrenciesRoutes(app: App) {
     const body = request.body as {
       name?: string;
       symbol?: string;
+      type?: 'reward' | 'consequence';
       onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
       onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
     };
@@ -157,6 +160,7 @@ export function registerCurrenciesRoutes(app: App) {
       const updateData: Record<string, unknown> = {};
       if (body.name !== undefined) updateData.name = body.name;
       if (body.symbol !== undefined) updateData.symbol = body.symbol || null;
+      if (body.type !== undefined) updateData.type = body.type;
       if (body.onSuccess !== undefined) updateData.onSuccess = body.onSuccess;
       if (body.onFailure !== undefined) updateData.onFailure = body.onFailure;
       updateData.updatedAt = new Date();
