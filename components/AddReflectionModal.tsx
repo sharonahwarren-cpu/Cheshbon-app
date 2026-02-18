@@ -107,6 +107,7 @@ interface AddReflectionModalProps {
   gainsLosses: GainLoss[];
   strategies: Strategy[];
   prefilledGoalId?: string;
+  sourceScreen?: 'express' | 'reflect';
 }
 
 export function AddReflectionModal({
@@ -121,6 +122,7 @@ export function AddReflectionModal({
   gainsLosses,
   strategies,
   prefilledGoalId,
+  sourceScreen,
 }: AddReflectionModalProps) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -251,7 +253,7 @@ export function AddReflectionModal({
   };
 
   const handleSave = async () => {
-    console.log("Saving reflection from AddReflectionModal");
+    console.log("Saving reflection from AddReflectionModal, sourceScreen:", sourceScreen);
     
     if (!description.trim()) {
       return;
@@ -301,6 +303,12 @@ export function AddReflectionModal({
       setStrategyEffectiveness([]);
       
       onClose();
+      
+      // Navigate back to Express if the reflection was created from Express
+      if (sourceScreen === 'express') {
+        console.log('[AddReflectionModal] Navigating back to Express screen');
+        router.push('/(tabs)/(home)');
+      }
     } catch (error: any) {
       console.error("[AddReflectionModal] Error saving reflection:", error);
     } finally {
