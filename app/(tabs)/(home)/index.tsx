@@ -390,7 +390,6 @@ export default function HomeScreen() {
       params: { 
         date: dateString,
         openModal: 'true',
-        sourceScreen: 'express',
         ...(goalId && { goalId }),
       },
     });
