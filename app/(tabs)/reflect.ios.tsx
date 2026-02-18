@@ -290,10 +290,9 @@ export default function ReflectScreen() {
 
   const formatDate = (date: Date) => {
     const options: Intl.DateTimeFormatOptions = { 
-      weekday: 'long', 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
     };
     return date.toLocaleDateString('en-US', options);
   };
@@ -406,26 +405,20 @@ export default function ReflectScreen() {
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
-              size={24}
+              size={20}
               color={colors.text}
             />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateDisplay}>
             <Text style={styles.dateText}>{dateDisplay}</Text>
-            <IconSymbol
-              ios_icon_name="calendar"
-              android_material_icon_name="calendar-today"
-              size={20}
-              color={colors.primary}
-            />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleNextDay} style={styles.dateNavButton}>
             <IconSymbol
               ios_icon_name="chevron.right"
               android_material_icon_name="arrow-forward"
-              size={24}
+              size={20}
               color={colors.text}
             />
           </TouchableOpacity>
@@ -453,13 +446,7 @@ export default function ReflectScreen() {
         >
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <IconSymbol
-                ios_icon_name="book.fill"
-                android_material_icon_name="menu-book"
-                size={24}
-                color={colors.primary}
-              />
-              <Text style={styles.sectionTitle}>Daily Journal</Text>
+              <Text style={styles.sectionTitle}>Journal</Text>
             </View>
             <TextInput
               ref={journalInputRef}
@@ -489,19 +476,13 @@ export default function ReflectScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderRow}>
-                  <IconSymbol
-                    ios_icon_name="lightbulb.fill"
-                    android_material_icon_name="lightbulb"
-                    size={24}
-                    color={colors.primary}
-                  />
                   <Text style={styles.sectionTitle}>Reflections</Text>
                 </View>
                 <TouchableOpacity onPress={openAddReflectionModal} style={styles.addButton}>
                   <IconSymbol
                     ios_icon_name="plus.circle.fill"
                     android_material_icon_name="add-circle"
-                    size={32}
+                    size={28}
                     color={colors.primary}
                   />
                 </TouchableOpacity>
@@ -835,10 +816,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 8,
   },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 22,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -846,17 +827,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     backgroundColor: colors.card,
     marginHorizontal: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 12,
+    marginBottom: 12,
   },
   dateNavButton: {
     padding: 8,
@@ -866,10 +842,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
   dateText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
   },
@@ -881,23 +856,23 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   section: {
-    marginBottom: 32,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: colors.text,
   },
   addButton: {
@@ -905,20 +880,15 @@ const styles = StyleSheet.create({
   },
   journalInput: {
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    fontSize: 16,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
     color: colors.text,
-    minHeight: 200,
-    maxHeight: 400,
+    minHeight: 250,
+    maxHeight: 450,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
   },
   floatingSaveButton: {
     position: 'absolute',
@@ -929,7 +899,7 @@ const styles = StyleSheet.create({
   saveButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
@@ -950,7 +920,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   timestampText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textSecondary,
   },
   emptyState: {
