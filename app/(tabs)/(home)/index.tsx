@@ -5,6 +5,7 @@ import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/util
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
+import { AddReflectionModal } from "@/components/AddReflectionModal";
 import {
   StyleSheet,
   View,
@@ -125,6 +126,69 @@ interface Currency {
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
 
+interface GainLoss {
+  id: string;
+  name: string;
+  type: 'Gain' | 'Loss';
+  category?: string;
+  subCategory?: string;
+}
+
+interface Strategy {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  successCount: number;
+  failureCount: number;
+  timesUsed: number;
+  successRate: number;
+}
+
+interface UserPreferences {
+  reflectionCategoriesEnabled?: boolean;
+  reflectionCategories?: string[];
+}
+
+interface Reflection {
+  id: string;
+  entryDate: string;
+  category?: string;
+  type: 'Restraint' | 'Proactive';
+  description: string;
+  linkedGoalId?: string;
+  linkedGoalTitle?: string;
+  outcome?: 'success' | 'struggled';
+  currencyChange?: {
+    currencyId: string;
+    amount: number;
+    operation: 'add' | 'subtract';
+    currencyName?: string;
+    currencySymbol?: string;
+  };
+  gainedIds?: string[];
+  lostIds?: string[];
+  wasWorthIt?: boolean;
+  additionalThoughts?: string;
+  strategyEffectiveness?: {
+    strategyId: string;
+    worked: boolean;
+  }[];
+  createdAt: string;
+}
+
+interface Goal {
+  id: string;
+  title: string;
+  behaviorCategories?: string[];
+  rewardCurrencyId?: string;
+  rewardAmount?: number;
+  rewardSuccesses?: number;
+  consequenceCurrencyId?: string;
+  consequenceAmount?: number;
+  consequenceFailures?: number;
+}
+
 export default function HomeScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -162,6 +226,14 @@ export default function HomeScreen() {
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
+
+  // AddReflectionModal state
+  const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
+  const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
   useEffect(() => {
     console.log("HomeScreen mounted");
@@ -342,6 +414,32 @@ export default function HomeScreen() {
     }
   };
 
+  const loadModalData = async () => {
+    console.log("[Express] Loading modal data (goals, gains/losses, strategies, preferences)");
+    try {
+      const [goalsRes, gainsLossesRes, strategiesRes, prefsRes] = await Promise.all([
+        authenticatedGet('/api/goals'),
+        authenticatedGet('/api/gains-losses'),
+        authenticatedGet('/api/strategies'),
+        authenticatedGet('/api/user-preferences').catch(() => ({ data: {} })),
+      ]);
+
+      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
+      const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
+      const prefsData = prefsRes?.data || prefsRes || {};
+
+      setGoals(goalsData);
+      setGainsLosses(gainsLossesData);
+      setStrategies(strategiesData);
+      setUserPreferences(prefsData);
+
+      console.log("[Express] Modal data loaded successfully");
+    } catch (error) {
+      console.error("[Express] Error loading modal data:", error);
+    }
+  };
+
   const handleGoalSuccess = async (goalId: string) => {
     console.log("Recording success for goal:", goalId);
     try {
@@ -382,17 +480,19 @@ export default function HomeScreen() {
     router.push(`/create-goal?id=${goalId}`);
   };
 
-  const openAddReflectionModal = (goalId?: string) => {
-    console.log("Opening Add Reflection modal directly from Express", goalId ? `for goal: ${goalId}` : "");
-    const dateString = selectedDate.toISOString().split('T')[0];
-    router.push({
-      pathname: '/(tabs)/reflect',
-      params: { 
-        date: dateString,
-        openModal: 'true',
-        ...(goalId && { goalId }),
-      },
-    });
+  const openAddReflectionModal = async (goalId?: string) => {
+    console.log("[Express] Opening AddReflectionModal directly", goalId ? `for goal: ${goalId}` : "");
+    setPrefilledGoalId(goalId);
+    await loadModalData();
+    setShowAddReflectionModal(true);
+  };
+
+  const handleReflectionSaved = (reflection: Reflection) => {
+    console.log("[Express] Reflection saved, closing modal and refreshing data");
+    setShowAddReflectionModal(false);
+    setPrefilledGoalId(undefined);
+    loadExpressData();
+    showSuccess('Reflection saved successfully!');
   };
 
   const toggleCategory = (categoryKey: string) => {
@@ -1370,6 +1470,26 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {showAddReflectionModal && (
+        <AddReflectionModal
+          visible={showAddReflectionModal}
+          onClose={() => {
+            console.log("[Express] Closing AddReflectionModal without saving");
+            setShowAddReflectionModal(false);
+            setPrefilledGoalId(undefined);
+          }}
+          onSave={handleReflectionSaved}
+          selectedDate={selectedDate}
+          goals={goals}
+          currencies={currencies}
+          userPreferences={userPreferences}
+          editingReflection={null}
+          gainsLosses={gainsLosses}
+          strategies={strategies}
+          prefilledGoalId={prefilledGoalId}
+        />
+      )}
     </SafeAreaView>
   );
 }
