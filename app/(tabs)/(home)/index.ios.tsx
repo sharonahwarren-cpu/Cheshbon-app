@@ -575,30 +575,6 @@ export default function HomeScreen() {
     
     const hasDescription = goal.description && goal.description.trim().length > 0;
     
-    const rewardMessage = (() => {
-      if (!goal.rewardCurrencyId || !goal.rewardSuccesses || !goal.rewardAmount) return null;
-      const currency = currencies.find(c => c.id === goal.rewardCurrencyId);
-      if (!currency) return null;
-      
-      const totalSuccesses = goal.successCount || 0;
-      const remaining = goal.rewardSuccesses - (totalSuccesses % goal.rewardSuccesses);
-      const symbol = currency.symbol || currency.name;
-      
-      return `${remaining} more ${remaining === 1 ? 'success' : 'successes'} until ${goal.rewardAmount} ${symbol}`;
-    })();
-    
-    const consequenceMessage = (() => {
-      if (!goal.consequenceCurrencyId || !goal.consequenceFailures || !goal.consequenceAmount) return null;
-      const currency = currencies.find(c => c.id === goal.consequenceCurrencyId);
-      if (!currency) return null;
-      
-      const totalStruggles = goal.struggleCount || 0;
-      const remaining = goal.consequenceFailures - (totalStruggles % goal.consequenceFailures);
-      const symbol = currency.symbol || currency.name;
-      
-      return `${remaining} more ${remaining === 1 ? 'struggle' : 'struggles'} until ${goal.consequenceAmount} ${symbol}`;
-    })();
-    
     return (
       <View key={goal.id} style={styles.goalCard}>
         <TouchableOpacity 
@@ -641,33 +617,6 @@ export default function HomeScreen() {
             />
           </View>
         </View>
-        
-        {(rewardMessage || consequenceMessage) && (
-          <View style={styles.currencyProgressContainer}>
-            {rewardMessage && (
-              <View style={styles.currencyProgressRow}>
-                <IconSymbol
-                  ios_icon_name="gift.fill"
-                  android_material_icon_name="card-giftcard"
-                  size={14}
-                  color={colors.success}
-                />
-                <Text style={styles.currencyProgressText}>{rewardMessage}</Text>
-              </View>
-            )}
-            {consequenceMessage && (
-              <View style={styles.currencyProgressRow}>
-                <IconSymbol
-                  ios_icon_name="exclamationmark.triangle.fill"
-                  android_material_icon_name="warning"
-                  size={14}
-                  color={colors.error}
-                />
-                <Text style={styles.currencyProgressText}>{consequenceMessage}</Text>
-              </View>
-            )}
-          </View>
-        )}
         
         {goal.dailyEntries && goal.dailyEntries.length > 0 && (
           <View style={styles.entriesContainer}>
@@ -1590,20 +1539,6 @@ const styles = StyleSheet.create({
   tallyCount: {
     fontSize: 20,
     fontWeight: 'bold',
-  },
-  currencyProgressContainer: {
-    marginTop: 8,
-    gap: 6,
-  },
-  currencyProgressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  currencyProgressText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '500',
   },
   entriesContainer: {
     flexDirection: 'row',
