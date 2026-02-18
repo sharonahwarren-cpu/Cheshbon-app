@@ -490,21 +490,27 @@ export function AddReflectionModal({
                     />
                     <Text style={styles.label}>Type</Text>
                   </View>
-                  <View style={styles.optionsColumn}>
+                  <View style={styles.optionsGrid}>
                     {(['Proactive', 'Restraint'] as const).map((t, index) => {
                       const isSelected = type === t;
-                      const displayText = t === 'Proactive' 
-                        ? 'Proactive (I chose to or didn\'t refrain from…)' 
-                        : 'Restraint (I refrained from or didn\'t…)';
+                      const proactiveIcon = { ios: 'arrow.up.right.circle.fill', android: 'trending-up' };
+                      const restraintIcon = { ios: 'hand.raised.fill', android: 'back-hand' };
+                      const icon = t === 'Proactive' ? proactiveIcon : restraintIcon;
                       
                       return (
                         <React.Fragment key={index}>
                           <TouchableOpacity
-                            style={[styles.optionButtonLarge, isSelected && styles.optionButtonSelected]}
+                            style={[styles.typeButton, isSelected && styles.typeButtonSelected]}
                             onPress={() => setType(t)}
                           >
-                            <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                              {displayText}
+                            <IconSymbol
+                              ios_icon_name={icon.ios}
+                              android_material_icon_name={icon.android}
+                              size={28}
+                              color={isSelected ? colors.background : colors.primary}
+                            />
+                            <Text style={[styles.typeButtonText, isSelected && styles.typeButtonTextSelected]}>
+                              {t}
                             </Text>
                           </TouchableOpacity>
                         </React.Fragment>
@@ -1405,6 +1411,33 @@ const styles = StyleSheet.create({
   optionButtonTextSelected: {
     color: colors.background,
     fontWeight: '600',
+  },
+  typeButton: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    minWidth: 140,
+  },
+  typeButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  typeButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  typeButtonTextSelected: {
+    color: colors.background,
   },
   outcomeButton: {
     flex: 1,
