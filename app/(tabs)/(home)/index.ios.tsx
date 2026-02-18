@@ -325,6 +325,8 @@ export default function HomeScreen() {
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
       
+      console.log('[Express iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
+      
       setActivatedGoals(goalsData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
@@ -448,13 +450,13 @@ export default function HomeScreen() {
   };
 
   const openAddReflectionModal = (goalId?: string) => {
-    console.log("Opening Add Reflection modal from Express", goalId ? `for goal: ${goalId}` : "");
+    console.log("Opening Add Reflection modal from Express iOS", goalId ? `for goal: ${goalId}` : "", "with", currencies.length, "currencies");
     setPrefilledGoalId(goalId);
     setShowAddReflectionModal(true);
   };
 
   const handleReflectionSaved = (reflection: Reflection) => {
-    console.log('[Express] Reflection saved, closing modal and reloading data');
+    console.log('[Express iOS] Reflection saved, closing modal and reloading data');
     setShowAddReflectionModal(false);
     setPrefilledGoalId(undefined);
     showSuccess('Reflection saved successfully');
@@ -1023,7 +1025,7 @@ export default function HomeScreen() {
         <AddReflectionModal
           visible={showAddReflectionModal}
           onClose={() => {
-            console.log('[Express] Closing AddReflectionModal without saving');
+            console.log('[Express iOS] Closing AddReflectionModal without saving');
             setShowAddReflectionModal(false);
             setPrefilledGoalId(undefined);
           }}

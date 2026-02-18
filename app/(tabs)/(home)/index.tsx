@@ -333,6 +333,8 @@ export default function HomeScreen() {
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
       
+      console.log('[Express] Loaded currencies for modal:', currenciesData.length, 'currencies');
+      
       setActivatedGoals(goalsData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
@@ -456,7 +458,7 @@ export default function HomeScreen() {
   };
 
   const openAddReflectionModal = (goalId?: string) => {
-    console.log("Opening Add Reflection modal from Express", goalId ? `for goal: ${goalId}` : "");
+    console.log("Opening Add Reflection modal from Express", goalId ? `for goal: ${goalId}` : "", "with", currencies.length, "currencies");
     setPrefilledGoalId(goalId);
     setShowAddReflectionModal(true);
   };
