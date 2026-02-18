@@ -408,7 +408,7 @@ export function AddReflectionModal({
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.modalOverlay}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={0}
       >
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
@@ -541,8 +541,13 @@ export function AddReflectionModal({
                     blurOnSubmit={false}
                     onFocus={() => {
                       setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                      }, 300);
+                        descriptionInputRef.current?.measure((x, y, width, height, pageX, pageY) => {
+                          scrollViewRef.current?.scrollTo({ 
+                            y: pageY - 150,
+                            animated: true 
+                          });
+                        });
+                      }, 100);
                     }}
                   />
                 </View>
@@ -912,8 +917,13 @@ export function AddReflectionModal({
                     blurOnSubmit={false}
                     onFocus={() => {
                       setTimeout(() => {
-                        scrollViewRef.current?.scrollToEnd({ animated: true });
-                      }, 300);
+                        additionalThoughtsInputRef.current?.measure((x, y, width, height, pageX, pageY) => {
+                          scrollViewRef.current?.scrollTo({ 
+                            y: pageY - 150,
+                            animated: true 
+                          });
+                        });
+                      }, 100);
                     }}
                   />
                 </View>
