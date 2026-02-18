@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { authenticatedPost, authenticatedPut } from '@/utils/api';
 import { useRouter } from 'expo-router';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 interface GainLoss {
   id: string;
@@ -146,8 +152,52 @@ export function AddReflectionModal({
   const [showLossesPicker, setShowLossesPicker] = useState(false);
   const [showStrategyPicker, setShowStrategyPicker] = useState(false);
   
+  const [newGainName, setNewGainName] = useState('');
+  const [newLossName, setNewLossName] = useState('');
+  const [newStrategyName, setNewStrategyName] = useState('');
+  const [showAddGainInput, setShowAddGainInput] = useState(false);
+  const [showAddLossInput, setShowAddLossInput] = useState(false);
+  const [showAddStrategyInput, setShowAddStrategyInput] = useState(false);
+  
+  const scrollViewRef = useRef<ScrollView>(null);
   const descriptionInputRef = useRef<TextInput>(null);
   const thoughtsInputRef = useRef<TextInput>(null);
+  const newGainInputRef = useRef<TextInput>(null);
+  const newLossInputRef = useRef<TextInput>(null);
+  const newStrategyInputRef = useRef<TextInput>(null);
+
+  // Auto-focus description when step 1 loads
+  useEffect(() => {
+    if (visible && step === 1) {
+      setTimeout(() => {
+        descriptionInputRef.current?.focus();
+      }, 300);
+    }
+  }, [visible, step]);
+
+  // Auto-progress when description is filled (after 500ms of no typing)
+  useEffect(() => {
+    if (step === 1 && description.trim().length > 10) {
+      const timer = setTimeout(() => {
+        console.log('Auto-progressing from step 1 to step 2');
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setStep(2);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [description, step]);
+
+  // Auto-progress from step 2 when outcome is selected
+  useEffect(() => {
+    if (step === 2 && linkedGoalId && outcome) {
+      const timer = setTimeout(() => {
+        console.log('Auto-progressing from step 2 to step 3');
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setStep(3);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [linkedGoalId, outcome, step]);
 
   const getCategoryIcon = (category: string) => {
     const iconMap: Record<string, { ios: string; android: string }> = {
@@ -160,8 +210,6 @@ export function AddReflectionModal({
   };
 
   const getDescriptionPlaceholder = () => {
-    const categoryLower = category.toLowerCase();
-    
     if (type === 'Restraint') {
       if (category === 'Thought') {
         return 'What did you restrain from thinking (or not think)?';
@@ -193,10 +241,12 @@ export function AddReflectionModal({
     if (step === 1 && !description.trim()) {
       return;
     }
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setStep(step + 1);
   };
 
   const handleBack = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setStep(step - 1);
   };
 
@@ -263,28 +313,60 @@ export function AddReflectionModal({
     router.push('/create-goal');
   };
 
-  const handleCreateGain = () => {
-    onClose();
-    router.push({
-      pathname: '/(tabs)/settings',
-      params: { section: 'gainsLosses', action: 'add', type: 'Gain' },
-    });
+  const handleAddNewGain = async () => {
+    if (!newGainName.trim()) return;
+    
+    try {
+      const newGain = await authenticatedPost('/api/gains-losses', {
+        name: newGainName.trim(),
+        type: 'Gain',
+      });
+      
+      setGainedIds([...gainedIds, newGain.id]);
+      setNewGainName('');
+      setShowAddGainInput(false);
+      
+      console.log('New gain created:', newGain);
+    } catch (error) {
+      console.error('Error creating gain:', error);
+    }
   };
 
-  const handleCreateLoss = () => {
-    onClose();
-    router.push({
-      pathname: '/(tabs)/settings',
-      params: { section: 'gainsLosses', action: 'add', type: 'Loss' },
-    });
+  const handleAddNewLoss = async () => {
+    if (!newLossName.trim()) return;
+    
+    try {
+      const newLoss = await authenticatedPost('/api/gains-losses', {
+        name: newLossName.trim(),
+        type: 'Loss',
+      });
+      
+      setLostIds([...lostIds, newLoss.id]);
+      setNewLossName('');
+      setShowAddLossInput(false);
+      
+      console.log('New loss created:', newLoss);
+    } catch (error) {
+      console.error('Error creating loss:', error);
+    }
   };
 
-  const handleCreateStrategy = () => {
-    onClose();
-    router.push({
-      pathname: '/(tabs)/settings',
-      params: { section: 'strategies', action: 'add' },
-    });
+  const handleAddNewStrategy = async () => {
+    if (!newStrategyName.trim()) return;
+    
+    try {
+      const newStrategy = await authenticatedPost('/api/strategies', {
+        name: newStrategyName.trim(),
+      });
+      
+      setSelectedStrategies([...selectedStrategies, newStrategy.id]);
+      setNewStrategyName('');
+      setShowAddStrategyInput(false);
+      
+      console.log('New strategy created:', newStrategy);
+    } catch (error) {
+      console.error('Error creating strategy:', error);
+    }
   };
 
   const toggleStrategy = (strategyId: string) => {
@@ -317,7 +399,6 @@ export function AddReflectionModal({
   const categoriesEnabled = userPreferences?.reflectionCategoriesEnabled ?? false;
   const availableCategories = userPreferences?.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
-  // Calculate currency effect based on goal and outcome
   const getCurrencyFeedback = () => {
     if (!selectedGoal || !outcome) return null;
 
@@ -417,7 +498,12 @@ export function AddReflectionModal({
           ))}
         </View>
 
-        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.content} 
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.contentContainer}
+        >
           {step === 1 && (
             <View style={styles.stepContainer}>
               <Text style={styles.stepTitle}>Basic Information</Text>
@@ -500,7 +586,15 @@ export function AddReflectionModal({
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
+                  onFocus={() => {
+                    setTimeout(() => {
+                      scrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 100);
+                  }}
                 />
+                <Text style={styles.helperText}>
+                  Keep typing... (auto-advances when complete)
+                </Text>
               </View>
             </View>
           )}
@@ -520,7 +614,7 @@ export function AddReflectionModal({
                   </Text>
                   <IconSymbol
                     ios_icon_name="chevron.down"
-                    android_material_icon_name="arrow-downward"
+                    android_material_icon_name="arrow-drop-down"
                     size={20}
                     color={colors.textSecondary}
                   />
@@ -583,6 +677,12 @@ export function AddReflectionModal({
                       <Text style={styles.currencyFeedbackText}>{currencyFeedback.message}</Text>
                     </View>
                   )}
+                  
+                  {linkedGoalId && outcome && (
+                    <Text style={styles.helperText}>
+                      Auto-advancing to next step...
+                    </Text>
+                  )}
                 </View>
               )}
             </View>
@@ -603,7 +703,7 @@ export function AddReflectionModal({
                   </Text>
                   <IconSymbol
                     ios_icon_name="chevron.down"
-                    android_material_icon_name="arrow-downward"
+                    android_material_icon_name="arrow-drop-down"
                     size={20}
                     color={colors.textSecondary}
                   />
@@ -621,7 +721,7 @@ export function AddReflectionModal({
                   </Text>
                   <IconSymbol
                     ios_icon_name="chevron.down"
-                    android_material_icon_name="arrow-downward"
+                    android_material_icon_name="arrow-drop-down"
                     size={20}
                     color={colors.textSecondary}
                   />
@@ -681,7 +781,7 @@ export function AddReflectionModal({
                   </Text>
                   <IconSymbol
                     ios_icon_name="chevron.down"
-                    android_material_icon_name="arrow-downward"
+                    android_material_icon_name="arrow-drop-down"
                     size={20}
                     color={colors.textSecondary}
                   />
@@ -748,6 +848,11 @@ export function AddReflectionModal({
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
+                  onFocus={() => {
+                    setTimeout(() => {
+                      scrollViewRef.current?.scrollToEnd({ animated: true });
+                    }, 100);
+                  }}
                 />
               </View>
             </View>
@@ -899,19 +1004,61 @@ export function AddReflectionModal({
                     </TouchableOpacity>
                   );
                 })}
-                {gains.length === 0 && (
-                  <View style={styles.pickerEmpty}>
-                    <Text style={styles.pickerEmptyText}>No gains available</Text>
-                    <TouchableOpacity style={styles.createButton} onPress={handleCreateGain}>
+                
+                {showAddGainInput ? (
+                  <View style={styles.addNewInputContainer}>
+                    <TextInput
+                      ref={newGainInputRef}
+                      style={styles.addNewInput}
+                      value={newGainName}
+                      onChangeText={setNewGainName}
+                      placeholder="Enter new gain name..."
+                      placeholderTextColor={colors.textSecondary}
+                      autoFocus
+                      onSubmitEditing={handleAddNewGain}
+                    />
+                    <TouchableOpacity
+                      style={styles.addNewSaveButton}
+                      onPress={handleAddNewGain}
+                    >
                       <IconSymbol
-                        ios_icon_name="plus"
-                        android_material_icon_name="add"
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
                         size={20}
-                        color={colors.primary}
+                        color={colors.background}
                       />
-                      <Text style={styles.createButtonText}>Create Gain</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.addNewCancelButton}
+                      onPress={() => {
+                        setShowAddGainInput(false);
+                        setNewGainName('');
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="xmark"
+                        android_material_icon_name="close"
+                        size={20}
+                        color={colors.text}
+                      />
                     </TouchableOpacity>
                   </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.addNewButton}
+                    onPress={() => {
+                      setShowAddGainInput(true);
+                      setTimeout(() => newGainInputRef.current?.focus(), 100);
+                    }}
+                  >
+                    <IconSymbol
+                      ios_icon_name="plus.circle.fill"
+                      android_material_icon_name="add-circle"
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.addNewButtonText}>Add New Gain</Text>
+                  </TouchableOpacity>
                 )}
               </ScrollView>
               <TouchableOpacity
@@ -966,19 +1113,61 @@ export function AddReflectionModal({
                     </TouchableOpacity>
                   );
                 })}
-                {losses.length === 0 && (
-                  <View style={styles.pickerEmpty}>
-                    <Text style={styles.pickerEmptyText}>No losses available</Text>
-                    <TouchableOpacity style={styles.createButton} onPress={handleCreateLoss}>
+                
+                {showAddLossInput ? (
+                  <View style={styles.addNewInputContainer}>
+                    <TextInput
+                      ref={newLossInputRef}
+                      style={styles.addNewInput}
+                      value={newLossName}
+                      onChangeText={setNewLossName}
+                      placeholder="Enter new loss name..."
+                      placeholderTextColor={colors.textSecondary}
+                      autoFocus
+                      onSubmitEditing={handleAddNewLoss}
+                    />
+                    <TouchableOpacity
+                      style={styles.addNewSaveButton}
+                      onPress={handleAddNewLoss}
+                    >
                       <IconSymbol
-                        ios_icon_name="plus"
-                        android_material_icon_name="add"
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
                         size={20}
-                        color={colors.primary}
+                        color={colors.background}
                       />
-                      <Text style={styles.createButtonText}>Create Loss</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.addNewCancelButton}
+                      onPress={() => {
+                        setShowAddLossInput(false);
+                        setNewLossName('');
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="xmark"
+                        android_material_icon_name="close"
+                        size={20}
+                        color={colors.text}
+                      />
                     </TouchableOpacity>
                   </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.addNewButton}
+                    onPress={() => {
+                      setShowAddLossInput(true);
+                      setTimeout(() => newLossInputRef.current?.focus(), 100);
+                    }}
+                  >
+                    <IconSymbol
+                      ios_icon_name="plus.circle.fill"
+                      android_material_icon_name="add-circle"
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.addNewButtonText}>Add New Loss</Text>
+                  </TouchableOpacity>
                 )}
               </ScrollView>
               <TouchableOpacity
@@ -1032,19 +1221,61 @@ export function AddReflectionModal({
                     </TouchableOpacity>
                   );
                 })}
-                {strategies.length === 0 && (
-                  <View style={styles.pickerEmpty}>
-                    <Text style={styles.pickerEmptyText}>No strategies available</Text>
-                    <TouchableOpacity style={styles.createButton} onPress={handleCreateStrategy}>
+                
+                {showAddStrategyInput ? (
+                  <View style={styles.addNewInputContainer}>
+                    <TextInput
+                      ref={newStrategyInputRef}
+                      style={styles.addNewInput}
+                      value={newStrategyName}
+                      onChangeText={setNewStrategyName}
+                      placeholder="Enter new strategy name..."
+                      placeholderTextColor={colors.textSecondary}
+                      autoFocus
+                      onSubmitEditing={handleAddNewStrategy}
+                    />
+                    <TouchableOpacity
+                      style={styles.addNewSaveButton}
+                      onPress={handleAddNewStrategy}
+                    >
                       <IconSymbol
-                        ios_icon_name="plus"
-                        android_material_icon_name="add"
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
                         size={20}
-                        color={colors.primary}
+                        color={colors.background}
                       />
-                      <Text style={styles.createButtonText}>Create Strategy</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.addNewCancelButton}
+                      onPress={() => {
+                        setShowAddStrategyInput(false);
+                        setNewStrategyName('');
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="xmark"
+                        android_material_icon_name="close"
+                        size={20}
+                        color={colors.text}
+                      />
                     </TouchableOpacity>
                   </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.addNewButton}
+                    onPress={() => {
+                      setShowAddStrategyInput(true);
+                      setTimeout(() => newStrategyInputRef.current?.focus(), 100);
+                    }}
+                  >
+                    <IconSymbol
+                      ios_icon_name="plus.circle.fill"
+                      android_material_icon_name="add-circle"
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.addNewButtonText}>Add New Strategy</Text>
+                  </TouchableOpacity>
                 )}
               </ScrollView>
               <TouchableOpacity
@@ -1108,6 +1339,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 40,
   },
   stepContainer: {
     padding: 20,
@@ -1198,6 +1432,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     minHeight: 120,
+  },
+  helperText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   picker: {
     flexDirection: 'row',
@@ -1447,6 +1687,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.primary,
+  },
+  addNewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 20,
+    borderTopWidth: 2,
+    borderTopColor: colors.border,
+    backgroundColor: colors.backgroundAlt,
+  },
+  addNewButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  addNewInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 8,
+    borderTopWidth: 2,
+    borderTopColor: colors.border,
+    backgroundColor: colors.backgroundAlt,
+  },
+  addNewInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  addNewSaveButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addNewCancelButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   pickerDoneButton: {
     margin: 20,
