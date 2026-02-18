@@ -889,37 +889,36 @@ export default function SettingsScreen() {
       const percentageColor = (area.percentageColor === 'green') ? colors.success : colors.error;
       const goalsCount = area.goals?.length || 0;
       const activeGoalsCount = area.goals?.filter(g => g.status === 'ACTIVE').length || 0;
-      const deactivatedGoalsCount = area.goals?.filter(g => g.status === 'DEACTIVATED').length || 0;
-      const goalsText = `${activeGoalsCount} active, ${deactivatedGoalsCount} deactivated`;
       
       return (
         <React.Fragment key={area.id}>
-          <View style={[styles.lifeAreaCard, { marginLeft: depth * 20, borderLeftColor: areaColor, borderLeftWidth: 4 }]}>
-            <View style={styles.lifeAreaHeader}>
-              <View style={styles.lifeAreaTitleRow}>
-                <View style={[styles.lifeAreaIconContainer, { backgroundColor: areaColor + '20' }]}>
-                  <IconSymbol
-                    ios_icon_name="star.fill"
-                    android_material_icon_name={iconName}
-                    size={24}
-                    color={areaColor}
-                  />
-                </View>
-                <View style={styles.lifeAreaInfo}>
-                  <Text style={styles.lifeAreaName}>{area.name}</Text>
-                  <Text style={styles.lifeAreaGoalsCount}>{goalsText}</Text>
-                </View>
+          <View style={[styles.lifeAreaCardCompact, { marginLeft: depth * 16, borderLeftColor: areaColor }]}>
+            <View style={styles.lifeAreaCompactContent}>
+              <View style={styles.lifeAreaCompactLeft}>
+                <IconSymbol
+                  ios_icon_name="star.fill"
+                  android_material_icon_name={iconName}
+                  size={20}
+                  color={areaColor}
+                />
+                <Text style={styles.lifeAreaCompactName}>{area.name}</Text>
+                <Text style={styles.lifeAreaCompactGoals}>({activeGoalsCount})</Text>
+                {area.showProgress && (
+                  <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
+                    {percentageText}
+                  </Text>
+                )}
               </View>
-              <View style={styles.lifeAreaActions}>
+              <View style={styles.lifeAreaCompactActions}>
                 {depth === 0 && index > 0 && (
                   <TouchableOpacity
                     onPress={() => moveLifeAreaUp(index)}
-                    style={styles.iconButton}
+                    style={styles.iconButtonCompact}
                   >
                     <IconSymbol
                       ios_icon_name="arrow.up"
                       android_material_icon_name="arrow-upward"
-                      size={20}
+                      size={16}
                       color={colors.textSecondary}
                     />
                   </TouchableOpacity>
@@ -927,12 +926,12 @@ export default function SettingsScreen() {
                 {depth === 0 && index < parentArray.length - 1 && (
                   <TouchableOpacity
                     onPress={() => moveLifeAreaDown(index)}
-                    style={styles.iconButton}
+                    style={styles.iconButtonCompact}
                   >
                     <IconSymbol
                       ios_icon_name="arrow.down"
                       android_material_icon_name="arrow-downward"
-                      size={20}
+                      size={16}
                       color={colors.textSecondary}
                     />
                   </TouchableOpacity>
@@ -942,65 +941,39 @@ export default function SettingsScreen() {
                     setSelectedLifeArea(area);
                     setShowGoalManagementModal(true);
                   }}
-                  style={styles.iconButton}
+                  style={styles.iconButtonCompact}
                 >
                   <IconSymbol
                     ios_icon_name="link"
                     android_material_icon_name="link"
-                    size={20}
+                    size={16}
                     color={colors.primary}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => openEditModal('lifeArea', area)}
-                  style={styles.iconButton}
+                  style={styles.iconButtonCompact}
                 >
                   <IconSymbol
                     ios_icon_name="pencil"
                     android_material_icon_name="edit"
-                    size={20}
+                    size={16}
                     color={colors.primary}
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => handleDeleteItem('lifeArea', area.id)}
-                  style={styles.iconButton}
+                  style={styles.iconButtonCompact}
                 >
                   <IconSymbol
                     ios_icon_name="trash"
                     android_material_icon_name="delete"
-                    size={20}
+                    size={16}
                     color={colors.error}
                   />
                 </TouchableOpacity>
               </View>
             </View>
-            
-            {area.showProgress && (
-              <View style={styles.lifeAreaProgress}>
-                <View style={styles.progressMeter}>
-                  <View style={[styles.progressFill, { width: `${percentage}%`, backgroundColor: percentageColor }]} />
-                </View>
-                <Text style={[styles.progressText, { color: percentageColor }]}>{percentageText}</Text>
-              </View>
-            )}
-            
-            {goalsCount > 0 && (
-              <View style={styles.lifeAreaGoals}>
-                {area.goals?.map((goal, idx) => {
-                  const isActive = goal.status === 'ACTIVE';
-                  const goalStatusText = isActive ? 'Active' : 'Deactivated';
-                  const goalStatusColor = isActive ? colors.success : colors.textSecondary;
-                  
-                  return (
-                    <View key={idx} style={styles.lifeAreaGoalItem}>
-                      <Text style={styles.lifeAreaGoalTitle}>{goal.title}</Text>
-                      <Text style={[styles.lifeAreaGoalStatus, { color: goalStatusColor }]}>{goalStatusText}</Text>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
           </View>
           {area.children && area.children.map((child, childIndex) => renderLifeAreaItem(child, depth + 1, childIndex, area.children || []))}
         </React.Fragment>
@@ -2514,6 +2487,9 @@ const styles = StyleSheet.create({
   iconButton: {
     padding: 8,
   },
+  iconButtonCompact: {
+    padding: 4,
+  },
   currencyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2929,89 +2905,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  // Life Area specific styles
-  lifeAreaCard: {
+  // Life Area compact styles
+  lifeAreaCardCompact: {
     backgroundColor: colors.card,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
   },
-  lifeAreaHeader: {
+  lifeAreaCompactContent: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
   },
-  lifeAreaTitleRow: {
+  lifeAreaCompactLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
     flex: 1,
   },
-  lifeAreaIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  lifeAreaInfo: {
-    flex: 1,
-  },
-  lifeAreaName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  lifeAreaCompactName: {
+    fontSize: 15,
+    fontWeight: '600',
     color: colors.text,
-    marginBottom: 4,
   },
-  lifeAreaGoalsCount: {
-    fontSize: 14,
+  lifeAreaCompactGoals: {
+    fontSize: 13,
     color: colors.textSecondary,
   },
-  lifeAreaActions: {
+  lifeAreaCompactPercentage: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  lifeAreaCompactActions: {
     flexDirection: 'row',
     gap: 4,
-  },
-  lifeAreaProgress: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  progressMeter: {
-    flex: 1,
-    height: 8,
-    backgroundColor: colors.border,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  progressText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  lifeAreaGoals: {
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: 12,
-  },
-  lifeAreaGoalItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  lifeAreaGoalTitle: {
-    fontSize: 14,
-    color: colors.text,
-    flex: 1,
-  },
-  lifeAreaGoalStatus: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   iconGrid: {
     flexDirection: 'row',
