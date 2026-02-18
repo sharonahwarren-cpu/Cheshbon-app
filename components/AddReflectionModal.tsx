@@ -555,29 +555,33 @@ export function AddReflectionModal({
                     style={[styles.typeButton, type === 'Restraint' && styles.typeButtonActive]}
                     onPress={() => setType('Restraint')}
                   >
-                    <IconSymbol
-                      ios_icon_name="hand.raised.fill"
-                      android_material_icon_name="back-hand"
-                      size={20}
-                      color={type === 'Restraint' ? colors.background : colors.text}
-                    />
-                    <Text style={[styles.typeButtonText, type === 'Restraint' && styles.typeButtonTextActive]}>
-                      Restraint
-                    </Text>
+                    <View style={styles.typeButtonContent}>
+                      <IconSymbol
+                        ios_icon_name="hand.raised.fill"
+                        android_material_icon_name="back-hand"
+                        size={24}
+                        color={type === 'Restraint' ? colors.background : colors.secondary}
+                      />
+                      <Text style={[styles.typeButtonText, type === 'Restraint' && styles.typeButtonTextActive]}>
+                        Restraint
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.typeButton, type === 'Proactive' && styles.typeButtonActive]}
                     onPress={() => setType('Proactive')}
                   >
-                    <IconSymbol
-                      ios_icon_name="bolt.fill"
-                      android_material_icon_name="flash-on"
-                      size={20}
-                      color={type === 'Proactive' ? colors.background : colors.text}
-                    />
-                    <Text style={[styles.typeButtonText, type === 'Proactive' && styles.typeButtonTextActive]}>
-                      Proactive
-                    </Text>
+                    <View style={styles.typeButtonContent}>
+                      <IconSymbol
+                        ios_icon_name="bolt.fill"
+                        android_material_icon_name="flash-on"
+                        size={24}
+                        color={type === 'Proactive' ? colors.background : colors.primary}
+                      />
+                      <Text style={[styles.typeButtonText, type === 'Proactive' && styles.typeButtonTextActive]}>
+                        Proactive
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -747,11 +751,11 @@ export function AddReflectionModal({
                       <IconSymbol
                         ios_icon_name="hand.thumbsup.fill"
                         android_material_icon_name="thumb-up"
-                        size={20}
+                        size={32}
                         color={wasWorthIt === true ? colors.background : colors.success}
                       />
                       <Text style={[styles.worthButtonText, wasWorthIt === true && styles.worthButtonTextActive]}>
-                        Yes
+                        Worth it
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -761,11 +765,11 @@ export function AddReflectionModal({
                       <IconSymbol
                         ios_icon_name="hand.thumbsdown.fill"
                         android_material_icon_name="thumb-down"
-                        size={20}
+                        size={32}
                         color={wasWorthIt === false ? colors.background : colors.error}
                       />
                       <Text style={[styles.worthButtonText, wasWorthIt === false && styles.worthButtonTextActive]}>
-                        No
+                        Not worth it
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -805,8 +809,8 @@ export function AddReflectionModal({
                       const effectiveness = strategyEffectiveness.find(s => s.strategyId === strategyId);
                       
                       return (
-                        <View key={strategyId} style={styles.strategyEffectivenessRow}>
-                          <Text style={styles.strategyName}>{strategy.name}</Text>
+                        <View key={strategyId} style={styles.strategyEffectivenessCard}>
+                          <Text style={styles.strategyEffectivenessName}>{strategy.name}</Text>
                           <View style={styles.strategyEffectivenessButtons}>
                             <TouchableOpacity
                               style={[
@@ -816,11 +820,17 @@ export function AddReflectionModal({
                               onPress={() => setStrategyWorked(strategyId, true)}
                             >
                               <IconSymbol
-                                ios_icon_name="checkmark"
-                                android_material_icon_name="check"
-                                size={16}
+                                ios_icon_name="checkmark.circle.fill"
+                                android_material_icon_name="check-circle"
+                                size={24}
                                 color={effectiveness?.worked === true ? colors.background : colors.success}
                               />
+                              <Text style={[
+                                styles.strategyEffectivenessButtonText,
+                                effectiveness?.worked === true && styles.strategyEffectivenessButtonTextActive
+                              ]}>
+                                Worked
+                              </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={[
@@ -830,11 +840,17 @@ export function AddReflectionModal({
                               onPress={() => setStrategyWorked(strategyId, false)}
                             >
                               <IconSymbol
-                                ios_icon_name="xmark"
-                                android_material_icon_name="close"
-                                size={16}
+                                ios_icon_name="xmark.circle.fill"
+                                android_material_icon_name="cancel"
+                                size={24}
                                 color={effectiveness?.worked === false ? colors.background : colors.error}
                               />
+                              <Text style={[
+                                styles.strategyEffectivenessButtonText,
+                                effectiveness?.worked === false && styles.strategyEffectivenessButtonTextActive
+                              ]}>
+                                Didn't work
+                              </Text>
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -1408,25 +1424,28 @@ const styles = StyleSheet.create({
   },
   typeButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
+    paddingVertical: 20,
     paddingHorizontal: 16,
     borderRadius: 12,
     backgroundColor: colors.card,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.border,
   },
   typeButtonActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
+  typeButtonContent: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   typeButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
+    textAlign: 'center',
   },
   typeButtonTextActive: {
     color: colors.background,
@@ -1512,15 +1531,15 @@ const styles = StyleSheet.create({
   },
   worthButton: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
+    gap: 12,
+    paddingVertical: 24,
     paddingHorizontal: 16,
     borderRadius: 12,
     backgroundColor: colors.card,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.border,
   },
   worthButtonYes: {
@@ -1532,51 +1551,53 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   worthButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
+    textAlign: 'center',
   },
   worthButtonTextActive: {
     color: colors.background,
   },
   strategyEffectivenessContainer: {
     marginTop: 16,
+    gap: 12,
+  },
+  strategyEffectivenessTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  strategyEffectivenessCard: {
     padding: 16,
     backgroundColor: colors.card,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
+    gap: 12,
   },
-  strategyEffectivenessTitle: {
-    fontSize: 14,
+  strategyEffectivenessName: {
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 12,
-  },
-  strategyEffectivenessRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  strategyName: {
-    fontSize: 14,
-    color: colors.text,
-    flex: 1,
   },
   strategyEffectivenessButtons: {
     flexDirection: 'row',
     gap: 8,
   },
   strategyEffectivenessButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.backgroundAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: colors.border,
   },
   strategyEffectivenessButtonYes: {
     backgroundColor: colors.success,
@@ -1585,6 +1606,14 @@ const styles = StyleSheet.create({
   strategyEffectivenessButtonNo: {
     backgroundColor: colors.error,
     borderColor: colors.error,
+  },
+  strategyEffectivenessButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  strategyEffectivenessButtonTextActive: {
+    color: colors.background,
   },
   footer: {
     flexDirection: 'row',

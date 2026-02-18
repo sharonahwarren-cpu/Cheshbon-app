@@ -416,37 +416,43 @@ export default function ReflectScreen() {
               />
               <Text style={styles.sectionTitle}>Daily Journal</Text>
             </View>
-            <TextInput
-              style={styles.journalInput}
-              value={journalContent}
-              onChangeText={setJournalContent}
-              placeholder="Write your thoughts for today..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              textAlignVertical="top"
-              returnKeyType="default"
-              blurOnSubmit={false}
-              autoFocus={false}
-            />
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSaveJournal}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <React.Fragment>
-                  <IconSymbol
-                    ios_icon_name="checkmark.circle.fill"
-                    android_material_icon_name="check-circle"
-                    size={20}
-                    color={colors.background}
-                  />
-                  <Text style={styles.saveButtonText}>Save</Text>
-                </React.Fragment>
-              )}
-            </TouchableOpacity>
+            <View style={styles.journalContainer}>
+              <TextInput
+                style={styles.journalInput}
+                value={journalContent}
+                onChangeText={setJournalContent}
+                placeholder="Write your thoughts for today..."
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                textAlignVertical="top"
+                returnKeyType="default"
+                blurOnSubmit={false}
+                autoFocus={false}
+                scrollEnabled={true}
+              />
+              <TouchableOpacity
+                style={styles.journalDoneButton}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  handleSaveJournal();
+                }}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} size="small" />
+                ) : (
+                  <React.Fragment>
+                    <IconSymbol
+                      ios_icon_name="checkmark.circle.fill"
+                      android_material_icon_name="check-circle"
+                      size={20}
+                      color={colors.background}
+                    />
+                    <Text style={styles.journalDoneButtonText}>Done</Text>
+                  </React.Fragment>
+                )}
+              </TouchableOpacity>
+            </View>
             {journalEntry && (
               <View style={styles.timestampContainer}>
                 <Text style={styles.timestampText}>
@@ -2036,14 +2042,9 @@ const styles = StyleSheet.create({
   addButton: {
     padding: 4,
   },
-  journalInput: {
+  journalContainer: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 20,
-    fontSize: 16,
-    color: colors.text,
-    minHeight: 150,
-    textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: '#000',
@@ -2051,25 +2052,30 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    overflow: 'hidden',
   },
-  saveButton: {
+  journalInput: {
+    padding: 20,
+    fontSize: 16,
+    color: colors.text,
+    minHeight: 180,
+    maxHeight: 180,
+    textAlignVertical: 'top',
+  },
+  journalDoneButton: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  saveButtonText: {
+  journalDoneButtonText: {
     color: colors.background,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   timestampContainer: {
