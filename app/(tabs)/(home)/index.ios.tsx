@@ -562,7 +562,7 @@ export default function HomeScreen() {
     const successCount = dailySuccessEntries.length;
     const struggleCount = dailyStruggleEntries.length;
 
-    const tallies: Array<{ tally: number; currencySymbol: string; hasValue: boolean }> = [];
+    const tallies: Array<{ tally: number; currencySymbol: string; hasValue: boolean; isReward: boolean }> = [];
 
     // Calculate reward currency impact
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
@@ -584,6 +584,7 @@ export default function HomeScreen() {
               tally: Math.abs(rewardTally),
               currencySymbol: rewardCurrency.symbol || '',
               hasValue: true,
+              isReward: true,
             });
           }
         }
@@ -612,6 +613,7 @@ export default function HomeScreen() {
                 tally: Math.abs(consequenceTally),
                 currencySymbol: consequenceCurrency.symbol || '',
                 hasValue: true,
+                isReward: false,
               });
             }
           }
@@ -672,6 +674,7 @@ export default function HomeScreen() {
               {currencyTallies.map((tally, index) => {
                 const tallyText = tally.tally.toString();
                 const currencySymbolText = tally.currencySymbol;
+                const tallyColor = tally.isReward ? colors.success : colors.error;
                 
                 return (
                   <View key={index} style={styles.currencyTallyBadge}>
@@ -680,7 +683,7 @@ export default function HomeScreen() {
                         {currencySymbolText}
                       </Text>
                     )}
-                    <Text style={styles.currencyTallyText}>
+                    <Text style={[styles.currencyTallyText, { color: tallyColor }]}>
                       {tallyText}
                     </Text>
                   </View>
@@ -1251,7 +1254,6 @@ const styles = StyleSheet.create({
   currencyTallyText: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: colors.text,
   },
   tallyRow: {
     flexDirection: 'row',
