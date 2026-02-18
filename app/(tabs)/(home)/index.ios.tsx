@@ -1,8 +1,4 @@
 
-import { useAuth } from "@/contexts/AuthContext";
-import React, { useState, useEffect } from "react";
-import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
-import { SafeAreaView } from "react-native-safe-area-context";
 import {
   StyleSheet,
   View,
@@ -13,10 +9,14 @@ import {
   Modal,
   TextInput,
 } from "react-native";
-import { colors } from "@/styles/commonStyles";
-import { IconSymbol } from "@/components/IconSymbol";
+import React, { useState, useEffect } from "react";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { IconSymbol } from "@/components/IconSymbol";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "@/styles/commonStyles";
+import { useAuth } from "@/contexts/AuthContext";
+import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
 
 interface CurrencyBalance {
   currencyId: string;
@@ -716,7 +716,7 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="checkmark"
               android_material_icon_name="check"
-              size={16}
+              size={18}
               color="#FFFFFF"
             />
             <Text style={styles.actionButtonText}>Success</Text>
@@ -729,7 +729,7 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="xmark"
               android_material_icon_name="close"
-              size={16}
+              size={18}
               color="#FFFFFF"
             />
             <Text style={styles.actionButtonText}>Struggle</Text>
@@ -793,6 +793,7 @@ export default function HomeScreen() {
   const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
   const dateDisplay = formatDateDisplay(selectedDate);
 
+  // Map goals for modal with correct field names that AddReflectionModal expects
   const goalsForModal = activatedGoals.map(g => {
     console.log('[Express iOS] Mapping goal for modal:', {
       id: g.id,
@@ -807,16 +808,17 @@ export default function HomeScreen() {
       struggleCount: g.struggleCount,
     });
     
+    // Map backend field names to what AddReflectionModal expects
     return {
       id: g.id,
       title: g.title,
       behaviorCategories: g.behaviorCategories,
       rewardCurrencyId: g.rewardCurrencyId,
       rewardAmount: g.rewardAmount,
-      rewardSuccesses: g.rewardSuccesses,
+      rewardSuccesses: g.rewardSuccesses, // Backend uses rewardSuccesses, modal expects this
       consequenceCurrencyId: g.consequenceCurrencyId,
       consequenceAmount: g.consequenceAmount,
-      consequenceFailures: g.consequenceFailures,
+      consequenceFailures: g.consequenceFailures, // Backend uses consequenceFailures, modal expects this
       successCount: g.successCount,
       struggleCount: g.struggleCount,
     };
@@ -911,110 +913,18 @@ export default function HomeScreen() {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {activeTab === 'reports' ? (
-          <>
-            {currencyBalances.length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>Total Currency Balances</Text>
-                {currencyBalances.map((balance, index) => {
-                  const symbolText = balance.symbol || '';
-                  const totalBalanceText = `${balance.totalBalance}`;
-                  const totalBalanceColor = balance.totalBalance >= 0 ? colors.success : colors.error;
-                  const currency = currencies.find(c => c.id === balance.currencyId);
-                  
-                  let buttonType: 'claim' | 'pay' = 'claim';
-                  if (balance.totalBalance > 0) {
-                    buttonType = (currency && isRewardCurrency(currency)) ? 'claim' : 'pay';
-                  } else if (balance.totalBalance < 0) {
-                    buttonType = (currency && isRewardCurrency(currency)) ? 'pay' : 'claim';
-                  }
-                  
-                  const buttonText = buttonType === 'claim' ? 'Claim' : 'Pay';
-                  const buttonIcon = buttonType === 'claim' ? 'download' : 'upload';
-                  const buttonIosIcon = buttonType === 'claim' ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill';
-                  
-                  return (
-                    <View key={index} style={styles.reportCard}>
-                      <View style={styles.reportHeader}>
-                        <Text style={styles.reportTitle}>{balance.currencyName}</Text>
-                        {symbolText && <Text style={styles.reportSymbol}>{symbolText}</Text>}
-                      </View>
-                      <View style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>Total Balance:</Text>
-                        <Text style={[styles.reportValue, { color: totalBalanceColor }]}>
-                          {totalBalanceText}
-                        </Text>
-                      </View>
-                      
-                      {balance.totalBalance !== 0 && (
-                        <TouchableOpacity
-                          style={[styles.currencyActionButton, buttonType === 'claim' ? styles.claimButton : styles.payButton]}
-                          onPress={() => openCurrencyModal(balance.currencyId, balance.currencyName, symbolText, balance.totalBalance, buttonType)}
-                        >
-                          <IconSymbol
-                            ios_icon_name={buttonIosIcon}
-                            android_material_icon_name={buttonIcon}
-                            size={18}
-                            color={colors.background}
-                          />
-                          <Text style={styles.currencyActionButtonText}>{buttonText}</Text>
-                        </TouchableOpacity>
-                      )}
-                      
-                      {balance.goalBreakdown && balance.goalBreakdown.length > 0 && (
-                        <View style={styles.goalBreakdownSection}>
-                          <Text style={styles.goalBreakdownTitle}>Per Goal:</Text>
-                          {balance.goalBreakdown.map((goalBalance, idx) => {
-                            const goalBalanceText = `${goalBalance.balance}`;
-                            const goalBalanceColor = goalBalance.balance >= 0 ? colors.success : colors.error;
-                            
-                            return (
-                              <View key={idx} style={styles.goalBreakdownRow}>
-                                <Text style={styles.goalBreakdownGoal}>{goalBalance.goalTitle}</Text>
-                                <Text style={[styles.goalBreakdownBalance, { color: goalBalanceColor }]}>
-                                  {symbolText}{goalBalanceText}
-                                </Text>
-                              </View>
-                            );
-                          })}
-                        </View>
-                      )}
-                      
-                      <TouchableOpacity 
-                        style={styles.drillDownHint}
-                        onPress={() => {
-                          console.log("Navigating to currency history for:", balance.currencyId);
-                          router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
-                        }}
-                      >
-                        <IconSymbol
-                          ios_icon_name="chevron.right"
-                          android_material_icon_name="arrow-forward"
-                          size={16}
-                          color={colors.primary}
-                        />
-                        <Text style={styles.drillDownText}>Tap to view related reflections</Text>
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })}
-              </>
-            )}
-
-            {currencyBalances.length === 0 && !winsVsLosses && !successVsStruggles && (
-              <View style={styles.emptyState}>
-                <IconSymbol
-                  ios_icon_name="chart.bar"
-                  android_material_icon_name="assessment"
-                  size={64}
-                  color={colors.muted}
-                />
-                <Text style={styles.emptyStateTitle}>No data yet</Text>
-                <Text style={styles.emptyStateText}>
-                  Start tracking your goals and reflections to see reports here
-                </Text>
-              </View>
-            )}
-          </>
+          <View style={styles.emptyState}>
+            <IconSymbol
+              ios_icon_name="chart.bar"
+              android_material_icon_name="assessment"
+              size={64}
+              color={colors.muted}
+            />
+            <Text style={styles.emptyStateTitle}>Reports coming soon</Text>
+            <Text style={styles.emptyStateText}>
+              View your progress and statistics here
+            </Text>
+          </View>
         ) : (
           <>
             {Object.keys(categoryGroups).length === 0 ? (
@@ -1057,94 +967,6 @@ export default function HomeScreen() {
           sourceScreen="express"
         />
       )}
-
-      <Modal
-        visible={showCurrencyModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCurrencyModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.currencyModal}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setShowCurrencyModal(false)}>
-                <IconSymbol
-                  ios_icon_name="xmark"
-                  android_material_icon_name="close"
-                  size={24}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>{currencyModalType === 'claim' ? 'Claim' : 'Pay'} {selectedCurrencyName}</Text>
-              <View style={{ width: 24 }} />
-            </View>
-            
-            <View style={styles.currencyModalContent}>
-              <Text style={styles.currencyModalLabel}>Amount {selectedCurrencySymbol && `(${selectedCurrencySymbol})`}</Text>
-              <TextInput
-                style={styles.currencyModalInput}
-                value={currencyModalAmount}
-                onChangeText={setCurrencyModalAmount}
-                placeholder="Enter amount"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-              />
-              <Text style={styles.currencyModalHelper}>
-                Maximum: {currencyModalMaxAmount} {selectedCurrencySymbol}
-              </Text>
-              
-              <View style={styles.quickAmountButtons}>
-                <TouchableOpacity
-                  style={styles.quickAmountButton}
-                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount / 4).toFixed(2))}
-                >
-                  <Text style={styles.quickAmountButtonText}>25%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quickAmountButton}
-                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount / 2).toFixed(2))}
-                >
-                  <Text style={styles.quickAmountButtonText}>50%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quickAmountButton}
-                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount * 0.75).toFixed(2))}
-                >
-                  <Text style={styles.quickAmountButtonText}>75%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quickAmountButton}
-                  onPress={() => setCurrencyModalAmount(currencyModalMaxAmount.toString())}
-                >
-                  <Text style={styles.quickAmountButtonText}>100%</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => setShowCurrencyModal(false)}
-              >
-                <Text style={styles.modalButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonPrimary]}
-                onPress={handleCurrencyAction}
-                disabled={currencyModalLoading}
-              >
-                {currencyModalLoading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.modalButtonPrimaryText}>
-                    {currencyModalType === 'claim' ? 'Claim' : 'Pay'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       <Modal
         visible={errorModalVisible}
@@ -1279,115 +1101,6 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: 20,
     paddingBottom: 100,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 16,
-    marginBottom: 12,
-  },
-  reportCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  reportHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  reportTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  reportSymbol: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  reportRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  reportLabel: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  reportValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  goalBreakdownSection: {
-    marginTop: 8,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  goalBreakdownTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  goalBreakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  goalBreakdownGoal: {
-    fontSize: 14,
-    color: colors.text,
-    flex: 1,
-  },
-  goalBreakdownBalance: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  currencyActionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginTop: 12,
-  },
-  claimButton: {
-    backgroundColor: colors.success,
-  },
-  payButton: {
-    backgroundColor: colors.error,
-  },
-  currencyActionButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.background,
-  },
-  drillDownHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  drillDownText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',
@@ -1528,7 +1241,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 8,
-    gap: 4,
+    gap: 6,
   },
   successButton: {
     backgroundColor: colors.success,
@@ -1542,7 +1255,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   actionButtonText: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
   },
@@ -1551,98 +1264,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  currencyModal: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    width: '90%',
-    maxWidth: 400,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  currencyModalContent: {
-    padding: 20,
-  },
-  currencyModalLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  currencyModalInput: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 18,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 8,
-  },
-  currencyModalHelper: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 16,
-  },
-  quickAmountButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  quickAmountButton: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  quickAmountButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    padding: 20,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalButtonPrimary: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  modalButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  modalButtonPrimaryText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
   alertModal: {
     backgroundColor: colors.backgroundAlt,

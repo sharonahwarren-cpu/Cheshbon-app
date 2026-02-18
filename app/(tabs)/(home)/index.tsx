@@ -801,6 +801,7 @@ export default function HomeScreen() {
   const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
   const dateDisplay = formatDateDisplay(selectedDate);
 
+  // Map goals for modal with correct field names that AddReflectionModal expects
   const goalsForModal = activatedGoals.map(g => {
     console.log('[Express] Mapping goal for modal:', {
       id: g.id,
@@ -815,16 +816,17 @@ export default function HomeScreen() {
       struggleCount: g.struggleCount,
     });
     
+    // Map backend field names to what AddReflectionModal expects
     return {
       id: g.id,
       title: g.title,
       behaviorCategories: g.behaviorCategories,
       rewardCurrencyId: g.rewardCurrencyId,
       rewardAmount: g.rewardAmount,
-      rewardSuccesses: g.rewardSuccesses,
+      rewardSuccesses: g.rewardSuccesses, // Backend uses rewardSuccesses, modal expects this
       consequenceCurrencyId: g.consequenceCurrencyId,
       consequenceAmount: g.consequenceAmount,
-      consequenceFailures: g.consequenceFailures,
+      consequenceFailures: g.consequenceFailures, // Backend uses consequenceFailures, modal expects this
       successCount: g.successCount,
       struggleCount: g.struggleCount,
     };
