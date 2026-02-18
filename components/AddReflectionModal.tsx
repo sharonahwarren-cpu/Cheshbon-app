@@ -12,17 +12,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
-  LayoutAnimation,
-  UIManager,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { authenticatedPost, authenticatedPut } from '@/utils/api';
 import { useRouter } from 'expo-router';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 interface GainLoss {
   id: string;
@@ -80,6 +74,8 @@ interface Goal {
   consequenceCurrencyId?: string;
   consequenceAmount?: number;
   consequenceFailures?: number;
+  successCount?: number;
+  struggleCount?: number;
 }
 
 interface Currency {
@@ -125,150 +121,153 @@ export function AddReflectionModal({
   sourceScreen,
 }: AddReflectionModalProps) {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const descriptionInputRef = useRef<TextInput>(null);
+  const additionalThoughtsInputRef = useRef<TextInput>(null);
+  const strategyNameInputRef = useRef<TextInput>(null);
+  const strategyDescInputRef = useRef<TextInput>(null);
   
-  const [category, setCategory] = useState<string>(editingReflection?.category || '');
-  const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Restraint');
+  const [step, setStep] = useState(1);
+  const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
+  const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Proactive');
   const [description, setDescription] = useState(editingReflection?.description || '');
-  const [linkedGoalId, setLinkedGoalId] = useState<string>(prefilledGoalId || editingReflection?.linkedGoalId || '');
+  const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId || prefilledGoalId);
   const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(editingReflection?.outcome);
-  const [currencyChange, setCurrencyChange] = useState<{
-    currencyId: string;
-    amount: number;
-    operation: 'add' | 'subtract';
-  } | undefined>(editingReflection?.currencyChange);
   const [gainedIds, setGainedIds] = useState<string[]>(editingReflection?.gainedIds || []);
   const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
   const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(editingReflection?.wasWorthIt);
   const [additionalThoughts, setAdditionalThoughts] = useState(editingReflection?.additionalThoughts || '');
-  const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
-  const [strategyEffectiveness, setStrategyEffectiveness] = useState<{
-    strategyId: string;
-    worked: boolean;
-  }[]>(editingReflection?.strategyEffectiveness || []);
-  
+  const [strategyEffectiveness, setStrategyEffectiveness] = useState<{strategyId: string; worked: boolean}[]>(editingReflection?.strategyEffectiveness || []);
+  const [loading, setLoading] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
-  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [goalSearchQuery, setGoalSearchQuery] = useState('');
   const [showGainsPicker, setShowGainsPicker] = useState(false);
   const [showLossesPicker, setShowLossesPicker] = useState(false);
   const [showStrategyPicker, setShowStrategyPicker] = useState(false);
+  const [showCreateGainModal, setShowCreateGainModal] = useState(false);
+  const [showCreateLossModal, setShowCreateLossModal] = useState(false);
+  const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemDescription, setNewItemDescription] = useState('');
+
+  const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
+  const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+
+  const filteredGoals = goals.filter(goal => {
+    if (!category) return true;
+    if (!goal.behaviorCategories) return true;
+    return goal.behaviorCategories.includes(category);
+  }).filter(goal => {
+    if (!goalSearchQuery) return true;
+    return goal.title.toLowerCase().includes(goalSearchQuery.toLowerCase());
+  });
+
+  const selectedGoal = goals.find(g => g.id === linkedGoalId);
   
-  const [newGainName, setNewGainName] = useState('');
-  const [newLossName, setNewLossName] = useState('');
-  const [newStrategyName, setNewStrategyName] = useState('');
-  const [showAddGainInput, setShowAddGainInput] = useState(false);
-  const [showAddLossInput, setShowAddLossInput] = useState(false);
-  const [showAddStrategyInput, setShowAddStrategyInput] = useState(false);
-  
-  const scrollViewRef = useRef<ScrollView>(null);
-  const descriptionInputRef = useRef<TextInput>(null);
-  const thoughtsInputRef = useRef<TextInput>(null);
-  const newGainInputRef = useRef<TextInput>(null);
-  const newLossInputRef = useRef<TextInput>(null);
-  const newStrategyInputRef = useRef<TextInput>(null);
-
-  // Auto-focus description when step 1 loads
-  useEffect(() => {
-    if (visible && step === 1) {
-      setTimeout(() => {
-        descriptionInputRef.current?.focus();
-      }, 300);
-    }
-  }, [visible, step]);
-
-  // Auto-progress when description is filled (after 500ms of no typing)
-  useEffect(() => {
-    if (step === 1 && description.trim().length > 10) {
-      const timer = setTimeout(() => {
-        console.log('Auto-progressing from step 1 to step 2');
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setStep(2);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [description, step]);
-
-  // Auto-progress from step 2 when outcome is selected
-  useEffect(() => {
-    if (step === 2 && linkedGoalId && outcome) {
-      const timer = setTimeout(() => {
-        console.log('Auto-progressing from step 2 to step 3');
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setStep(3);
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [linkedGoalId, outcome, step]);
+  const currencyBalanceInfo = (() => {
+    if (!linkedGoalId || !outcome || !selectedGoal) return null;
+    
+    const isSuccess = outcome === 'success';
+    const currencyId = isSuccess ? selectedGoal.rewardCurrencyId : selectedGoal.consequenceCurrencyId;
+    const amount = isSuccess ? selectedGoal.rewardAmount : selectedGoal.consequenceAmount;
+    const threshold = isSuccess ? selectedGoal.rewardSuccesses : selectedGoal.consequenceFailures;
+    
+    if (!currencyId || !amount) return null;
+    
+    const currency = currencies.find(c => c.id === currencyId);
+    if (!currency) return null;
+    
+    const operation = isSuccess ? currency.onSuccess : currency.onFailure;
+    if (!operation || operation === 'NONE') return null;
+    
+    const actionText = isSuccess 
+      ? (operation === 'ADD' ? 'earn' : 'lose')
+      : (operation === 'ADD' ? 'gain' : 'lose');
+    
+    const displayAmount = amount;
+    const displaySymbol = currency.symbol || '';
+    const displayThreshold = threshold || 1;
+    
+    return {
+      operation: operation === 'ADD' ? 'add' : 'subtract',
+      amount: displayAmount,
+      symbol: displaySymbol,
+      name: currency.name,
+      threshold: displayThreshold,
+      actionText,
+      isSuccess,
+    };
+  })();
 
   const getCategoryIcon = (category: string) => {
-    const iconMap: Record<string, { ios: string; android: string }> = {
-      'Action': { ios: 'figure.walk', android: 'directions-walk' },
-      'Speech': { ios: 'bubble.left.fill', android: 'chat' },
-      'Thought': { ios: 'brain.head.profile', android: 'psychology' },
-      'Feeling': { ios: 'heart.fill', android: 'favorite' },
-    };
-    return iconMap[category] || { ios: 'circle.fill', android: 'circle' };
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
   };
 
   const getDescriptionPlaceholder = () => {
-    if (type === 'Restraint') {
-      if (category === 'Thought') {
-        return 'What did you restrain from thinking (or not think)?';
-      } else if (category === 'Action') {
-        return 'What did you restrain yourself from doing (or not do)?';
-      } else if (category === 'Speech') {
-        return 'What did you restrain yourself from saying (or not say)?';
-      } else if (category === 'Feeling') {
-        return 'What did you restrain yourself from feeling (or not feel)?';
-      } else {
-        return 'What did you restrain from doing?';
-      }
-    } else {
-      if (category === 'Thought') {
-        return 'What did you think (or not restrain yourself from thinking)?';
-      } else if (category === 'Action') {
-        return 'What did you do (or not restrain yourself from doing)?';
-      } else if (category === 'Speech') {
-        return 'What did you say (or not restrain yourself from saying)?';
-      } else if (category === 'Feeling') {
-        return 'What did you feel (or not restrain yourself from feeling)?';
-      } else {
-        return 'What proactive action did you take?';
-      }
+    if (!category) {
+      return type === 'Proactive' 
+        ? 'I chose to or didn\'t refrain from...' 
+        : 'I refrained from or didn\'t...';
     }
+
+    if (type === 'Proactive') {
+      if (category === 'Action') return 'Describe what you chose to do';
+      if (category === 'Speech') return 'Describe what you chose to say';
+      if (category === 'Thought' || category === 'Feeling') return 'Describe what you chose to think/feel';
+    } else {
+      if (category === 'Action') return 'Describe what you refrained from doing';
+      if (category === 'Speech') return 'Describe what you refrained from saying';
+      if (category === 'Thought' || category === 'Feeling') return 'Describe what you refrained from thinking/feeling';
+    }
+
+    return 'Describe your reflection';
   };
 
   const handleNext = () => {
     if (step === 1 && !description.trim()) {
+      alert('Please enter a description');
       return;
     }
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    Keyboard.dismiss();
     setStep(step + 1);
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    }, 100);
   };
 
   const handleBack = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setStep(step - 1);
+    if (step > 1) {
+      Keyboard.dismiss();
+      setStep(step - 1);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }, 100);
+    }
   };
 
   const handleSave = async () => {
-    console.log("Saving reflection from AddReflectionModal, sourceScreen:", sourceScreen);
-    
     if (!description.trim()) {
+      alert('Please enter a description');
       return;
     }
 
+    console.log('Saving reflection from shared AddReflectionModal, sourceScreen:', sourceScreen);
     setLoading(true);
     try {
-      const reflectionData = {
-        date: selectedDate.toISOString().split('T')[0],
-        category: category || undefined,
+      const dateString = selectedDate.toISOString().split('T')[0];
+      
+      const payload = {
+        date: dateString,
+        category: categoriesEnabled ? category : undefined,
         type,
-        description: description.trim(),
+        description,
         linkedGoalId: linkedGoalId || undefined,
-        outcome: outcome || undefined,
-        currencyChange: currencyChange || undefined,
+        outcome: linkedGoalId ? outcome : undefined,
         gainedIds: gainedIds.length > 0 ? gainedIds : undefined,
         lostIds: lostIds.length > 0 ? lostIds : undefined,
         wasWorthIt: wasWorthIt !== undefined ? wasWorthIt : undefined,
@@ -276,1225 +275,1136 @@ export function AddReflectionModal({
         strategyEffectiveness: strategyEffectiveness.length > 0 ? strategyEffectiveness : undefined,
       };
 
-      console.log('[AddReflectionModal] Sending reflection data:', reflectionData);
-
       let savedReflection;
       if (editingReflection) {
-        savedReflection = await authenticatedPut(`/api/reflections/${editingReflection.id}`, reflectionData);
+        savedReflection = await authenticatedPut(`/api/reflections/${editingReflection.id}`, payload);
       } else {
-        savedReflection = await authenticatedPost('/api/reflections', reflectionData);
+        savedReflection = await authenticatedPost('/api/reflections', payload);
       }
 
-      console.log('[AddReflectionModal] Reflection saved successfully:', savedReflection);
-      onSave(savedReflection);
-      
-      setStep(1);
-      setCategory('');
-      setType('Restraint');
-      setDescription('');
-      setLinkedGoalId('');
-      setOutcome(undefined);
-      setCurrencyChange(undefined);
-      setGainedIds([]);
-      setLostIds([]);
-      setWasWorthIt(undefined);
-      setAdditionalThoughts('');
-      setSelectedStrategies([]);
-      setStrategyEffectiveness([]);
-      
-      onClose();
+      console.log('[AddReflectionModal] Reflection saved successfully, calling onSave callback');
+      onSave(savedReflection?.data || savedReflection);
       
       // Navigate back to Express if the reflection was created from Express
       if (sourceScreen === 'express') {
         console.log('[AddReflectionModal] Navigating back to Express screen');
-        router.push('/(tabs)/(home)');
+        setTimeout(() => {
+          router.push('/(tabs)/(home)');
+        }, 500);
       }
-    } catch (error: any) {
-      console.error("[AddReflectionModal] Error saving reflection:", error);
-    } finally {
+    } catch (error) {
+      console.error('Error saving reflection:', error);
+      alert('Failed to save reflection');
       setLoading(false);
     }
   };
 
   const handleCreateGoal = () => {
-    onClose();
     router.push('/create-goal');
   };
 
-  const handleAddNewGain = async () => {
-    if (!newGainName.trim()) return;
-    
+  const handleCreateGain = async () => {
+    if (!newItemName.trim()) {
+      alert('Please enter a name');
+      return;
+    }
+
     try {
+      setLoading(true);
       const newGain = await authenticatedPost('/api/gains-losses', {
-        name: newGainName.trim(),
+        name: newItemName,
         type: 'Gain',
       });
       
-      setGainedIds([...gainedIds, newGain.id]);
-      setNewGainName('');
-      setShowAddGainInput(false);
-      
-      console.log('New gain created:', newGain);
+      gainsLosses.push(newGain?.data || newGain);
+      gainedIds.push((newGain?.data || newGain).id);
+      setNewItemName('');
+      setShowCreateGainModal(false);
     } catch (error) {
       console.error('Error creating gain:', error);
+      alert('Failed to create gain');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAddNewLoss = async () => {
-    if (!newLossName.trim()) return;
-    
+  const handleCreateLoss = async () => {
+    if (!newItemName.trim()) {
+      alert('Please enter a name');
+      return;
+    }
+
     try {
+      setLoading(true);
       const newLoss = await authenticatedPost('/api/gains-losses', {
-        name: newLossName.trim(),
+        name: newItemName,
         type: 'Loss',
       });
       
-      setLostIds([...lostIds, newLoss.id]);
-      setNewLossName('');
-      setShowAddLossInput(false);
-      
-      console.log('New loss created:', newLoss);
+      gainsLosses.push(newLoss?.data || newLoss);
+      lostIds.push((newLoss?.data || newLoss).id);
+      setNewItemName('');
+      setShowCreateLossModal(false);
     } catch (error) {
       console.error('Error creating loss:', error);
+      alert('Failed to create loss');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAddNewStrategy = async () => {
-    if (!newStrategyName.trim()) return;
-    
+  const handleCreateStrategy = async () => {
+    if (!newItemName.trim()) {
+      alert('Please enter a name');
+      return;
+    }
+
     try {
+      setLoading(true);
       const newStrategy = await authenticatedPost('/api/strategies', {
-        name: newStrategyName.trim(),
+        name: newItemName,
+        description: newItemDescription || undefined,
+        category: category || undefined,
       });
       
-      setSelectedStrategies([...selectedStrategies, newStrategy.id]);
-      setNewStrategyName('');
-      setShowAddStrategyInput(false);
-      
-      console.log('New strategy created:', newStrategy);
+      strategies.push(newStrategy?.data || newStrategy);
+      setNewItemName('');
+      setNewItemDescription('');
+      setShowCreateStrategyModal(false);
     } catch (error) {
       console.error('Error creating strategy:', error);
+      alert('Failed to create strategy');
+    } finally {
+      setLoading(false);
     }
   };
 
   const toggleStrategy = (strategyId: string) => {
-    if (selectedStrategies.includes(strategyId)) {
-      setSelectedStrategies(selectedStrategies.filter(id => id !== strategyId));
-      setStrategyEffectiveness(strategyEffectiveness.filter(s => s.strategyId !== strategyId));
+    const existing = strategyEffectiveness.find(se => se.strategyId === strategyId);
+    if (existing) {
+      setStrategyEffectiveness(strategyEffectiveness.filter(se => se.strategyId !== strategyId));
     } else {
-      setSelectedStrategies([...selectedStrategies, strategyId]);
+      setStrategyEffectiveness([...strategyEffectiveness, { strategyId, worked: true }]);
     }
   };
 
   const setStrategyWorked = (strategyId: string, worked: boolean) => {
-    const existing = strategyEffectiveness.find(s => s.strategyId === strategyId);
-    if (existing) {
-      setStrategyEffectiveness(
-        strategyEffectiveness.map(s =>
-          s.strategyId === strategyId ? { ...s, worked } : s
-        )
-      );
-    } else {
-      setStrategyEffectiveness([...strategyEffectiveness, { strategyId, worked }]);
-    }
+    setStrategyEffectiveness(strategyEffectiveness.map(se => 
+      se.strategyId === strategyId ? { ...se, worked } : se
+    ));
   };
 
-  const selectedGoal = goals.find(g => g.id === linkedGoalId);
-  const selectedCurrency = currencies.find(c => c.id === currencyChange?.currencyId);
-  const gains = gainsLosses.filter(gl => gl.type === 'Gain');
-  const losses = gainsLosses.filter(gl => gl.type === 'Loss');
-
-  const categoriesEnabled = userPreferences?.reflectionCategoriesEnabled ?? false;
-  const availableCategories = userPreferences?.reflectionCategories || ['Action', 'Speech', 'Thought'];
-
-  const getCurrencyFeedback = () => {
-    if (!selectedGoal || !outcome) return null;
-
-    const currency = outcome === 'success' 
-      ? currencies.find(c => c.id === selectedGoal.rewardCurrencyId)
-      : currencies.find(c => c.id === selectedGoal.consequenceCurrencyId);
-
-    if (!currency) return null;
-
-    if (outcome === 'success') {
-      if (!selectedGoal.rewardSuccesses || !selectedGoal.rewardAmount) return null;
-      
-      const currentSuccesses = (selectedGoal as any).successCount || 0;
-      const requiredSuccesses = selectedGoal.rewardSuccesses;
-      const rewardAmount = selectedGoal.rewardAmount;
-      const currencySymbol = currency.symbol || '';
-
-      const successesAfterThis = currentSuccesses + 1;
-      const successesUntilNextReward = requiredSuccesses - (successesAfterThis % requiredSuccesses);
-
-      if (successesUntilNextReward === requiredSuccesses || successesAfterThis % requiredSuccesses === 0) {
-        return {
-          type: 'success',
-          message: `Earned ${rewardAmount} ${currencySymbol}!`,
-        };
-      } else {
-        return {
-          type: 'success',
-          message: `${successesUntilNextReward} more ${successesUntilNextReward === 1 ? 'success' : 'successes'} until ${rewardAmount} ${currencySymbol}`,
-        };
-      }
-    } else {
-      if (!selectedGoal.consequenceFailures || !selectedGoal.consequenceAmount) return null;
-      
-      const currentStruggles = (selectedGoal as any).struggleCount || 0;
-      const requiredStruggles = selectedGoal.consequenceFailures;
-      const consequenceAmount = selectedGoal.consequenceAmount;
-      const currencySymbol = currency.symbol || '';
-
-      const strugglesAfterThis = currentStruggles + 1;
-      const strugglesUntilNextConsequence = requiredStruggles - (strugglesAfterThis % requiredStruggles);
-
-      if (strugglesUntilNextConsequence === requiredStruggles || strugglesAfterThis % requiredStruggles === 0) {
-        return {
-          type: 'struggled',
-          message: `Incurred ${consequenceAmount} ${currencySymbol}!`,
-        };
-      } else {
-        return {
-          type: 'struggled',
-          message: `${strugglesUntilNextConsequence} more ${strugglesUntilNextConsequence === 1 ? 'struggle' : 'struggles'} until ${consequenceAmount} ${currencySymbol}`,
-        };
-      }
-    }
-  };
-
-  const currencyFeedback = getCurrencyFeedback();
-  const placeholderText = getDescriptionPlaceholder();
+  const modalTitle = editingReflection ? 'Edit Reflection' : 'Add Reflection';
+  const totalSteps = 4;
+  const progressPercent = (step / totalSteps) * 100;
 
   return (
     <Modal
       visible={visible}
+      transparent
       animationType="slide"
-      presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        style={styles.container}
+      <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        style={styles.modalOverlay}
+        keyboardVerticalOffset={0}
       >
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.headerButton}>
-            <IconSymbol
-              ios_icon_name="xmark"
-              android_material_icon_name="close"
-              size={24}
-              color={colors.text}
-            />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {editingReflection ? 'Edit Reflection' : 'Add Reflection'}
-          </Text>
-          <View style={styles.headerButton} />
-        </View>
-
-        <View style={styles.progressIndicator}>
-          {[1, 2, 3, 4].map((s) => (
-            <View
-              key={s}
-              style={[
-                styles.progressDot,
-                s === step && styles.progressDotActive,
-                s < step && styles.progressDotComplete,
-              ]}
-            />
-          ))}
-        </View>
-
-        <ScrollView 
-          ref={scrollViewRef}
-          style={styles.content} 
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.contentContainer}
-        >
-          {step === 1 && (
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepTitle}>Basic Information</Text>
-
-              {categoriesEnabled && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Category (Optional)</Text>
-                  <View style={styles.categoryButtons}>
-                    {availableCategories.map((cat) => {
-                      const icon = getCategoryIcon(cat);
-                      const isSelected = category === cat;
-                      
-                      return (
-                        <TouchableOpacity
-                          key={cat}
-                          style={[styles.categoryButton, isSelected && styles.categoryButtonActive]}
-                          onPress={() => setCategory(isSelected ? '' : cat)}
-                        >
-                          <View style={styles.categoryButtonContent}>
-                            <IconSymbol
-                              ios_icon_name={icon.ios}
-                              android_material_icon_name={icon.android}
-                              size={24}
-                              color={isSelected ? colors.background : colors.text}
-                            />
-                            <Text style={[styles.categoryButtonText, isSelected && styles.categoryButtonTextActive]}>
-                              {cat}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Type</Text>
-                <View style={styles.typeButtons}>
-                  <TouchableOpacity
-                    style={[styles.typeButton, type === 'Restraint' && styles.typeButtonActive]}
-                    onPress={() => setType('Restraint')}
-                  >
-                    <View style={styles.typeButtonContent}>
-                      <IconSymbol
-                        ios_icon_name="hand.raised.fill"
-                        android_material_icon_name="back-hand"
-                        size={24}
-                        color={type === 'Restraint' ? colors.background : colors.secondary}
-                      />
-                      <Text style={[styles.typeButtonText, type === 'Restraint' && styles.typeButtonTextActive]}>
-                        Restraint
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.typeButton, type === 'Proactive' && styles.typeButtonActive]}
-                    onPress={() => setType('Proactive')}
-                  >
-                    <View style={styles.typeButtonContent}>
-                      <IconSymbol
-                        ios_icon_name="bolt.fill"
-                        android_material_icon_name="flash-on"
-                        size={24}
-                        color={type === 'Proactive' ? colors.background : colors.primary}
-                      />
-                      <Text style={[styles.typeButtonText, type === 'Proactive' && styles.typeButtonTextActive]}>
-                        Proactive
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Description *</Text>
-                <TextInput
-                  ref={descriptionInputRef}
-                  style={styles.textArea}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder={placeholderText}
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                  onFocus={() => {
-                    setTimeout(() => {
-                      scrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 100);
-                  }}
-                />
-                <Text style={styles.helperText}>
-                  Keep typing... (auto-advances when complete)
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {step === 2 && (
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepTitle}>Link to Goal & Outcome</Text>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Linked Goal (Optional)</Text>
-                <TouchableOpacity
-                  style={styles.picker}
-                  onPress={() => setShowGoalPicker(true)}
-                >
-                  <Text style={[styles.pickerText, !selectedGoal && styles.pickerPlaceholder]}>
-                    {selectedGoal ? selectedGoal.title : 'Select a goal'}
-                  </Text>
-                  <IconSymbol
-                    ios_icon_name="chevron.down"
-                    android_material_icon_name="arrow-drop-down"
-                    size={20}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-                {linkedGoalId && (
-                  <TouchableOpacity
-                    style={styles.clearButton}
-                    onPress={() => setLinkedGoalId('')}
-                  >
-                    <Text style={styles.clearButtonText}>Clear Selection</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {linkedGoalId && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Outcome</Text>
-                  <View style={styles.outcomeButtons}>
-                    <TouchableOpacity
-                      style={[styles.outcomeButton, outcome === 'success' && styles.outcomeButtonSuccess]}
-                      onPress={() => setOutcome(outcome === 'success' ? undefined : 'success')}
-                    >
-                      <IconSymbol
-                        ios_icon_name="checkmark.circle.fill"
-                        android_material_icon_name="check-circle"
-                        size={20}
-                        color={outcome === 'success' ? colors.background : colors.success}
-                      />
-                      <Text style={[styles.outcomeButtonText, outcome === 'success' && styles.outcomeButtonTextActive]}>
-                        Success
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.outcomeButton, outcome === 'struggled' && styles.outcomeButtonStruggle]}
-                      onPress={() => setOutcome(outcome === 'struggled' ? undefined : 'struggled')}
-                    >
-                      <IconSymbol
-                        ios_icon_name="xmark.circle.fill"
-                        android_material_icon_name="cancel"
-                        size={20}
-                        color={outcome === 'struggled' ? colors.background : colors.error}
-                      />
-                      <Text style={[styles.outcomeButtonText, outcome === 'struggled' && styles.outcomeButtonTextActive]}>
-                        Struggled
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  
-                  {currencyFeedback && (
-                    <View style={[
-                      styles.currencyFeedbackBox,
-                      currencyFeedback.type === 'success' ? styles.currencyFeedbackSuccess : styles.currencyFeedbackStruggled
-                    ]}>
-                      <IconSymbol
-                        ios_icon_name={currencyFeedback.type === 'success' ? "gift.fill" : "exclamationmark.triangle.fill"}
-                        android_material_icon_name={currencyFeedback.type === 'success' ? "card-giftcard" : "warning"}
-                        size={20}
-                        color={colors.background}
-                      />
-                      <Text style={styles.currencyFeedbackText}>{currencyFeedback.message}</Text>
-                    </View>
-                  )}
-                  
-                  {linkedGoalId && outcome && (
-                    <Text style={styles.helperText}>
-                      Auto-advancing to next step...
-                    </Text>
-                  )}
-                </View>
-              )}
-            </View>
-          )}
-
-          {step === 3 && (
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepTitle}>Gains, Losses & Worth</Text>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Gains (Optional)</Text>
-                <TouchableOpacity
-                  style={styles.picker}
-                  onPress={() => setShowGainsPicker(true)}
-                >
-                  <Text style={[styles.pickerText, gainedIds.length === 0 && styles.pickerPlaceholder]}>
-                    {gainedIds.length > 0 ? `${gainedIds.length} selected` : 'Select gains'}
-                  </Text>
-                  <IconSymbol
-                    ios_icon_name="chevron.down"
-                    android_material_icon_name="arrow-drop-down"
-                    size={20}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Losses (Optional)</Text>
-                <TouchableOpacity
-                  style={styles.picker}
-                  onPress={() => setShowLossesPicker(true)}
-                >
-                  <Text style={[styles.pickerText, lostIds.length === 0 && styles.pickerPlaceholder]}>
-                    {lostIds.length > 0 ? `${lostIds.length} selected` : 'Select losses'}
-                  </Text>
-                  <IconSymbol
-                    ios_icon_name="chevron.down"
-                    android_material_icon_name="arrow-drop-down"
-                    size={20}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {type === 'Restraint' && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Was it worth it?</Text>
-                  <View style={styles.worthButtons}>
-                    <TouchableOpacity
-                      style={[styles.worthButton, wasWorthIt === true && styles.worthButtonYes]}
-                      onPress={() => setWasWorthIt(wasWorthIt === true ? undefined : true)}
-                    >
-                      <IconSymbol
-                        ios_icon_name="hand.thumbsup.fill"
-                        android_material_icon_name="thumb-up"
-                        size={32}
-                        color={wasWorthIt === true ? colors.background : colors.success}
-                      />
-                      <Text style={[styles.worthButtonText, wasWorthIt === true && styles.worthButtonTextActive]}>
-                        Worth it
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.worthButton, wasWorthIt === false && styles.worthButtonNo]}
-                      onPress={() => setWasWorthIt(wasWorthIt === false ? undefined : false)}
-                    >
-                      <IconSymbol
-                        ios_icon_name="hand.thumbsdown.fill"
-                        android_material_icon_name="thumb-down"
-                        size={32}
-                        color={wasWorthIt === false ? colors.background : colors.error}
-                      />
-                      <Text style={[styles.worthButtonText, wasWorthIt === false && styles.worthButtonTextActive]}>
-                        Not worth it
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
-          )}
-
-          {step === 4 && (
-            <View style={styles.stepContainer}>
-              <Text style={styles.stepTitle}>Strategies & Final Thoughts</Text>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Strategies Used (Optional)</Text>
-                <TouchableOpacity
-                  style={styles.picker}
-                  onPress={() => setShowStrategyPicker(true)}
-                >
-                  <Text style={[styles.pickerText, selectedStrategies.length === 0 && styles.pickerPlaceholder]}>
-                    {selectedStrategies.length > 0 ? `${selectedStrategies.length} selected` : 'Select strategies'}
-                  </Text>
-                  <IconSymbol
-                    ios_icon_name="chevron.down"
-                    android_material_icon_name="arrow-drop-down"
-                    size={20}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-
-                {selectedStrategies.length > 0 && (
-                  <View style={styles.strategyEffectivenessContainer}>
-                    <Text style={styles.strategyEffectivenessTitle}>Did these strategies work?</Text>
-                    {selectedStrategies.map((strategyId) => {
-                      const strategy = strategies.find(s => s.id === strategyId);
-                      if (!strategy) return null;
-                      
-                      const effectiveness = strategyEffectiveness.find(s => s.strategyId === strategyId);
-                      
-                      return (
-                        <View key={strategyId} style={styles.strategyEffectivenessCard}>
-                          <Text style={styles.strategyEffectivenessName}>{strategy.name}</Text>
-                          <View style={styles.strategyEffectivenessButtons}>
-                            <TouchableOpacity
-                              style={[
-                                styles.strategyEffectivenessButton,
-                                effectiveness?.worked === true && styles.strategyEffectivenessButtonYes,
-                              ]}
-                              onPress={() => setStrategyWorked(strategyId, true)}
-                            >
-                              <IconSymbol
-                                ios_icon_name="checkmark.circle.fill"
-                                android_material_icon_name="check-circle"
-                                size={24}
-                                color={effectiveness?.worked === true ? colors.background : colors.success}
-                              />
-                              <Text style={[
-                                styles.strategyEffectivenessButtonText,
-                                effectiveness?.worked === true && styles.strategyEffectivenessButtonTextActive
-                              ]}>
-                                Worked
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[
-                                styles.strategyEffectivenessButton,
-                                effectiveness?.worked === false && styles.strategyEffectivenessButtonNo,
-                              ]}
-                              onPress={() => setStrategyWorked(strategyId, false)}
-                            >
-                              <IconSymbol
-                                ios_icon_name="xmark.circle.fill"
-                                android_material_icon_name="cancel"
-                                size={24}
-                                color={effectiveness?.worked === false ? colors.background : colors.error}
-                              />
-                              <Text style={[
-                                styles.strategyEffectivenessButtonText,
-                                effectiveness?.worked === false && styles.strategyEffectivenessButtonTextActive
-                              ]}>
-                                Didn't work
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.section}>
-                <Text style={styles.sectionLabel}>Additional Thoughts (Optional)</Text>
-                <TextInput
-                  ref={thoughtsInputRef}
-                  style={styles.textArea}
-                  value={additionalThoughts}
-                  onChangeText={setAdditionalThoughts}
-                  placeholder="Any additional reflections or insights..."
-                  placeholderTextColor={colors.textSecondary}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                  onFocus={() => {
-                    setTimeout(() => {
-                      scrollViewRef.current?.scrollToEnd({ animated: true });
-                    }, 100);
-                  }}
-                />
-              </View>
-            </View>
-          )}
-        </ScrollView>
-
-        <View style={styles.footer}>
-          {step > 1 && (
-            <TouchableOpacity style={styles.footerButton} onPress={handleBack}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={step > 1 ? handleBack : onClose} style={styles.backButton}>
               <IconSymbol
-                ios_icon_name="chevron.left"
-                android_material_icon_name="arrow-back"
-                size={20}
+                ios_icon_name={step > 1 ? "chevron.left" : "xmark"}
+                android_material_icon_name={step > 1 ? "arrow-back" : "close"}
+                size={24}
                 color={colors.text}
               />
-              <Text style={styles.footerButtonText}>Back</Text>
             </TouchableOpacity>
-          )}
-          {step < 4 ? (
-            <TouchableOpacity
-              style={[styles.footerButton, styles.footerButtonPrimary, step === 1 && styles.footerButtonFull]}
-              onPress={handleNext}
-              disabled={step === 1 && !description.trim()}
-            >
-              <Text style={styles.footerButtonPrimaryText}>Next</Text>
-              <IconSymbol
-                ios_icon_name="chevron.right"
-                android_material_icon_name="arrow-forward"
-                size={20}
-                color={colors.background}
-              />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.footerButton, styles.footerButtonPrimary]}
-              onPress={handleSave}
-              disabled={loading || !description.trim()}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <>
-                  <IconSymbol
-                    ios_icon_name="checkmark"
-                    android_material_icon_name="check"
-                    size={20}
-                    color={colors.background}
-                  />
-                  <Text style={styles.footerButtonPrimaryText}>Save</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
+            <View style={styles.modalTitleContainer}>
+              <Text style={styles.modalTitle}>{modalTitle}</Text>
+              <Text style={styles.stepIndicator}>Step {step} of {totalSteps}</Text>
+            </View>
+            <View style={styles.backButton} />
+          </View>
 
-        <Modal visible={showGoalPicker} animationType="slide" transparent={true}>
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerContent}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Select Goal</Text>
-                <TouchableOpacity onPress={() => setShowGoalPicker(false)}>
-                  <IconSymbol
-                    ios_icon_name="xmark"
-                    android_material_icon_name="close"
-                    size={24}
-                    color={colors.text}
-                  />
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.pickerList}>
-                {goals.map((goal) => (
-                  <TouchableOpacity
-                    key={goal.id}
-                    style={styles.pickerItem}
-                    onPress={() => {
-                      setLinkedGoalId(goal.id);
-                      setShowGoalPicker(false);
-                    }}
-                  >
-                    <Text style={styles.pickerItemText}>{goal.title}</Text>
-                    {linkedGoalId === goal.id && (
+          <View style={styles.progressBar}>
+            <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+          </View>
+
+          <ScrollView 
+            ref={scrollViewRef}
+            style={styles.modalBody} 
+            contentContainerStyle={styles.modalBodyContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            {step === 1 && (
+              <React.Fragment>
+                {categoriesEnabled && (
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
                       <IconSymbol
-                        ios_icon_name="checkmark"
-                        android_material_icon_name="check"
-                        size={20}
+                        ios_icon_name="tag.fill"
+                        android_material_icon_name="label"
+                        size={18}
                         color={colors.primary}
                       />
-                    )}
+                      <Text style={styles.label}>Category (Optional)</Text>
+                    </View>
+                    <View style={styles.optionsGrid}>
+                      {availableCategories.map((cat, index) => {
+                        const isSelected = category === cat;
+                        const categoryIcon = getCategoryIcon(cat);
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setCategory(isSelected ? undefined : cat)}
+                            >
+                              <IconSymbol
+                                ios_icon_name={categoryIcon.ios}
+                                android_material_icon_name={categoryIcon.android}
+                                size={16}
+                                color={isSelected ? colors.background : colors.primary}
+                              />
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {cat}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="arrow.triangle.2.circlepath"
+                      android_material_icon_name="sync"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Type</Text>
+                  </View>
+                  <View style={styles.optionsColumn}>
+                    {(['Proactive', 'Restraint'] as const).map((t, index) => {
+                      const isSelected = type === t;
+                      const displayText = t === 'Proactive' 
+                        ? 'Proactive (I chose to or didn\'t refrain from…)' 
+                        : 'Restraint (I refrained from or didn\'t…)';
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <TouchableOpacity
+                            style={[styles.optionButtonLarge, isSelected && styles.optionButtonSelected]}
+                            onPress={() => setType(t)}
+                          >
+                            <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                              {displayText}
+                            </Text>
+                          </TouchableOpacity>
+                        </React.Fragment>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="text.alignleft"
+                      android_material_icon_name="description"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Description</Text>
+                  </View>
+                  <TextInput
+                    ref={descriptionInputRef}
+                    style={[styles.input, styles.textArea]}
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder={getDescriptionPlaceholder()}
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={6}
+                    blurOnSubmit={false}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
+                  />
+                </View>
+              </React.Fragment>
+            )}
+
+            {step === 2 && (
+              <React.Fragment>
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="target"
+                      android_material_icon_name="flag"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Link to a Goal (Optional)</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowGoalPicker(!showGoalPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {selectedGoal ? selectedGoal.title : 'Select a goal...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
                   </TouchableOpacity>
-                ))}
-                {goals.length === 0 && (
-                  <View style={styles.pickerEmpty}>
-                    <Text style={styles.pickerEmptyText}>No goals available</Text>
-                    <TouchableOpacity style={styles.createButton} onPress={handleCreateGoal}>
+
+                  {showGoalPicker && (
+                    <View style={styles.goalPickerContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        value={goalSearchQuery}
+                        onChangeText={setGoalSearchQuery}
+                        placeholder="Search goals..."
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                      <ScrollView style={styles.goalList}>
+                        <TouchableOpacity
+                          style={styles.goalItem}
+                          onPress={() => {
+                            setLinkedGoalId(undefined);
+                            setOutcome(undefined);
+                            setShowGoalPicker(false);
+                          }}
+                        >
+                          <Text style={styles.goalItemText}>None</Text>
+                        </TouchableOpacity>
+                        {filteredGoals.map((goal, index) => {
+                          const isSelected = linkedGoalId === goal.id;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  setLinkedGoalId(goal.id);
+                                  setShowGoalPicker(false);
+                                }}
+                              >
+                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                  {goal.title}
+                                </Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={handleCreateGoal}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Create New Goal</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {linkedGoalId && (
+                  <View style={styles.formGroup}>
+                    <View style={styles.labelRow}>
                       <IconSymbol
-                        ios_icon_name="plus"
-                        android_material_icon_name="add"
-                        size={20}
+                        ios_icon_name="chart.bar.fill"
+                        android_material_icon_name="bar-chart"
+                        size={18}
                         color={colors.primary}
                       />
-                      <Text style={styles.createButtonText}>Create Goal</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
-
-        <Modal visible={showGainsPicker} animationType="slide" transparent={true}>
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerContent}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Select Gains</Text>
-                <TouchableOpacity onPress={() => setShowGainsPicker(false)}>
-                  <IconSymbol
-                    ios_icon_name="xmark"
-                    android_material_icon_name="close"
-                    size={24}
-                    color={colors.text}
-                  />
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.pickerList}>
-                {gains.map((gain) => {
-                  const isSelected = gainedIds.includes(gain.id);
-                  
-                  return (
-                    <TouchableOpacity
-                      key={gain.id}
-                      style={styles.pickerItem}
-                      onPress={() => {
-                        if (isSelected) {
-                          setGainedIds(gainedIds.filter(id => id !== gain.id));
-                        } else {
-                          setGainedIds([...gainedIds, gain.id]);
-                        }
-                      }}
-                    >
-                      <Text style={styles.pickerItemText}>{gain.name}</Text>
-                      {isSelected && (
-                        <IconSymbol
-                          ios_icon_name="checkmark"
-                          android_material_icon_name="check"
-                          size={20}
-                          color={colors.primary}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-                
-                {showAddGainInput ? (
-                  <View style={styles.addNewInputContainer}>
-                    <TextInput
-                      ref={newGainInputRef}
-                      style={styles.addNewInput}
-                      value={newGainName}
-                      onChangeText={setNewGainName}
-                      placeholder="Enter new gain name..."
-                      placeholderTextColor={colors.textSecondary}
-                      autoFocus
-                      onSubmitEditing={handleAddNewGain}
-                    />
-                    <TouchableOpacity
-                      style={styles.addNewSaveButton}
-                      onPress={handleAddNewGain}
-                    >
-                      <IconSymbol
-                        ios_icon_name="checkmark"
-                        android_material_icon_name="check"
-                        size={20}
-                        color={colors.background}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.addNewCancelButton}
-                      onPress={() => {
-                        setShowAddGainInput(false);
-                        setNewGainName('');
-                      }}
-                    >
-                      <IconSymbol
-                        ios_icon_name="xmark"
-                        android_material_icon_name="close"
-                        size={20}
-                        color={colors.text}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.addNewButton}
-                    onPress={() => {
-                      setShowAddGainInput(true);
-                      setTimeout(() => newGainInputRef.current?.focus(), 100);
-                    }}
-                  >
-                    <IconSymbol
-                      ios_icon_name="plus.circle.fill"
-                      android_material_icon_name="add-circle"
-                      size={24}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.addNewButtonText}>Add New Gain</Text>
-                  </TouchableOpacity>
-                )}
-              </ScrollView>
-              <TouchableOpacity
-                style={styles.pickerDoneButton}
-                onPress={() => setShowGainsPicker(false)}
-              >
-                <Text style={styles.pickerDoneButtonText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        <Modal visible={showLossesPicker} animationType="slide" transparent={true}>
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerContent}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Select Losses</Text>
-                <TouchableOpacity onPress={() => setShowLossesPicker(false)}>
-                  <IconSymbol
-                    ios_icon_name="xmark"
-                    android_material_icon_name="close"
-                    size={24}
-                    color={colors.text}
-                  />
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.pickerList}>
-                {losses.map((loss) => {
-                  const isSelected = lostIds.includes(loss.id);
-                  
-                  return (
-                    <TouchableOpacity
-                      key={loss.id}
-                      style={styles.pickerItem}
-                      onPress={() => {
-                        if (isSelected) {
-                          setLostIds(lostIds.filter(id => id !== loss.id));
-                        } else {
-                          setLostIds([...lostIds, loss.id]);
-                        }
-                      }}
-                    >
-                      <Text style={styles.pickerItemText}>{loss.name}</Text>
-                      {isSelected && (
-                        <IconSymbol
-                          ios_icon_name="checkmark"
-                          android_material_icon_name="check"
-                          size={20}
-                          color={colors.primary}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-                
-                {showAddLossInput ? (
-                  <View style={styles.addNewInputContainer}>
-                    <TextInput
-                      ref={newLossInputRef}
-                      style={styles.addNewInput}
-                      value={newLossName}
-                      onChangeText={setNewLossName}
-                      placeholder="Enter new loss name..."
-                      placeholderTextColor={colors.textSecondary}
-                      autoFocus
-                      onSubmitEditing={handleAddNewLoss}
-                    />
-                    <TouchableOpacity
-                      style={styles.addNewSaveButton}
-                      onPress={handleAddNewLoss}
-                    >
-                      <IconSymbol
-                        ios_icon_name="checkmark"
-                        android_material_icon_name="check"
-                        size={20}
-                        color={colors.background}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.addNewCancelButton}
-                      onPress={() => {
-                        setShowAddLossInput(false);
-                        setNewLossName('');
-                      }}
-                    >
-                      <IconSymbol
-                        ios_icon_name="xmark"
-                        android_material_icon_name="close"
-                        size={20}
-                        color={colors.text}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.addNewButton}
-                    onPress={() => {
-                      setShowAddLossInput(true);
-                      setTimeout(() => newLossInputRef.current?.focus(), 100);
-                    }}
-                  >
-                    <IconSymbol
-                      ios_icon_name="plus.circle.fill"
-                      android_material_icon_name="add-circle"
-                      size={24}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.addNewButtonText}>Add New Loss</Text>
-                  </TouchableOpacity>
-                )}
-              </ScrollView>
-              <TouchableOpacity
-                style={styles.pickerDoneButton}
-                onPress={() => setShowLossesPicker(false)}
-              >
-                <Text style={styles.pickerDoneButtonText}>Done</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        <Modal visible={showStrategyPicker} animationType="slide" transparent={true}>
-          <View style={styles.pickerModal}>
-            <View style={styles.pickerContent}>
-              <View style={styles.pickerHeader}>
-                <Text style={styles.pickerTitle}>Select Strategies</Text>
-                <TouchableOpacity onPress={() => setShowStrategyPicker(false)}>
-                  <IconSymbol
-                    ios_icon_name="xmark"
-                    android_material_icon_name="close"
-                    size={24}
-                    color={colors.text}
-                  />
-                </TouchableOpacity>
-              </View>
-              <ScrollView style={styles.pickerList}>
-                {strategies.map((strategy) => {
-                  const isSelected = selectedStrategies.includes(strategy.id);
-                  
-                  return (
-                    <TouchableOpacity
-                      key={strategy.id}
-                      style={styles.pickerItem}
-                      onPress={() => toggleStrategy(strategy.id)}
-                    >
-                      <View style={styles.strategyItemContent}>
-                        <Text style={styles.pickerItemText}>{strategy.name}</Text>
-                        {strategy.description && (
-                          <Text style={styles.strategyDescription}>{strategy.description}</Text>
-                        )}
+                      <Text style={styles.label}>Outcome</Text>
+                    </View>
+                    <View style={styles.optionsGrid}>
+                      {(['success', 'struggled'] as const).map((o, index) => {
+                        const isSelected = outcome === o;
+                        const displayText = o === 'success' ? 'Success' : 'Struggled';
+                        const iconName = o === 'success' ? 'check-circle' : 'cancel';
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.outcomeButton, isSelected && (o === 'success' ? styles.outcomeButtonSuccess : styles.outcomeButtonStruggled)]}
+                              onPress={() => setOutcome(o)}
+                            >
+                              <IconSymbol
+                                ios_icon_name={o === 'success' ? "checkmark.circle.fill" : "xmark.circle.fill"}
+                                android_material_icon_name={iconName}
+                                size={20}
+                                color={isSelected ? colors.background : (o === 'success' ? colors.success : colors.error)}
+                              />
+                              <Text style={[styles.outcomeButtonText, isSelected && styles.outcomeButtonTextSelected]}>
+                                {displayText}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                    
+                    {currencyBalanceInfo && (
+                      <View style={[
+                        styles.currencyBalanceInfo,
+                        currencyBalanceInfo.isSuccess ? styles.currencyBalanceInfoSuccess : styles.currencyBalanceInfoStruggled
+                      ]}>
+                        <View style={styles.currencyBalanceHeader}>
+                          <IconSymbol
+                            ios_icon_name="dollarsign.circle.fill"
+                            android_material_icon_name="account-balance-wallet"
+                            size={20}
+                            color={currencyBalanceInfo.isSuccess ? colors.success : colors.error}
+                          />
+                          <Text style={styles.currencyBalanceTitle}>Currency Impact</Text>
+                        </View>
+                        <View style={styles.currencyBalanceAmount}>
+                          <Text style={[
+                            styles.currencyBalanceText,
+                            currencyBalanceInfo.operation === 'add' ? styles.currencyBalancePositive : styles.currencyBalanceNegative
+                          ]}>
+                            {currencyBalanceInfo.operation === 'add' ? '+' : '-'}
+                            {currencyBalanceInfo.amount} {currencyBalanceInfo.symbol}
+                          </Text>
+                        </View>
+                        <Text style={styles.currencyBalanceDescription}>
+                          After {currencyBalanceInfo.threshold} {currencyBalanceInfo.isSuccess ? 'successes' : 'struggles'}, {currencyBalanceInfo.actionText} {currencyBalanceInfo.amount} {currencyBalanceInfo.name}
+                        </Text>
                       </View>
-                      {isSelected && (
-                        <IconSymbol
-                          ios_icon_name="checkmark"
-                          android_material_icon_name="check"
-                          size={20}
-                          color={colors.primary}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-                
-                {showAddStrategyInput ? (
-                  <View style={styles.addNewInputContainer}>
-                    <TextInput
-                      ref={newStrategyInputRef}
-                      style={styles.addNewInput}
-                      value={newStrategyName}
-                      onChangeText={setNewStrategyName}
-                      placeholder="Enter new strategy name..."
-                      placeholderTextColor={colors.textSecondary}
-                      autoFocus
-                      onSubmitEditing={handleAddNewStrategy}
-                    />
-                    <TouchableOpacity
-                      style={styles.addNewSaveButton}
-                      onPress={handleAddNewStrategy}
-                    >
-                      <IconSymbol
-                        ios_icon_name="checkmark"
-                        android_material_icon_name="check"
-                        size={20}
-                        color={colors.background}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.addNewCancelButton}
-                      onPress={() => {
-                        setShowAddStrategyInput(false);
-                        setNewStrategyName('');
-                      }}
-                    >
-                      <IconSymbol
-                        ios_icon_name="xmark"
-                        android_material_icon_name="close"
-                        size={20}
-                        color={colors.text}
-                      />
-                    </TouchableOpacity>
+                    )}
                   </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.addNewButton}
-                    onPress={() => {
-                      setShowAddStrategyInput(true);
-                      setTimeout(() => newStrategyInputRef.current?.focus(), 100);
-                    }}
-                  >
+                )}
+              </React.Fragment>
+            )}
+
+            {step === 3 && (
+              <React.Fragment>
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
                     <IconSymbol
-                      ios_icon_name="plus.circle.fill"
-                      android_material_icon_name="add-circle"
+                      ios_icon_name="arrow.up.circle.fill"
+                      android_material_icon_name="trending-up"
+                      size={18}
+                      color={colors.success}
+                    />
+                    <Text style={styles.label}>What was Gained (Optional)</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowGainsPicker(!showGainsPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {gainedIds.length > 0 ? `${gainedIds.length} gains selected` : 'Select gains...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
                       size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+
+                  {showGainsPicker && (
+                    <View style={styles.pickerContainer}>
+                      <ScrollView style={styles.pickerList}>
+                        {gainsLosses.filter(gl => gl.type === 'Gain').map((gain, index) => {
+                          const isSelected = gainedIds.includes(gain.id);
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  if (isSelected) {
+                                    setGainedIds(gainedIds.filter(id => id !== gain.id));
+                                  } else {
+                                    setGainedIds([...gainedIds, gain.id]);
+                                  }
+                                }}
+                              >
+                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                  {gain.name}
+                                  {gain.category && ` (${gain.category})`}
+                                </Text>
+                                {isSelected && (
+                                  <IconSymbol
+                                    ios_icon_name="checkmark.circle.fill"
+                                    android_material_icon_name="check-circle"
+                                    size={20}
+                                    color={colors.primary}
+                                  />
+                                )}
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={() => setShowCreateGainModal(true)}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Add New Gain</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="arrow.down.circle.fill"
+                      android_material_icon_name="trending-down"
+                      size={18}
+                      color={colors.error}
+                    />
+                    <Text style={styles.label}>What was Lost (Optional)</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowLossesPicker(!showLossesPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {lostIds.length > 0 ? `${lostIds.length} losses selected` : 'Select losses...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+
+                  {showLossesPicker && (
+                    <View style={styles.pickerContainer}>
+                      <ScrollView style={styles.pickerList}>
+                        {gainsLosses.filter(gl => gl.type === 'Loss').map((loss, index) => {
+                          const isSelected = lostIds.includes(loss.id);
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  if (isSelected) {
+                                    setLostIds(lostIds.filter(id => id !== loss.id));
+                                  } else {
+                                    setLostIds([...lostIds, loss.id]);
+                                  }
+                                }}
+                              >
+                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                  {loss.name}
+                                  {loss.category && ` (${loss.category})`}
+                                </Text>
+                                {isSelected && (
+                                  <IconSymbol
+                                    ios_icon_name="checkmark.circle.fill"
+                                    android_material_icon_name="check-circle"
+                                    size={20}
+                                    color={colors.primary}
+                                  />
+                                )}
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={() => setShowCreateLossModal(true)}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Add New Loss</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="questionmark.circle.fill"
+                      android_material_icon_name="help"
+                      size={18}
                       color={colors.primary}
                     />
-                    <Text style={styles.addNewButtonText}>Add New Strategy</Text>
+                    <Text style={styles.label}>Was it worth it?</Text>
+                  </View>
+                  <View style={styles.optionsColumn}>
+                    {[
+                      { label: 'Yes, worth it', value: true },
+                      { label: 'No, not worth it', value: false },
+                    ].map((option, index) => {
+                      const isSelected = wasWorthIt === option.value;
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <TouchableOpacity
+                            style={[styles.optionButtonLarge, isSelected && styles.optionButtonSelected]}
+                            onPress={() => setWasWorthIt(option.value)}
+                          >
+                            <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        </React.Fragment>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="text.bubble.fill"
+                      android_material_icon_name="chat-bubble"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Notes on weighing up gains and losses (Optional)</Text>
+                  </View>
+                  <TextInput
+                    ref={additionalThoughtsInputRef}
+                    style={[styles.input, styles.textArea]}
+                    value={additionalThoughts}
+                    onChangeText={setAdditionalThoughts}
+                    placeholder="Notes on weighing up gains and losses..."
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    numberOfLines={6}
+                    blurOnSubmit={false}
+                    onFocus={() => {
+                      setTimeout(() => {
+                        scrollViewRef.current?.scrollToEnd({ animated: true });
+                      }, 300);
+                    }}
+                  />
+                </View>
+              </React.Fragment>
+            )}
+
+            {step === 4 && (
+              <React.Fragment>
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="lightbulb.fill"
+                      android_material_icon_name="lightbulb"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Strategies (Optional)</Text>
+                  </View>
+                  <Text style={styles.helperText}>
+                    Select strategies you used or want to use for this reflection
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowStrategyPicker(!showStrategyPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {strategyEffectiveness.length > 0 ? `${strategyEffectiveness.length} strategies selected` : 'Select strategies...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
                   </TouchableOpacity>
+
+                  {showStrategyPicker && (
+                    <View style={styles.pickerContainer}>
+                      <ScrollView style={styles.pickerList}>
+                        {strategies.map((strategy, index) => {
+                          const isSelected = strategyEffectiveness.some(se => se.strategyId === strategy.id);
+                          const successRateText = `${Math.round(strategy.successRate)}%`;
+                          const timesUsedText = `${strategy.timesUsed} times`;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.strategyListItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => toggleStrategy(strategy.id)}
+                              >
+                                <View style={styles.strategyListItemContent}>
+                                  <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                    {strategy.name}
+                                  </Text>
+                                  <View style={styles.strategyStats}>
+                                    <Text style={styles.strategyStatText}>{successRateText}</Text>
+                                    <Text style={styles.strategyStatText}>•</Text>
+                                    <Text style={styles.strategyStatText}>{timesUsedText}</Text>
+                                  </View>
+                                </View>
+                                {isSelected && (
+                                  <IconSymbol
+                                    ios_icon_name="checkmark.circle.fill"
+                                    android_material_icon_name="check-circle"
+                                    size={20}
+                                    color={colors.primary}
+                                  />
+                                )}
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={() => setShowCreateStrategyModal(true)}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Add New Strategy</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {strategyEffectiveness.length > 0 && (
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Did these strategies work?</Text>
+                    {strategyEffectiveness.map((se, index) => {
+                      const strategy = strategies.find(s => s.id === se.strategyId);
+                      if (!strategy) return null;
+                      
+                      const successRateText = `${Math.round(strategy.successRate)}%`;
+                      const fractionText = `${strategy.successCount}/${strategy.timesUsed}`;
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <View style={styles.strategyEffectivenessCard}>
+                            <View style={styles.strategyEffectivenessHeader}>
+                              <Text style={styles.strategyEffectivenessName}>{strategy.name}</Text>
+                              <Text style={styles.strategyEffectivenessRate}>
+                                {successRateText} ({fractionText})
+                              </Text>
+                            </View>
+                            {strategy.description && (
+                              <Text style={styles.strategyEffectivenessDescription}>
+                                {strategy.description}
+                              </Text>
+                            )}
+                            <View style={styles.strategyEffectivenessButtons}>
+                              <TouchableOpacity
+                                style={[
+                                  styles.strategyEffectivenessButton,
+                                  se.worked && styles.strategyEffectivenessButtonWorked
+                                ]}
+                                onPress={() => setStrategyWorked(se.strategyId, true)}
+                              >
+                                <IconSymbol
+                                  ios_icon_name="checkmark.circle.fill"
+                                  android_material_icon_name="check-circle"
+                                  size={20}
+                                  color={se.worked ? colors.background : colors.success}
+                                />
+                                <Text style={[
+                                  styles.strategyEffectivenessButtonText,
+                                  se.worked && styles.strategyEffectivenessButtonTextSelected
+                                ]}>
+                                  Worked
+                                </Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[
+                                  styles.strategyEffectivenessButton,
+                                  !se.worked && styles.strategyEffectivenessButtonDidntWork
+                                ]}
+                                onPress={() => setStrategyWorked(se.strategyId, false)}
+                              >
+                                <IconSymbol
+                                  ios_icon_name="xmark.circle.fill"
+                                  android_material_icon_name="cancel"
+                                  size={20}
+                                  color={!se.worked ? colors.background : colors.error}
+                                />
+                                <Text style={[
+                                  styles.strategyEffectivenessButtonText,
+                                  !se.worked && styles.strategyEffectivenessButtonTextSelected
+                                ]}>
+                                  Didn't work
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </React.Fragment>
+                      );
+                    })}
+                  </View>
                 )}
-              </ScrollView>
+              </React.Fragment>
+            )}
+          </ScrollView>
+
+          <View style={styles.modalFooter}>
+            {step < totalSteps ? (
               <TouchableOpacity
-                style={styles.pickerDoneButton}
-                onPress={() => setShowStrategyPicker(false)}
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleNext}
               >
-                <Text style={styles.pickerDoneButtonText}>Done</Text>
+                <Text style={styles.buttonPrimaryText}>Next</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={20}
+                  color={colors.background}
+                />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSave}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <React.Fragment>
+                    <IconSymbol
+                      ios_icon_name="checkmark.circle.fill"
+                      android_material_icon_name="check-circle"
+                      size={20}
+                      color={colors.background}
+                    />
+                    <Text style={styles.buttonPrimaryText}>Save Reflection</Text>
+                  </React.Fragment>
+                )}
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      <Modal
+        visible={showCreateGainModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateGainModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.createItemModal}>
+            <Text style={styles.alertTitle}>Add New Gain</Text>
+            <TextInput
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Gain name..."
+              placeholderTextColor={colors.textSecondary}
+              blurOnSubmit={false}
+              autoFocus
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setShowCreateGainModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateGain}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={showCreateLossModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateLossModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.createItemModal}>
+            <Text style={styles.alertTitle}>Add New Loss</Text>
+            <TextInput
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Loss name..."
+              placeholderTextColor={colors.textSecondary}
+              blurOnSubmit={false}
+              autoFocus
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setShowCreateLossModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateLoss}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={showCreateStrategyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateStrategyModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.createItemModal}>
+            <Text style={styles.alertTitle}>Add New Strategy</Text>
+            <TextInput
+              ref={strategyNameInputRef}
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Strategy name..."
+              placeholderTextColor={colors.textSecondary}
+              blurOnSubmit={false}
+              autoFocus
+              returnKeyType="next"
+              onSubmitEditing={() => strategyDescInputRef.current?.focus()}
+            />
+            <TextInput
+              ref={strategyDescInputRef}
+              style={[styles.input, styles.textArea, { marginTop: 12 }]}
+              value={newItemDescription}
+              onChangeText={setNewItemDescription}
+              placeholder="Description (optional)..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={3}
+              blurOnSubmit={false}
+              returnKeyType="done"
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setNewItemDescription('');
+                  setShowCreateStrategyModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateStrategy}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Add</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
-  header: {
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '92%',
+  },
+  modalHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    justifyContent: 'space-between',
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  headerButton: {
+  backButton: {
     width: 40,
     height: 40,
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  modalTitleContainer: {
+    flex: 1,
     alignItems: 'center',
   },
-  headerTitle: {
+  modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
   },
-  progressIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 16,
-    gap: 8,
+  stepIndicator: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  progressBar: {
+    height: 4,
     backgroundColor: colors.border,
   },
-  progressDotActive: {
+  progressFill: {
+    height: '100%',
     backgroundColor: colors.primary,
-    width: 24,
   },
-  progressDotComplete: {
-    backgroundColor: colors.success,
-  },
-  content: {
+  modalBody: {
     flex: 1,
   },
-  contentContainer: {
-    paddingBottom: 40,
+  modalBodyContent: {
+    padding: 16,
+    paddingBottom: 120,
   },
-  stepContainer: {
-    padding: 20,
+  modalFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
   },
-  stepTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 24,
+  formGroup: {
+    marginBottom: 20,
   },
-  section: {
-    marginBottom: 24,
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
   },
-  sectionLabel: {
-    fontSize: 16,
+  label: {
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
-    marginBottom: 12,
   },
-  categoryButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+  helperText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 10,
   },
-  categoryButton: {
-    minWidth: '47%',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+  input: {
     backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: colors.text,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  categoryButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+  textArea: {
+    minHeight: 140,
+    maxHeight: 200,
+    textAlignVertical: 'top',
   },
-  categoryButtonContent: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
+  optionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
   },
-  categoryButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    textAlign: 'center',
+  optionsColumn: {
+    gap: 10,
   },
-  categoryButtonTextActive: {
-    color: colors.background,
-  },
-  typeButtons: {
+  optionButton: {
     flexDirection: 'row',
-    gap: 12,
-  },
-  typeButton: {
-    flex: 1,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 12,
     backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: colors.border,
   },
-  typeButtonActive: {
+  optionButtonLarge: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  optionButtonSelected: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  typeButtonContent: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  typeButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
+  optionButtonText: {
+    fontSize: 14,
     color: colors.text,
     textAlign: 'center',
   },
-  typeButtonTextActive: {
+  optionButtonTextSelected: {
     color: colors.background,
-  },
-  textArea: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minHeight: 120,
-  },
-  helperText: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 8,
-    fontStyle: 'italic',
-  },
-  picker: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  pickerText: {
-    fontSize: 16,
-    color: colors.text,
-  },
-  pickerPlaceholder: {
-    color: colors.textSecondary,
-  },
-  clearButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-  },
-  clearButtonText: {
-    fontSize: 14,
-    color: colors.primary,
     fontWeight: '600',
-  },
-  outcomeButtons: {
-    flexDirection: 'row',
-    gap: 12,
   },
   outcomeButton: {
     flex: 1,
@@ -1502,85 +1412,199 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 16,
     paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  outcomeButtonSuccess: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
-  },
-  outcomeButtonStruggle: {
-    backgroundColor: colors.error,
-    borderColor: colors.error,
-  },
-  outcomeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  outcomeButtonTextActive: {
-    color: colors.background,
-  },
-  worthButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  worthButton: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingVertical: 24,
-    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     backgroundColor: colors.card,
     borderWidth: 2,
     borderColor: colors.border,
   },
-  worthButtonYes: {
-    backgroundColor: colors.success,
+  outcomeButtonSuccess: {
     borderColor: colors.success,
   },
-  worthButtonNo: {
-    backgroundColor: colors.error,
+  outcomeButtonStruggled: {
     borderColor: colors.error,
   },
-  worthButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
+  outcomeButtonText: {
+    fontSize: 14,
     color: colors.text,
-    textAlign: 'center',
+    fontWeight: '600',
   },
-  worthButtonTextActive: {
+  outcomeButtonTextSelected: {
     color: colors.background,
   },
-  strategyEffectivenessContainer: {
-    marginTop: 16,
-    gap: 12,
+  goalPickerButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  strategyEffectivenessTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+  goalPickerText: {
+    fontSize: 15,
     color: colors.text,
-    marginBottom: 4,
   },
-  strategyEffectivenessCard: {
-    padding: 16,
+  goalPickerContainer: {
+    marginTop: 8,
     backgroundColor: colors.card,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 12,
+    maxHeight: 250,
+  },
+  pickerContainer: {
+    marginTop: 8,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: 300,
+  },
+  searchInput: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 15,
+    color: colors.text,
+    margin: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  goalList: {
+    maxHeight: 200,
+  },
+  pickerList: {
+    maxHeight: 280,
+  },
+  goalItem: {
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  goalItemSelected: {
+    backgroundColor: colors.primary + '20',
+  },
+  goalItemText: {
+    fontSize: 15,
+    color: colors.text,
+    flex: 1,
+  },
+  goalItemTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  createNewButton: {
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  createNewText: {
+    fontSize: 15,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  currencyBalanceInfo: {
+    marginTop: 12,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 2,
+  },
+  currencyBalanceInfoSuccess: {
+    borderColor: colors.success + '60',
+    backgroundColor: colors.success + '10',
+  },
+  currencyBalanceInfoStruggled: {
+    borderColor: colors.error + '60',
+    backgroundColor: colors.error + '10',
+  },
+  currencyBalanceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  currencyBalanceTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  currencyBalanceAmount: {
+    marginBottom: 6,
+  },
+  currencyBalanceText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  currencyBalancePositive: {
+    color: colors.success,
+  },
+  currencyBalanceNegative: {
+    color: colors.error,
+  },
+  currencyBalanceDescription: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  strategyListItem: {
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  strategyListItemContent: {
+    flex: 1,
+  },
+  strategyStats: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  strategyStatText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  strategyEffectivenessCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  strategyEffectivenessHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   strategyEffectivenessName: {
     fontSize: 15,
     fontWeight: '600',
     color: colors.text,
+    flex: 1,
+  },
+  strategyEffectivenessRate: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  strategyEffectivenessDescription: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 10,
   },
   strategyEffectivenessButtons: {
     flexDirection: 'row',
@@ -1592,222 +1616,86 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: colors.backgroundAlt,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: colors.background,
     borderWidth: 2,
     borderColor: colors.border,
   },
-  strategyEffectivenessButtonYes: {
+  strategyEffectivenessButtonWorked: {
     backgroundColor: colors.success,
     borderColor: colors.success,
   },
-  strategyEffectivenessButtonNo: {
+  strategyEffectivenessButtonDidntWork: {
     backgroundColor: colors.error,
     borderColor: colors.error,
   },
   strategyEffectivenessButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.text,
   },
-  strategyEffectivenessButtonTextActive: {
+  strategyEffectivenessButtonTextSelected: {
     color: colors.background,
   },
-  footer: {
-    flexDirection: 'row',
-    padding: 20,
-    gap: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  footerButton: {
-    flex: 1,
-    flexDirection: 'row',
+  button: {
+    padding: 14,
+    borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  footerButtonFull: {
-    flex: 1,
-  },
-  footerButtonPrimary: {
+  buttonPrimary: {
     backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  footerButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  footerButtonPrimaryText: {
-    fontSize: 16,
-    fontWeight: '600',
+  buttonPrimaryText: {
     color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
   },
-  pickerModal: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  pickerContent: {
+  createItemModal: {
     backgroundColor: colors.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    borderRadius: 16,
     padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    margin: 20,
   },
-  pickerTitle: {
+  alertTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
+    marginBottom: 10,
   },
-  pickerList: {
-    maxHeight: 400,
-  },
-  pickerItem: {
+  alertButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  pickerItemText: {
-    fontSize: 16,
-    color: colors.text,
-  },
-  strategyItemContent: {
-    flex: 1,
-    marginRight: 12,
-  },
-  strategyDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  pickerEmpty: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  pickerEmptyText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginBottom: 16,
-  },
-  createButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  createButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  addNewButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    padding: 20,
-    borderTopWidth: 2,
-    borderTopColor: colors.border,
-    backgroundColor: colors.backgroundAlt,
-  },
-  addNewButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  addNewInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 8,
-    borderTopWidth: 2,
-    borderTopColor: colors.border,
-    backgroundColor: colors.backgroundAlt,
-  },
-  addNewInput: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  addNewSaveButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addNewCancelButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pickerDoneButton: {
-    margin: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-  },
-  pickerDoneButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.background,
-  },
-  currencyFeedbackBox: {
+    gap: 10,
     marginTop: 16,
-    padding: 16,
+  },
+  alertButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    padding: 14,
     borderRadius: 12,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
-  currencyFeedbackSuccess: {
-    backgroundColor: colors.success,
+  alertButtonSecondary: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  currencyFeedbackStruggled: {
-    backgroundColor: colors.error,
-  },
-  currencyFeedbackText: {
+  alertButtonText: {
+    color: colors.background,
     fontSize: 15,
     fontWeight: '600',
-    color: colors.background,
-    flex: 1,
+  },
+  alertButtonSecondaryText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

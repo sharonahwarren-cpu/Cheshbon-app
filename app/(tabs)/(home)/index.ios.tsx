@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
+import { AddReflectionModal } from "@/components/AddReflectionModal";
 import { useRouter, useLocalSearchParams } from "expo-router";
 
 interface CurrencyBalance {
@@ -117,6 +118,57 @@ interface CategoryGroup {
   goals: ActivatedGoal[];
 }
 
+interface GainLoss {
+  id: string;
+  name: string;
+  type: 'Gain' | 'Loss';
+  category?: string;
+  subCategory?: string;
+}
+
+interface Strategy {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  successCount: number;
+  failureCount: number;
+  timesUsed: number;
+  successRate: number;
+}
+
+interface Reflection {
+  id: string;
+  entryDate: string;
+  category?: string;
+  type: 'Restraint' | 'Proactive';
+  description: string;
+  linkedGoalId?: string;
+  linkedGoalTitle?: string;
+  outcome?: 'success' | 'struggled';
+  currencyChange?: {
+    currencyId: string;
+    amount: number;
+    operation: 'add' | 'subtract';
+    currencyName?: string;
+    currencySymbol?: string;
+  };
+  gainedIds?: string[];
+  lostIds?: string[];
+  wasWorthIt?: boolean;
+  additionalThoughts?: string;
+  strategyEffectiveness?: {
+    strategyId: string;
+    worked: boolean;
+  }[];
+  createdAt: string;
+}
+
+interface UserPreferences {
+  reflectionCategoriesEnabled?: boolean;
+  reflectionCategories?: string[];
+}
+
 export default function HomeScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -154,6 +206,12 @@ export default function HomeScreen() {
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
+  
+  const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
+  const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
+  const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
   useEffect(() => {
     console.log("HomeScreen mounted");
@@ -253,10 +311,22 @@ export default function HomeScreen() {
     console.log("Loading express data (activated goals) for date:", selectedDate.toISOString());
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
-      const goalsRes = await authenticatedGet(`/api/goals/activated-today?date=${dateString}`);
+      const [goalsRes, gainsLossesRes, strategiesRes, prefsRes] = await Promise.all([
+        authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
+        authenticatedGet('/api/gains-losses'),
+        authenticatedGet('/api/strategies'),
+        authenticatedGet('/api/user-preferences'),
+      ]);
+      
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
+      const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
+      const prefsData = prefsRes?.data || prefsRes || {};
       
       setActivatedGoals(goalsData);
+      setGainsLosses(gainsLossesData);
+      setStrategies(strategiesData);
+      setUserPreferences(prefsData);
       
       const groups: Record<string, CategoryGroup> = {};
       
@@ -375,16 +445,17 @@ export default function HomeScreen() {
   };
 
   const openAddReflectionModal = (goalId?: string) => {
-    console.log("Opening Add Reflection modal directly from Express", goalId ? `for goal: ${goalId}` : "");
-    const dateString = selectedDate.toISOString().split('T')[0];
-    router.push({
-      pathname: '/(tabs)/reflect',
-      params: { 
-        date: dateString,
-        openModal: 'true',
-        ...(goalId && { goalId }),
-      },
-    });
+    console.log("Opening Add Reflection modal from Express", goalId ? `for goal: ${goalId}` : "");
+    setPrefilledGoalId(goalId);
+    setShowAddReflectionModal(true);
+  };
+
+  const handleReflectionSaved = (reflection: Reflection) => {
+    console.log('[Express] Reflection saved, closing modal and reloading data');
+    setShowAddReflectionModal(false);
+    setPrefilledGoalId(undefined);
+    showSuccess('Reflection saved successfully');
+    loadExpressData();
   };
 
   const toggleCategory = (categoryKey: string) => {
@@ -716,6 +787,20 @@ export default function HomeScreen() {
   const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
   const dateDisplay = formatDateDisplay(selectedDate);
 
+  const goalsForModal = activatedGoals.map(g => ({
+    id: g.id,
+    title: g.title,
+    behaviorCategories: g.behaviorCategories,
+    rewardCurrencyId: g.rewardCurrencyId,
+    rewardAmount: g.rewardAmount,
+    rewardSuccesses: g.rewardSuccesses,
+    consequenceCurrencyId: g.consequenceCurrencyId,
+    consequenceAmount: g.consequenceAmount,
+    consequenceFailures: g.consequenceFailures,
+    successCount: g.successCount,
+    struggleCount: g.struggleCount,
+  }));
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -930,6 +1015,27 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
+
+      {showAddReflectionModal && (
+        <AddReflectionModal
+          visible={showAddReflectionModal}
+          onClose={() => {
+            console.log('[Express] Closing AddReflectionModal without saving');
+            setShowAddReflectionModal(false);
+            setPrefilledGoalId(undefined);
+          }}
+          onSave={handleReflectionSaved}
+          selectedDate={selectedDate}
+          goals={goalsForModal}
+          currencies={currencies}
+          userPreferences={userPreferences}
+          editingReflection={null}
+          gainsLosses={gainsLosses}
+          strategies={strategies}
+          prefilledGoalId={prefilledGoalId}
+          sourceScreen="express"
+        />
+      )}
 
       <Modal
         visible={showCurrencyModal}
