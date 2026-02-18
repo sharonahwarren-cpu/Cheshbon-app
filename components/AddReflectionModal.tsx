@@ -12,6 +12,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  LayoutAnimation,
+  findNodeHandle,
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -149,9 +151,63 @@ export function AddReflectionModal({
   const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+
+  // Keyboard listeners for iOS
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+
+    const keyboardWillShowListener = Keyboard.addListener('keyboardWillShow', (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+
+    const keyboardWillHideListener = Keyboard.addListener('keyboardWillHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
+
+  // Auto-scroll to keep Description input visible when focused
+  const handleDescriptionFocus = () => {
+    if (Platform.OS === 'ios' && descriptionInputRef.current && scrollViewRef.current) {
+      setTimeout(() => {
+        descriptionInputRef.current?.measureLayout(
+          findNodeHandle(scrollViewRef.current) as number,
+          (x, y) => {
+            // Scroll to position the input above the keyboard with extra padding
+            const scrollToY = Math.max(0, y - 100);
+            scrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
+          },
+          () => {}
+        );
+      }, 100);
+    }
+  };
+
+  // Keep cursor visible as user types in Description
+  const handleDescriptionContentSizeChange = () => {
+    if (Platform.OS === 'ios' && descriptionInputRef.current && scrollViewRef.current && keyboardHeight > 0) {
+      setTimeout(() => {
+        descriptionInputRef.current?.measureLayout(
+          findNodeHandle(scrollViewRef.current) as number,
+          (x, y, width, height) => {
+            // Calculate position to keep the bottom of the text input visible above keyboard
+            const inputBottom = y + height;
+            const scrollToY = Math.max(0, inputBottom - 150);
+            scrollViewRef.current?.scrollTo({ y: scrollToY, animated: true });
+          },
+          () => {}
+        );
+      }, 50);
+    }
+  };
 
   const filteredGoals = goals.filter(goal => {
     if (!category) return true;
@@ -539,6 +595,8 @@ export function AddReflectionModal({
                     multiline
                     textAlignVertical="top"
                     blurOnSubmit={false}
+                    onFocus={handleDescriptionFocus}
+                    onContentSizeChange={handleDescriptionContentSizeChange}
                   />
                 </View>
               </React.Fragment>
