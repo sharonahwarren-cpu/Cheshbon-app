@@ -446,7 +446,7 @@ export default function ReflectScreen() {
         >
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Journal</Text>
+              <Text style={styles.sectionTitle}>Daily Journal</Text>
             </View>
             <TextInput
               ref={journalInputRef}
@@ -871,7 +871,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.text,
   },
@@ -884,8 +884,7 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 15,
     color: colors.text,
-    minHeight: 250,
-    maxHeight: 450,
+    height: 100,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: colors.border,
