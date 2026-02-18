@@ -180,8 +180,10 @@ export function AddReflectionModal({
   const handleDescriptionFocus = () => {
     console.log('Description input focused on Step 1');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
+      // Scroll to a position that shows the Description input above the keyboard
+      // Account for: Category section (~120px) + Type section (~180px) + Description label (~40px)
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 150, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 340, animated: true });
       }, 100);
     }
   };
@@ -191,7 +193,7 @@ export function AddReflectionModal({
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
       console.log('Description content size changed, scrolling to keep visible');
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 200, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 380, animated: true });
       }, 50);
     }
   };
