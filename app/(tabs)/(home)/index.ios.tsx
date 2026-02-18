@@ -737,8 +737,8 @@ export default function HomeScreen() {
             onPress={() => openAddReflectionModal(goal.id)}
           >
             <IconSymbol
-              ios_icon_name="book.fill"
-              android_material_icon_name="menu-book"
+              ios_icon_name="note.text"
+              android_material_icon_name="edit"
               size={18}
               color="#FFFFFF"
             />
@@ -882,8 +882,8 @@ export default function HomeScreen() {
             onPress={() => openAddReflectionModal()}
           >
             <IconSymbol
-              ios_icon_name="book.fill"
-              android_material_icon_name="menu-book"
+              ios_icon_name="note.text"
+              android_material_icon_name="edit"
               size={20}
               color={colors.primary}
             />
