@@ -20,7 +20,7 @@ import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDel
 import DateTimePicker from '@react-native-community/datetimepicker';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ColorPicker, HueSlider } from 'react-native-color-picker';
+import { ColorPicker, HueSlider, fromHsv } from 'react-native-color-picker';
 import Slider from '@react-native-community/slider';
 
 interface LifeArea {
@@ -507,14 +507,14 @@ export default function SettingsScreen() {
 
   const handleLinkGoalToLifeArea = async (goalId: string, lifeAreaId: string) => {
     try {
-      setLoading(true);
+      console.log('[Settings] Linking goal to life area:', { goalId, lifeAreaId });
       await authenticatedPost(`/api/life-areas/${lifeAreaId}/goals`, { goalId });
       showSuccess('Goal linked to life area successfully');
       
       // Reload data to get updated life areas with linked goals
       await loadData();
       
-      // Update the formData to show the newly linked goal immediately
+      // Update the formData and editingItem to show the newly linked goal immediately
       if (editingItem && editingItem.id === lifeAreaId) {
         const updatedLifeArea = lifeAreas.find(la => la.id === lifeAreaId);
         if (updatedLifeArea) {
@@ -525,33 +525,29 @@ export default function SettingsScreen() {
     } catch (error) {
       console.error('Error linking goal to life area:', error);
       showError('Failed to link goal to life area');
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleUnlinkGoalFromLifeArea = async (goalId: string, lifeAreaId: string) => {
     try {
-      setLoading(true);
+      console.log('[Settings] Unlinking goal from life area:', { goalId, lifeAreaId });
       await authenticatedDelete(`/api/life-areas/${lifeAreaId}/goals/${goalId}`);
+      
+      // Update formData immediately (optimistic update)
+      const updatedGoals = (formData.goals || []).filter((g: any) => g.id !== goalId);
+      const updatedFormData = { ...formData, goals: updatedGoals };
+      setFormData(updatedFormData);
+      setEditingItem(updatedFormData);
+      
       showSuccess('Goal unlinked from life area successfully');
       
-      // Reload data to get updated life areas
+      // Reload data in the background to ensure consistency
       await loadData();
-      
-      // Update the formData to remove the unlinked goal immediately
-      if (editingItem && editingItem.id === lifeAreaId) {
-        const updatedLifeArea = lifeAreas.find(la => la.id === lifeAreaId);
-        if (updatedLifeArea) {
-          setEditingItem(updatedLifeArea);
-          setFormData(updatedLifeArea);
-        }
-      }
     } catch (error) {
       console.error('Error unlinking goal from life area:', error);
       showError('Failed to unlink goal from life area');
-    } finally {
-      setLoading(false);
+      // Reload data to revert optimistic update
+      await loadData();
     }
   };
 
@@ -1681,7 +1677,7 @@ export default function SettingsScreen() {
     // Get available goals for linking (not already linked to this life area)
     const availableGoals = goals.filter(g => {
       if (!editingItem) return true;
-      const linkedGoalIds = editingItem.goals?.map((goal: any) => goal.id) || [];
+      const linkedGoalIds = (formData.goals || []).map((goal: any) => goal.id);
       return !linkedGoalIds.includes(g.id);
     });
 
@@ -1823,7 +1819,7 @@ export default function SettingsScreen() {
                         <ColorPicker
                           color={formData.color || '#FF6B6B'}
                           onColorChange={(color) => {
-                            const hexColor = color.toUpperCase();
+                            const hexColor = fromHsv(color);
                             setFormData({ ...formData, color: hexColor });
                           }}
                           style={styles.colorWheel}
@@ -1888,9 +1884,9 @@ export default function SettingsScreen() {
                     <Text style={styles.helperText}>Select goals to link to this life area</Text>
                     
                     {/* Show currently linked goals */}
-                    {editingItem && editingItem.goals && editingItem.goals.length > 0 && (
+                    {formData.goals && formData.goals.length > 0 && (
                       <View style={styles.linkedGoalsList}>
-                        {editingItem.goals.map((goal: any, idx: number) => {
+                        {formData.goals.map((goal: any, idx: number) => {
                           const statusText = goal.status === 'ACTIVE' ? 'Active' : 'Deactivated';
                           const statusColor = goal.status === 'ACTIVE' ? colors.success : colors.textSecondary;
                           
@@ -1901,7 +1897,11 @@ export default function SettingsScreen() {
                                 <Text style={[styles.linkedGoalStatus, { color: statusColor }]}>{statusText}</Text>
                               </View>
                               <TouchableOpacity
-                                onPress={() => handleUnlinkGoalFromLifeArea(goal.id, editingItem.id)}
+                                onPress={() => {
+                                  if (editingItem) {
+                                    handleUnlinkGoalFromLifeArea(goal.id, editingItem.id);
+                                  }
+                                }}
                                 style={styles.unlinkButton}
                               >
                                 <IconSymbol
@@ -2324,6 +2324,46 @@ export default function SettingsScreen() {
             </View>
           </View>
         </View>
+
+        {/* Create Goal Modal - appears on top of Edit Life Area modal */}
+        {showCreateGoalModal && (
+          <View style={styles.createGoalModalOverlay}>
+            <View style={styles.alertModal}>
+              <View style={styles.alertModalHeader}>
+                <Text style={styles.alertTitle}>Create New Goal</Text>
+                <TouchableOpacity onPress={() => setShowCreateGoalModal(false)}>
+                  <IconSymbol
+                    ios_icon_name="xmark"
+                    android_material_icon_name="close"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.alertMessage}>
+                This will open the Create Goal screen. After creating the goal, you can return here to link it to this life area.
+              </Text>
+              <View style={styles.alertButtons}>
+                <TouchableOpacity
+                  style={[styles.alertButton, styles.alertButtonSecondary]}
+                  onPress={() => setShowCreateGoalModal(false)}
+                >
+                  <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.alertButton}
+                  onPress={() => {
+                    setShowCreateGoalModal(false);
+                    setShowModal(false);
+                    router.push(`/create-goal?lifeAreaId=${editingItem?.id}`);
+                  }}
+                >
+                  <Text style={styles.alertButtonText}>Create Goal</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
       </Modal>
     );
   };
@@ -2351,41 +2391,6 @@ export default function SettingsScreen() {
       )}
 
       {renderEditModal()}
-
-      {/* Create Goal Modal */}
-      <Modal
-        visible={showCreateGoalModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCreateGoalModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
-            <Text style={styles.alertTitle}>Create New Goal</Text>
-            <Text style={styles.alertMessage}>
-              This will open the Create Goal screen. After creating the goal, you can return here to link it to this life area.
-            </Text>
-            <View style={styles.alertButtons}>
-              <TouchableOpacity
-                style={[styles.alertButton, styles.alertButtonSecondary]}
-                onPress={() => setShowCreateGoalModal(false)}
-              >
-                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.alertButton}
-                onPress={() => {
-                  setShowCreateGoalModal(false);
-                  setShowModal(false);
-                  router.push(`/create-goal?lifeAreaId=${editingItem?.id}`);
-                }}
-              >
-                <Text style={styles.alertButtonText}>Create Goal</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Currency Claim/Pay Modal */}
       <Modal
@@ -2917,11 +2922,16 @@ const styles = StyleSheet.create({
     width: '80%',
     maxWidth: 400,
   },
+  alertModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   alertTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 12,
   },
   alertMessage: {
     fontSize: 16,
@@ -3348,5 +3358,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.primary,
     fontWeight: '600',
+  },
+  createGoalModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    zIndex: 1000,
   },
 });
