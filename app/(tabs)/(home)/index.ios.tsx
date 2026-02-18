@@ -106,6 +106,7 @@ interface Currency {
   id: string;
   name: string;
   symbol?: string;
+  type?: 'reward' | 'consequence';
   onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
@@ -562,7 +563,12 @@ export default function HomeScreen() {
     const successCount = dailySuccessEntries.length;
     const struggleCount = dailyStruggleEntries.length;
 
-    const tallies: Array<{ tally: number; currencySymbol: string; hasValue: boolean; isReward: boolean }> = [];
+    const tallies: Array<{ 
+      tally: number; 
+      currencySymbol: string; 
+      currencyType: 'reward' | 'consequence';
+      currencyId: string;
+    }> = [];
 
     // Calculate reward currency impact
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
@@ -581,10 +587,10 @@ export default function HomeScreen() {
           
           if (rewardTally !== 0) {
             tallies.push({
-              tally: Math.abs(rewardTally),
+              tally: rewardTally,
               currencySymbol: rewardCurrency.symbol || '',
-              hasValue: true,
-              isReward: true,
+              currencyType: rewardCurrency.type || 'reward',
+              currencyId: rewardCurrency.id,
             });
           }
         }
@@ -607,13 +613,18 @@ export default function HomeScreen() {
           }
           
           if (consequenceTally !== 0) {
-            // Only add if it's a different currency than reward
-            if (goal.rewardCurrencyId !== goal.consequenceCurrencyId) {
+            // Check if same currency as reward - if so, combine them
+            const existingTallyIndex = tallies.findIndex(t => t.currencyId === consequenceCurrency.id);
+            if (existingTallyIndex !== -1) {
+              // Same currency - combine the tallies
+              tallies[existingTallyIndex].tally += consequenceTally;
+            } else {
+              // Different currency - add separately
               tallies.push({
-                tally: Math.abs(consequenceTally),
+                tally: consequenceTally,
                 currencySymbol: consequenceCurrency.symbol || '',
-                hasValue: true,
-                isReward: false,
+                currencyType: consequenceCurrency.type || 'consequence',
+                currencyId: consequenceCurrency.id,
               });
             }
           }
@@ -621,7 +632,7 @@ export default function HomeScreen() {
       }
     }
     
-    return tallies;
+    return tallies.filter(t => t.tally !== 0);
   };
 
   if (loading) {
@@ -672,9 +683,9 @@ export default function HomeScreen() {
           {hasCurrencyTallies && (
             <View style={styles.currencyTalliesContainer}>
               {currencyTallies.map((tally, index) => {
-                const tallyText = tally.tally.toString();
+                const tallyColor = tally.currencyType === 'reward' ? colors.success : colors.error;
+                const displayTally = tally.tally < 0 ? `-${Math.abs(tally.tally)}` : `${tally.tally}`;
                 const currencySymbolText = tally.currencySymbol;
-                const tallyColor = tally.isReward ? colors.success : colors.error;
                 
                 return (
                   <View key={index} style={styles.currencyTallyBadge}>
@@ -684,7 +695,7 @@ export default function HomeScreen() {
                       </Text>
                     )}
                     <Text style={[styles.currencyTallyText, { color: tallyColor }]}>
-                      {tallyText}
+                      {displayTally}
                     </Text>
                   </View>
                 );
