@@ -529,27 +529,23 @@ export function AddReflectionModal({
                     />
                     <Text style={styles.label}>Description</Text>
                   </View>
-                  <TextInput
-                    ref={descriptionInputRef}
-                    style={[styles.input, styles.textArea]}
-                    value={description}
-                    onChangeText={setDescription}
-                    placeholder={getDescriptionPlaceholder()}
-                    placeholderTextColor={colors.textSecondary}
-                    multiline
-                    numberOfLines={6}
-                    blurOnSubmit={false}
-                    onFocus={() => {
-                      setTimeout(() => {
-                        descriptionInputRef.current?.measure((x, y, width, height, pageX, pageY) => {
-                          scrollViewRef.current?.scrollTo({ 
-                            y: pageY - 150,
-                            animated: true 
-                          });
-                        });
-                      }, 100);
-                    }}
-                  />
+                  <ScrollView
+                    style={styles.textAreaScrollContainer}
+                    nestedScrollEnabled={true}
+                    showsVerticalScrollIndicator={true}
+                  >
+                    <TextInput
+                      ref={descriptionInputRef}
+                      style={styles.textAreaInput}
+                      value={description}
+                      onChangeText={setDescription}
+                      placeholder={getDescriptionPlaceholder()}
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      scrollEnabled={false}
+                      blurOnSubmit={false}
+                    />
+                  </ScrollView>
                 </View>
               </React.Fragment>
             )}
@@ -905,27 +901,23 @@ export function AddReflectionModal({
                     />
                     <Text style={styles.label}>Notes on weighing up gains and losses (Optional)</Text>
                   </View>
-                  <TextInput
-                    ref={additionalThoughtsInputRef}
-                    style={[styles.input, styles.textArea]}
-                    value={additionalThoughts}
-                    onChangeText={setAdditionalThoughts}
-                    placeholder="Notes on weighing up gains and losses..."
-                    placeholderTextColor={colors.textSecondary}
-                    multiline
-                    numberOfLines={6}
-                    blurOnSubmit={false}
-                    onFocus={() => {
-                      setTimeout(() => {
-                        additionalThoughtsInputRef.current?.measure((x, y, width, height, pageX, pageY) => {
-                          scrollViewRef.current?.scrollTo({ 
-                            y: pageY - 150,
-                            animated: true 
-                          });
-                        });
-                      }, 100);
-                    }}
-                  />
+                  <ScrollView
+                    style={styles.textAreaScrollContainer}
+                    nestedScrollEnabled={true}
+                    showsVerticalScrollIndicator={true}
+                  >
+                    <TextInput
+                      ref={additionalThoughtsInputRef}
+                      style={styles.textAreaInput}
+                      value={additionalThoughts}
+                      onChangeText={setAdditionalThoughts}
+                      placeholder="Notes on weighing up gains and losses..."
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      scrollEnabled={false}
+                      blurOnSubmit={false}
+                    />
+                  </ScrollView>
                 </View>
               </React.Fragment>
             )}
@@ -1379,8 +1371,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   textArea: {
-    minHeight: 140,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  textAreaScrollContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
     maxHeight: 200,
+  },
+  textAreaInput: {
+    padding: 14,
+    fontSize: 16,
+    color: colors.text,
+    minHeight: 140,
     textAlignVertical: 'top',
   },
   optionsGrid: {
