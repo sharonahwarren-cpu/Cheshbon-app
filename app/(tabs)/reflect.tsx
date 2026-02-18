@@ -465,6 +465,12 @@ export default function ReflectScreen() {
         >
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
+              <IconSymbol
+                ios_icon_name="book.fill"
+                android_material_icon_name="menu-book"
+                size={22}
+                color="#4A90E2"
+              />
               <Text style={styles.sectionTitle}>Daily Journal</Text>
             </View>
             <TextInput
@@ -493,6 +499,12 @@ export default function ReflectScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderRow}>
+                  <IconSymbol
+                    ios_icon_name="sparkles"
+                    android_material_icon_name="auto-awesome"
+                    size={22}
+                    color="#9B59B6"
+                  />
                   <Text style={styles.sectionTitle}>Reflections</Text>
                 </View>
                 <TouchableOpacity onPress={openAddReflectionModal} style={styles.addButton}>
@@ -887,11 +899,11 @@ const styles = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
   },
