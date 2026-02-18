@@ -144,6 +144,12 @@ export function registerGoalsTrackingRoutes(app: App) {
             successCount: totalSuccessCount,
             struggleCount: totalStruggleCount,
             dailyEntries,
+            rewardCurrencyId: goal.rewardCurrencyId || null,
+            rewardAmount: goal.rewardAmount ?? null,
+            rewardSuccesses: goal.rewardSuccesses ?? null,
+            consequenceCurrencyId: goal.consequenceCurrencyId || null,
+            consequenceAmount: goal.consequenceAmount ?? null,
+            consequenceFailures: goal.consequenceFailures ?? null,
           };
         });
 
