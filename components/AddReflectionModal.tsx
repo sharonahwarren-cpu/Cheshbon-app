@@ -202,8 +202,10 @@ export function AddReflectionModal({
   const handleAdditionalThoughtsFocus = () => {
     console.log('Additional thoughts input focused on Step 3');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
+      // Scroll to position the Notes text box above the keyboard
+      // Account for: Gains section (~100px) + Losses section (~100px) + Was it worth it section (~150px) + Notes label (~40px)
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        scrollViewRef.current?.scrollTo({ y: 400, animated: true });
       }, 100);
     }
   };
@@ -211,9 +213,10 @@ export function AddReflectionModal({
   // Keep cursor visible as user types in Additional Thoughts (Step 3)
   const handleAdditionalThoughtsContentSizeChange = () => {
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
-      console.log('Additional thoughts content size changed, scrolling to keep visible');
+      console.log('Additional thoughts content size changed, maintaining scroll position');
+      // Keep the scroll position stable so the text box stays visible
       setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        scrollViewRef.current?.scrollTo({ y: 400, animated: false });
       }, 50);
     }
   };
