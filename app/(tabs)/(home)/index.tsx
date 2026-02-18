@@ -801,19 +801,34 @@ export default function HomeScreen() {
   const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
   const dateDisplay = formatDateDisplay(selectedDate);
 
-  const goalsForModal = activatedGoals.map(g => ({
-    id: g.id,
-    title: g.title,
-    behaviorCategories: g.behaviorCategories,
-    rewardCurrencyId: g.rewardCurrencyId,
-    rewardAmount: g.rewardAmount,
-    rewardSuccesses: g.rewardSuccesses,
-    consequenceCurrencyId: g.consequenceCurrencyId,
-    consequenceAmount: g.consequenceAmount,
-    consequenceFailures: g.consequenceFailures,
-    successCount: g.successCount,
-    struggleCount: g.struggleCount,
-  }));
+  const goalsForModal = activatedGoals.map(g => {
+    console.log('[Express] Mapping goal for modal:', {
+      id: g.id,
+      title: g.title,
+      rewardCurrencyId: g.rewardCurrencyId,
+      rewardAmount: g.rewardAmount,
+      rewardSuccesses: g.rewardSuccesses,
+      consequenceCurrencyId: g.consequenceCurrencyId,
+      consequenceAmount: g.consequenceAmount,
+      consequenceFailures: g.consequenceFailures,
+      successCount: g.successCount,
+      struggleCount: g.struggleCount,
+    });
+    
+    return {
+      id: g.id,
+      title: g.title,
+      behaviorCategories: g.behaviorCategories,
+      rewardCurrencyId: g.rewardCurrencyId,
+      rewardAmount: g.rewardAmount,
+      rewardSuccesses: g.rewardSuccesses,
+      consequenceCurrencyId: g.consequenceCurrencyId,
+      consequenceAmount: g.consequenceAmount,
+      consequenceFailures: g.consequenceFailures,
+      successCount: g.successCount,
+      struggleCount: g.struggleCount,
+    };
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

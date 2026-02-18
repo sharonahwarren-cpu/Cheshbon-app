@@ -233,6 +233,25 @@ export function AddReflectionModal({
   const selectedGoal = goals.find(g => g.id === linkedGoalId);
   
   const currencyBalanceInfo = (() => {
+    console.log('[AddReflectionModal] Currency calculation check:', {
+      linkedGoalId,
+      outcome,
+      selectedGoal: selectedGoal ? {
+        id: selectedGoal.id,
+        title: selectedGoal.title,
+        rewardCurrencyId: selectedGoal.rewardCurrencyId,
+        rewardAmount: selectedGoal.rewardAmount,
+        rewardSuccesses: selectedGoal.rewardSuccesses,
+        consequenceCurrencyId: selectedGoal.consequenceCurrencyId,
+        consequenceAmount: selectedGoal.consequenceAmount,
+        consequenceFailures: selectedGoal.consequenceFailures,
+        successCount: selectedGoal.successCount,
+        struggleCount: selectedGoal.struggleCount,
+      } : null,
+      currenciesCount: currencies.length,
+      sourceScreen,
+    });
+    
     if (!linkedGoalId || !outcome || !selectedGoal) return null;
     
     const isSuccess = outcome === 'success';
@@ -256,7 +275,7 @@ export function AddReflectionModal({
     const displaySymbol = currency.symbol || '';
     const displayThreshold = threshold || 1;
     
-    return {
+    const result = {
       operation: operation === 'ADD' ? 'add' : 'subtract',
       amount: displayAmount,
       symbol: displaySymbol,
@@ -265,6 +284,10 @@ export function AddReflectionModal({
       actionText,
       isSuccess,
     };
+    
+    console.log('[AddReflectionModal] Currency impact calculated:', result);
+    
+    return result;
   })();
 
   const getCategoryIcon = (category: string) => {
