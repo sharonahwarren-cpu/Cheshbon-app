@@ -319,19 +319,22 @@ export default function HomeScreen() {
     console.log("Loading express data (activated goals) for date:", selectedDate.toISOString());
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
-      const [goalsRes, gainsLossesRes, strategiesRes, prefsRes] = await Promise.all([
+      const [goalsRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes] = await Promise.all([
         authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
+        authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/user-preferences'),
       ]);
       
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
       
       setActivatedGoals(goalsData);
+      setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
       setUserPreferences(prefsData);
@@ -405,7 +408,7 @@ export default function HomeScreen() {
       });
       
       setCategoryGroups(sortedGroups);
-      console.log("Express data loaded successfully with nested categories:", sortedGroups);
+      console.log("Express data loaded successfully with nested categories and currencies:", sortedGroups);
     } catch (error) {
       console.error("Error loading express data:", error);
       throw error;
