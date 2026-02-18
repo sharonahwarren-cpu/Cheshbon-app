@@ -562,48 +562,87 @@ export default function HomeScreen() {
     const successCount = dailySuccessEntries.length;
     const struggleCount = dailyStruggleEntries.length;
 
-    let rewardTally = 0;
-    let consequenceTally = 0;
-    let isReward = true;
+    let totalTally = 0;
+    let currencyUsed: Currency | null = null;
+    let isRewardType = true;
 
+    // Calculate reward currency impact
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
       const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
       if (rewardCurrency) {
         const completedRewardSets = Math.floor(successCount / goal.rewardSuccesses);
-        const rewardAmount = completedRewardSets * goal.rewardAmount;
-        
-        if (rewardCurrency.onSuccess === 'ADD') {
-          rewardTally += rewardAmount;
-          isReward = true;
-        } else if (rewardCurrency.onSuccess === 'SUBTRACT') {
-          rewardTally -= rewardAmount;
-          isReward = false;
+        if (completedRewardSets > 0) {
+          const rewardAmount = completedRewardSets * goal.rewardAmount;
+          
+          if (rewardCurrency.onSuccess === 'ADD') {
+            totalTally += rewardAmount;
+          } else if (rewardCurrency.onSuccess === 'SUBTRACT') {
+            totalTally -= rewardAmount;
+          }
+          
+          // Reward currency is a reward type (gift icon)
+          currencyUsed = rewardCurrency;
+          isRewardType = true;
         }
       }
     }
 
+    // Calculate consequence currency impact
     if (goal.consequenceCurrencyId && goal.consequenceAmount && goal.consequenceFailures) {
       const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
       if (consequenceCurrency) {
         const completedConsequenceSets = Math.floor(struggleCount / goal.consequenceFailures);
-        const consequenceAmount = completedConsequenceSets * goal.consequenceAmount;
-        
-        if (consequenceCurrency.onFailure === 'ADD') {
-          consequenceTally += consequenceAmount;
-          isReward = true;
-        } else if (consequenceCurrency.onFailure === 'SUBTRACT') {
-          consequenceTally -= consequenceAmount;
-          isReward = false;
+        if (completedConsequenceSets > 0) {
+          const consequenceAmount = completedConsequenceSets * goal.consequenceAmount;
+          
+          if (consequenceCurrency.onFailure === 'ADD') {
+            totalTally += consequenceAmount;
+          } else if (consequenceCurrency.onFailure === 'SUBTRACT') {
+            totalTally -= consequenceAmount;
+          }
+          
+          // Consequence currency is a consequence type (wallet icon)
+          currencyUsed = consequenceCurrency;
+          isRewardType = false;
         }
       }
     }
 
-    const totalTally = rewardTally + consequenceTally;
+    // If both reward and consequence are present, determine which one to show based on which has a value
+    // Priority: show the one that actually has an impact today
+    if (goal.rewardCurrencyId && goal.consequenceCurrencyId) {
+      const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
+      const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
+      
+      const hasRewardImpact = rewardCurrency && goal.rewardSuccesses && Math.floor(successCount / goal.rewardSuccesses) > 0;
+      const hasConsequenceImpact = consequenceCurrency && goal.consequenceFailures && Math.floor(struggleCount / goal.consequenceFailures) > 0;
+      
+      if (hasRewardImpact && !hasConsequenceImpact) {
+        currencyUsed = rewardCurrency || null;
+        isRewardType = true;
+      } else if (hasConsequenceImpact && !hasRewardImpact) {
+        currencyUsed = consequenceCurrency || null;
+        isRewardType = false;
+      } else if (hasRewardImpact && hasConsequenceImpact) {
+        // Both have impact - show the currency symbol of the one with larger absolute impact
+        const rewardImpact = Math.abs(Math.floor(successCount / (goal.rewardSuccesses || 1)) * (goal.rewardAmount || 0));
+        const consequenceImpact = Math.abs(Math.floor(struggleCount / (goal.consequenceFailures || 1)) * (goal.consequenceAmount || 0));
+        
+        if (consequenceImpact > rewardImpact) {
+          currencyUsed = consequenceCurrency || null;
+          isRewardType = false;
+        } else {
+          currencyUsed = rewardCurrency || null;
+          isRewardType = true;
+        }
+      }
+    }
     
     return {
-      tally: totalTally,
-      isReward: totalTally >= 0 ? isReward : !isReward,
+      tally: Math.abs(totalTally),
+      isReward: isRewardType,
       hasValue: totalTally !== 0,
+      currencySymbol: currencyUsed?.symbol || '',
     };
   };
 
@@ -627,10 +666,11 @@ export default function HomeScreen() {
     const hasDescription = goal.description && goal.description.trim().length > 0;
     
     const currencyTally = calculateDailyCurrencyTally(goal);
-    const tallyText = Math.abs(currencyTally.tally).toString();
+    const tallyText = currencyTally.tally.toString();
     const tallyIcon = currencyTally.isReward ? 'card-giftcard' : 'account-balance-wallet';
     const tallyIosIcon = currencyTally.isReward ? 'gift.fill' : 'creditcard.fill';
     const tallyColor = currencyTally.isReward ? colors.success : colors.error;
+    const currencySymbolText = currencyTally.currencySymbol;
     
     return (
       <View key={goal.id} style={styles.goalCard}>
@@ -663,6 +703,11 @@ export default function HomeScreen() {
                 size={14}
                 color={tallyColor}
               />
+              {currencySymbolText && (
+                <Text style={[styles.currencySymbolText, { color: tallyColor }]}>
+                  {currencySymbolText}
+                </Text>
+              )}
               <Text style={[styles.currencyTallyText, { color: tallyColor }]}>
                 {tallyText}
               </Text>
@@ -1209,6 +1254,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundAlt,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  currencySymbolText: {
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   currencyTallyText: {
     fontSize: 12,
