@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Modal,
-  TextInput,
   Image,
 } from "react-native";
 import React, { useState, useEffect } from "react";
@@ -18,63 +17,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@/styles/commonStyles";
 import { useAuth } from "@/contexts/AuthContext";
 import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
-
-interface CurrencyBalance {
-  currencyId: string;
-  currencyName: string;
-  symbol: string;
-  totalBalance: number;
-  goalBreakdown?: Array<{ goalId: string; goalTitle: string; balance: number }>;
-}
-
-interface WinsVsLosses {
-  wins: number;
-  losses: number;
-  totalReflections: number;
-}
-
-interface SuccessVsStruggles {
-  successes: number;
-  struggles: number;
-  total: number;
-}
-
-interface ReflectionStats {
-  totalReflections: number;
-  totalRestraints: number;
-  totalProactive: number;
-  worthItPercentage: number;
-}
-
-interface JournalCount {
-  count: number;
-}
-
-interface GainsLossesSummary {
-  totalGains: number;
-  totalLosses: number;
-  byCategory: Array<{ category: string; gains: number; losses: number }>;
-  topGains: Array<{ id: string; name: string; count: number }>;
-  topLosses: Array<{ id: string; name: string; count: number }>;
-}
-
-interface BehaviorCounts {
-  actionEntries: number;
-  speechEntries: number;
-  thoughtEntries: number;
-}
-
-interface GoalProgress {
-  goalId: string;
-  goalTitle: string;
-  progress: number;
-  successCount: number;
-  struggleCount: number;
-  rewardCurrencyBalance?: number;
-  rewardCurrencySymbol?: string;
-  consequenceCurrencyBalance?: number;
-  consequenceCurrencySymbol?: string;
-}
 
 interface DailyEntry {
   id: string;
@@ -176,35 +118,16 @@ export default function HomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   
-  const [activeTab, setActiveTab] = useState<'reports' | 'express'>('reports');
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  
-  const [currencyBalances, setCurrencyBalances] = useState<CurrencyBalance[]>([]);
-  const [currencies, setCurrencies] = useState<Currency[]>([]);
-  const [winsVsLosses, setWinsVsLosses] = useState<WinsVsLosses | null>(null);
-  const [successVsStruggles, setSuccessVsStruggles] = useState<SuccessVsStruggles | null>(null);
-  const [reflectionStats, setReflectionStats] = useState<ReflectionStats | null>(null);
-  const [journalCount, setJournalCount] = useState<JournalCount | null>(null);
-  const [gainsLossesSummary, setGainsLossesSummary] = useState<GainsLossesSummary | null>(null);
-  const [behaviorCounts, setBehaviorCounts] = useState<BehaviorCounts | null>(null);
-  const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);
   
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
   const [categoryGroups, setCategoryGroups] = useState<Record<string, CategoryGroup>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [currencies, setCurrencies] = useState<Currency[]>([]);
   
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  
-  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
-  const [currencyModalType, setCurrencyModalType] = useState<'claim' | 'pay'>('claim');
-  const [selectedCurrencyId, setSelectedCurrencyId] = useState<string>('');
-  const [selectedCurrencyName, setSelectedCurrencyName] = useState<string>('');
-  const [selectedCurrencySymbol, setSelectedCurrencySymbol] = useState<string>('');
-  const [currencyModalAmount, setCurrencyModalAmount] = useState<string>('');
-  const [currencyModalMaxAmount, setCurrencyModalMaxAmount] = useState<number>(0);
-  const [currencyModalLoading, setCurrencyModalLoading] = useState(false);
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
@@ -216,15 +139,13 @@ export default function HomeScreen() {
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
   useEffect(() => {
-    console.log("HomeScreen mounted");
+    console.log("HomeScreen iOS mounted");
     loadData();
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'express') {
-      console.log("Selected date changed, reloading express data:", selectedDate);
-      loadExpressData();
-    }
+    console.log("Selected date changed iOS, reloading data:", selectedDate);
+    loadData();
   }, [selectedDate]);
 
   const showError = (message: string) => {
@@ -241,76 +162,8 @@ export default function HomeScreen() {
   };
 
   const loadData = async () => {
-    console.log("Loading home screen data");
+    console.log("Loading home screen data iOS");
     setLoading(true);
-    try {
-      if (activeTab === 'reports') {
-        await loadReportsData();
-      } else {
-        await loadExpressData();
-      }
-    } catch (error: any) {
-      console.error("Error loading data:", error);
-      showError(error.message || "Failed to load data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadReportsData = async () => {
-    console.log("Loading reports data");
-    try {
-      const [
-        currencyRes,
-        currenciesRes,
-        winsLossesRes,
-        successStrugglesRes,
-        reflectionStatsRes,
-        journalCountRes,
-        gainsLossesRes,
-        behaviorCountsRes,
-        goalProgressRes,
-      ] = await Promise.all([
-        authenticatedGet('/api/reports/currency-balances'),
-        authenticatedGet('/api/currencies'),
-        authenticatedGet('/api/reports/wins-vs-losses'),
-        authenticatedGet('/api/reports/success-vs-struggles'),
-        authenticatedGet('/api/reports/reflection-stats'),
-        authenticatedGet('/api/reports/journal-count'),
-        authenticatedGet('/api/reports/gains-losses-summary'),
-        authenticatedGet('/api/reports/behavior-counts'),
-        authenticatedGet('/api/reports/goal-progress'),
-      ]);
-
-      const currencyData = Array.isArray(currencyRes) ? currencyRes : (currencyRes?.data || []);
-      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
-      const winsLossesData = winsLossesRes?.data || winsLossesRes || null;
-      const successStrugglesData = successStrugglesRes?.data || successStrugglesRes || null;
-      const reflectionStatsData = reflectionStatsRes?.data || reflectionStatsRes || null;
-      const journalCountData = journalCountRes?.data || journalCountRes || null;
-      const gainsLossesData = gainsLossesRes?.data || gainsLossesRes || null;
-      const behaviorCountsData = behaviorCountsRes?.data || behaviorCountsRes || null;
-      const goalProgressData = Array.isArray(goalProgressRes) ? goalProgressRes : (goalProgressRes?.data || []);
-
-      setCurrencyBalances(currencyData);
-      setCurrencies(currenciesData);
-      setWinsVsLosses(winsLossesData);
-      setSuccessVsStruggles(successStrugglesData);
-      setReflectionStats(reflectionStatsData);
-      setJournalCount(journalCountData);
-      setGainsLossesSummary(gainsLossesData);
-      setBehaviorCounts(behaviorCountsData);
-      setGoalProgress(goalProgressData);
-
-      console.log("Reports data loaded successfully with currency balances");
-    } catch (error) {
-      console.error("Error loading reports data:", error);
-      throw error;
-    }
-  };
-
-  const loadExpressData = async () => {
-    console.log("Loading express data (activated goals) for date:", selectedDate.toISOString());
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
       const [goalsRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes] = await Promise.all([
@@ -327,8 +180,7 @@ export default function HomeScreen() {
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
       
-      console.log('[Express iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
-      console.log('[Express iOS] Currency data sample:', currenciesData.slice(0, 2));
+      console.log('[Home iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
       
       setActivatedGoals(goalsData);
       setCurrencies(currenciesData);
@@ -405,65 +257,67 @@ export default function HomeScreen() {
       });
       
       setCategoryGroups(sortedGroups);
-      console.log("Express data loaded successfully with nested categories and currencies:", sortedGroups);
-    } catch (error) {
-      console.error("Error loading express data:", error);
-      throw error;
+      console.log("Home data loaded successfully iOS");
+    } catch (error: any) {
+      console.error("Error loading home data iOS:", error);
+      showError(error.message || "Failed to load data");
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleGoalSuccess = async (goalId: string) => {
-    console.log("Recording success for goal:", goalId);
+    console.log("Recording success for goal iOS:", goalId);
     try {
       const timestamp = new Date(selectedDate).toISOString();
       await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
-      await loadExpressData();
+      await loadData();
     } catch (error: any) {
-      console.error("Error recording success:", error);
+      console.error("Error recording success iOS:", error);
       showError(error.message || "Failed to record success");
     }
   };
 
   const handleGoalStruggle = async (goalId: string) => {
-    console.log("Recording struggle for goal:", goalId);
+    console.log("Recording struggle for goal iOS:", goalId);
     try {
       const timestamp = new Date(selectedDate).toISOString();
       await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
-      await loadExpressData();
+      await loadData();
     } catch (error: any) {
-      console.error("Error recording struggle:", error);
+      console.error("Error recording struggle iOS:", error);
       showError(error.message || "Failed to record struggle");
     }
   };
 
   const handleDeleteEntry = async (goalId: string, entryId: string) => {
-    console.log("Deleting entry:", entryId, "for goal:", goalId);
+    console.log("Deleting entry iOS:", entryId, "for goal:", goalId);
     try {
       await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
-      await loadExpressData();
+      await loadData();
     } catch (error: any) {
-      console.error("Error deleting entry:", error);
+      console.error("Error deleting entry iOS:", error);
       showError(error.message || "Failed to delete entry");
     }
   };
 
   const handleEditGoal = (goalId: string) => {
-    console.log("Opening goal editor for:", goalId);
+    console.log("Opening goal editor for iOS:", goalId);
     router.push(`/create-goal?id=${goalId}`);
   };
 
   const openAddReflectionModal = (goalId?: string) => {
-    console.log("Opening Add Reflection modal from Express iOS", goalId ? `for goal: ${goalId}` : "", "with", currencies.length, "currencies");
+    console.log("Opening Add Reflection modal from Home iOS", goalId ? `for goal: ${goalId}` : "");
     setPrefilledGoalId(goalId);
     setShowAddReflectionModal(true);
   };
 
   const handleReflectionSaved = (reflection: Reflection) => {
-    console.log('[Express iOS] Reflection saved, closing modal and reloading data');
+    console.log('[Home iOS] Reflection saved, closing modal and reloading data');
     setShowAddReflectionModal(false);
     setPrefilledGoalId(undefined);
     showSuccess('Reflection saved successfully');
-    loadExpressData();
+    loadData();
   };
 
   const toggleCategory = (categoryKey: string) => {
@@ -500,62 +354,6 @@ export default function HomeScreen() {
     
     const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
     return date.toLocaleDateString(undefined, options);
-  };
-
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const isRewardCurrency = (currency: Currency): boolean => {
-    return currency.onSuccess === 'ADD';
-  };
-
-  const openCurrencyModal = (currencyId: string, currencyName: string, currencySymbol: string, balance: number, type: 'claim' | 'pay') => {
-    console.log("Opening currency modal:", type, currencyName, balance);
-    setSelectedCurrencyId(currencyId);
-    setSelectedCurrencyName(currencyName);
-    setSelectedCurrencySymbol(currencySymbol);
-    setCurrencyModalType(type);
-    setCurrencyModalMaxAmount(Math.abs(balance));
-    setCurrencyModalAmount(Math.abs(balance).toString());
-    setShowCurrencyModal(true);
-  };
-
-  const handleCurrencyAction = async () => {
-    console.log("Handling currency action:", currencyModalType, selectedCurrencyName, currencyModalAmount);
-    
-    const amount = parseFloat(currencyModalAmount);
-    if (isNaN(amount) || amount <= 0) {
-      showError('Please enter a valid amount');
-      return;
-    }
-    
-    if (amount > currencyModalMaxAmount) {
-      showError(`Amount cannot exceed ${currencyModalMaxAmount}`);
-      return;
-    }
-    
-    setCurrencyModalLoading(true);
-    try {
-      const endpoint = currencyModalType === 'claim' 
-        ? `/api/currencies/${selectedCurrencyId}/claim`
-        : `/api/currencies/${selectedCurrencyId}/pay`;
-      
-      const response = await authenticatedPost(endpoint, { amount });
-      
-      setShowCurrencyModal(false);
-      setCurrencyModalAmount('');
-      
-      const actionText = currencyModalType === 'claim' ? 'claimed' : 'paid';
-      showSuccess(`Successfully ${actionText} ${amount} ${selectedCurrencySymbol}`);
-      
-      await loadReportsData();
-    } catch (error: any) {
-      console.error("Error processing currency action:", error);
-      showError(error.message || `Failed to ${currencyModalType} currency`);
-    } finally {
-      setCurrencyModalLoading(false);
-    }
   };
 
   const calculateDailyCurrencyTallies = (goal: ActivatedGoal) => {
@@ -842,37 +640,21 @@ export default function HomeScreen() {
     );
   };
 
-  const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
   const dateDisplay = formatDateDisplay(selectedDate);
 
-  const goalsForModal = activatedGoals.map(g => {
-    console.log('[Express iOS] Mapping goal for modal:', {
-      id: g.id,
-      title: g.title,
-      rewardCurrencyId: g.rewardCurrencyId,
-      rewardAmount: g.rewardAmount,
-      rewardSuccesses: g.rewardSuccesses,
-      consequenceCurrencyId: g.consequenceCurrencyId,
-      consequenceAmount: g.consequenceAmount,
-      consequenceFailures: g.consequenceFailures,
-      successCount: g.successCount,
-      struggleCount: g.struggleCount,
-    });
-    
-    return {
-      id: g.id,
-      title: g.title,
-      behaviorCategories: g.behaviorCategories,
-      rewardCurrencyId: g.rewardCurrencyId,
-      rewardAmount: g.rewardAmount,
-      rewardSuccesses: g.rewardSuccesses,
-      consequenceCurrencyId: g.consequenceCurrencyId,
-      consequenceAmount: g.consequenceAmount,
-      consequenceFailures: g.consequenceFailures,
-      successCount: g.successCount,
-      struggleCount: g.struggleCount,
-    };
-  });
+  const goalsForModal = activatedGoals.map(g => ({
+    id: g.id,
+    title: g.title,
+    behaviorCategories: g.behaviorCategories,
+    rewardCurrencyId: g.rewardCurrencyId,
+    rewardAmount: g.rewardAmount,
+    rewardSuccesses: g.rewardSuccesses,
+    consequenceCurrencyId: g.consequenceCurrencyId,
+    consequenceAmount: g.consequenceAmount,
+    consequenceFailures: g.consequenceFailures,
+    successCount: g.successCount,
+    struggleCount: g.struggleCount,
+  }));
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -890,119 +672,81 @@ export default function HomeScreen() {
           <Text style={styles.headerTitle}>Cheshbon</Text>
         </View>
 
-        <View style={styles.tabContainer}>
+        <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'reports' && styles.tabActive]}
+            style={styles.actionButtonLarge}
             onPress={() => {
-              console.log("Switching to reports tab");
-              setActiveTab('reports');
+              console.log("Navigating to Reflect screen iOS");
+              router.push('/(tabs)/reflect');
             }}
           >
             <IconSymbol
-              ios_icon_name="chart.bar.fill"
-              android_material_icon_name="assessment"
+              ios_icon_name="square.and.pencil"
+              android_material_icon_name="edit"
               size={20}
-              color={activeTab === 'reports' ? '#FFFFFF' : colors.textSecondary}
+              color="#FFFFFF"
             />
-            <Text style={[styles.tabText, activeTab === 'reports' && styles.tabTextActive]}>
-              Reports
-            </Text>
+            <Text style={styles.actionButtonLargeText}>Reflect</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={[styles.tab, activeTab === 'express' && styles.tabActive]}
-            onPress={() => {
-              console.log("Switching to express tab");
-              setActiveTab('express');
-            }}
+            style={styles.actionButtonLarge}
+            onPress={() => openAddReflectionModal()}
           >
             <IconSymbol
               ios_icon_name="bolt.fill"
               android_material_icon_name="flash-on"
               size={20}
-              color={activeTab === 'express' ? '#FFFFFF' : colors.textSecondary}
+              color="#FFFFFF"
             />
-            <Text style={[styles.tabText, activeTab === 'express' && styles.tabTextActive]}>
-              Express
-            </Text>
+            <Text style={styles.actionButtonLargeText}>Express</Text>
           </TouchableOpacity>
         </View>
 
-        {activeTab === 'express' && (
-          <View style={styles.dateNavigator}>
-            <TouchableOpacity 
-              style={styles.dateNavButton}
-              onPress={handlePreviousDay}
-            >
-              <IconSymbol
-                ios_icon_name="chevron.left"
-                android_material_icon_name="arrow-back"
-                size={18}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-            
-            <Text style={styles.dateDisplay}>{dateDisplay}</Text>
-            
-            <TouchableOpacity 
-              style={styles.dateNavButton}
-              onPress={handleNextDay}
-            >
-              <IconSymbol
-                ios_icon_name="chevron.right"
-                android_material_icon_name="arrow-forward"
-                size={18}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.addReflectionButton}
-              onPress={() => openAddReflectionModal()}
-            >
-              <IconSymbol
-                ios_icon_name="note.text"
-                android_material_icon_name="edit"
-                size={20}
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.dateNavigator}>
+          <TouchableOpacity 
+            style={styles.dateNavButton}
+            onPress={handlePreviousDay}
+          >
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={18}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+          
+          <Text style={styles.dateDisplay}>{dateDisplay}</Text>
+          
+          <TouchableOpacity 
+            style={styles.dateNavButton}
+            onPress={handleNextDay}
+          >
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="arrow-forward"
+              size={18}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.content}>
-          {activeTab === 'reports' ? (
+          {Object.keys(categoryGroups).length === 0 ? (
             <View style={styles.emptyState}>
               <IconSymbol
-                ios_icon_name="chart.bar"
-                android_material_icon_name="assessment"
+                ios_icon_name="bolt"
+                android_material_icon_name="flash-on"
                 size={64}
                 color={colors.muted}
               />
-              <Text style={styles.emptyStateTitle}>Reports Coming Soon</Text>
+              <Text style={styles.emptyStateTitle}>No active goals today</Text>
               <Text style={styles.emptyStateText}>
-                View detailed reports in Settings
+                Create goals in Settings to track them here
               </Text>
             </View>
           ) : (
-            <>
-              {Object.keys(categoryGroups).length === 0 ? (
-                <View style={styles.emptyState}>
-                  <IconSymbol
-                    ios_icon_name="bolt"
-                    android_material_icon_name="flash-on"
-                    size={64}
-                    color={colors.muted}
-                  />
-                  <Text style={styles.emptyStateTitle}>No active goals today</Text>
-                  <Text style={styles.emptyStateText}>
-                    Create goals in Settings to track them here
-                  </Text>
-                </View>
-              ) : (
-                Object.values(categoryGroups).map(group => renderCategoryGroup(group))
-              )}
-            </>
+            Object.values(categoryGroups).map(group => renderCategoryGroup(group))
           )}
         </View>
       </ScrollView>
@@ -1011,7 +755,7 @@ export default function HomeScreen() {
         <AddReflectionModal
           visible={showAddReflectionModal}
           onClose={() => {
-            console.log('[Express iOS] Closing AddReflectionModal without saving');
+            console.log('[Home iOS] Closing AddReflectionModal without saving');
             setShowAddReflectionModal(false);
             setPrefilledGoalId(undefined);
           }}
@@ -1103,36 +847,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
   },
-  tabContainer: {
+  buttonContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
     marginTop: 12,
     marginBottom: 12,
     gap: 12,
   },
-  tab: {
+  actionButtonLarge: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: colors.backgroundAlt,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+    backgroundColor: colors.primary,
     gap: 8,
   },
-  tabActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  tabText: {
+  actionButtonLargeText: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  tabTextActive: {
     color: '#FFFFFF',
   },
   dateNavigator: {
@@ -1155,13 +890,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     minWidth: 120,
     textAlign: 'center',
-  },
-  addReflectionButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: colors.backgroundAlt,
-    borderWidth: 1,
-    borderColor: colors.primary,
   },
   content: {
     paddingHorizontal: 20,
