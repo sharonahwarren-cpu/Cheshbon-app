@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Image,
 } from "react-native";
 import React, { useState, useEffect } from "react";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
@@ -883,6 +884,11 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
+        <Image
+          source={require('@/assets/images/Chesbon_app_Logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={styles.headerTitle}>Cheshbon</Text>
         <Text style={styles.headerSubtitle}>Your personal growth companion</Text>
       </View>
@@ -1081,6 +1087,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 16,
+    alignItems: 'center',
+  },
+  logo: {
+    width: 60,
+    height: 60,
+    marginBottom: 12,
   },
   headerTitle: {
     fontSize: 32,
