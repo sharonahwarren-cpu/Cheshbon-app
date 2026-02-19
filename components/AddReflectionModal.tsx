@@ -176,31 +176,31 @@ export function AddReflectionModal({
     };
   }, []);
 
-  // Auto-scroll to keep Description input visible when focused (Step 1)
+  // Auto-scroll to keep Description input visible when focused (Step 2)
   const handleDescriptionFocus = () => {
-    console.log('Description input focused on Step 1');
+    console.log('Description input focused on Step 2');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
       // Scroll to a position that shows the Description input above the keyboard
-      // Account for: Category section (~120px) + Type section (~180px) + Description label (~40px)
+      // Account for: Type section (~180px) + Description label (~40px)
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 340, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 220, animated: true });
       }, 100);
     }
   };
 
-  // Keep cursor visible as user types in Description (Step 1)
+  // Keep cursor visible as user types in Description (Step 2)
   const handleDescriptionContentSizeChange = () => {
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
       console.log('Description content size changed, scrolling to keep visible');
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 380, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 260, animated: true });
       }, 50);
     }
   };
 
-  // Auto-scroll to keep Additional Thoughts input visible when focused (Step 3)
+  // Auto-scroll to keep Additional Thoughts input visible when focused (Step 4)
   const handleAdditionalThoughtsFocus = () => {
-    console.log('Additional thoughts input focused on Step 3');
+    console.log('Additional thoughts input focused on Step 4');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
       // Scroll to position the Notes text box above the keyboard
       // Account for: Gains section (~100px) + Losses section (~100px) + Was it worth it section (~150px) + Notes label (~40px)
@@ -210,7 +210,7 @@ export function AddReflectionModal({
     }
   };
 
-  // Keep cursor visible as user types in Additional Thoughts (Step 3)
+  // Keep cursor visible as user types in Additional Thoughts (Step 4)
   const handleAdditionalThoughtsContentSizeChange = () => {
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
       console.log('Additional thoughts content size changed, maintaining scroll position');
@@ -326,10 +326,16 @@ export function AddReflectionModal({
       return;
     }
     
-    // Step 2: Description validation
-    if (step === 2 && !description.trim()) {
-      alert('Please enter a description');
-      return;
+    // Step 2: Type and Description validation
+    if (step === 2) {
+      if (!type) {
+        alert('Please select a reflection type (Proactive or Restraint)');
+        return;
+      }
+      if (!description.trim()) {
+        alert('Please enter a description');
+        return;
+      }
     }
     
     Keyboard.dismiss();
@@ -353,6 +359,11 @@ export function AddReflectionModal({
     // CRITICAL: When behaviors are enabled, category is MANDATORY
     if (categoriesEnabled && !category) {
       alert('Please select a category');
+      return;
+    }
+    
+    if (!type) {
+      alert('Please select a reflection type');
       return;
     }
     
@@ -522,6 +533,10 @@ export function AddReflectionModal({
     ? keyboardHeight + NEXT_BUTTON_HEIGHT + 20
     : NEXT_BUTTON_HEIGHT + 20;
 
+  // Get screen dimensions for responsive icon sizing
+  const screenWidth = Dimensions.get('window').width;
+  const categoryIconSize = Math.min(screenWidth * 0.15, 80); // 15% of screen width, max 80
+
   return (
     <Modal
       visible={visible}
@@ -566,6 +581,7 @@ export function AddReflectionModal({
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
+            {/* STEP 1: Category Selection */}
             {step === 1 && (
               <React.Fragment>
                 {categoriesEnabled && (
@@ -577,10 +593,13 @@ export function AddReflectionModal({
                         size={18}
                         color={colors.primary}
                       />
-                      <Text style={styles.label}>Category</Text>
+                      <Text style={styles.label}>Choose Behaviour Category</Text>
                       <Text style={styles.required}> *</Text>
                     </View>
-                    <View style={styles.optionsGrid}>
+                    <Text style={styles.helperText}>
+                      Select the category that best describes this reflection
+                    </Text>
+                    <View style={styles.categoryGrid}>
                       {availableCategories.map((cat, index) => {
                         const isSelected = category === cat;
                         const categoryIcon = getCategoryIcon(cat);
@@ -588,16 +607,18 @@ export function AddReflectionModal({
                         return (
                           <React.Fragment key={index}>
                             <TouchableOpacity
-                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              style={[styles.categoryCard, isSelected && styles.categoryCardSelected]}
                               onPress={() => setCategory(cat)}
                             >
-                              <IconSymbol
-                                ios_icon_name={categoryIcon.ios}
-                                android_material_icon_name={categoryIcon.android}
-                                size={16}
-                                color={isSelected ? colors.background : colors.primary}
-                              />
-                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                              <View style={[styles.categoryIconContainer, isSelected && styles.categoryIconContainerSelected]}>
+                                <IconSymbol
+                                  ios_icon_name={categoryIcon.ios}
+                                  android_material_icon_name={categoryIcon.android}
+                                  size={categoryIconSize * 0.5}
+                                  color={isSelected ? colors.background : colors.primary}
+                                />
+                              </View>
+                              <Text style={[styles.categoryCardText, isSelected && styles.categoryCardTextSelected]}>
                                 {cat}
                               </Text>
                             </TouchableOpacity>
@@ -610,7 +631,8 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {step === 5 && (
+            {/* STEP 2: Type and Description */}
+            {step === 2 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
@@ -621,7 +643,11 @@ export function AddReflectionModal({
                       color={colors.primary}
                     />
                     <Text style={styles.label}>Type</Text>
+                    <Text style={styles.required}> *</Text>
                   </View>
+                  <Text style={styles.helperText}>
+                    Is this a proactive action or a restraint?
+                  </Text>
                   <View style={styles.optionsGrid}>
                     {(['Proactive', 'Restraint'] as const).map((t, index) => {
                       const isSelected = type === t;
@@ -660,7 +686,11 @@ export function AddReflectionModal({
                       color={colors.primary}
                     />
                     <Text style={styles.label}>Description</Text>
+                    <Text style={styles.required}> *</Text>
                   </View>
+                  <Text style={styles.helperText}>
+                    Describe what happened in detail
+                  </Text>
                   <TextInput
                     ref={descriptionInputRef}
                     style={[styles.input, styles.textArea]}
@@ -678,7 +708,8 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {step === 2 && (
+            {/* STEP 3: Link to a Goal */}
+            {step === 3 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
@@ -832,7 +863,8 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {step === 3 && (
+            {/* STEP 4: Gains, Losses, Was it worth it */}
+            {step === 4 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
@@ -1052,7 +1084,8 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {step === 4 && (
+            {/* STEP 5: Strategies */}
+            {step === 5 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
@@ -1512,6 +1545,50 @@ const styles = StyleSheet.create({
   textAreaFixed: {
     height: 120,
     textAlignVertical: 'top',
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  categoryCard: {
+    flex: 1,
+    minWidth: '45%',
+    maxWidth: '48%',
+    aspectRatio: 1,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.border,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  categoryCardSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  categoryIconContainer: {
+    width: '70%',
+    aspectRatio: 1,
+    borderRadius: 999,
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryIconContainerSelected: {
+    backgroundColor: colors.primary + '30',
+  },
+  categoryCardText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  categoryCardTextSelected: {
+    color: colors.background,
   },
   optionsGrid: {
     flexDirection: 'row',
