@@ -1,5 +1,5 @@
 
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React, { useState, useEffect } from "react";
 import { IconSymbol } from "@/components/IconSymbol";
@@ -162,8 +162,15 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* About Card */}
+        {/* About Card with Logo */}
         <View style={styles.card}>
+          <View style={styles.aboutLogoContainer}>
+            <Image
+              source={require('@/assets/images/Chesbon_app_Logo.png')}
+              style={styles.aboutLogo}
+              resizeMode="contain"
+            />
+          </View>
           <Text style={styles.cardTitle}>About Cheshbon</Text>
           <Text style={styles.aboutText}>
             Cheshbon is your personal growth companion. Track your thoughts through journaling and achieve your goals with progress tracking.
@@ -324,6 +331,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
+  },
+  aboutLogoContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  aboutLogo: {
+    width: 80,
+    height: 80,
   },
   aboutText: {
     fontSize: 14,
