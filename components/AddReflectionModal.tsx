@@ -146,8 +146,11 @@ export function AddReflectionModal({
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [goalSearchQuery, setGoalSearchQuery] = useState('');
   const [showGainsPicker, setShowGainsPicker] = useState(false);
+  const [gainsSearchQuery, setGainsSearchQuery] = useState('');
   const [showLossesPicker, setShowLossesPicker] = useState(false);
+  const [lossesSearchQuery, setLossesSearchQuery] = useState('');
   const [showStrategyPicker, setShowStrategyPicker] = useState(false);
+  const [strategySearchQuery, setStrategySearchQuery] = useState('');
   const [showCreateGainModal, setShowCreateGainModal] = useState(false);
   const [showCreateLossModal, setShowCreateLossModal] = useState(false);
   const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
@@ -205,9 +208,9 @@ export function AddReflectionModal({
     console.log('Additional thoughts input focused on Step 4');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
       // Scroll to position the Notes text box lower for better visibility above keyboard and Next button
-      // Increased offset to 520 to position the textbox down a bit lower
+      // Reduced offset to 420 to position the textbox down a bit lower (was 520, now 420)
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 520, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 420, animated: true });
       }, 100);
     }
   };
@@ -217,19 +220,55 @@ export function AddReflectionModal({
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
       console.log('Additional thoughts content size changed, maintaining scroll position');
       // Keep the scroll position stable so the text box stays visible above keyboard and Next button
+      // Reduced offset to 420 to match handleAdditionalThoughtsFocus (was 520, now 420)
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 520, animated: false });
+        scrollViewRef.current?.scrollTo({ y: 420, animated: false });
       }, 50);
     }
   };
 
+  // Filter goals by category AND search query
   const filteredGoals = goals.filter(goal => {
-    if (!category) return true;
-    if (!goal.behaviorCategories) return true;
+    // First filter by search query
+    if (goalSearchQuery && !goal.title.toLowerCase().includes(goalSearchQuery.toLowerCase())) {
+      return false;
+    }
+    
+    // If categories are NOT enabled, show all goals (that match search)
+    if (!categoriesEnabled) {
+      return true;
+    }
+    
+    // If categories ARE enabled but no category is selected yet, show all goals (that match search)
+    if (!category) {
+      return true;
+    }
+    
+    // If goal has no behavior categories, show it (that match search)
+    if (!goal.behaviorCategories || goal.behaviorCategories.length === 0) {
+      return true;
+    }
+    
+    // If goal has behavior categories, check if it includes the selected category
     return goal.behaviorCategories.includes(category);
-  }).filter(goal => {
-    if (!goalSearchQuery) return true;
-    return goal.title.toLowerCase().includes(goalSearchQuery.toLowerCase());
+  });
+
+  // Filter gains by search query
+  const filteredGains = gainsLosses.filter(gl => gl.type === 'Gain').filter(gain => {
+    if (!gainsSearchQuery) return true;
+    return gain.name.toLowerCase().includes(gainsSearchQuery.toLowerCase());
+  });
+
+  // Filter losses by search query
+  const filteredLosses = gainsLosses.filter(gl => gl.type === 'Loss').filter(loss => {
+    if (!lossesSearchQuery) return true;
+    return loss.name.toLowerCase().includes(lossesSearchQuery.toLowerCase());
+  });
+
+  // Filter strategies by search query
+  const filteredStrategies = strategies.filter(strategy => {
+    if (!strategySearchQuery) return true;
+    return strategy.name.toLowerCase().includes(strategySearchQuery.toLowerCase());
   });
 
   const selectedGoal = goals.find(g => g.id === linkedGoalId);
@@ -932,8 +971,15 @@ export function AddReflectionModal({
 
                   {showGainsPicker && (
                     <View style={styles.pickerContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        value={gainsSearchQuery}
+                        onChangeText={setGainsSearchQuery}
+                        placeholder="Search gains..."
+                        placeholderTextColor={colors.textSecondary}
+                      />
                       <ScrollView style={styles.pickerList}>
-                        {gainsLosses.filter(gl => gl.type === 'Gain').map((gain, index) => {
+                        {filteredGains.map((gain, index) => {
                           const isSelected = gainedIds.includes(gain.id);
                           
                           return (
@@ -1008,8 +1054,15 @@ export function AddReflectionModal({
 
                   {showLossesPicker && (
                     <View style={styles.pickerContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        value={lossesSearchQuery}
+                        onChangeText={setLossesSearchQuery}
+                        placeholder="Search losses..."
+                        placeholderTextColor={colors.textSecondary}
+                      />
                       <ScrollView style={styles.pickerList}>
-                        {gainsLosses.filter(gl => gl.type === 'Loss').map((loss, index) => {
+                        {filteredLosses.map((loss, index) => {
                           const isSelected = lostIds.includes(loss.id);
                           
                           return (
@@ -1159,8 +1212,15 @@ export function AddReflectionModal({
 
                   {showStrategyPicker && (
                     <View style={styles.pickerContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        value={strategySearchQuery}
+                        onChangeText={setStrategySearchQuery}
+                        placeholder="Search strategies..."
+                        placeholderTextColor={colors.textSecondary}
+                      />
                       <ScrollView style={styles.pickerList}>
-                        {strategies.map((strategy, index) => {
+                        {filteredStrategies.map((strategy, index) => {
                           const effectiveness = strategyEffectiveness.find(se => se.strategyId === strategy.id);
                           const isSelected = !!effectiveness;
                           const successRateText = `${Math.round(strategy.successRate)}%`;
