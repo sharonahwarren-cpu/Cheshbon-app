@@ -152,23 +152,29 @@ export function AddReflectionModal({
   const [newItemName, setNewItemName] = useState('');
   const [newItemDescription, setNewItemDescription] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [showStrategyWorthItModal, setShowStrategyWorthItModal] = useState(false);
+  const [pendingStrategyId, setPendingStrategyId] = useState<string | null>(null);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
-  // Keyboard listeners for iOS
+  // Keyboard listeners
   useEffect(() => {
-    if (Platform.OS !== 'ios') return;
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        console.log('Keyboard showing, height:', e.endCoordinates.height);
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
 
-    const keyboardWillShowListener = Keyboard.addListener('keyboardWillShow', (e) => {
-      console.log('Keyboard will show, height:', e.endCoordinates.height);
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-
-    const keyboardWillHideListener = Keyboard.addListener('keyboardWillHide', () => {
-      console.log('Keyboard will hide');
-      setKeyboardHeight(0);
-    });
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        console.log('Keyboard hiding');
+        setKeyboardHeight(0);
+      }
+    );
 
     return () => {
       keyboardWillShowListener.remove();
@@ -179,9 +185,7 @@ export function AddReflectionModal({
   // Auto-scroll to keep Description input visible when focused (Step 2)
   const handleDescriptionFocus = () => {
     console.log('Description input focused on Step 2');
-    if (Platform.OS === 'ios' && scrollViewRef.current) {
-      // Scroll to a position that shows the Description input above the keyboard
-      // Account for: Type section (~180px) + Description label (~40px)
+    if (scrollViewRef.current) {
       setTimeout(() => {
         scrollViewRef.current?.scrollTo({ y: 220, animated: true });
       }, 100);
@@ -190,7 +194,7 @@ export function AddReflectionModal({
 
   // Keep cursor visible as user types in Description (Step 2)
   const handleDescriptionContentSizeChange = () => {
-    if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
+    if (keyboardHeight > 0 && scrollViewRef.current) {
       console.log('Description content size changed, scrolling to keep visible');
       setTimeout(() => {
         scrollViewRef.current?.scrollTo({ y: 260, animated: true });
@@ -201,22 +205,21 @@ export function AddReflectionModal({
   // Auto-scroll to keep Additional Thoughts input visible when focused (Step 4)
   const handleAdditionalThoughtsFocus = () => {
     console.log('Additional thoughts input focused on Step 4');
-    if (Platform.OS === 'ios' && scrollViewRef.current) {
-      // Scroll to position the Notes text box above the keyboard
-      // Account for: Gains section (~100px) + Losses section (~100px) + Was it worth it section (~150px) + Notes label (~40px)
+    if (scrollViewRef.current) {
+      // Scroll to position the Notes text box well above the keyboard
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 400, animated: true });
-      }, 100);
+        scrollViewRef.current?.scrollTo({ y: 500, animated: true });
+      }, 150);
     }
   };
 
   // Keep cursor visible as user types in Additional Thoughts (Step 4)
   const handleAdditionalThoughtsContentSizeChange = () => {
-    if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
+    if (keyboardHeight > 0 && scrollViewRef.current) {
       console.log('Additional thoughts content size changed, maintaining scroll position');
       // Keep the scroll position stable so the text box stays visible
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 400, animated: false });
+        scrollViewRef.current?.scrollTo({ y: 500, animated: false });
       }, 50);
     }
   };
@@ -535,9 +538,26 @@ export function AddReflectionModal({
   };
 
   const setStrategyWorked = (strategyId: string, worked: boolean) => {
-    setStrategyEffectiveness(strategyEffectiveness.map(se => 
-      se.strategyId === strategyId ? { ...se, worked } : se
-    ));
+    console.log('Setting strategy worked:', strategyId, worked);
+    
+    // Show the "Worth It or Not Worth It" popup
+    setPendingStrategyId(strategyId);
+    setShowStrategyWorthItModal(true);
+  };
+
+  const handleStrategyWorthItChoice = (worthIt: boolean) => {
+    console.log('User chose worth it:', worthIt, 'for strategy:', pendingStrategyId);
+    
+    if (pendingStrategyId) {
+      // Update the strategy effectiveness with the user's choice
+      setStrategyEffectiveness(strategyEffectiveness.map(se => 
+        se.strategyId === pendingStrategyId ? { ...se, worked: worthIt } : se
+      ));
+    }
+    
+    // Close the modal
+    setShowStrategyWorthItModal(false);
+    setPendingStrategyId(null);
   };
 
   const modalTitle = editingReflection ? 'Edit Reflection' : 'Add Reflection';
@@ -546,13 +566,15 @@ export function AddReflectionModal({
 
   // Calculate bottom padding for ScrollView to ensure content is above the Next button
   const NEXT_BUTTON_HEIGHT = 70;
-  const scrollViewBottomPadding = Platform.OS === 'ios' && keyboardHeight > 0 
+  const scrollViewBottomPadding = keyboardHeight > 0 
     ? keyboardHeight + NEXT_BUTTON_HEIGHT + 20
     : NEXT_BUTTON_HEIGHT + 20;
 
   // Get screen dimensions for responsive icon sizing
   const screenWidth = Dimensions.get('window').width;
   const categoryIconSize = Math.min(screenWidth * 0.15, 80); // 15% of screen width, max 80
+
+  const pendingStrategy = strategies.find(s => s.id === pendingStrategyId);
 
   return (
     <Modal
@@ -1107,7 +1129,7 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 5: Strategies - No default selection */}
+            {/* STEP 5: Strategies - No default selection, popup for worth it */}
             {step === 5 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
@@ -1305,6 +1327,51 @@ export function AddReflectionModal({
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Strategy Worth It Modal */}
+      <Modal
+        visible={showStrategyWorthItModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStrategyWorthItModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.worthItModal}>
+            <Text style={styles.worthItModalTitle}>
+              {pendingStrategy?.name}
+            </Text>
+            <Text style={styles.worthItModalSubtitle}>
+              Was this strategy worth it?
+            </Text>
+            <View style={styles.worthItModalButtons}>
+              <TouchableOpacity
+                style={[styles.worthItModalButton, styles.worthItModalButtonYes]}
+                onPress={() => handleStrategyWorthItChoice(true)}
+              >
+                <IconSymbol
+                  ios_icon_name="hand.thumbsup.fill"
+                  android_material_icon_name="thumb-up"
+                  size={32}
+                  color={colors.background}
+                />
+                <Text style={styles.worthItModalButtonText}>Worth It</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.worthItModalButton, styles.worthItModalButtonNo]}
+                onPress={() => handleStrategyWorthItChoice(false)}
+              >
+                <IconSymbol
+                  ios_icon_name="hand.thumbsdown.fill"
+                  android_material_icon_name="thumb-down"
+                  size={32}
+                  color={colors.background}
+                />
+                <Text style={styles.worthItModalButtonText}>Not Worth It</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showCreateGainModal}
@@ -2010,5 +2077,51 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 15,
     fontWeight: '600',
+  },
+  worthItModal: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    padding: 24,
+    margin: 20,
+    alignItems: 'center',
+  },
+  worthItModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  worthItModalSubtitle: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  worthItModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  worthItModalButton: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+  },
+  worthItModalButtonYes: {
+    backgroundColor: colors.success,
+  },
+  worthItModalButtonNo: {
+    backgroundColor: colors.error,
+  },
+  worthItModalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.background,
   },
 });
