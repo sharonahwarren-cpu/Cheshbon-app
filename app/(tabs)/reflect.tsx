@@ -253,14 +253,29 @@ export default function ReflectScreen() {
       setLoading(true);
       const dateString = selectedDate.toISOString().split('T')[0];
       
-      const savedEntry = await authenticatedPost('/api/journals/by-date', {
+      const response = await authenticatedPost('/api/journals/by-date', {
         date: dateString,
         content: tempJournalContent,
       });
 
-      setJournalEntry(savedEntry?.data || savedEntry);
-      setJournalContent(tempJournalContent);
-      showSuccess('Journal saved successfully');
+      const savedEntry = response?.data || response;
+      
+      if (savedEntry && savedEntry.deleted) {
+        console.log('Journal entry deleted (content was empty)');
+        setJournalEntry(null);
+        setJournalContent('');
+        showSuccess('Journal entry deleted');
+      } else if (savedEntry) {
+        console.log('Journal entry saved');
+        setJournalEntry(savedEntry);
+        setJournalContent(tempJournalContent);
+        showSuccess('Journal saved successfully');
+      } else {
+        console.log('No journal entry (content was empty and no existing entry)');
+        setJournalEntry(null);
+        setJournalContent('');
+      }
+      
       setShowJournalModal(false);
       setTempJournalContent('');
     } catch (error) {
