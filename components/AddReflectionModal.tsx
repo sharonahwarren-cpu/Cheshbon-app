@@ -320,6 +320,12 @@ export function AddReflectionModal({
   };
 
   const handleNext = () => {
+    // CRITICAL: When behaviors are enabled, category is MANDATORY in step 1
+    if (step === 1 && categoriesEnabled && !category) {
+      alert('Please select a category');
+      return;
+    }
+    
     if (step === 1 && !description.trim()) {
       alert('Please enter a description');
       return;
@@ -342,6 +348,12 @@ export function AddReflectionModal({
   };
 
   const handleSave = async () => {
+    // CRITICAL: When behaviors are enabled, category is MANDATORY
+    if (categoriesEnabled && !category) {
+      alert('Please select a category');
+      return;
+    }
+    
     if (!description.trim()) {
       alert('Please enter a description');
       return;
@@ -554,7 +566,8 @@ export function AddReflectionModal({
                         size={18}
                         color={colors.primary}
                       />
-                      <Text style={styles.label}>Category (Optional)</Text>
+                      <Text style={styles.label}>Category</Text>
+                      <Text style={styles.required}> *</Text>
                     </View>
                     <View style={styles.optionsGrid}>
                       {availableCategories.map((cat, index) => {
@@ -565,7 +578,7 @@ export function AddReflectionModal({
                           <React.Fragment key={index}>
                             <TouchableOpacity
                               style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                              onPress={() => setCategory(isSelected ? undefined : cat)}
+                              onPress={() => setCategory(cat)}
                             >
                               <IconSymbol
                                 ios_icon_name={categoryIcon.ios}
@@ -1450,6 +1463,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.text,
+  },
+  required: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.error,
   },
   helperText: {
     fontSize: 13,
