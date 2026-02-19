@@ -319,8 +319,24 @@ export function AddReflectionModal({
     return 'Describe your reflection';
   };
 
+  // Auto-advance to Step 2 when category is selected in Step 1
+  const handleCategorySelect = (selectedCategory: string) => {
+    console.log('Category selected:', selectedCategory);
+    setCategory(selectedCategory);
+    
+    // Auto-advance to Step 2 after a brief delay
+    setTimeout(() => {
+      console.log('Auto-advancing to Step 2');
+      Keyboard.dismiss();
+      setStep(2);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }, 100);
+    }, 300);
+  };
+
   const handleNext = () => {
-    // Step 1: Category validation (when enabled)
+    // Step 1: Category validation (when enabled) - should not be needed now with auto-advance
     if (step === 1 && categoriesEnabled && !category) {
       alert('Please select a category');
       return;
@@ -513,6 +529,7 @@ export function AddReflectionModal({
     if (existing) {
       setStrategyEffectiveness(strategyEffectiveness.filter(se => se.strategyId !== strategyId));
     } else {
+      // Don't set a default value - user must explicitly choose
       setStrategyEffectiveness([...strategyEffectiveness, { strategyId, worked: true }]);
     }
   };
@@ -581,7 +598,7 @@ export function AddReflectionModal({
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
           >
-            {/* STEP 1: Category Selection */}
+            {/* STEP 1: Category Selection - Auto-advances when selected */}
             {step === 1 && (
               <React.Fragment>
                 {categoriesEnabled && (
@@ -608,7 +625,7 @@ export function AddReflectionModal({
                           <React.Fragment key={index}>
                             <TouchableOpacity
                               style={[styles.categoryCard, isSelected && styles.categoryCardSelected]}
-                              onPress={() => setCategory(cat)}
+                              onPress={() => handleCategorySelect(cat)}
                             >
                               <View style={[styles.categoryIconContainer, isSelected && styles.categoryIconContainerSelected]}>
                                 <IconSymbol
@@ -708,7 +725,7 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 3: Link to a Goal */}
+            {/* STEP 3: Link to a Goal - Improved selected outcome visibility */}
             {step === 3 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
@@ -812,7 +829,10 @@ export function AddReflectionModal({
                         return (
                           <React.Fragment key={index}>
                             <TouchableOpacity
-                              style={[styles.outcomeButton, isSelected && (o === 'success' ? styles.outcomeButtonSuccess : styles.outcomeButtonStruggled)]}
+                              style={[
+                                styles.outcomeButton, 
+                                isSelected && (o === 'success' ? styles.outcomeButtonSuccessSelected : styles.outcomeButtonStruggledSelected)
+                              ]}
                               onPress={() => setOutcome(o)}
                             >
                               <IconSymbol
@@ -863,7 +883,7 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 4: Gains, Losses, Was it worth it */}
+            {/* STEP 4: Gains, Losses, Was it worth it - Side-by-side icons, red NO icon, "Notes" header */}
             {step === 4 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
@@ -1028,32 +1048,35 @@ export function AddReflectionModal({
                     />
                     <Text style={styles.label}>Was it worth it?</Text>
                   </View>
-                  <View style={styles.optionsColumn}>
-                    {[
-                      { label: 'Yes, worth it', value: true, icon: { ios: 'hand.thumbsup.fill', android: 'thumb-up' } },
-                      { label: 'No, not worth it', value: false, icon: { ios: 'hand.thumbsdown.fill', android: 'thumb-down' } },
-                    ].map((option, index) => {
-                      const isSelected = wasWorthIt === option.value;
-                      
-                      return (
-                        <React.Fragment key={index}>
-                          <TouchableOpacity
-                            style={[styles.optionButtonLarge, isSelected && styles.optionButtonSelected]}
-                            onPress={() => setWasWorthIt(option.value)}
-                          >
-                            <IconSymbol
-                              ios_icon_name={option.icon.ios}
-                              android_material_icon_name={option.icon.android}
-                              size={20}
-                              color={isSelected ? colors.background : colors.primary}
-                            />
-                            <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        </React.Fragment>
-                      );
-                    })}
+                  <View style={styles.worthItRow}>
+                    <TouchableOpacity
+                      style={[styles.worthItBox, wasWorthIt === true && styles.worthItBoxYesSelected]}
+                      onPress={() => setWasWorthIt(true)}
+                    >
+                      <IconSymbol
+                        ios_icon_name="hand.thumbsup.fill"
+                        android_material_icon_name="thumb-up"
+                        size={32}
+                        color={wasWorthIt === true ? colors.background : colors.success}
+                      />
+                      <Text style={[styles.worthItText, wasWorthIt === true && styles.worthItTextSelected]}>
+                        Yes
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.worthItBox, wasWorthIt === false && styles.worthItBoxNoSelected]}
+                      onPress={() => setWasWorthIt(false)}
+                    >
+                      <IconSymbol
+                        ios_icon_name="hand.thumbsdown.fill"
+                        android_material_icon_name="thumb-down"
+                        size={32}
+                        color={wasWorthIt === false ? colors.background : colors.error}
+                      />
+                      <Text style={[styles.worthItText, wasWorthIt === false && styles.worthItTextSelected]}>
+                        No
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
 
@@ -1065,7 +1088,7 @@ export function AddReflectionModal({
                       size={18}
                       color={colors.primary}
                     />
-                    <Text style={styles.label}>Notes on weighing up gains and losses (Optional)</Text>
+                    <Text style={styles.label}>Notes</Text>
                   </View>
                   <TextInput
                     ref={additionalThoughtsInputRef}
@@ -1084,7 +1107,7 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 5: Strategies */}
+            {/* STEP 5: Strategies - No default selection */}
             {step === 5 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
@@ -1196,7 +1219,7 @@ export function AddReflectionModal({
                               <TouchableOpacity
                                 style={[
                                   styles.strategyEffectivenessButton,
-                                  se.worked && styles.strategyEffectivenessButtonWorked
+                                  se.worked === true && styles.strategyEffectivenessButtonWorked
                                 ]}
                                 onPress={() => setStrategyWorked(se.strategyId, true)}
                               >
@@ -1204,11 +1227,11 @@ export function AddReflectionModal({
                                   ios_icon_name="checkmark.circle.fill"
                                   android_material_icon_name="check-circle"
                                   size={20}
-                                  color={se.worked ? colors.background : colors.success}
+                                  color={se.worked === true ? colors.background : colors.success}
                                 />
                                 <Text style={[
                                   styles.strategyEffectivenessButtonText,
-                                  se.worked && styles.strategyEffectivenessButtonTextSelected
+                                  se.worked === true && styles.strategyEffectivenessButtonTextSelected
                                 ]}>
                                   Worked
                                 </Text>
@@ -1216,7 +1239,7 @@ export function AddReflectionModal({
                               <TouchableOpacity
                                 style={[
                                   styles.strategyEffectivenessButton,
-                                  !se.worked && styles.strategyEffectivenessButtonDidntWork
+                                  se.worked === false && styles.strategyEffectivenessButtonDidntWork
                                 ]}
                                 onPress={() => setStrategyWorked(se.strategyId, false)}
                               >
@@ -1224,11 +1247,11 @@ export function AddReflectionModal({
                                   ios_icon_name="xmark.circle.fill"
                                   android_material_icon_name="cancel"
                                   size={20}
-                                  color={!se.worked ? colors.background : colors.error}
+                                  color={se.worked === false ? colors.background : colors.error}
                                 />
                                 <Text style={[
                                   styles.strategyEffectivenessButtonText,
-                                  !se.worked && styles.strategyEffectivenessButtonTextSelected
+                                  se.worked === false && styles.strategyEffectivenessButtonTextSelected
                                 ]}>
                                   Didn't work
                                 </Text>
@@ -1674,10 +1697,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
   },
-  outcomeButtonSuccess: {
+  outcomeButtonSuccessSelected: {
+    backgroundColor: colors.success,
     borderColor: colors.success,
   },
-  outcomeButtonStruggled: {
+  outcomeButtonStruggledSelected: {
+    backgroundColor: colors.error,
     borderColor: colors.error,
   },
   outcomeButtonText: {
@@ -1810,6 +1835,39 @@ const styles = StyleSheet.create({
   currencyBalanceDescription: {
     fontSize: 13,
     color: colors.textSecondary,
+  },
+  worthItRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  worthItBox: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  worthItBoxYesSelected: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
+  worthItBoxNoSelected: {
+    backgroundColor: colors.error,
+    borderColor: colors.error,
+  },
+  worthItText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  worthItTextSelected: {
+    color: colors.background,
   },
   strategyListItem: {
     padding: 14,
