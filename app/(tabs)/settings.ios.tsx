@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   Modal,
   ActivityIndicator,
   Switch,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -17,8 +19,10 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator, DragEndParams } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 interface LifeArea {
   id: string;
@@ -122,6 +126,7 @@ export default function SettingsScreen() {
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
+  const [lifeAreasData, setLifeAreasData] = useState<Array<LifeArea & { depth: number }>>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
@@ -164,18 +169,31 @@ export default function SettingsScreen() {
   // Icon picker state (for image upload)
   const [uploadingIcon, setUploadingIcon] = useState(false);
 
+  // Drag state for horizontal gesture detection
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [tempDepthAdjustment, setTempDepthAdjustment] = useState<number>(0);
+  const dragStartX = useRef<number>(0);
+
   useEffect(() => {
+    console.log('[Settings iOS] Component mounted, loading data...');
     loadData();
   }, []);
 
   useEffect(() => {
     if (currentSection === 'reports') {
+      console.log('[Settings iOS] Switched to reports section, loading currency balances...');
       loadCurrencyBalances();
     }
   }, [currentSection]);
 
+  // Update flattened life areas when lifeAreas changes
+  useEffect(() => {
+    const flatAreas = flattenLifeAreas(lifeAreas);
+    setLifeAreasData(flatAreas);
+  }, [lifeAreas]);
+
   const loadData = async () => {
-    console.log('Loading settings data...');
+    console.log('[Settings iOS] Loading settings data...');
     setLoading(true);
     try {
       const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes, goalProgressRes] = await Promise.all([
@@ -188,7 +206,7 @@ export default function SettingsScreen() {
         authenticatedGet('/api/reports/goal-progress'),
       ]);
 
-      console.log('Settings data loaded successfully');
+      console.log('[Settings iOS] Settings data loaded successfully');
       
       const goalsData = Array.isArray(goalsRes) 
         ? goalsRes 
@@ -242,14 +260,13 @@ export default function SettingsScreen() {
       console.log('[Settings iOS] Life areas loaded:', lifeAreasData);
       
       setGoals(goalsWithBalances);
-      // Life Areas API now returns nested structure with goals and success percentages
       setLifeAreas(lifeAreasData);
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setPreferences(prefsData);
     } catch (error) {
-      console.error('Error loading settings data:', error);
+      console.error('[Settings iOS] Error loading settings data:', error);
       showError('Failed to load settings data');
     } finally {
       setLoading(false);
@@ -257,7 +274,7 @@ export default function SettingsScreen() {
   };
 
   const loadCurrencyBalances = async () => {
-    console.log('Loading currency balances and reflection tallies...');
+    console.log('[Settings iOS] Loading currency balances and reflection tallies...');
     try {
       const [balancesRes, talliesRes] = await Promise.all([
         authenticatedGet('/api/reports/currency-balances'),
@@ -270,7 +287,7 @@ export default function SettingsScreen() {
       setCurrencyBalances(balancesData);
       setWorthItTallies(talliesData);
     } catch (error) {
-      console.error('Error loading reports data:', error);
+      console.error('[Settings iOS] Error loading reports data:', error);
       showError('Failed to load reports data');
     }
   };
@@ -287,7 +304,6 @@ export default function SettingsScreen() {
 
   const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
     if (type === 'lifeArea') {
-      // Navigate to the new Life Area wizard screen
       console.log('[Settings iOS] Opening Life Area wizard');
       router.push('/life-area-wizard');
       return;
@@ -326,7 +342,6 @@ export default function SettingsScreen() {
 
   const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', item: any) => {
     if (type === 'lifeArea') {
-      // Navigate to the Life Area wizard screen with edit mode
       console.log('[Settings iOS] Opening Life Area wizard for editing:', item.id);
       router.push(`/life-area-wizard?id=${item.id}`);
       return;
@@ -339,7 +354,10 @@ export default function SettingsScreen() {
   };
 
   const handleSaveItem = async () => {
-    if (!modalType) return;
+    if (!modalType) {
+      console.log('[Settings iOS] No modal type set, cannot save');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -394,7 +412,7 @@ export default function SettingsScreen() {
       setShowModal(false);
       await loadData();
     } catch (error) {
-      console.error('Error saving item:', error);
+      console.error('[Settings iOS] Error saving item:', error);
       showError('Failed to save item');
     } finally {
       setLoading(false);
@@ -427,7 +445,7 @@ export default function SettingsScreen() {
 
       await loadData();
     } catch (error) {
-      console.error('Error deleting item:', error);
+      console.error('[Settings iOS] Error deleting item:', error);
       showError('Failed to delete item');
     } finally {
       setLoading(false);
@@ -441,7 +459,7 @@ export default function SettingsScreen() {
       showSuccess('Goal deleted successfully');
       await loadData();
     } catch (error) {
-      console.error('Error deleting goal:', error);
+      console.error('[Settings iOS] Error deleting goal:', error);
       showError('Failed to delete goal');
     } finally {
       setLoading(false);
@@ -451,12 +469,12 @@ export default function SettingsScreen() {
   const handleDeactivateGoal = async (id: string) => {
     try {
       setLoading(true);
-      console.log(`[API] Toggling goal status for goal ${id}`);
+      console.log(`[Settings iOS] Toggling goal status for goal ${id}`);
       await authenticatedPost(`/api/goals/${id}/deactivate`, {});
       showSuccess('Goal status updated successfully');
       await loadData();
     } catch (error: any) {
-      console.error('[API] Error toggling goal status:', error);
+      console.error('[Settings iOS] Error toggling goal status:', error);
       showError(error.message || 'Failed to update goal status');
     } finally {
       setLoading(false);
@@ -469,7 +487,7 @@ export default function SettingsScreen() {
       await authenticatedPut('/api/user-preferences', preferences);
       showSuccess('Preferences saved successfully');
     } catch (error) {
-      console.error('Error saving preferences:', error);
+      console.error('[Settings iOS] Error saving preferences:', error);
       showError('Failed to save preferences');
     } finally {
       setLoading(false);
@@ -481,7 +499,8 @@ export default function SettingsScreen() {
     const hour = parseInt(hours);
     const ampm = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour % 12 || 12;
-    return `${displayHour}:${minutes} ${ampm}`;
+    const displayHourText = displayHour.toString();
+    return `${displayHourText}:${minutes} ${ampm}`;
   };
 
   const onTimeChange = (event: any, selectedDate?: Date) => {
@@ -557,11 +576,11 @@ export default function SettingsScreen() {
       }
 
       if (currencyModalType === 'claim') {
-        console.log(`[API] Claiming ${amount} of currency ${selectedCurrencyId}`);
+        console.log(`[Settings iOS] Claiming ${amount} of currency ${selectedCurrencyId}`);
         await authenticatedPost(`/api/currencies/${selectedCurrencyId}/claim`, { amount });
         showSuccess(`Claimed ${amount} successfully`);
       } else {
-        console.log(`[API] Paying ${amount} of currency ${selectedCurrencyId}`);
+        console.log(`[Settings iOS] Paying ${amount} of currency ${selectedCurrencyId}`);
         await authenticatedPost(`/api/currencies/${selectedCurrencyId}/pay`, { amount });
         showSuccess(`Paid ${amount} successfully`);
       }
@@ -572,7 +591,7 @@ export default function SettingsScreen() {
         await loadCurrencyBalances();
       }
     } catch (error: any) {
-      console.error('[API] Error with currency action:', error);
+      console.error('[Settings iOS] Error with currency action:', error);
       showError(error.message || 'Failed to process currency action');
     } finally {
       setLoading(false);
@@ -582,15 +601,16 @@ export default function SettingsScreen() {
   const getCurrencyActionText = (currency: Currency, isSuccess: boolean): string => {
     const action = isSuccess ? currency.onSuccess : currency.onFailure;
     if (action === 'ADD') {
-      return isSuccess ? 'Gain' : 'Increase Debt';
+      const actionText = isSuccess ? 'Gain' : 'Increase Debt';
+      return actionText;
     } else if (action === 'SUBTRACT') {
-      return isSuccess ? 'Reduce Debt' : 'Lose';
+      const actionText = isSuccess ? 'Reduce Debt' : 'Lose';
+      return actionText;
     } else {
       return 'No Change';
     }
   };
 
-  // Determine if a currency is a reward type (onSuccess = ADD) or consequence type (onFailure = ADD)
   const isRewardCurrency = (currency: Currency): boolean => {
     return currency.onSuccess === 'ADD';
   };
@@ -599,7 +619,6 @@ export default function SettingsScreen() {
     return currency.onFailure === 'ADD';
   };
 
-  // Sort goals: Active first (alphabetically), then Deactivated (alphabetically)
   const sortedGoals = useMemo(() => {
     const activeGoals = goals.filter(g => g.status === 'ACTIVE');
     const deactivatedGoals = goals.filter(g => g.status === 'DEACTIVATED');
@@ -621,133 +640,188 @@ export default function SettingsScreen() {
     return result;
   };
 
-  const handleReorderLifeAreas = async ({ data }: { data: Array<LifeArea & { depth: number }> }) => {
-    console.log('[Settings iOS] Reordering life areas with drag-and-drop nesting...');
+  const handleReorderLifeAreas = async (params: DragEndParams<LifeArea & { depth: number }>) => {
+    const { data, from, to } = params;
     
-    // Guard clause: ensure data is valid
+    console.log('[Settings iOS] Drag-and-drop reorder:', { from, to, itemsCount: data.length });
+    
     if (!data || !Array.isArray(data) || data.length === 0) {
       console.error('[Settings iOS] Invalid data for reordering:', data);
       showError('Invalid data for reordering');
       return;
     }
     
+    // Apply any temporary depth adjustments from horizontal gestures
+    let finalData = data;
+    if (draggedItemId && tempDepthAdjustment !== 0) {
+      console.log('[Settings iOS] Applying depth adjustment:', tempDepthAdjustment, 'to item:', draggedItemId);
+      finalData = data.map(item => {
+        if (item.id === draggedItemId) {
+          const newDepth = Math.max(0, Math.min(3, item.depth + tempDepthAdjustment));
+          console.log('[Settings iOS] Item depth changed from', item.depth, 'to', newDepth);
+          return { ...item, depth: newDepth };
+        }
+        return item;
+      });
+    }
+    
+    // Reset drag state
+    setDraggedItemId(null);
+    setTempDepthAdjustment(0);
+    
+    // Optimistically update UI
+    setLifeAreasData(finalData);
+    
     try {
-      // Build updates array with parentId and displayOrder based on depth changes
+      // Reconstruct parentId and displayOrder from the flat list
       const updates: Array<{ id: string; parentId: string | null; displayOrder: number }> = [];
+      const parentStack: Array<{ id: string; depth: number }> = [];
       
-      for (let i = 0; i < data.length; i++) {
-        const currentArea = data[i];
-        const prevArea = i > 0 ? data[i - 1] : null;
+      for (let i = 0; i < finalData.length; i++) {
+        const currentItem = finalData[i];
         
-        let newParentId: string | null = null;
-        
-        // Determine parent based on depth relative to neighbors
-        if (currentArea.depth > 0 && prevArea) {
-          if (currentArea.depth > prevArea.depth) {
-            // This area is a child of the previous area
-            newParentId = prevArea.id;
-          } else if (currentArea.depth === prevArea.depth) {
-            // Same level as previous area, share the same parent
-            newParentId = prevArea.parentId || null;
-          } else {
-            // Less depth than previous, need to find the correct parent by going up
-            // Find the closest ancestor at depth - 1
-            for (let j = i - 1; j >= 0; j--) {
-              if (data[j].depth === currentArea.depth - 1) {
-                newParentId = data[j].id;
-                break;
-              } else if (data[j].depth < currentArea.depth - 1) {
-                // No direct parent found at depth - 1, use null (top level)
-                newParentId = null;
-                break;
-              }
-            }
-          }
+        // Adjust parent stack based on current item's depth
+        while (parentStack.length > 0 && parentStack[parentStack.length - 1].depth >= currentItem.depth) {
+          parentStack.pop();
         }
         
+        // Determine parent ID
+        const parentId = parentStack.length > 0 ? parentStack[parentStack.length - 1].id : null;
+        
         updates.push({
-          id: currentArea.id,
-          parentId: newParentId,
+          id: currentItem.id,
+          parentId,
           displayOrder: i,
         });
+        
+        // If next item has greater depth, this item is a parent
+        if (i + 1 < finalData.length && finalData[i + 1].depth > currentItem.depth) {
+          parentStack.push({ id: currentItem.id, depth: currentItem.depth });
+        }
       }
       
       console.log('[Settings iOS] Sending updates to backend:', updates);
       
-      // Send updates to backend
       await authenticatedPut('/api/life-areas/reorder', { updates });
       console.log('[Settings iOS] Life areas reordered successfully');
       
-      // Reload data to get the updated structure
       await loadData();
-      showSuccess('Life areas reordered successfully');
     } catch (error: any) {
       console.error('[Settings iOS] Error reordering life areas:', error);
       showError(error.message || 'Failed to reorder life areas');
-      // Reload data to revert to previous state
       await loadData();
     }
   };
 
-  const renderLifeAreas = () => {
-    const flatAreas = flattenLifeAreas(lifeAreas);
+  const handlePanGesture = (event: any, itemId: string, currentDepth: number) => {
+    const { nativeEvent } = event;
+    
+    if (nativeEvent.state === State.BEGAN) {
+      console.log('[Settings iOS] Pan gesture began for item:', itemId);
+      setDraggedItemId(itemId);
+      dragStartX.current = nativeEvent.x;
+      setTempDepthAdjustment(0);
+    } else if (nativeEvent.state === State.ACTIVE) {
+      const deltaX = nativeEvent.translationX;
+      const INDENT_THRESHOLD = 30;
+      
+      // Calculate depth adjustment based on horizontal movement
+      const depthChange = Math.floor(deltaX / INDENT_THRESHOLD);
+      
+      // Clamp depth to valid range (0-3)
+      const newDepth = Math.max(0, Math.min(3, currentDepth + depthChange));
+      const actualDepthChange = newDepth - currentDepth;
+      
+      if (actualDepthChange !== tempDepthAdjustment) {
+        console.log('[Settings iOS] Depth adjustment changed:', actualDepthChange);
+        setTempDepthAdjustment(actualDepthChange);
+      }
+    } else if (nativeEvent.state === State.END || nativeEvent.state === State.CANCELLED) {
+      console.log('[Settings iOS] Pan gesture ended/cancelled');
+    }
+  };
 
+  const renderLifeAreas = () => {
     const renderLifeAreaItem = ({ item, drag, isActive }: RenderItemParams<LifeArea & { depth: number }>) => {
       const iconName = item.icon;
       const areaColor = item.color || colors.primary;
       
+      // Calculate visual depth (current depth + temporary adjustment)
+      const visualDepth = draggedItemId === item.id 
+        ? Math.max(0, Math.min(3, item.depth + tempDepthAdjustment))
+        : item.depth;
+      
+      const marginLeftValue = visualDepth * 20;
+      
+      // When dragging, allow the card to extend beyond normal padding
+      const cardStyle = isActive ? {
+        position: 'absolute' as const,
+        left: marginLeftValue - 20, // Offset by container padding to allow full horizontal movement
+        right: -20, // Extend beyond right padding
+        zIndex: 1000,
+      } : {
+        marginLeft: marginLeftValue,
+      };
+      
       return (
         <ScaleDecorator>
-          <View
-            style={[
-              styles.lifeAreaCardCompact,
-              { marginLeft: item.depth * 20, borderLeftColor: areaColor },
-              isActive && styles.lifeAreaCardActive,
-            ]}
+          <PanGestureHandler
+            onHandlerStateChange={(event) => handlePanGesture(event, item.id, item.depth)}
+            onGestureEvent={(event) => handlePanGesture(event, item.id, item.depth)}
+            enabled={isActive}
           >
-            <View style={styles.lifeAreaCompactContent}>
-              <View style={styles.lifeAreaCompactLeft}>
-                <TouchableOpacity onLongPress={drag} disabled={isActive} style={styles.dragHandle}>
-                  <IconSymbol
-                    ios_icon_name="line.3.horizontal"
-                    android_material_icon_name="drag-handle"
-                    size={20}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-                {iconName ? (
-                  <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
-                ) : (
-                  <View style={styles.iconPlaceholder} />
-                )}
-                <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
-              </View>
-              <View style={styles.lifeAreaCompactActions}>
-                <TouchableOpacity
-                  onPress={() => openEditModal('lifeArea', item)}
-                  style={styles.iconButtonCompact}
-                >
-                  <IconSymbol
-                    ios_icon_name="pencil"
-                    android_material_icon_name="edit"
-                    size={16}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => handleDeleteItem('lifeArea', item.id)}
-                  style={styles.iconButtonCompact}
-                >
-                  <IconSymbol
-                    ios_icon_name="trash"
-                    android_material_icon_name="delete"
-                    size={16}
-                    color={colors.error}
-                  />
-                </TouchableOpacity>
+            <View
+              style={[
+                styles.lifeAreaCardCompact,
+                { borderLeftColor: areaColor },
+                cardStyle,
+                isActive && styles.lifeAreaCardActive,
+              ]}
+            >
+              <View style={styles.lifeAreaCompactContent}>
+                <View style={styles.lifeAreaCompactLeft}>
+                  <TouchableOpacity onLongPress={drag} disabled={isActive} style={styles.dragHandle}>
+                    <IconSymbol
+                      ios_icon_name="line.3.horizontal"
+                      android_material_icon_name="drag-handle"
+                      size={24}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                  {iconName ? (
+                    <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
+                  ) : (
+                    <View style={styles.iconPlaceholder} />
+                  )}
+                  <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
+                </View>
+                <View style={styles.lifeAreaCompactActions}>
+                  <TouchableOpacity
+                    onPress={() => openEditModal('lifeArea', item)}
+                    style={styles.iconButtonCompact}
+                  >
+                    <IconSymbol
+                      ios_icon_name="pencil"
+                      android_material_icon_name="edit"
+                      size={16}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteItem('lifeArea', item.id)}
+                    style={styles.iconButtonCompact}
+                  >
+                    <IconSymbol
+                      ios_icon_name="trash"
+                      android_material_icon_name="delete"
+                      size={16}
+                      color={colors.error}
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
+          </PanGestureHandler>
         </ScaleDecorator>
       );
     };
@@ -774,16 +848,16 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Long press and drag to reorder. Drop on another item to make it a child, or adjust indentation by dragging left/right.
+          Long press the ≡ handle and drag vertically to reorder. While dragging, swipe left/right to change nesting level.
         </Text>
-        {flatAreas.length === 0 ? (
+        {lifeAreasData.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
           </View>
         ) : (
           <GestureHandlerRootView style={styles.listContainer}>
             <DraggableFlatList
-              data={flatAreas}
+              data={lifeAreasData}
               onDragEnd={handleReorderLifeAreas}
               keyExtractor={(item) => item.id}
               renderItem={renderLifeAreaItem}
@@ -1137,7 +1211,8 @@ export default function SettingsScreen() {
                     scheduleText += ` - ${alarm.dayOfWeek}`;
                   }
                   if (alarm.dayOfMonth) {
-                    scheduleText += ` - Day ${alarm.dayOfMonth}`;
+                    const dayText = `Day ${alarm.dayOfMonth}`;
+                    scheduleText += ` - ${dayText}`;
                   }
                   
                   return (
@@ -1305,7 +1380,6 @@ export default function SettingsScreen() {
               const struggleCount = goal.struggleCount || 0;
               const isDeactivated = goal.status === 'DEACTIVATED';
               
-              // Display per-goal currency balance (not total)
               let displayCurrencyId = null;
               let displayCurrencyBalance = 0;
               let displayCurrencySymbol = '';
@@ -1404,7 +1478,6 @@ export default function SettingsScreen() {
                       <Text style={styles.listItemSubtitle}>{goal.description}</Text>
                     )}
                     
-                    {/* Success/Struggle counts with icons */}
                     <View style={styles.goalStats}>
                       <View style={styles.goalStatItem}>
                         <IconSymbol
@@ -1430,7 +1503,6 @@ export default function SettingsScreen() {
                       </View>
                     </View>
                     
-                    {/* Per-goal currency balance (not total) */}
                     {displayCurrencyId && (
                       <View style={styles.currencyBalances}>
                         <View style={styles.currencyBalanceRow}>
@@ -1468,6 +1540,7 @@ export default function SettingsScreen() {
     const worthItPercentage = worthItTallies && worthItTallies.total > 0 
       ? Math.round((worthItTallies.worthIt / worthItTallies.total) * 100)
       : 0;
+    const notWorthItPercentage = 100 - worthItPercentage;
 
     return (
       <View style={styles.container}>
@@ -1497,7 +1570,7 @@ export default function SettingsScreen() {
                     Worth It: {worthItTallies.worthIt} ({worthItPercentage}%)
                   </Text>
                   <Text style={[styles.reportStat, { color: colors.error }]}>
-                    Not Worth It: {worthItTallies.notWorthIt} ({100 - worthItPercentage}%)
+                    Not Worth It: {worthItTallies.notWorthIt} ({notWorthItPercentage}%)
                   </Text>
                 </View>
               </View>
@@ -1516,7 +1589,6 @@ export default function SettingsScreen() {
               const totalBalanceColor = balance.totalBalance >= 0 ? colors.success : colors.error;
               const currency = currencies.find(c => c.id === balance.currencyId);
               
-              // Determine button type based on balance and currency type
               let buttonType: 'claim' | 'pay' = 'claim';
               if (balance.totalBalance > 0) {
                 buttonType = (currency && isRewardCurrency(currency)) ? 'claim' : 'pay';
@@ -1524,12 +1596,14 @@ export default function SettingsScreen() {
                 buttonType = (currency && isRewardCurrency(currency)) ? 'pay' : 'claim';
               }
               
+              const absBalance = Math.abs(balance.totalBalance);
+              
               return (
                 <React.Fragment key={index}>
                   <TouchableOpacity 
                     style={styles.reportCard}
                     onPress={() => {
-                      console.log('Navigating to currency reflections for:', balance.currencyId);
+                      console.log('[Settings iOS] Navigating to currency reflections for:', balance.currencyId);
                       router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
                     }}
                   >
@@ -1571,7 +1645,7 @@ export default function SettingsScreen() {
                         }}
                       >
                         <Text style={styles.currencyTotalActionButtonText}>
-                          {buttonType === 'claim' ? 'Claim' : 'Pay'} {Math.abs(balance.totalBalance)} {symbolText}
+                          {buttonType === 'claim' ? 'Claim' : 'Pay'} {absBalance} {symbolText}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -1617,7 +1691,6 @@ export default function SettingsScreen() {
         </>
       )}
 
-      {/* Currency Claim/Pay Modal */}
       <Modal
         visible={showCurrencyModal}
         transparent
@@ -2309,19 +2382,19 @@ const styles = StyleSheet.create({
   },
   lifeAreaCardCompact: {
     backgroundColor: colors.card,
-    padding: 12,
+    padding: 16,
     borderRadius: 8,
     marginBottom: 8,
     borderLeftWidth: 3,
   },
   lifeAreaCardActive: {
     backgroundColor: colors.border,
-    opacity: 0.8,
-    elevation: 5,
+    opacity: 0.9,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
   draggableListContent: {
     paddingBottom: 20,
@@ -2354,7 +2427,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   dragHandle: {
-    padding: 4,
+    padding: 8,
     marginRight: 4,
   },
   currencyTypeText: {
