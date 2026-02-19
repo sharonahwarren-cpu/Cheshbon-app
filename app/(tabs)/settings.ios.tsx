@@ -1260,8 +1260,13 @@ export default function SettingsScreen() {
         </View>
         <ScrollView style={styles.formContainer}>
           <View style={styles.formGroup}>
-            <View style={styles.switchRow}>
-              <Text style={styles.label}>{toggleLabelText}</Text>
+            <View style={styles.reflectionToggleContainer}>
+              <View style={styles.reflectionToggleTextContainer}>
+                <Text style={styles.reflectionToggleLabel}>{toggleLabelText}</Text>
+                <Text style={styles.helperText}>
+                  When enabled, you can categorize reflections and goals as Action, Speech, Thought, or Feeling
+                </Text>
+              </View>
               <Switch
                 value={categoriesEnabled}
                 onValueChange={(value) => {
@@ -1272,9 +1277,6 @@ export default function SettingsScreen() {
                 ios_backgroundColor={toggleColor}
               />
             </View>
-            <Text style={styles.helperText}>
-              When enabled, you can categorize reflections and goals as Action, Speech, Thought, or Feeling
-            </Text>
           </View>
 
           {categoriesEnabled && (
@@ -1964,6 +1966,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  reflectionToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  reflectionToggleTextContainer: {
+    flex: 1,
+  },
+  reflectionToggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
   optionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2279,7 +2296,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 4,
-    marginBottom: 12,
   },
   savePreferencesButton: {
     backgroundColor: colors.primary,
