@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Switch,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
@@ -181,6 +181,14 @@ export default function SettingsScreen() {
       loadCurrencyBalances();
     }
   }, [currentSection]);
+
+  // Reload data when screen comes into focus (e.g., returning from life-area-wizard)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[Settings iOS] Screen focused, reloading data...');
+      loadData();
+    }, [])
+  );
 
   const loadData = async () => {
     console.log('[Settings iOS] Loading settings data...');
