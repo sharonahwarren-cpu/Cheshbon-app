@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Switch,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
@@ -117,6 +117,7 @@ type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currenci
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
   const [loading, setLoading] = useState(false);
   
@@ -787,7 +788,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Long press the ≡ handle and drag to reorder. Drop onto another item to nest it as a child.
+          Long press ≡ and drag vertically to reorder. While dragging, swipe left/right to change nesting level.
         </Text>
         {flatAreas.length === 0 ? (
           <View style={styles.emptyState}>
@@ -800,7 +801,10 @@ export default function SettingsScreen() {
               onDragEnd={handleReorderLifeAreas}
               keyExtractor={(item) => item.id}
               renderItem={renderLifeAreaItem}
-              contentContainerStyle={styles.draggableListContent}
+              contentContainerStyle={[
+                styles.draggableListContent,
+                { paddingBottom: insets.bottom + 80 }
+              ]}
             />
           </GestureHandlerRootView>
         )}
