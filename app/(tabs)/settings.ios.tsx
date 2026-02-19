@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Switch,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -20,6 +21,8 @@ import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDel
 import DateTimePicker from '@react-native-community/datetimepicker';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator, DragEndParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 interface LifeArea {
   id: string;
@@ -719,8 +722,8 @@ export default function SettingsScreen() {
       dragStartX.current = nativeEvent.x;
       setTempDepthAdjustment(0);
     } else if (nativeEvent.state === State.ACTIVE) {
-      const deltaX = nativeEvent.x - dragStartX.current;
-      const INDENT_THRESHOLD = 30; // Reduced from 40 to make it more responsive
+      const deltaX = nativeEvent.translationX;
+      const INDENT_THRESHOLD = 30;
       
       // Calculate depth adjustment based on horizontal movement
       const depthChange = Math.floor(deltaX / INDENT_THRESHOLD);
@@ -750,6 +753,16 @@ export default function SettingsScreen() {
       
       const marginLeftValue = visualDepth * 20;
       
+      // When dragging, allow the card to extend beyond normal padding
+      const cardStyle = isActive ? {
+        position: 'absolute' as const,
+        left: marginLeftValue - 20, // Offset by container padding to allow full horizontal movement
+        right: -20, // Extend beyond right padding
+        zIndex: 1000,
+      } : {
+        marginLeft: marginLeftValue,
+      };
+      
       return (
         <ScaleDecorator>
           <PanGestureHandler
@@ -760,7 +773,8 @@ export default function SettingsScreen() {
             <View
               style={[
                 styles.lifeAreaCardCompact,
-                { marginLeft: marginLeftValue, borderLeftColor: areaColor },
+                { borderLeftColor: areaColor },
+                cardStyle,
                 isActive && styles.lifeAreaCardActive,
               ]}
             >
@@ -2375,12 +2389,12 @@ const styles = StyleSheet.create({
   },
   lifeAreaCardActive: {
     backgroundColor: colors.border,
-    opacity: 0.8,
-    elevation: 5,
+    opacity: 0.9,
+    elevation: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
   },
   draggableListContent: {
     paddingBottom: 20,
