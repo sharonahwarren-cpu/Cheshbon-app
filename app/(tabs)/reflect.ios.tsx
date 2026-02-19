@@ -130,25 +130,8 @@ export default function ReflectScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [isJournalFocused, setIsJournalFocused] = useState(false);
-
-  useEffect(() => {
-    const keyboardWillShowListener = Keyboard.addListener('keyboardWillShow', (e) => {
-      console.log('Keyboard showing, height:', e.endCoordinates.height);
-      setKeyboardHeight(e.endCoordinates.height);
-    });
-    const keyboardWillHideListener = Keyboard.addListener('keyboardWillHide', () => {
-      console.log('Keyboard hiding');
-      setKeyboardHeight(0);
-      setIsJournalFocused(false);
-    });
-
-    return () => {
-      keyboardWillShowListener.remove();
-      keyboardWillHideListener.remove();
-    };
-  }, []);
+  const [showJournalModal, setShowJournalModal] = useState(false);
+  const [tempJournalContent, setTempJournalContent] = useState('');
 
   useEffect(() => {
     if (params.date) {
@@ -247,6 +230,18 @@ export default function ReflectScreen() {
     setShowSuccessModal(true);
   };
 
+  const handleOpenJournalModal = () => {
+    console.log('Opening journal modal');
+    setTempJournalContent(journalContent);
+    setShowJournalModal(true);
+  };
+
+  const handleCloseJournalModal = () => {
+    console.log('Closing journal modal without saving');
+    setShowJournalModal(false);
+    setTempJournalContent('');
+  };
+
   const handleSaveJournal = async () => {
     console.log('Saving journal entry...');
     try {
@@ -255,12 +250,14 @@ export default function ReflectScreen() {
       
       const savedEntry = await authenticatedPost('/api/journals/by-date', {
         date: dateString,
-        content: journalContent,
+        content: tempJournalContent,
       });
 
       setJournalEntry(savedEntry?.data || savedEntry);
+      setJournalContent(tempJournalContent);
       showSuccess('Journal saved successfully');
-      Keyboard.dismiss();
+      setShowJournalModal(false);
+      setTempJournalContent('');
     } catch (error) {
       console.error('Error saving journal:', error);
       showError('Failed to save journal entry');
@@ -342,17 +339,13 @@ export default function ReflectScreen() {
     }));
   };
 
-  const handleJournalFocus = () => {
-    console.log('Journal input focused');
-    setIsJournalFocused(true);
-    setTimeout(() => {
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-    }, 100);
-  };
-
-  const handleJournalBlur = () => {
-    console.log('Journal input blurred');
-    setIsJournalFocused(false);
+  const getCategoryIcon = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'cloud.fill', android: 'cloud' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
   };
 
   const dateDisplay = formatDate(selectedDate);
@@ -370,24 +363,14 @@ export default function ReflectScreen() {
     groupedReflections['All'] = reflections;
   }
 
-  const getCategoryIcon = (category: string) => {
-    const categoryLower = category.toLowerCase();
-    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
-    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
-    if (categoryLower === 'thought') return { ios: 'cloud.fill', android: 'cloud' };
-    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
-    return { ios: 'sparkles', android: 'auto-awesome' };
-  };
+  const hasJournalContent = journalContent && journalContent.trim().length > 0;
+  const journalPreview = hasJournalContent ? journalContent.substring(0, 100) + (journalContent.length > 100 ? '...' : '') : '';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <KeyboardAvoidingView 
-        style={styles.container}
-        behavior="padding"
-        keyboardVerticalOffset={0}
-      >
+      <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Reflect</Text>
           <TouchableOpacity onPress={() => router.push('/search-journals')}>
@@ -436,302 +419,344 @@ export default function ReflectScreen() {
         <ScrollView 
           ref={scrollViewRef}
           style={styles.content} 
-          contentContainerStyle={[
-            styles.contentContainer,
-            isJournalFocused && keyboardHeight > 0 && { paddingBottom: keyboardHeight + 20 }
-          ]}
+          contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
         >
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <IconSymbol
-                ios_icon_name="book.fill"
-                android_material_icon_name="menu-book"
-                size={22}
-                color="#4A90E2"
-              />
-              <Text style={styles.sectionTitle}>Daily Journal</Text>
+          <TouchableOpacity 
+            style={styles.journalCard}
+            onPress={handleOpenJournalModal}
+            activeOpacity={0.7}
+          >
+            <View style={styles.journalCardHeader}>
+              <View style={styles.journalCardTitleRow}>
+                <IconSymbol
+                  ios_icon_name="book.fill"
+                  android_material_icon_name="menu-book"
+                  size={28}
+                  color="#4A90E2"
+                />
+                <Text style={styles.journalCardTitle}>Daily Journal</Text>
+              </View>
             </View>
+            
+            {!hasJournalContent ? (
+              <View style={styles.journalPlaceholder}>
+                <IconSymbol
+                  ios_icon_name="book.closed.fill"
+                  android_material_icon_name="menu-book"
+                  size={48}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.journalPlaceholderText}>Tap to write about your day…</Text>
+              </View>
+            ) : (
+              <View style={styles.journalPreviewContainer}>
+                <Text style={styles.journalPreviewText} numberOfLines={3}>
+                  {journalPreview}
+                </Text>
+                {journalEntry && (
+                  <Text style={styles.journalTimestamp}>
+                    Last saved: {new Date(journalEntry.updatedAt).toLocaleString()}
+                  </Text>
+                )}
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionHeaderRow}>
+                <IconSymbol
+                  ios_icon_name="sparkles"
+                  android_material_icon_name="auto-awesome"
+                  size={22}
+                  color="#9B59B6"
+                />
+                <Text style={styles.sectionTitle}>Reflections</Text>
+              </View>
+              <TouchableOpacity onPress={openAddReflectionModal} style={styles.addButton}>
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={28}
+                  color={colors.primary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {reflections.length === 0 ? (
+              <View style={styles.emptyState}>
+                <IconSymbol
+                  ios_icon_name="sparkles"
+                  android_material_icon_name="auto-awesome"
+                  size={48}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.emptyStateText}>
+                  No reflections for this day. Tap + to add one.
+                </Text>
+              </View>
+            ) : (
+              Object.entries(groupedReflections).map(([category, categoryReflections], catIndex) => {
+                if (categoryReflections.length === 0) return null;
+                
+                const categoryIcon = getCategoryIcon(category);
+                const isCollapsed = collapsedCategories[category];
+                
+                return (
+                  <React.Fragment key={catIndex}>
+                    {categoriesEnabled && category !== 'All' && (
+                      <TouchableOpacity 
+                        style={styles.categoryHeader}
+                        onPress={() => toggleCategory(category)}
+                      >
+                        <IconSymbol
+                          ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
+                          android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
+                          size={20}
+                          color={colors.text}
+                        />
+                        <IconSymbol
+                          ios_icon_name={categoryIcon.ios}
+                          android_material_icon_name={categoryIcon.android}
+                          size={20}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.categoryTitle}>{category}</Text>
+                        <View style={styles.categoryBadge}>
+                          <Text style={styles.categoryBadgeText}>{categoryReflections.length}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                    
+                    {!isCollapsed && categoryReflections.map((reflection, index) => {
+                      const typeText = reflection.type;
+                      const outcomeText = reflection.outcome ? 
+                        (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
+                        null;
+                      
+                      return (
+                        <React.Fragment key={index}>
+                          <View style={styles.reflectionCard}>
+                            <View style={styles.reflectionHeader}>
+                              <View style={styles.reflectionBadges}>
+                                <View style={[styles.badge, reflection.type === 'Proactive' ? styles.badgeProactive : styles.badgeRestraint]}>
+                                  <Text style={styles.badgeText}>{typeText}</Text>
+                                </View>
+                                {reflection.outcome && (
+                                  <View style={[styles.badge, reflection.outcome === 'success' ? styles.badgeSuccess : styles.badgeStruggle]}>
+                                    <Text style={styles.badgeText}>{outcomeText}</Text>
+                                  </View>
+                                )}
+                              </View>
+                              <View style={styles.reflectionActions}>
+                                <TouchableOpacity
+                                  onPress={() => openEditReflectionModal(reflection)}
+                                  style={styles.iconButton}
+                                >
+                                  <IconSymbol
+                                    ios_icon_name="pencil"
+                                    android_material_icon_name="edit"
+                                    size={20}
+                                    color={colors.primary}
+                                  />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => handleDeleteReflection(reflection.id)}
+                                  style={styles.iconButton}
+                                >
+                                  <IconSymbol
+                                    ios_icon_name="trash"
+                                    android_material_icon_name="delete"
+                                    size={20}
+                                    color={colors.error}
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+
+                            <Text style={styles.reflectionDescription}>{reflection.description}</Text>
+
+                            {reflection.linkedGoalId && (
+                              <View style={styles.linkedGoalSection}>
+                                <View style={styles.linkedGoalHeader}>
+                                  <IconSymbol
+                                    ios_icon_name="target"
+                                    android_material_icon_name="flag"
+                                    size={16}
+                                    color={colors.primary}
+                                  />
+                                  <Text style={styles.linkedGoalLabel}>Linked Goal</Text>
+                                </View>
+                                <Text style={styles.linkedGoalTitle}>
+                                  {reflection.linkedGoalTitle || goals.find(g => g.id === reflection.linkedGoalId)?.title || 'Unknown Goal'}
+                                </Text>
+                              </View>
+                            )}
+
+                            {reflection.currencyChange && (
+                              <View style={styles.currencyChange}>
+                                <Text style={styles.currencyChangeText}>
+                                  {reflection.currencyChange.operation === 'add' ? '+' : '-'}
+                                  {reflection.currencyChange.amount} {reflection.currencyChange.currencySymbol || ''}
+                                </Text>
+                              </View>
+                            )}
+
+                            {(reflection.gainedIds && reflection.gainedIds.length > 0) && (
+                              <View style={styles.gainsLossesSection}>
+                                <View style={styles.gainsLossesHeader}>
+                                  <IconSymbol
+                                    ios_icon_name="arrow.up.circle.fill"
+                                    android_material_icon_name="trending-up"
+                                    size={16}
+                                    color={colors.success}
+                                  />
+                                  <Text style={styles.gainsLossesTitle}>Gained</Text>
+                                </View>
+                                <View style={styles.gainsLossesList}>
+                                  {reflection.gainedIds.map((gainId, idx) => {
+                                    const gain = gainsLosses.find(gl => gl.id === gainId);
+                                    const gainName = gain?.name || 'Unknown';
+                                    return gain ? (
+                                      <View key={idx} style={styles.gainLossBadge}>
+                                        <Text style={styles.gainLossBadgeText}>{gainName}</Text>
+                                      </View>
+                                    ) : null;
+                                  })}
+                                </View>
+                              </View>
+                            )}
+
+                            {(reflection.lostIds && reflection.lostIds.length > 0) && (
+                              <View style={styles.gainsLossesSection}>
+                                <View style={styles.gainsLossesHeader}>
+                                  <IconSymbol
+                                    ios_icon_name="arrow.down.circle.fill"
+                                    android_material_icon_name="trending-down"
+                                    size={16}
+                                    color={colors.error}
+                                  />
+                                  <Text style={styles.gainsLossesTitle}>Lost</Text>
+                                </View>
+                                <View style={styles.gainsLossesList}>
+                                  {reflection.lostIds.map((lossId, idx) => {
+                                    const loss = gainsLosses.find(gl => gl.id === lossId);
+                                    const lossName = loss?.name || 'Unknown';
+                                    return loss ? (
+                                      <View key={idx} style={[styles.gainLossBadge, styles.lossBadge]}>
+                                        <Text style={styles.gainLossBadgeText}>{lossName}</Text>
+                                      </View>
+                                    ) : null;
+                                  })}
+                                </View>
+                              </View>
+                            )}
+
+                            {reflection.wasWorthIt !== undefined && (
+                              <View style={styles.worthItSection}>
+                                <IconSymbol
+                                  ios_icon_name={reflection.wasWorthIt ? "checkmark.circle.fill" : "xmark.circle.fill"}
+                                  android_material_icon_name={reflection.wasWorthIt ? "check-circle" : "cancel"}
+                                  size={16}
+                                  color={reflection.wasWorthIt ? colors.success : colors.error}
+                                />
+                                <Text style={[styles.worthItValue, reflection.wasWorthIt ? styles.worthItYes : styles.worthItNo]}>
+                                  {reflection.wasWorthIt ? 'Worth it' : 'Not worth it'}
+                                </Text>
+                              </View>
+                            )}
+
+                            {reflection.additionalThoughts && (
+                              <View style={styles.additionalThoughtsSection}>
+                                <Text style={styles.additionalThoughtsLabel}>Notes on weighing up gains and losses</Text>
+                                <Text style={styles.additionalThoughtsText}>{reflection.additionalThoughts}</Text>
+                              </View>
+                            )}
+
+                            {(reflection.strategyEffectiveness && reflection.strategyEffectiveness.length > 0) && (
+                              <View style={styles.strategiesSection}>
+                                <View style={styles.strategiesHeader}>
+                                  <IconSymbol
+                                    ios_icon_name="lightbulb.fill"
+                                    android_material_icon_name="lightbulb"
+                                    size={16}
+                                    color={colors.primary}
+                                  />
+                                  <Text style={styles.strategiesTitle}>Strategies</Text>
+                                </View>
+                                <View style={styles.strategiesList}>
+                                  {reflection.strategyEffectiveness.map((se, idx) => {
+                                    const strategy = strategies.find(s => s.id === se.strategyId);
+                                    const strategyName = strategy?.name || 'Unknown Strategy';
+                                    
+                                    return (
+                                      <View key={idx} style={styles.strategyBadge}>
+                                        <Text style={styles.strategyBadgeText}>{strategyName}</Text>
+                                        <View style={[styles.strategyStatusDot, se.worked ? styles.strategyWorkedDot : styles.strategyDidntWorkDot]} />
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                              </View>
+                            )}
+                          </View>
+                        </React.Fragment>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </View>
+        </ScrollView>
+      </View>
+
+      <Modal
+        visible={showJournalModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={handleCloseJournalModal}
+      >
+        <SafeAreaView style={styles.journalModalContainer} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView 
+            style={styles.journalModalContent}
+            behavior="padding"
+          >
+            <View style={styles.journalModalHeader}>
+              <View style={styles.journalModalTitleRow}>
+                <IconSymbol
+                  ios_icon_name="book.fill"
+                  android_material_icon_name="menu-book"
+                  size={24}
+                  color="#4A90E2"
+                />
+                <Text style={styles.journalModalTitle}>Daily Journal</Text>
+              </View>
+              <TouchableOpacity onPress={handleCloseJournalModal} style={styles.closeButton}>
+                <IconSymbol
+                  ios_icon_name="xmark.circle.fill"
+                  android_material_icon_name="close"
+                  size={28}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
             <TextInput
-              ref={journalInputRef}
-              style={styles.journalInput}
-              value={journalContent}
-              onChangeText={setJournalContent}
+              style={styles.journalModalInput}
+              value={tempJournalContent}
+              onChangeText={setTempJournalContent}
               placeholder="Write your thoughts for today..."
               placeholderTextColor={colors.textSecondary}
               multiline
               textAlignVertical="top"
-              returnKeyType="default"
-              blurOnSubmit={false}
-              autoFocus={false}
-              onFocus={handleJournalFocus}
-              onBlur={handleJournalBlur}
+              autoFocus
             />
-            {journalEntry && (
-              <View style={styles.timestampContainer}>
-                <Text style={styles.timestampText}>
-                  Last saved: {new Date(journalEntry.updatedAt).toLocaleString()}
-                </Text>
-              </View>
-            )}
-          </View>
 
-          {!isJournalFocused && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionHeaderRow}>
-                  <IconSymbol
-                    ios_icon_name="sparkles"
-                    android_material_icon_name="auto-awesome"
-                    size={22}
-                    color="#9B59B6"
-                  />
-                  <Text style={styles.sectionTitle}>Reflections</Text>
-                </View>
-                <TouchableOpacity onPress={openAddReflectionModal} style={styles.addButton}>
-                  <IconSymbol
-                    ios_icon_name="plus.circle.fill"
-                    android_material_icon_name="add-circle"
-                    size={28}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {reflections.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <IconSymbol
-                    ios_icon_name="sparkles"
-                    android_material_icon_name="auto-awesome"
-                    size={48}
-                    color={colors.textSecondary}
-                  />
-                  <Text style={styles.emptyStateText}>
-                    No reflections for this day. Tap + to add one.
-                  </Text>
-                </View>
-              ) : (
-                Object.entries(groupedReflections).map(([category, categoryReflections], catIndex) => {
-                  if (categoryReflections.length === 0) return null;
-                  
-                  const categoryIcon = getCategoryIcon(category);
-                  const isCollapsed = collapsedCategories[category];
-                  
-                  return (
-                    <React.Fragment key={catIndex}>
-                      {categoriesEnabled && category !== 'All' && (
-                        <TouchableOpacity 
-                          style={styles.categoryHeader}
-                          onPress={() => toggleCategory(category)}
-                        >
-                          <IconSymbol
-                            ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
-                            android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
-                            size={20}
-                            color={colors.text}
-                          />
-                          <IconSymbol
-                            ios_icon_name={categoryIcon.ios}
-                            android_material_icon_name={categoryIcon.android}
-                            size={20}
-                            color={colors.primary}
-                          />
-                          <Text style={styles.categoryTitle}>{category}</Text>
-                          <View style={styles.categoryBadge}>
-                            <Text style={styles.categoryBadgeText}>{categoryReflections.length}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      )}
-                      
-                      {!isCollapsed && categoryReflections.map((reflection, index) => {
-                        const typeText = reflection.type;
-                        const outcomeText = reflection.outcome ? 
-                          (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
-                          null;
-                        
-                        return (
-                          <React.Fragment key={index}>
-                            <View style={styles.reflectionCard}>
-                              <View style={styles.reflectionHeader}>
-                                <View style={styles.reflectionBadges}>
-                                  <View style={[styles.badge, reflection.type === 'Proactive' ? styles.badgeProactive : styles.badgeRestraint]}>
-                                    <Text style={styles.badgeText}>{typeText}</Text>
-                                  </View>
-                                  {reflection.outcome && (
-                                    <View style={[styles.badge, reflection.outcome === 'success' ? styles.badgeSuccess : styles.badgeStruggle]}>
-                                      <Text style={styles.badgeText}>{outcomeText}</Text>
-                                    </View>
-                                  )}
-                                </View>
-                                <View style={styles.reflectionActions}>
-                                  <TouchableOpacity
-                                    onPress={() => openEditReflectionModal(reflection)}
-                                    style={styles.iconButton}
-                                  >
-                                    <IconSymbol
-                                      ios_icon_name="pencil"
-                                      android_material_icon_name="edit"
-                                      size={20}
-                                      color={colors.primary}
-                                    />
-                                  </TouchableOpacity>
-                                  <TouchableOpacity
-                                    onPress={() => handleDeleteReflection(reflection.id)}
-                                    style={styles.iconButton}
-                                  >
-                                    <IconSymbol
-                                      ios_icon_name="trash"
-                                      android_material_icon_name="delete"
-                                      size={20}
-                                      color={colors.error}
-                                    />
-                                  </TouchableOpacity>
-                                </View>
-                              </View>
-
-                              <Text style={styles.reflectionDescription}>{reflection.description}</Text>
-
-                              {reflection.linkedGoalId && (
-                                <View style={styles.linkedGoalSection}>
-                                  <View style={styles.linkedGoalHeader}>
-                                    <IconSymbol
-                                      ios_icon_name="target"
-                                      android_material_icon_name="flag"
-                                      size={16}
-                                      color={colors.primary}
-                                    />
-                                    <Text style={styles.linkedGoalLabel}>Linked Goal</Text>
-                                  </View>
-                                  <Text style={styles.linkedGoalTitle}>
-                                    {reflection.linkedGoalTitle || goals.find(g => g.id === reflection.linkedGoalId)?.title || 'Unknown Goal'}
-                                  </Text>
-                                </View>
-                              )}
-
-                              {reflection.currencyChange && (
-                                <View style={styles.currencyChange}>
-                                  <Text style={styles.currencyChangeText}>
-                                    {reflection.currencyChange.operation === 'add' ? '+' : '-'}
-                                    {reflection.currencyChange.amount} {reflection.currencyChange.currencySymbol || ''}
-                                  </Text>
-                                </View>
-                              )}
-
-                              {(reflection.gainedIds && reflection.gainedIds.length > 0) && (
-                                <View style={styles.gainsLossesSection}>
-                                  <View style={styles.gainsLossesHeader}>
-                                    <IconSymbol
-                                      ios_icon_name="arrow.up.circle.fill"
-                                      android_material_icon_name="trending-up"
-                                      size={16}
-                                      color={colors.success}
-                                    />
-                                    <Text style={styles.gainsLossesTitle}>Gained</Text>
-                                  </View>
-                                  <View style={styles.gainsLossesList}>
-                                    {reflection.gainedIds.map((gainId, idx) => {
-                                      const gain = gainsLosses.find(gl => gl.id === gainId);
-                                      const gainName = gain?.name || 'Unknown';
-                                      return gain ? (
-                                        <View key={idx} style={styles.gainLossBadge}>
-                                          <Text style={styles.gainLossBadgeText}>{gainName}</Text>
-                                        </View>
-                                      ) : null;
-                                    })}
-                                  </View>
-                                </View>
-                              )}
-
-                              {(reflection.lostIds && reflection.lostIds.length > 0) && (
-                                <View style={styles.gainsLossesSection}>
-                                  <View style={styles.gainsLossesHeader}>
-                                    <IconSymbol
-                                      ios_icon_name="arrow.down.circle.fill"
-                                      android_material_icon_name="trending-down"
-                                      size={16}
-                                      color={colors.error}
-                                    />
-                                    <Text style={styles.gainsLossesTitle}>Lost</Text>
-                                  </View>
-                                  <View style={styles.gainsLossesList}>
-                                    {reflection.lostIds.map((lossId, idx) => {
-                                      const loss = gainsLosses.find(gl => gl.id === lossId);
-                                      const lossName = loss?.name || 'Unknown';
-                                      return loss ? (
-                                        <View key={idx} style={[styles.gainLossBadge, styles.lossBadge]}>
-                                          <Text style={styles.gainLossBadgeText}>{lossName}</Text>
-                                        </View>
-                                      ) : null;
-                                    })}
-                                  </View>
-                                </View>
-                              )}
-
-                              {reflection.wasWorthIt !== undefined && (
-                                <View style={styles.worthItSection}>
-                                  <IconSymbol
-                                    ios_icon_name={reflection.wasWorthIt ? "checkmark.circle.fill" : "xmark.circle.fill"}
-                                    android_material_icon_name={reflection.wasWorthIt ? "check-circle" : "cancel"}
-                                    size={16}
-                                    color={reflection.wasWorthIt ? colors.success : colors.error}
-                                  />
-                                  <Text style={[styles.worthItValue, reflection.wasWorthIt ? styles.worthItYes : styles.worthItNo]}>
-                                    {reflection.wasWorthIt ? 'Worth it' : 'Not worth it'}
-                                  </Text>
-                                </View>
-                              )}
-
-                              {reflection.additionalThoughts && (
-                                <View style={styles.additionalThoughtsSection}>
-                                  <Text style={styles.additionalThoughtsLabel}>Notes on weighing up gains and losses</Text>
-                                  <Text style={styles.additionalThoughtsText}>{reflection.additionalThoughts}</Text>
-                                </View>
-                              )}
-
-                              {(reflection.strategyEffectiveness && reflection.strategyEffectiveness.length > 0) && (
-                                <View style={styles.strategiesSection}>
-                                  <View style={styles.strategiesHeader}>
-                                    <IconSymbol
-                                      ios_icon_name="lightbulb.fill"
-                                      android_material_icon_name="lightbulb"
-                                      size={16}
-                                      color={colors.primary}
-                                    />
-                                    <Text style={styles.strategiesTitle}>Strategies</Text>
-                                  </View>
-                                  <View style={styles.strategiesList}>
-                                    {reflection.strategyEffectiveness.map((se, idx) => {
-                                      const strategy = strategies.find(s => s.id === se.strategyId);
-                                      const strategyName = strategy?.name || 'Unknown Strategy';
-                                      
-                                      return (
-                                        <View key={idx} style={styles.strategyBadge}>
-                                          <Text style={styles.strategyBadgeText}>{strategyName}</Text>
-                                          <View style={[styles.strategyStatusDot, se.worked ? styles.strategyWorkedDot : styles.strategyDidntWorkDot]} />
-                                        </View>
-                                      );
-                                    })}
-                                  </View>
-                                </View>
-                              )}
-                            </View>
-                          </React.Fragment>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })
-              )}
-            </View>
-          )}
-        </ScrollView>
-
-        {isJournalFocused && keyboardHeight > 0 && (
-          <View style={[styles.floatingSaveButton, { bottom: keyboardHeight + 10 }]}>
             <TouchableOpacity
-              style={styles.saveButton}
+              style={styles.saveJournalButton}
               onPress={handleSaveJournal}
               disabled={loading}
             >
@@ -742,16 +767,16 @@ export default function ReflectScreen() {
                   <IconSymbol
                     ios_icon_name="checkmark.circle.fill"
                     android_material_icon_name="check-circle"
-                    size={20}
+                    size={24}
                     color={colors.background}
                   />
-                  <Text style={styles.saveButtonText}>Save Journal</Text>
+                  <Text style={styles.saveJournalButtonText}>Save & Close</Text>
                 </React.Fragment>
               )}
             </TouchableOpacity>
-          </View>
-        )}
-      </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
 
       {showAddReflectionModal && (
         <AddReflectionModal
@@ -867,6 +892,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
+  journalCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  journalCardHeader: {
+    marginBottom: 16,
+  },
+  journalCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  journalCardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  journalPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  journalPlaceholderText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  journalPreviewContainer: {
+    gap: 8,
+  },
+  journalPreviewText: {
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 22,
+  },
+  journalTimestamp: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
   section: {
     marginBottom: 20,
   },
@@ -880,7 +955,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 8,
   },
   sectionTitle: {
     fontSize: 18,
@@ -889,50 +963,6 @@ const styles = StyleSheet.create({
   },
   addButton: {
     padding: 4,
-  },
-  journalInput: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 15,
-    color: colors.text,
-    height: 100,
-    textAlignVertical: 'top',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  floatingSaveButton: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
-    zIndex: 1000,
-  },
-  saveButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  saveButtonText: {
-    color: colors.background,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  timestampContainer: {
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  timestampText: {
-    fontSize: 11,
-    color: colors.textSecondary,
   },
   emptyState: {
     padding: 48,
@@ -1191,6 +1221,64 @@ const styles = StyleSheet.create({
   },
   strategyDidntWorkDot: {
     backgroundColor: colors.error,
+  },
+  journalModalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  journalModalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  journalModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  journalModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  journalModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  journalModalInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 20,
+    fontSize: 16,
+    color: colors.text,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 20,
+  },
+  saveJournalButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveJournalButtonText: {
+    color: colors.background,
+    fontSize: 18,
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,
