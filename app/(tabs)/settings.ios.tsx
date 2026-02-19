@@ -622,7 +622,7 @@ export default function SettingsScreen() {
   };
 
   const handleReorderLifeAreas = async ({ data }: { data: Array<LifeArea & { depth: number }> }) => {
-    console.log('[Settings iOS] Reordering life areas with re-nesting support...');
+    console.log('[Settings iOS] Reordering life areas with drag-and-drop nesting...');
     
     // Guard clause: ensure data is valid
     if (!data || !Array.isArray(data) || data.length === 0) {
@@ -638,7 +638,6 @@ export default function SettingsScreen() {
       for (let i = 0; i < data.length; i++) {
         const currentArea = data[i];
         const prevArea = i > 0 ? data[i - 1] : null;
-        const nextArea = i < data.length - 1 ? data[i + 1] : null;
         
         let newParentId: string | null = null;
         
@@ -690,62 +689,12 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleIndentArea = (areaId: string, direction: 'left' | 'right') => {
-    const flatAreas = flattenLifeAreas(lifeAreas);
-    const areaIndex = flatAreas.findIndex(a => a.id === areaId);
-    
-    if (areaIndex === -1) return;
-    
-    const updatedAreas = [...flatAreas];
-    const currentArea = updatedAreas[areaIndex];
-    
-    if (direction === 'right') {
-      // Indent (increase depth) - make it a child of the previous sibling
-      if (areaIndex > 0) {
-        const prevArea = updatedAreas[areaIndex - 1];
-        // Can only indent if previous area is at same or greater depth
-        if (prevArea.depth >= currentArea.depth) {
-          currentArea.depth = prevArea.depth + 1;
-          currentArea.parentId = prevArea.id;
-        }
-      }
-    } else {
-      // Outdent (decrease depth) - move up one level
-      if (currentArea.depth > 0) {
-        currentArea.depth = currentArea.depth - 1;
-        // Find new parent (the parent of current parent)
-        if (currentArea.parentId) {
-          const currentParent = updatedAreas.find(a => a.id === currentArea.parentId);
-          currentArea.parentId = currentParent?.parentId || null;
-        }
-      }
-    }
-    
-    // Update all children to maintain relative depth
-    const updateChildrenDepth = (parentId: string, depthDelta: number) => {
-      for (const area of updatedAreas) {
-        if (area.parentId === parentId) {
-          area.depth += depthDelta;
-          updateChildrenDepth(area.id, depthDelta);
-        }
-      }
-    };
-    
-    handleReorderLifeAreas({ data: updatedAreas });
-  };
-
   const renderLifeAreas = () => {
     const flatAreas = flattenLifeAreas(lifeAreas);
 
     const renderLifeAreaItem = ({ item, drag, isActive }: RenderItemParams<LifeArea & { depth: number }>) => {
       const iconName = item.icon;
       const areaColor = item.color || colors.primary;
-      const percentage = item.successPercentage || 0;
-      const percentageText = `${Math.round(percentage)}%`;
-      const statusColor = item.percentageColor || item.successStatus;
-      const percentageColor = (statusColor === 'green') ? colors.success : colors.error;
-      const canIndentRight = flatAreas.findIndex(a => a.id === item.id) > 0;
-      const canIndentLeft = item.depth > 0;
       
       return (
         <ScaleDecorator>
@@ -772,39 +721,8 @@ export default function SettingsScreen() {
                   <View style={styles.iconPlaceholder} />
                 )}
                 <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
-                {item.showProgress && (
-                  <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
-                    {percentageText}
-                  </Text>
-                )}
               </View>
               <View style={styles.lifeAreaCompactActions}>
-                {canIndentLeft && (
-                  <TouchableOpacity
-                    onPress={() => handleIndentArea(item.id, 'left')}
-                    style={styles.iconButtonCompact}
-                  >
-                    <IconSymbol
-                      ios_icon_name="chevron.left"
-                      android_material_icon_name="chevron-left"
-                      size={16}
-                      color={colors.primary}
-                    />
-                  </TouchableOpacity>
-                )}
-                {canIndentRight && (
-                  <TouchableOpacity
-                    onPress={() => handleIndentArea(item.id, 'right')}
-                    style={styles.iconButtonCompact}
-                  >
-                    <IconSymbol
-                      ios_icon_name="chevron.right"
-                      android_material_icon_name="chevron-right"
-                      size={16}
-                      color={colors.primary}
-                    />
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity
                   onPress={() => openEditModal('lifeArea', item)}
                   style={styles.iconButtonCompact}
@@ -856,7 +774,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Long press to drag. Use arrows to change nesting level.
+          Long press and drag to reorder. Drop on another item to make it a child, or adjust indentation by dragging left/right.
         </Text>
         {flatAreas.length === 0 ? (
           <View style={styles.emptyState}>
@@ -2428,11 +2346,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
-  lifeAreaCompactPercentage: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
   lifeAreaCompactActions: {
     flexDirection: 'row',
     gap: 4,
@@ -2455,42 +2368,5 @@ const styles = StyleSheet.create({
   },
   currencyTypeConsequence: {
     color: colors.error,
-  },
-  formContainer: {
-    flex: 1,
-  },
-  formGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  optionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  optionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  optionButtonSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  optionButtonText: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  optionButtonTextSelected: {
-    color: colors.background,
-    fontWeight: '600',
   },
 });
