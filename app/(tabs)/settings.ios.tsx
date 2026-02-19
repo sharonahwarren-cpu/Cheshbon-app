@@ -1221,6 +1221,7 @@ export default function SettingsScreen() {
   const renderReflectionPreferences = () => {
     const allCategories = ['Action', 'Speech', 'Thought', 'Feeling'];
     const selectedCategories = preferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+    const categoriesEnabled = preferences.reflectionCategoriesEnabled !== false;
 
     const toggleCategory = (category: string) => {
       const currentCategories = preferences.reflectionCategories || [];
@@ -1230,6 +1231,18 @@ export default function SettingsScreen() {
       
       setPreferences({ ...preferences, reflectionCategories: newCategories });
     };
+
+    const getCategoryIcon = (category: string) => {
+      const categoryLower = category.toLowerCase();
+      if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+      if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+      if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
+      if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+      return { ios: 'sparkles', android: 'auto-awesome' };
+    };
+
+    const toggleLabelText = categoriesEnabled ? 'Behaviours are Enabled' : 'Enable Behaviour Categories';
+    const toggleColor = categoriesEnabled ? colors.success : colors.error;
 
     return (
       <View style={styles.container}>
@@ -1248,30 +1261,32 @@ export default function SettingsScreen() {
         <ScrollView style={styles.formContainer}>
           <View style={styles.formGroup}>
             <View style={styles.switchRow}>
-              <Text style={styles.label}>Enable Categories in Reflections</Text>
+              <Text style={styles.label}>{toggleLabelText}</Text>
               <Switch
-                value={preferences.reflectionCategoriesEnabled !== false}
+                value={categoriesEnabled}
                 onValueChange={(value) => {
                   setPreferences({ ...preferences, reflectionCategoriesEnabled: value });
                 }}
-                trackColor={{ false: colors.border, true: colors.primary }}
+                trackColor={{ false: toggleColor, true: toggleColor }}
                 thumbColor={colors.background}
+                ios_backgroundColor={toggleColor}
               />
             </View>
             <Text style={styles.helperText}>
-              When enabled, you can categorize reflections as Action, Speech, Thought, or Feeling
+              When enabled, you can categorize reflections and goals as Action, Speech, Thought, or Feeling
             </Text>
           </View>
 
-          {preferences.reflectionCategoriesEnabled !== false && (
+          {categoriesEnabled && (
             <View style={styles.formGroup}>
               <Text style={styles.label}>Available Categories</Text>
               <Text style={styles.helperText}>
-                Select which categories you want to use in your reflections
+                Select which categories you want to use in your reflections and goals
               </Text>
               <View style={styles.optionsGrid}>
                 {allCategories.map((category, index) => {
                   const isSelected = selectedCategories.includes(category);
+                  const categoryIcon = getCategoryIcon(category);
                   
                   return (
                     <React.Fragment key={index}>
@@ -1279,6 +1294,12 @@ export default function SettingsScreen() {
                         style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
                         onPress={() => toggleCategory(category)}
                       >
+                        <IconSymbol
+                          ios_icon_name={categoryIcon.ios}
+                          android_material_icon_name={categoryIcon.android}
+                          size={16}
+                          color={isSelected ? colors.background : colors.primary}
+                        />
                         <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                           {category}
                         </Text>
