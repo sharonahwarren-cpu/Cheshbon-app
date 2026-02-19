@@ -623,12 +623,21 @@ export default function SettingsScreen() {
   const handleReorderLifeAreas = async ({ data }: { data: Array<LifeArea & { depth: number }> }) => {
     console.log('[Settings iOS] Reordering life areas...');
     
-    // Update local state immediately for optimistic UI
-    const reorderedIds = data.map(item => item.id);
+    // Guard clause: ensure data is valid
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      console.error('[Settings iOS] Invalid data for reordering:', data);
+      showError('Invalid data for reordering');
+      return;
+    }
     
     try {
-      // Send the new order to the backend
-      await authenticatedPut('/api/life-areas/reorder', { ids: reorderedIds });
+      // Extract IDs from the reordered data
+      const reorderedIds = data.map(item => item.id);
+      
+      console.log('[Settings iOS] Reordered IDs:', reorderedIds);
+      
+      // Send the new order to the backend (backend expects { lifeAreaIds: string[] })
+      await authenticatedPut('/api/life-areas/reorder', { lifeAreaIds: reorderedIds });
       console.log('[Settings iOS] Life areas reordered successfully');
       
       // Reload data to get the updated structure

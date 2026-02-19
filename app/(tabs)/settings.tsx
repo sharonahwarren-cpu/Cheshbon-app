@@ -573,6 +573,13 @@ export default function SettingsScreen() {
   };
 
   const handleReorderLifeAreas = async (reorderedAreas: LifeArea[]) => {
+    // Guard clause: ensure data is valid
+    if (!reorderedAreas || !Array.isArray(reorderedAreas) || reorderedAreas.length === 0) {
+      console.error('[Settings] Invalid data for reordering:', reorderedAreas);
+      showError('Invalid data for reordering');
+      return;
+    }
+    
     try {
       console.log('[Settings] Reordering life areas, count:', reorderedAreas.length);
       
@@ -606,16 +613,19 @@ export default function SettingsScreen() {
       // Optimistic update with rebuilt hierarchy
       setLifeAreas(rebuiltHierarchy);
       
-      // Send only the IDs in the new order to the backend
+      // Send only the IDs in the new order to the backend (backend expects { lifeAreaIds: string[] })
       const lifeAreaIds = reorderedAreas.map(area => area.id);
+      console.log('[Settings] Reordered IDs:', lifeAreaIds);
+      
       await authenticatedPut('/api/life-areas/reorder', { lifeAreaIds });
       console.log('[Settings] Life areas reordered successfully');
       
       // Reload to get the correct structure from backend
       await loadData();
-    } catch (error) {
-      console.error('Error reordering life areas:', error);
-      showError('Failed to reorder life areas');
+      showSuccess('Life areas reordered successfully');
+    } catch (error: any) {
+      console.error('[Settings] Error reordering life areas:', error);
+      showError(error.message || 'Failed to reorder life areas');
       // Reload data to revert optimistic update
       await loadData();
     }
