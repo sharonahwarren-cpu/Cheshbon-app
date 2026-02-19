@@ -48,7 +48,12 @@ interface Currency {
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
 
-type BehaviorCategory = 'Action' | 'Speech' | 'Thought';
+interface UserPreferences {
+  reflectionCategoriesEnabled?: boolean;
+  reflectionCategories?: string[];
+}
+
+type BehaviorCategory = 'Action' | 'Speech' | 'Thought' | 'Feeling';
 type GoalType = 'Restraining' | 'Proactive';
 type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
 
@@ -98,6 +103,10 @@ export default function CreateGoalScreen() {
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
+  const [userPreferences, setUserPreferences] = useState<UserPreferences>({
+    reflectionCategoriesEnabled: true,
+    reflectionCategories: ['Action', 'Speech', 'Thought'],
+  });
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -129,6 +138,7 @@ export default function CreateGoalScreen() {
         authenticatedGet<any>('/api/life-areas'),
         authenticatedGet<any>('/api/strategies'),
         authenticatedGet<any>('/api/currencies'),
+        authenticatedGet<any>('/api/user-preferences'),
       ];
 
       // If editing, also load the goal details
@@ -137,23 +147,39 @@ export default function CreateGoalScreen() {
       }
 
       const results = await Promise.all(promises);
-      const [goalsData, lifeAreasData, strategiesData, currenciesData, goalDetailsData] = results;
+      const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData] = results;
       
       console.log('[API] Goals loaded:', goalsData);
       console.log('[API] Life areas loaded:', lifeAreasData);
       console.log('[API] Strategies loaded:', strategiesData);
       console.log('[API] Currencies loaded:', currenciesData);
+      console.log('[API] User preferences loaded:', preferencesData);
       
       // Handle both direct array and { data: array } response formats
       const goals = Array.isArray(goalsData) ? goalsData : (goalsData?.data || []);
       const lifeAreas = Array.isArray(lifeAreasData) ? lifeAreasData : (lifeAreasData?.data || []);
       const strategies = Array.isArray(strategiesData) ? strategiesData : (strategiesData?.data || []);
       const currencies = Array.isArray(currenciesData) ? currenciesData : (currenciesData?.data || []);
+      const preferences = preferencesData?.data || preferencesData || {
+        reflectionCategoriesEnabled: true,
+        reflectionCategories: ['Action', 'Speech', 'Thought'],
+      };
+      
+      // Parse reflectionCategories if it's a JSON string
+      if (preferences.reflectionCategories && typeof preferences.reflectionCategories === 'string') {
+        try {
+          preferences.reflectionCategories = JSON.parse(preferences.reflectionCategories);
+        } catch (e) {
+          console.error('[API] Failed to parse reflectionCategories:', e);
+          preferences.reflectionCategories = ['Action', 'Speech', 'Thought'];
+        }
+      }
       
       setGoals(goals);
       setLifeAreas(lifeAreas);
       setStrategies(strategies);
       setCurrencies(currencies);
+      setUserPreferences(preferences);
 
       // If a life area was pre-selected (from Edit Life Area or Wizard), set it
       if (preselectedLifeAreaId && !editingGoalId) {
@@ -233,6 +259,13 @@ export default function CreateGoalScreen() {
     
     if (!title.trim()) {
       showError('Goal title is required');
+      return;
+    }
+
+    // CRITICAL: When behaviors are enabled, at least one category is MANDATORY
+    const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
+    if (categoriesEnabled && behaviorCategories.length === 0) {
+      showError('Please select at least one behaviour category');
       return;
     }
 
@@ -519,34 +552,50 @@ export default function CreateGoalScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 5. Behavior Categories (Optional) */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Behavior Categories</Text>
-          <View style={styles.checkboxGroup}>
-            {(['Action', 'Speech', 'Thought'] as BehaviorCategory[]).map((category) => {
-              const isSelected = behaviorCategories.includes(category);
-              return (
-                <TouchableOpacity
-                  key={category}
-                  style={[styles.checkbox, isSelected && styles.checkboxSelected]}
-                  onPress={() => toggleBehaviorCategory(category)}
-                >
-                  {isSelected && (
+        {/* 5. Behaviour Categories - Linked to Reflection Preferences */}
+        {userPreferences.reflectionCategoriesEnabled !== false && (
+          <View style={styles.section}>
+            <Text style={styles.label}>
+              Behaviour Categories
+              <Text style={styles.required}> *</Text>
+            </Text>
+            <Text style={styles.helperText}>
+              Select which behaviour categories apply to this goal
+            </Text>
+            <View style={styles.checkboxGroup}>
+              {(userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought']).map((category) => {
+                const isSelected = behaviorCategories.includes(category as BehaviorCategory);
+                const getCategoryIcon = (cat: string) => {
+                  const categoryLower = cat.toLowerCase();
+                  if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+                  if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+                  if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
+                  if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+                  return { ios: 'sparkles', android: 'auto-awesome' };
+                };
+                const categoryIcon = getCategoryIcon(category);
+                
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    style={[styles.checkbox, isSelected && styles.checkboxSelected]}
+                    onPress={() => toggleBehaviorCategory(category as BehaviorCategory)}
+                  >
                     <IconSymbol
-                      ios_icon_name="checkmark"
-                      android_material_icon_name="check"
+                      ios_icon_name={categoryIcon.ios}
+                      android_material_icon_name={categoryIcon.android}
                       size={16}
-                      color="#fff"
+                      color={isSelected ? '#fff' : colors.primary}
                     />
-                  )}
-                  <Text style={[styles.checkboxText, isSelected && styles.checkboxTextSelected]}>
-                    {category}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    <Text style={[styles.checkboxText, isSelected && styles.checkboxTextSelected]}>
+                      {category}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* 6. Type (Required) */}
         <View style={styles.section}>
@@ -1172,6 +1221,11 @@ const styles = StyleSheet.create({
   },
   required: {
     color: '#ff4444',
+  },
+  helperText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 10,
   },
   input: {
     backgroundColor: colors.card,
