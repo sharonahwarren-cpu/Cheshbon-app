@@ -876,129 +876,135 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Image
-          source={require('@/assets/images/Chesbon_app_Logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.headerTitle}>Cheshbon</Text>
-      </View>
-
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'reports' && styles.tabActive]}
-          onPress={() => {
-            console.log("Switching to reports tab");
-            setActiveTab('reports');
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="chart.bar.fill"
-            android_material_icon_name="assessment"
-            size={20}
-            color={activeTab === 'reports' ? '#FFFFFF' : colors.textSecondary}
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollViewContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <Image
+            source={require('@/assets/images/Chesbon_app_Logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
           />
-          <Text style={[styles.tabText, activeTab === 'reports' && styles.tabTextActive]}>
-            Reports
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'express' && styles.tabActive]}
-          onPress={() => {
-            console.log("Switching to express tab");
-            setActiveTab('express');
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="bolt.fill"
-            android_material_icon_name="flash-on"
-            size={20}
-            color={activeTab === 'express' ? '#FFFFFF' : colors.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'express' && styles.tabTextActive]}>
-            Express
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.headerTitle}>Cheshbon</Text>
+        </View>
 
-      {activeTab === 'express' && (
-        <View style={styles.dateNavigator}>
-          <TouchableOpacity 
-            style={styles.dateNavButton}
-            onPress={handlePreviousDay}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'reports' && styles.tabActive]}
+            onPress={() => {
+              console.log("Switching to reports tab");
+              setActiveTab('reports');
+            }}
           >
             <IconSymbol
-              ios_icon_name="chevron.left"
-              android_material_icon_name="arrow-back"
-              size={18}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-          
-          <Text style={styles.dateDisplay}>{dateDisplay}</Text>
-          
-          <TouchableOpacity 
-            style={styles.dateNavButton}
-            onPress={handleNextDay}
-          >
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="arrow-forward"
-              size={18}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.addReflectionButton}
-            onPress={() => openAddReflectionModal()}
-          >
-            <IconSymbol
-              ios_icon_name="note.text"
-              android_material_icon_name="edit"
+              ios_icon_name="chart.bar.fill"
+              android_material_icon_name="assessment"
               size={20}
-              color={colors.primary}
+              color={activeTab === 'reports' ? '#FFFFFF' : colors.textSecondary}
             />
+            <Text style={[styles.tabText, activeTab === 'reports' && styles.tabTextActive]}>
+              Reports
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'express' && styles.tabActive]}
+            onPress={() => {
+              console.log("Switching to express tab");
+              setActiveTab('express');
+            }}
+          >
+            <IconSymbol
+              ios_icon_name="bolt.fill"
+              android_material_icon_name="flash-on"
+              size={20}
+              color={activeTab === 'express' ? '#FFFFFF' : colors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'express' && styles.tabTextActive]}>
+              Express
+            </Text>
           </TouchableOpacity>
         </View>
-      )}
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        {activeTab === 'reports' ? (
-          <View style={styles.emptyState}>
-            <IconSymbol
-              ios_icon_name="chart.bar"
-              android_material_icon_name="assessment"
-              size={64}
-              color={colors.muted}
-            />
-            <Text style={styles.emptyStateTitle}>Reports Coming Soon</Text>
-            <Text style={styles.emptyStateText}>
-              View detailed reports in Settings
-            </Text>
+        {activeTab === 'express' && (
+          <View style={styles.dateNavigator}>
+            <TouchableOpacity 
+              style={styles.dateNavButton}
+              onPress={handlePreviousDay}
+            >
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            
+            <Text style={styles.dateDisplay}>{dateDisplay}</Text>
+            
+            <TouchableOpacity 
+              style={styles.dateNavButton}
+              onPress={handleNextDay}
+            >
+              <IconSymbol
+                ios_icon_name="chevron.right"
+                android_material_icon_name="arrow-forward"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.addReflectionButton}
+              onPress={() => openAddReflectionModal()}
+            >
+              <IconSymbol
+                ios_icon_name="note.text"
+                android_material_icon_name="edit"
+                size={20}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
           </View>
-        ) : (
-          <>
-            {Object.keys(categoryGroups).length === 0 ? (
-              <View style={styles.emptyState}>
-                <IconSymbol
-                  ios_icon_name="bolt"
-                  android_material_icon_name="flash-on"
-                  size={64}
-                  color={colors.muted}
-                />
-                <Text style={styles.emptyStateTitle}>No active goals today</Text>
-                <Text style={styles.emptyStateText}>
-                  Create goals in Settings to track them here
-                </Text>
-              </View>
-            ) : (
-              Object.values(categoryGroups).map(group => renderCategoryGroup(group))
-            )}
-          </>
         )}
+
+        <View style={styles.content}>
+          {activeTab === 'reports' ? (
+            <View style={styles.emptyState}>
+              <IconSymbol
+                ios_icon_name="chart.bar"
+                android_material_icon_name="assessment"
+                size={64}
+                color={colors.muted}
+              />
+              <Text style={styles.emptyStateTitle}>Reports Coming Soon</Text>
+              <Text style={styles.emptyStateText}>
+                View detailed reports in Settings
+              </Text>
+            </View>
+          ) : (
+            <>
+              {Object.keys(categoryGroups).length === 0 ? (
+                <View style={styles.emptyState}>
+                  <IconSymbol
+                    ios_icon_name="bolt"
+                    android_material_icon_name="flash-on"
+                    size={64}
+                    color={colors.muted}
+                  />
+                  <Text style={styles.emptyStateTitle}>No active goals today</Text>
+                  <Text style={styles.emptyStateText}>
+                    Create goals in Settings to track them here
+                  </Text>
+                </View>
+              ) : (
+                Object.values(categoryGroups).map(group => renderCategoryGroup(group))
+              )}
+            </>
+          )}
+        </View>
       </ScrollView>
 
       {showAddReflectionModal && (
@@ -1075,9 +1081,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
   },
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    paddingBottom: 100,
+  },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 0,
+    paddingTop: 8,
     paddingBottom: 8,
     alignItems: 'center',
   },
@@ -1094,6 +1106,7 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
+    marginTop: 12,
     marginBottom: 12,
     gap: 12,
   },
@@ -1151,11 +1164,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   content: {
-    flex: 1,
-  },
-  contentContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
   },
   emptyState: {
     alignItems: 'center',
