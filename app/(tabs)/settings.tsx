@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -194,7 +194,7 @@ export default function SettingsScreen() {
   }, [currentSection]);
 
   const loadData = async () => {
-    console.log('[Settings Web] Loading settings data...');
+    console.log('Loading settings data...');
     setLoading(true);
     try {
       const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes, goalProgressRes] = await Promise.all([
@@ -207,7 +207,7 @@ export default function SettingsScreen() {
         authenticatedGet('/api/reports/goal-progress'),
       ]);
 
-      console.log('[Settings Web] Settings data loaded successfully');
+      console.log('Settings data loaded successfully');
       
       const goalsData = Array.isArray(goalsRes) 
         ? goalsRes 
@@ -218,7 +218,7 @@ export default function SettingsScreen() {
         ? lifeAreasRes 
         : (Array.isArray(lifeAreasRes?.data) ? lifeAreasRes.data : []);
       
-      console.log('[Settings Web] Life areas loaded:', lifeAreasData);
+      console.log('[Settings] Life areas loaded:', lifeAreasData);
       
       const strategiesData = Array.isArray(strategiesRes) 
         ? strategiesRes 
@@ -268,7 +268,7 @@ export default function SettingsScreen() {
       setGainsLosses(gainsLossesData);
       setPreferences(prefsData);
     } catch (error) {
-      console.error('[Settings Web] Error loading settings data:', error);
+      console.error('Error loading settings data:', error);
       showError('Failed to load settings data');
     } finally {
       setLoading(false);
@@ -276,7 +276,7 @@ export default function SettingsScreen() {
   };
 
   const loadCurrencyBalances = async () => {
-    console.log('[Settings Web] Loading currency balances and reflection tallies...');
+    console.log('Loading currency balances and reflection tallies...');
     try {
       const [balancesRes, talliesRes] = await Promise.all([
         authenticatedGet('/api/reports/currency-balances'),
@@ -298,12 +298,12 @@ export default function SettingsScreen() {
       setCurrencyBalances(filteredBalances);
       setWorthItTallies(talliesData);
       
-      console.log('[Settings Web] Filtered currency balances:', {
+      console.log('[Reports] Filtered currency balances:', {
         total: balancesData.length,
         nonZero: filteredBalances.length,
       });
     } catch (error) {
-      console.error('[Settings Web] Error loading reports data:', error);
+      console.error('Error loading reports data:', error);
       showError('Failed to load reports data');
     }
   };
@@ -321,7 +321,7 @@ export default function SettingsScreen() {
   const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
     if (type === 'lifeArea') {
       // Navigate to the new Life Area wizard screen
-      console.log('[Settings Web] Opening Life Area wizard');
+      console.log('[Settings] Opening Life Area wizard');
       router.push('/life-area-wizard');
       return;
     }
@@ -360,7 +360,7 @@ export default function SettingsScreen() {
   const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', item: any) => {
     if (type === 'lifeArea') {
       // Navigate to the Life Area wizard screen with edit mode
-      console.log('[Settings Web] Opening Life Area wizard for editing:', item.id);
+      console.log('[Settings] Opening Life Area wizard for editing:', item.id);
       router.push(`/life-area-wizard?id=${item.id}`);
       return;
     }
@@ -427,7 +427,7 @@ export default function SettingsScreen() {
       setShowModal(false);
       await loadData();
     } catch (error) {
-      console.error('[Settings Web] Error saving item:', error);
+      console.error('Error saving item:', error);
       showError('Failed to save item');
     } finally {
       setLoading(false);
@@ -473,7 +473,7 @@ export default function SettingsScreen() {
 
       await loadData();
     } catch (error) {
-      console.error('[Settings Web] Error deleting item:', error);
+      console.error('Error deleting item:', error);
       showError('Failed to delete item');
     } finally {
       setLoading(false);
@@ -486,12 +486,12 @@ export default function SettingsScreen() {
   const handleDeactivateGoal = async (id: string) => {
     try {
       setLoading(true);
-      console.log(`[Settings Web] Toggling goal status for goal ${id}`);
+      console.log(`[API] Toggling goal status for goal ${id}`);
       await authenticatedPost(`/api/goals/${id}/deactivate`, {});
       showSuccess('Goal status updated successfully');
       await loadData();
     } catch (error: any) {
-      console.error('[Settings Web] Error toggling goal status:', error);
+      console.error('[API] Error toggling goal status:', error);
       showError(error.message || 'Failed to update goal status');
     } finally {
       setLoading(false);
@@ -504,7 +504,7 @@ export default function SettingsScreen() {
       await authenticatedPut('/api/user-preferences', preferences);
       showSuccess('Notification preferences saved successfully');
     } catch (error) {
-      console.error('[Settings Web] Error saving preferences:', error);
+      console.error('Error saving preferences:', error);
       showError('Failed to save preferences');
     } finally {
       setLoading(false);
@@ -513,7 +513,7 @@ export default function SettingsScreen() {
 
   const handleLinkGoalToLifeArea = async (goalId: string, lifeAreaId: string) => {
     try {
-      console.log('[Settings Web] Linking goal to life area:', { goalId, lifeAreaId });
+      console.log('[Settings] Linking goal to life area:', { goalId, lifeAreaId });
       await authenticatedPost(`/api/life-areas/${lifeAreaId}/goals`, { goalId });
       
       // Find the goal that was just linked
@@ -541,7 +541,7 @@ export default function SettingsScreen() {
       // Reload data in the background to ensure consistency
       await loadData();
     } catch (error) {
-      console.error('[Settings Web] Error linking goal to life area:', error);
+      console.error('Error linking goal to life area:', error);
       showError('Failed to link goal to life area');
       // Reload data to revert optimistic update
       await loadData();
@@ -550,7 +550,7 @@ export default function SettingsScreen() {
 
   const handleUnlinkGoalFromLifeArea = async (goalId: string, lifeAreaId: string) => {
     try {
-      console.log('[Settings Web] Unlinking goal from life area:', { goalId, lifeAreaId });
+      console.log('[Settings] Unlinking goal from life area:', { goalId, lifeAreaId });
       await authenticatedDelete(`/api/life-areas/${lifeAreaId}/goals/${goalId}`);
       
       // Update formData immediately (optimistic update)
@@ -564,7 +564,7 @@ export default function SettingsScreen() {
       // Reload data in the background to ensure consistency
       await loadData();
     } catch (error) {
-      console.error('[Settings Web] Error unlinking goal from life area:', error);
+      console.error('Error unlinking goal from life area:', error);
       showError('Failed to unlink goal from life area');
       // Reload data to revert optimistic update
       await loadData();
@@ -574,47 +574,46 @@ export default function SettingsScreen() {
   const handleReorderLifeAreas = async (reorderedAreas: Array<LifeArea & { depth: number }>) => {
     // Guard clause: ensure data is valid
     if (!reorderedAreas || !Array.isArray(reorderedAreas) || reorderedAreas.length === 0) {
-      console.error('[Settings Web] Invalid data for reordering:', reorderedAreas);
+      console.error('[Settings] Invalid data for reordering:', reorderedAreas);
       showError('Invalid data for reordering');
       return;
     }
     
     try {
-      console.log('[Settings Web] Reordering life areas with re-nesting support, count:', reorderedAreas.length);
+      console.log('[Settings] Reordering life areas with re-nesting support, count:', reorderedAreas.length);
       
       // Build updates array with parentId and displayOrder based on depth changes
       const updates: Array<{ id: string; parentId: string | null; displayOrder: number }> = [];
       
-      // Track parent stack to properly handle nesting
-      const parentStack: Array<{ id: string; depth: number }> = [];
-      
       for (let i = 0; i < reorderedAreas.length; i++) {
         const currentArea = reorderedAreas[i];
+        const prevArea = i > 0 ? reorderedAreas[i - 1] : null;
+        const nextArea = i < reorderedAreas.length - 1 ? reorderedAreas[i + 1] : null;
+        
         let newParentId: string | null = null;
         
-        // Determine parent based on depth
-        if (currentArea.depth === 0) {
-          // Top level item
-          newParentId = null;
-          parentStack.length = 0; // Clear stack
-          parentStack.push({ id: currentArea.id, depth: 0 });
-        } else {
-          // Find the correct parent from the stack
-          // Remove items from stack that are at same or greater depth
-          while (parentStack.length > 0 && parentStack[parentStack.length - 1].depth >= currentArea.depth) {
-            parentStack.pop();
-          }
-          
-          // The parent is the last item in the stack
-          if (parentStack.length > 0) {
-            newParentId = parentStack[parentStack.length - 1].id;
+        // Determine parent based on depth relative to neighbors
+        if (currentArea.depth > 0 && prevArea) {
+          if (currentArea.depth > prevArea.depth) {
+            // This area is a child of the previous area
+            newParentId = prevArea.id;
+          } else if (currentArea.depth === prevArea.depth) {
+            // Same level as previous area, share the same parent
+            newParentId = prevArea.parentId || null;
           } else {
-            // Fallback to null if stack is empty (shouldn't happen with valid data)
-            newParentId = null;
+            // Less depth than previous, need to find the correct parent by going up
+            // Find the closest ancestor at depth - 1
+            for (let j = i - 1; j >= 0; j--) {
+              if (reorderedAreas[j].depth === currentArea.depth - 1) {
+                newParentId = reorderedAreas[j].id;
+                break;
+              } else if (reorderedAreas[j].depth < currentArea.depth - 1) {
+                // No direct parent found at depth - 1, use null (top level)
+                newParentId = null;
+                break;
+              }
+            }
           }
-          
-          // Add current item to stack
-          parentStack.push({ id: currentArea.id, depth: currentArea.depth });
         }
         
         updates.push({
@@ -624,18 +623,17 @@ export default function SettingsScreen() {
         });
       }
       
-      console.log('[Settings Web] Sending updates to backend:', updates);
+      console.log('[Settings] Sending updates to backend:', updates);
       
       // Send updates to backend
       await authenticatedPut('/api/life-areas/reorder', { updates });
-      console.log('[Settings Web] Life areas reordered successfully');
+      console.log('[Settings] Life areas reordered successfully');
       
       // Reload to get the correct structure from backend
       await loadData();
-      // REMOVED: showSuccess('Life areas recorded successfully');
-      // No success message shown after reordering
+      showSuccess('Life areas reordered successfully');
     } catch (error: any) {
-      console.error('[Settings Web] Error reordering life areas:', error);
+      console.error('[Settings] Error reordering life areas:', error);
       showError(error.message || 'Failed to reorder life areas');
       // Reload data to revert optimistic update
       await loadData();
@@ -735,11 +733,11 @@ export default function SettingsScreen() {
       }
 
       if (currencyModalType === 'claim') {
-        console.log(`[Settings Web] Claiming ${amount} of currency ${selectedCurrencyId}`);
+        console.log(`[API] Claiming ${amount} of currency ${selectedCurrencyId}`);
         await authenticatedPost(`/api/currencies/${selectedCurrencyId}/claim`, { amount });
         showSuccess(`Claimed ${amount} successfully`);
       } else {
-        console.log(`[Settings Web] Paying ${amount} of currency ${selectedCurrencyId}`);
+        console.log(`[API] Paying ${amount} of currency ${selectedCurrencyId}`);
         await authenticatedPost(`/api/currencies/${selectedCurrencyId}/pay`, { amount });
         showSuccess(`Paid ${amount} successfully`);
       }
@@ -750,7 +748,7 @@ export default function SettingsScreen() {
         await loadCurrencyBalances();
       }
     } catch (error: any) {
-      console.error('[Settings Web] Error with currency action:', error);
+      console.error('[API] Error with currency action:', error);
       showError(error.message || 'Failed to process currency action');
     } finally {
       setLoading(false);
@@ -1042,6 +1040,9 @@ export default function SettingsScreen() {
       const [items, setItems] = useState(flatAreas);
       const [dragIndex, setDragIndex] = useState<number | null>(null);
       const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+      const isDragging = useRef(false);
+      const dragStartY = useRef(0);
+      const itemHeight = 56; // approximate height of each item
 
       // Sync items when flatAreas changes
       useEffect(() => {
@@ -1049,48 +1050,48 @@ export default function SettingsScreen() {
       }, [lifeAreas]);
 
       const handleDragStart = (index: number, e: any) => {
-        console.log('[Settings Web] Drag start:', index);
-        setDragIndex(index);
-        if (e.dataTransfer) {
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/html', String(index));
+        if (Platform.OS === 'web') {
+          // Web: use HTML5 drag events via nativeEvent
+          isDragging.current = true;
+          setDragIndex(index);
+          dragStartY.current = e.nativeEvent?.pageY || 0;
         }
       };
 
-      const handleDragOver = (index: number, e: any) => {
-        e.preventDefault();
-        if (dragIndex !== null && index !== dragIndex) {
+      const handleDragOver = (index: number) => {
+        if (isDragging.current && dragIndex !== null && index !== dragIndex) {
           setDragOverIndex(index);
         }
       };
 
-      const handleDrop = (dropIndex: number, e: any) => {
-        e.preventDefault();
-        console.log('[Settings Web] Drop:', { dragIndex, dropIndex });
-        
+      const handleDrop = (dropIndex: number) => {
         if (dragIndex === null || dragIndex === dropIndex) {
           setDragIndex(null);
           setDragOverIndex(null);
+          isDragging.current = false;
           return;
         }
 
         const newItems = [...items];
         const [removed] = newItems.splice(dragIndex, 1);
         newItems.splice(dropIndex, 0, removed);
-        
-        console.log('[Settings Web] Reordered items:', newItems.map(i => i.name));
         setItems(newItems);
         setDragIndex(null);
         setDragOverIndex(null);
+        isDragging.current = false;
 
         // Trigger backend update
         handleReorderLifeAreas(newItems);
       };
 
       const handleDragEnd = () => {
-        console.log('[Settings Web] Drag end');
-        setDragIndex(null);
-        setDragOverIndex(null);
+        if (dragOverIndex !== null && dragIndex !== null) {
+          handleDrop(dragOverIndex);
+        } else {
+          setDragIndex(null);
+          setDragOverIndex(null);
+          isDragging.current = false;
+        }
       };
 
       return (
@@ -1098,6 +1099,10 @@ export default function SettingsScreen() {
           {items.map((item, index) => {
             const iconName = item.icon;
             const areaColor = item.color || colors.primary;
+            const percentage = item.successPercentage || 0;
+            const percentageText = `${Math.round(percentage)}%`;
+            const statusColor = item.percentageColor || item.successStatus;
+            const percentageColor = (statusColor === 'green') ? colors.success : colors.error;
             const canIndentRight = index > 0;
             const canIndentLeft = item.depth > 0;
             const isBeingDragged = dragIndex === index;
@@ -1112,16 +1117,35 @@ export default function SettingsScreen() {
                   isBeingDragged && styles.lifeAreaDragging,
                   isDragTarget && styles.lifeAreaDragTarget,
                 ]}
-                draggable
-                onDragStart={(e: any) => handleDragStart(index, e)}
-                onDragOver={(e: any) => handleDragOver(index, e)}
-                onDrop={(e: any) => handleDrop(index, e)}
-                onDragEnd={handleDragEnd}
+                // Web drag-and-drop via onMouseEnter
+                onMouseEnter={() => handleDragOver(index)}
               >
                 <View style={styles.lifeAreaCompactContent}>
                   <View style={styles.lifeAreaCompactLeft}>
-                    {/* Drag handle - cursor pointer for web */}
-                    <View style={[styles.dragHandle, { cursor: 'grab' }]}>
+                    {/* Drag handle - draggable on web */}
+                    <View
+                      style={styles.dragHandle}
+                      draggable={Platform.OS === 'web'}
+                      onDragStart={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          e.dataTransfer?.setData('text/plain', String(index));
+                          handleDragStart(index, e);
+                        }
+                      }}
+                      onDragEnd={() => handleDragEnd()}
+                      onDragOver={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          e.preventDefault?.();
+                          handleDragOver(index);
+                        }
+                      }}
+                      onDrop={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          e.preventDefault?.();
+                          handleDrop(index);
+                        }
+                      }}
+                    >
                       <IconSymbol
                         ios_icon_name="line.3.horizontal"
                         android_material_icon_name="drag-handle"
@@ -1135,6 +1159,11 @@ export default function SettingsScreen() {
                       <View style={styles.iconPlaceholder} />
                     )}
                     <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
+                    {item.showProgress && (
+                      <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
+                        {percentageText}
+                      </Text>
+                    )}
                   </View>
                   <View style={styles.lifeAreaCompactActions}>
                     {canIndentLeft && (
@@ -1216,7 +1245,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Drag the ≡ handle to reorder. Use arrow buttons to change nesting level (indent).
+          Drag the ≡ handle to reorder. Use arrows to change nesting level.
         </Text>
         {flatAreas.length === 0 ? (
           <View style={styles.emptyState}>
@@ -1771,7 +1800,7 @@ export default function SettingsScreen() {
                   <TouchableOpacity 
                     style={styles.reportCard}
                     onPress={() => {
-                      console.log('[Settings Web] Navigating to currency reflections for:', balance.currencyId);
+                      console.log('Navigating to currency reflections for:', balance.currencyId);
                       router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
                     }}
                   >
@@ -1837,6 +1866,711 @@ export default function SettingsScreen() {
     );
   };
 
+  const renderEditModal = () => {
+    if (!modalType) return null;
+
+    const modalTitle = editingItem ? `Edit ${modalType}` : `Add ${modalType}`;
+
+    // Get available goals for linking (not already linked to this life area)
+    const availableGoals = goals.filter(g => {
+      if (!editingItem) return true;
+      const linkedGoalIds = (formData.goals || []).map((goal: any) => goal.id);
+      return !linkedGoalIds.includes(g.id);
+    });
+
+    return (
+      <Modal
+        visible={showModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{modalTitle}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              {modalType === 'lifeArea' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name || ''}
+                      onChangeText={(value) => setFormData({ ...formData, name: value })}
+                      placeholder="Enter life area name"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Parent Life Area</Text>
+                    <TouchableOpacity
+                      style={styles.parentPickerButton}
+                      onPress={() => setShowParentPicker(!showParentPicker)}
+                    >
+                      <Text style={styles.parentPickerText}>
+                        {formData.parentId 
+                          ? lifeAreas.find(a => a.id === formData.parentId)?.name || 'None'
+                          : 'None'}
+                      </Text>
+                      <IconSymbol
+                        ios_icon_name={showParentPicker ? "chevron.up" : "chevron.down"}
+                        android_material_icon_name={showParentPicker ? "arrow-drop-up" : "arrow-drop-down"}
+                        size={24}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    {showParentPicker && (
+                      <ScrollView style={styles.pickerContainer}>
+                        <TouchableOpacity
+                          style={[styles.pickerItem, !formData.parentId && styles.pickerItemSelected]}
+                          onPress={() => {
+                            setFormData({ ...formData, parentId: null });
+                            setShowParentPicker(false);
+                          }}
+                        >
+                          <Text style={[styles.pickerItemText, !formData.parentId && styles.pickerItemTextSelected]}>
+                            None (Top Level)
+                          </Text>
+                        </TouchableOpacity>
+                        {flattenLifeAreas(lifeAreas).map((area, index) => {
+                          const isSelected = formData.parentId === area.id;
+                          const isCurrentItem = editingItem && editingItem.id === area.id;
+                          
+                          if (isCurrentItem) return null;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                                onPress={() => {
+                                  setFormData({ ...formData, parentId: area.id });
+                                  setShowParentPicker(false);
+                                }}
+                              >
+                                <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                                  {area.name}
+                                </Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Icon</Text>
+                    <Text style={styles.helperText}>Enter an emoji or symbol from your keyboard</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.icon || ''}
+                      onChangeText={(value) => setFormData({ ...formData, icon: value })}
+                      placeholder="e.g., 📚, 🏃‍♀️, ✨"
+                      placeholderTextColor={colors.textSecondary}
+                      autoCorrect={false}
+                      autoCapitalize="none"
+                      keyboardType="default"
+                    />
+                    {formData.icon && (
+                      <View style={styles.iconPreviewContainer}>
+                        <Text style={styles.iconPreviewText}>Preview:</Text>
+                        <Text style={styles.iconPreview}>{formData.icon}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Color</Text>
+                    <TouchableOpacity
+                      style={styles.colorPickerButton}
+                      onPress={() => setShowColorPicker(!showColorPicker)}
+                    >
+                      <View style={styles.colorPreview}>
+                        {formData.color ? (
+                          <View style={[styles.colorSwatch, { backgroundColor: formData.color }]} />
+                        ) : (
+                          <Text style={styles.colorPreviewText}>No color selected</Text>
+                        )}
+                      </View>
+                      <IconSymbol
+                        ios_icon_name={showColorPicker ? "chevron.up" : "chevron.down"}
+                        android_material_icon_name={showColorPicker ? "arrow-drop-up" : "arrow-drop-down"}
+                        size={24}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    {showColorPicker && (
+                      <View style={styles.colorPickerContainer}>
+                        <Text style={styles.colorPickerTitle}>Select a Color</Text>
+                        <View style={styles.colorGrid}>
+                          {COLOR_PALETTE.map((color, index) => {
+                            const isSelected = formData.color === color;
+                            
+                            return (
+                              <React.Fragment key={index}>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.colorSquare,
+                                    { backgroundColor: color },
+                                    isSelected && styles.colorSquareSelected
+                                  ]}
+                                  onPress={() => {
+                                    setFormData({ ...formData, color });
+                                    setShowColorPicker(false);
+                                  }}
+                                >
+                                  {isSelected && (
+                                    <IconSymbol
+                                      ios_icon_name="checkmark"
+                                      android_material_icon_name="check"
+                                      size={16}
+                                      color={color === '#FFFFFF' || color === '#E0E0E0' || color === '#FFFACD' || color === '#FFFFE0' || color === '#FFDAB9' || color === '#FF7F7F' || color === '#E6E6FA' || color === '#FFC0CB' || color === '#FFB6C1' || color === '#AFEEEE' || color === '#E0FFFF' || color === '#B0E0E6' || color === '#98FB98' || color === '#90EE90' ? '#000000' : '#FFFFFF'}
+                                    />
+                                  )}
+                                </TouchableOpacity>
+                              </React.Fragment>
+                            );
+                          })}
+                        </View>
+                        <View style={styles.customColorInputContainer}>
+                          <TextInput
+                            style={styles.customColorInput}
+                            value={customColorInput}
+                            onChangeText={setCustomColorInput}
+                            placeholder="#RRGGBB"
+                            placeholderTextColor={colors.textSecondary}
+                            autoCapitalize="characters"
+                            autoCorrect={false}
+                            keyboardType="default"
+                            maxLength={7}
+                          />
+                          <TouchableOpacity
+                            style={styles.addCustomColorButton}
+                            onPress={addCustomColor}
+                          >
+                            <Text style={styles.addCustomColorButtonText}>Add</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <View style={styles.switchRow}>
+                      <Text style={styles.label}>Show Progress Percentage</Text>
+                      <Switch
+                        value={formData.showProgress !== false}
+                        onValueChange={(value) => setFormData({ ...formData, showProgress: value })}
+                        trackColor={{ false: colors.border, true: colors.primary }}
+                        thumbColor={colors.background}
+                      />
+                    </View>
+                    <Text style={styles.helperText}>
+                      Display success percentage based on active goals in this life area
+                    </Text>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Linked Goals</Text>
+                    <Text style={styles.helperText}>Select goals to link to this life area</Text>
+                    
+                    {/* Show currently linked goals */}
+                    {formData.goals && formData.goals.length > 0 && (
+                      <View style={styles.linkedGoalsList}>
+                        {formData.goals.map((goal: any, idx: number) => {
+                          const statusText = goal.status === 'ACTIVE' ? 'Active' : 'Deactivated';
+                          const statusColor = goal.status === 'ACTIVE' ? colors.success : colors.textSecondary;
+                          
+                          return (
+                            <View key={idx} style={styles.linkedGoalItem}>
+                              <View style={styles.linkedGoalInfo}>
+                                <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
+                                <Text style={[styles.linkedGoalStatus, { color: statusColor }]}>{statusText}</Text>
+                              </View>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  if (editingItem) {
+                                    handleUnlinkGoalFromLifeArea(goal.id, editingItem.id);
+                                  }
+                                }}
+                                style={styles.unlinkButton}
+                              >
+                                <IconSymbol
+                                  ios_icon_name="xmark.circle.fill"
+                                  android_material_icon_name="cancel"
+                                  size={20}
+                                  color={colors.error}
+                                />
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                    
+                    {/* Dropdown to select and link new goals */}
+                    <TouchableOpacity
+                      style={styles.goalDropdownButton}
+                      onPress={() => setShowGoalDropdown(!showGoalDropdown)}
+                    >
+                      <Text style={styles.goalDropdownText}>Select a goal to link...</Text>
+                      <IconSymbol
+                        ios_icon_name={showGoalDropdown ? "chevron.up" : "chevron.down"}
+                        android_material_icon_name={showGoalDropdown ? "arrow-drop-up" : "arrow-drop-down"}
+                        size={24}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    
+                    {showGoalDropdown && (
+                      <View style={styles.goalDropdownContainer}>
+                        <ScrollView style={styles.goalDropdownList}>
+                          {availableGoals.map((goal, index) => (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={styles.goalDropdownItem}
+                                onPress={() => {
+                                  if (editingItem) {
+                                    handleLinkGoalToLifeArea(goal.id, editingItem.id);
+                                  }
+                                  setShowGoalDropdown(false);
+                                }}
+                              >
+                                <Text style={styles.goalDropdownItemText}>{goal.title}</Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          ))}
+                          <TouchableOpacity
+                            style={styles.createNewGoalButton}
+                            onPress={() => {
+                              setShowGoalDropdown(false);
+                              setShowCreateGoalModal(true);
+                            }}
+                          >
+                            <IconSymbol
+                              ios_icon_name="plus.circle.fill"
+                              android_material_icon_name="add-circle"
+                              size={20}
+                              color={colors.primary}
+                            />
+                            <Text style={styles.createNewGoalText}>Create New Goal</Text>
+                          </TouchableOpacity>
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+
+              {modalType === 'strategy' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name || ''}
+                      onChangeText={(value) => setFormData({ ...formData, name: value })}
+                      placeholder="Enter strategy name"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Description</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={formData.description || ''}
+                      onChangeText={(value) => setFormData({ ...formData, description: value })}
+                      placeholder="Enter description"
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Linked Goals</Text>
+                    <ScrollView style={styles.pickerContainer}>
+                      {goals.map((goal, index) => {
+                        const isSelected = formData.linkedGoalIds?.includes(goal.id);
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                              onPress={() => {
+                                const currentGoals = formData.linkedGoalIds || [];
+                                const newGoals = isSelected
+                                  ? currentGoals.filter((id: string) => id !== goal.id)
+                                  : [...currentGoals, goal.id];
+                                setFormData({ ...formData, linkedGoalIds: newGoals });
+                              }}
+                            >
+                              <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                                {goal.title}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                </>
+              )}
+
+              {modalType === 'currency' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name || ''}
+                      onChangeText={(value) => setFormData({ ...formData, name: value })}
+                      placeholder="Enter currency name"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Symbol</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.symbol || ''}
+                      onChangeText={(value) => setFormData({ ...formData, symbol: value })}
+                      placeholder="$ or ⭐ or any symbol"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Currency Type *</Text>
+                    <Text style={styles.helperText}>
+                      Reward currencies can be claimed (e.g., treats). Consequence currencies must be paid (e.g., fines, pushups).
+                    </Text>
+                    <View style={styles.optionsGrid}>
+                      {[
+                        { value: 'reward', label: 'Reward (Can be claimed)' },
+                        { value: 'consequence', label: 'Consequence (Must be paid)' }
+                      ].map((option, index) => {
+                        const isSelected = (formData.type || 'consequence') === option.value;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, type: option.value })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>On Success (Reward)</Text>
+                    <Text style={styles.helperText}>How does this currency change when a goal succeeds?</Text>
+                    <View style={styles.optionsGrid}>
+                      {[
+                        { value: 'ADD', label: 'Add (Gain Currency)' },
+                        { value: 'SUBTRACT', label: 'Subtract (Reduce Debt)' },
+                        { value: 'NONE', label: 'None (No Reward)' }
+                      ].map((option, index) => {
+                        const isSelected = formData.onSuccess === option.value;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, onSuccess: option.value })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>On Failure (Consequence)</Text>
+                    <Text style={styles.helperText}>How does this currency change when a goal is struggled with?</Text>
+                    <View style={styles.optionsGrid}>
+                      {[
+                        { value: 'ADD', label: 'Add (Increase Debt)' },
+                        { value: 'SUBTRACT', label: 'Subtract (Lose Currency)' },
+                        { value: 'NONE', label: 'None (No Consequence)' }
+                      ].map((option, index) => {
+                        const isSelected = formData.onFailure === option.value;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, onFailure: option.value })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {option.label}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {modalType === 'gainLoss' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name || ''}
+                      onChangeText={(value) => setFormData({ ...formData, name: value })}
+                      placeholder="Enter gain or loss name"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Type</Text>
+                    <View style={styles.optionsGrid}>
+                      {['Gain', 'Loss'].map((option, index) => {
+                        const isSelected = formData.type === option;
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, type: option })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {option}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Category (Optional)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.category || ''}
+                      onChangeText={(value) => setFormData({ ...formData, category: value })}
+                      placeholder="e.g., Emotional, Physical, Spiritual"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Sub-Category (Optional)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.subCategory || ''}
+                      onChangeText={(value) => setFormData({ ...formData, subCategory: value })}
+                      placeholder="e.g., Confidence, Energy"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+                </>
+              )}
+
+              {modalType === 'alarm' && (
+                <>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Alarm Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.name || ''}
+                      onChangeText={(value) => setFormData({ ...formData, name: value })}
+                      placeholder="e.g., Morning Journal Reminder"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Time</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        const [hours, minutes] = (formData.time || '09:00').split(':');
+                        const date = new Date();
+                        date.setHours(parseInt(hours));
+                        date.setMinutes(parseInt(minutes));
+                        setSelectedTime(date);
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <Text style={styles.timePickerText}>{formatTime(formData.time || '09:00')}</Text>
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="access-time"
+                        size={24}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    {showTimePicker && (
+                      <DateTimePicker
+                        value={selectedTime}
+                        mode="time"
+                        is24Hour={false}
+                        display="spinner"
+                        onChange={onTimeChange}
+                      />
+                    )}
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Frequency</Text>
+                    <View style={styles.optionsGrid}>
+                      {['daily', 'weekly', 'biweekly', 'monthly'].map((freq, index) => {
+                        const isSelected = formData.frequency === freq;
+                        const capitalizedFreq = freq.charAt(0).toUpperCase() + freq.slice(1);
+                        
+                        return (
+                          <React.Fragment key={index}>
+                            <TouchableOpacity
+                              style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                              onPress={() => setFormData({ ...formData, frequency: freq })}
+                            >
+                              <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                {capitalizedFreq}
+                              </Text>
+                            </TouchableOpacity>
+                          </React.Fragment>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {(formData.frequency === 'weekly' || formData.frequency === 'biweekly') && (
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>Day of Week</Text>
+                      <View style={styles.optionsGrid}>
+                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, index) => {
+                          const isSelected = formData.dayOfWeek === day;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                                onPress={() => setFormData({ ...formData, dayOfWeek: day })}
+                              >
+                                <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                                  {day}
+                                </Text>
+                              </TouchableOpacity>
+                            </React.Fragment>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+
+                  {formData.frequency === 'monthly' && (
+                    <View style={styles.formGroup}>
+                      <Text style={styles.label}>Day of Month</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={formData.dayOfMonth?.toString() || ''}
+                        onChangeText={(value) => setFormData({ ...formData, dayOfMonth: parseInt(value) || undefined })}
+                        placeholder="1-31"
+                        placeholderTextColor={colors.textSecondary}
+                        keyboardType="number-pad"
+                      />
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Create Goal Modal - appears on top of Edit Life Area modal */}
+        {showCreateGoalModal && (
+          <View style={styles.createGoalModalOverlay}>
+            <View style={styles.alertModal}>
+              <View style={styles.alertModalHeader}>
+                <Text style={styles.alertTitle}>Create New Goal</Text>
+                <TouchableOpacity onPress={() => setShowCreateGoalModal(false)}>
+                  <IconSymbol
+                    ios_icon_name="xmark"
+                    android_material_icon_name="close"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.alertMessage}>
+                This will open the Create Goal screen. The life area will be pre-selected. After creating the goal, you'll return here to continue editing.
+              </Text>
+              <View style={styles.alertButtons}>
+                <TouchableOpacity
+                  style={[styles.alertButton, styles.alertButtonSecondary]}
+                  onPress={() => setShowCreateGoalModal(false)}
+                >
+                  <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.alertButton}
+                  onPress={() => {
+                    setShowCreateGoalModal(false);
+                    // Keep the Edit Life Area modal open
+                    router.push(`/create-goal?lifeAreaId=${editingItem?.id}&returnToSettings=true`);
+                  }}
+                >
+                  <Text style={styles.alertButtonText}>Create Goal</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+      </Modal>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -1858,6 +2592,19 @@ export default function SettingsScreen() {
           {currentSection === 'reports' && renderReports()}
         </>
       )}
+
+      {renderEditModal()}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        visible={showConfirmDelete}
+        title={`Delete ${deleteItemType === 'lifeArea' ? 'Life Area' : deleteItemType === 'gainLoss' ? 'Gain/Loss' : deleteItemType || ''}?`}
+        message={`Are you sure you want to delete "${deleteItemName}"? This action cannot be undone.`}
+        onConfirm={handleDeleteItem}
+        onCancel={() => setShowConfirmDelete(false)}
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
+      />
 
       {/* Currency Claim/Pay Modal */}
       <Modal
@@ -1904,15 +2651,6 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* Confirm Delete Modal */}
-      <ConfirmModal
-        visible={showConfirmDelete}
-        title="Confirm Delete"
-        message={`Are you sure you want to delete "${deleteItemName}"? This action cannot be undone.`}
-        onConfirm={handleDeleteItem}
-        onCancel={() => setShowConfirmDelete(false)}
-      />
 
       <Modal
         visible={showErrorModal}
@@ -1961,6 +2699,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: Platform.OS === 'android' ? 48 : 0,
   },
   container: {
     flex: 1,
@@ -1982,6 +2721,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginBottom: 16,
+    marginTop: 8,
   },
   menuItem: {
     flexDirection: 'row',
@@ -2040,18 +2780,9 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2,
   },
-  listItemActions: {
+  goalMeta: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  iconButton: {
-    padding: 8,
-  },
-  goalCardExpanded: {
-    backgroundColor: colors.card,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    flexWrap: 'wrap',
   },
   goalCardDeactivated: {
     opacity: 0.6,
@@ -2083,32 +2814,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  currencyBalances: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  currencyBalanceRow: {
+  listItemActions: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
-  currencyBalanceValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-    color: colors.text,
+  iconButton: {
+    padding: 8,
   },
-  currencyActionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+  iconButtonCompact: {
+    padding: 4,
   },
-  currencyActionButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+  dragHandle: {
+    padding: 4,
+    marginRight: 4,
   },
   currencyHeader: {
     flexDirection: 'row',
@@ -2120,6 +2838,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.primary,
+  },
+  currencyTypeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  currencyTypeReward: {
+    color: colors.success,
+  },
+  currencyTypeConsequence: {
+    color: colors.error,
   },
   formContainer: {
     flex: 1,
@@ -2327,6 +3057,12 @@ const styles = StyleSheet.create({
     width: '100%',
     maxHeight: '80%',
   },
+  topModal: {
+    zIndex: 1000,
+  },
+  createGoalModalContent: {
+    zIndex: 2000,
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2404,11 +3140,16 @@ const styles = StyleSheet.create({
     width: '80%',
     maxWidth: 400,
   },
+  alertModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
   alertTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 12,
   },
   alertMessage: {
     fontSize: 16,
@@ -2480,6 +3221,202 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  goalCardExpanded: {
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  currencyBalances: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  currencyBalanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  currencyBalanceValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+    color: colors.text,
+  },
+  currencyActionButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  currencyActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  // Life Area compact styles with drag and drop
+  lifeAreaCardCompact: {
+    backgroundColor: colors.card,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+  },
+  lifeAreaDragging: {
+    opacity: 0.5,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  lifeAreaDragTarget: {
+    borderTopWidth: 2,
+    borderTopColor: colors.primary,
+    backgroundColor: colors.primary + '15',
+  },
+  lifeAreaCompactContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  lifeAreaCompactLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  lifeAreaIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  lifeAreaCompactName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  lifeAreaCompactPercentage: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  lifeAreaCompactActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  iconGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  iconOption: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  iconOptionSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 12,
+  },
+  colorSquare: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  colorSquareSelected: {
+    borderColor: colors.text,
+    borderWidth: 3,
+  },
+  colorOptionText: {
+    fontSize: 12,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  customColorOption: {
+    backgroundColor: colors.card,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  customColorInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+  },
+  customColorInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  addCustomColorButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addCustomColorButtonText: {
+    color: colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  goalManagementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  goalManagementInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  goalManagementTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  goalManagementStatus: {
+    fontSize: 14,
+  },
+  createGoalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+  },
+  createGoalButtonText: {
+    color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
+  },
   iconPlaceholder: {
     width: 20,
     height: 20,
@@ -2498,39 +3435,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  iconUploadContainer: {
-    alignItems: 'center',
-    padding: 20,
-  },
-  iconPreview: {
+  iconPreviewContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  removeIconButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: colors.error,
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: colors.card,
     borderRadius: 8,
   },
-  removeIconText: {
-    color: colors.background,
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  iconPlaceholderLarge: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  iconPlaceholderText: {
+  iconPreviewText: {
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  iconPreview: {
+    fontSize: 32,
   },
   colorPickerButton: {
     backgroundColor: colors.card,
@@ -2558,64 +3477,127 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
   },
-  lifeAreaCardCompact: {
+  colorPickerContainer: {
+    marginTop: 12,
+    padding: 16,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  colorPickerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  colorWheel: {
+    height: 200,
+    marginBottom: 12,
+  },
+  manageGoalsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  manageGoalsButtonText: {
+    color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  linkedGoalsList: {
+    marginTop: 12,
+    gap: 8,
+    marginBottom: 12,
+  },
+  linkedGoalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: colors.card,
     padding: 12,
     borderRadius: 8,
-    marginBottom: 8,
-    borderLeftWidth: 3,
   },
-  lifeAreaDragging: {
-    opacity: 0.5,
-  },
-  lifeAreaDragTarget: {
-    borderTopWidth: 3,
-    borderTopColor: colors.primary,
-  },
-  draggableListContent: {
-    paddingBottom: 20,
-  },
-  lifeAreaCompactContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  lifeAreaCompactLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  linkedGoalInfo: {
     flex: 1,
+    marginRight: 8,
   },
-  lifeAreaIcon: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  linkedGoalTitle: {
+    fontSize: 14,
+    color: colors.text,
+    marginBottom: 2,
   },
-  lifeAreaCompactName: {
-    fontSize: 15,
+  linkedGoalStatus: {
+    fontSize: 12,
     fontWeight: '600',
+  },
+  unlinkButton: {
+    padding: 4,
+  },
+  goalDropdownButton: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 8,
+  },
+  goalDropdownText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  goalDropdownContainer: {
+    marginTop: 8,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: 250,
+  },
+  goalDropdownList: {
+    maxHeight: 200,
+  },
+  goalDropdownItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  goalDropdownItemText: {
+    fontSize: 16,
     color: colors.text,
   },
-  lifeAreaCompactActions: {
+  createNewGoalButton: {
     flexDirection: 'row',
-    gap: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  iconButtonCompact: {
-    padding: 4,
-  },
-  dragHandle: {
-    padding: 4,
-    marginRight: 4,
-  },
-  currencyTypeText: {
-    fontSize: 13,
+  createNewGoalText: {
+    fontSize: 16,
+    color: colors.primary,
     fontWeight: '600',
-    marginTop: 4,
-    marginBottom: 4,
   },
-  currencyTypeReward: {
-    color: colors.success,
-  },
-  currencyTypeConsequence: {
-    color: colors.error,
+  createGoalModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    zIndex: 1000,
   },
 });

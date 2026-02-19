@@ -17,7 +17,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator, DragEndParams } from 'react-native-draggable-flatlist';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 interface LifeArea {
@@ -122,7 +122,6 @@ export default function SettingsScreen() {
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
-  const [lifeAreasData, setLifeAreasData] = useState<Array<LifeArea & { depth: number }>>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
@@ -175,14 +174,8 @@ export default function SettingsScreen() {
     }
   }, [currentSection]);
 
-  // Update flattened life areas when lifeAreas changes
-  useEffect(() => {
-    const flatAreas = flattenLifeAreas(lifeAreas);
-    setLifeAreasData(flatAreas);
-  }, [lifeAreas]);
-
   const loadData = async () => {
-    console.log('[Settings iOS] Loading settings data...');
+    console.log('Loading settings data...');
     setLoading(true);
     try {
       const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes, goalProgressRes] = await Promise.all([
@@ -195,7 +188,7 @@ export default function SettingsScreen() {
         authenticatedGet('/api/reports/goal-progress'),
       ]);
 
-      console.log('[Settings iOS] Settings data loaded successfully');
+      console.log('Settings data loaded successfully');
       
       const goalsData = Array.isArray(goalsRes) 
         ? goalsRes 
@@ -256,7 +249,7 @@ export default function SettingsScreen() {
       setGainsLosses(gainsLossesData);
       setPreferences(prefsData);
     } catch (error) {
-      console.error('[Settings iOS] Error loading settings data:', error);
+      console.error('Error loading settings data:', error);
       showError('Failed to load settings data');
     } finally {
       setLoading(false);
@@ -264,7 +257,7 @@ export default function SettingsScreen() {
   };
 
   const loadCurrencyBalances = async () => {
-    console.log('[Settings iOS] Loading currency balances and reflection tallies...');
+    console.log('Loading currency balances and reflection tallies...');
     try {
       const [balancesRes, talliesRes] = await Promise.all([
         authenticatedGet('/api/reports/currency-balances'),
@@ -277,7 +270,7 @@ export default function SettingsScreen() {
       setCurrencyBalances(balancesData);
       setWorthItTallies(talliesData);
     } catch (error) {
-      console.error('[Settings iOS] Error loading reports data:', error);
+      console.error('Error loading reports data:', error);
       showError('Failed to load reports data');
     }
   };
@@ -401,7 +394,7 @@ export default function SettingsScreen() {
       setShowModal(false);
       await loadData();
     } catch (error) {
-      console.error('[Settings iOS] Error saving item:', error);
+      console.error('Error saving item:', error);
       showError('Failed to save item');
     } finally {
       setLoading(false);
@@ -434,7 +427,7 @@ export default function SettingsScreen() {
 
       await loadData();
     } catch (error) {
-      console.error('[Settings iOS] Error deleting item:', error);
+      console.error('Error deleting item:', error);
       showError('Failed to delete item');
     } finally {
       setLoading(false);
@@ -448,7 +441,7 @@ export default function SettingsScreen() {
       showSuccess('Goal deleted successfully');
       await loadData();
     } catch (error) {
-      console.error('[Settings iOS] Error deleting goal:', error);
+      console.error('Error deleting goal:', error);
       showError('Failed to delete goal');
     } finally {
       setLoading(false);
@@ -458,12 +451,12 @@ export default function SettingsScreen() {
   const handleDeactivateGoal = async (id: string) => {
     try {
       setLoading(true);
-      console.log(`[Settings iOS] Toggling goal status for goal ${id}`);
+      console.log(`[API] Toggling goal status for goal ${id}`);
       await authenticatedPost(`/api/goals/${id}/deactivate`, {});
       showSuccess('Goal status updated successfully');
       await loadData();
     } catch (error: any) {
-      console.error('[Settings iOS] Error toggling goal status:', error);
+      console.error('[API] Error toggling goal status:', error);
       showError(error.message || 'Failed to update goal status');
     } finally {
       setLoading(false);
@@ -476,7 +469,7 @@ export default function SettingsScreen() {
       await authenticatedPut('/api/user-preferences', preferences);
       showSuccess('Preferences saved successfully');
     } catch (error) {
-      console.error('[Settings iOS] Error saving preferences:', error);
+      console.error('Error saving preferences:', error);
       showError('Failed to save preferences');
     } finally {
       setLoading(false);
@@ -564,11 +557,11 @@ export default function SettingsScreen() {
       }
 
       if (currencyModalType === 'claim') {
-        console.log(`[Settings iOS] Claiming ${amount} of currency ${selectedCurrencyId}`);
+        console.log(`[API] Claiming ${amount} of currency ${selectedCurrencyId}`);
         await authenticatedPost(`/api/currencies/${selectedCurrencyId}/claim`, { amount });
         showSuccess(`Claimed ${amount} successfully`);
       } else {
-        console.log(`[Settings iOS] Paying ${amount} of currency ${selectedCurrencyId}`);
+        console.log(`[API] Paying ${amount} of currency ${selectedCurrencyId}`);
         await authenticatedPost(`/api/currencies/${selectedCurrencyId}/pay`, { amount });
         showSuccess(`Paid ${amount} successfully`);
       }
@@ -579,7 +572,7 @@ export default function SettingsScreen() {
         await loadCurrencyBalances();
       }
     } catch (error: any) {
-      console.error('[Settings iOS] Error with currency action:', error);
+      console.error('[API] Error with currency action:', error);
       showError(error.message || 'Failed to process currency action');
     } finally {
       setLoading(false);
@@ -628,10 +621,8 @@ export default function SettingsScreen() {
     return result;
   };
 
-  const handleReorderLifeAreas = async (params: DragEndParams<LifeArea & { depth: number }>) => {
-    const { data, from, to } = params;
-    
-    console.log('[Settings iOS] Drag-and-drop reorder:', { from, to, itemsCount: data.length });
+  const handleReorderLifeAreas = async ({ data }: { data: Array<LifeArea & { depth: number }> }) => {
+    console.log('[Settings iOS] Reordering life areas with drag-and-drop nesting...');
     
     // Guard clause: ensure data is valid
     if (!data || !Array.isArray(data) || data.length === 0) {
@@ -640,35 +631,45 @@ export default function SettingsScreen() {
       return;
     }
     
-    // Optimistically update UI
-    setLifeAreasData(data);
-    
     try {
-      // Reconstruct parentId and displayOrder from the flat list
+      // Build updates array with parentId and displayOrder based on depth changes
       const updates: Array<{ id: string; parentId: string | null; displayOrder: number }> = [];
-      const parentStack: Array<{ id: string; depth: number }> = [];
       
       for (let i = 0; i < data.length; i++) {
-        const currentItem = data[i];
+        const currentArea = data[i];
+        const prevArea = i > 0 ? data[i - 1] : null;
         
-        // Adjust parent stack based on current item's depth
-        while (parentStack.length > 0 && parentStack[parentStack.length - 1].depth >= currentItem.depth) {
-          parentStack.pop();
+        let newParentId: string | null = null;
+        
+        // Determine parent based on depth relative to neighbors
+        if (currentArea.depth > 0 && prevArea) {
+          if (currentArea.depth > prevArea.depth) {
+            // This area is a child of the previous area
+            newParentId = prevArea.id;
+          } else if (currentArea.depth === prevArea.depth) {
+            // Same level as previous area, share the same parent
+            newParentId = prevArea.parentId || null;
+          } else {
+            // Less depth than previous, need to find the correct parent by going up
+            // Find the closest ancestor at depth - 1
+            for (let j = i - 1; j >= 0; j--) {
+              if (data[j].depth === currentArea.depth - 1) {
+                newParentId = data[j].id;
+                break;
+              } else if (data[j].depth < currentArea.depth - 1) {
+                // No direct parent found at depth - 1, use null (top level)
+                newParentId = null;
+                break;
+              }
+            }
+          }
         }
-        
-        // Determine parent ID
-        const parentId = parentStack.length > 0 ? parentStack[parentStack.length - 1].id : null;
         
         updates.push({
-          id: currentItem.id,
-          parentId,
+          id: currentArea.id,
+          parentId: newParentId,
           displayOrder: i,
         });
-        
-        // If next item has greater depth, this item is a parent
-        if (i + 1 < data.length && data[i + 1].depth > currentItem.depth) {
-          parentStack.push({ id: currentItem.id, depth: currentItem.depth });
-        }
       }
       
       console.log('[Settings iOS] Sending updates to backend:', updates);
@@ -679,6 +680,7 @@ export default function SettingsScreen() {
       
       // Reload data to get the updated structure
       await loadData();
+      showSuccess('Life areas reordered successfully');
     } catch (error: any) {
       console.error('[Settings iOS] Error reordering life areas:', error);
       showError(error.message || 'Failed to reorder life areas');
@@ -688,6 +690,8 @@ export default function SettingsScreen() {
   };
 
   const renderLifeAreas = () => {
+    const flatAreas = flattenLifeAreas(lifeAreas);
+
     const renderLifeAreaItem = ({ item, drag, isActive }: RenderItemParams<LifeArea & { depth: number }>) => {
       const iconName = item.icon;
       const areaColor = item.color || colors.primary;
@@ -770,16 +774,16 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Long press the ≡ handle and drag to reorder. Drag left/right to change nesting level.
+          Long press and drag to reorder. Drop on another item to make it a child, or adjust indentation by dragging left/right.
         </Text>
-        {lifeAreasData.length === 0 ? (
+        {flatAreas.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
           </View>
         ) : (
           <GestureHandlerRootView style={styles.listContainer}>
             <DraggableFlatList
-              data={lifeAreasData}
+              data={flatAreas}
               onDragEnd={handleReorderLifeAreas}
               keyExtractor={(item) => item.id}
               renderItem={renderLifeAreaItem}
@@ -1525,7 +1529,7 @@ export default function SettingsScreen() {
                   <TouchableOpacity 
                     style={styles.reportCard}
                     onPress={() => {
-                      console.log('[Settings iOS] Navigating to currency reflections for:', balance.currencyId);
+                      console.log('Navigating to currency reflections for:', balance.currencyId);
                       router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
                     }}
                   >
