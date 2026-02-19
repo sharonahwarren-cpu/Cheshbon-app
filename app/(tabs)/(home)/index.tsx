@@ -884,96 +884,96 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Image
-          source={require('@/assets/images/Chesbon_app_Logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.headerTitle}>Cheshbon</Text>
-      </View>
-
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'reports' && styles.tabActive]}
-          onPress={() => {
-            console.log("Switching to reports tab");
-            setActiveTab('reports');
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="chart.bar.fill"
-            android_material_icon_name="assessment"
-            size={20}
-            color={activeTab === 'reports' ? '#FFFFFF' : colors.textSecondary}
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        <View style={styles.header}>
+          <Image
+            source={require('@/assets/images/Chesbon_app_Logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
           />
-          <Text style={[styles.tabText, activeTab === 'reports' && styles.tabTextActive]}>
-            Reports
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'express' && styles.tabActive]}
-          onPress={() => {
-            console.log("Switching to express tab");
-            setActiveTab('express');
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="bolt.fill"
-            android_material_icon_name="flash-on"
-            size={20}
-            color={activeTab === 'express' ? '#FFFFFF' : colors.textSecondary}
-          />
-          <Text style={[styles.tabText, activeTab === 'express' && styles.tabTextActive]}>
-            Express
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.headerTitle}>Cheshbon</Text>
+        </View>
 
-      {activeTab === 'express' && (
-        <View style={styles.dateNavigator}>
-          <TouchableOpacity 
-            style={styles.dateNavButton}
-            onPress={handlePreviousDay}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'reports' && styles.tabActive]}
+            onPress={() => {
+              console.log("Switching to reports tab");
+              setActiveTab('reports');
+            }}
           >
             <IconSymbol
-              ios_icon_name="chevron.left"
-              android_material_icon_name="arrow-back"
-              size={18}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-          
-          <Text style={styles.dateDisplay}>{dateDisplay}</Text>
-          
-          <TouchableOpacity 
-            style={styles.dateNavButton}
-            onPress={handleNextDay}
-          >
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="arrow-forward"
-              size={18}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.addReflectionButton}
-            onPress={() => openAddReflectionModal()}
-          >
-            <IconSymbol
-              ios_icon_name="note.text"
-              android_material_icon_name="edit"
+              ios_icon_name="chart.bar.fill"
+              android_material_icon_name="assessment"
               size={20}
-              color={colors.primary}
+              color={activeTab === 'reports' ? '#FFFFFF' : colors.textSecondary}
             />
+            <Text style={[styles.tabText, activeTab === 'reports' && styles.tabTextActive]}>
+              Reports
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'express' && styles.tabActive]}
+            onPress={() => {
+              console.log("Switching to express tab");
+              setActiveTab('express');
+            }}
+          >
+            <IconSymbol
+              ios_icon_name="bolt.fill"
+              android_material_icon_name="flash-on"
+              size={20}
+              color={activeTab === 'express' ? '#FFFFFF' : colors.textSecondary}
+            />
+            <Text style={[styles.tabText, activeTab === 'express' && styles.tabTextActive]}>
+              Express
+            </Text>
           </TouchableOpacity>
         </View>
-      )}
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {activeTab === 'express' && (
+          <View style={styles.dateNavigator}>
+            <TouchableOpacity 
+              style={styles.dateNavButton}
+              onPress={handlePreviousDay}
+            >
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            
+            <Text style={styles.dateDisplay}>{dateDisplay}</Text>
+            
+            <TouchableOpacity 
+              style={styles.dateNavButton}
+              onPress={handleNextDay}
+            >
+              <IconSymbol
+                ios_icon_name="chevron.right"
+                android_material_icon_name="arrow-forward"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.addReflectionButton}
+              onPress={() => openAddReflectionModal()}
+            >
+              <IconSymbol
+                ios_icon_name="note.text"
+                android_material_icon_name="edit"
+                size={20}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {activeTab === 'reports' ? (
           <>
             {currencyBalances.length > 0 && (
@@ -1577,7 +1577,7 @@ const styles = StyleSheet.create({
   logo: {
     width: 100,
     height: 100,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   headerTitle: {
     fontSize: 28,
