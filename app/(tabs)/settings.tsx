@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,8 +18,6 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { COLOR_PALETTE, COLOR_GRID_COLUMNS } from '@/utils/colorPalette';
 
@@ -41,6 +39,7 @@ interface LifeArea {
   }>;
   successPercentage?: number;
   percentageColor?: 'green' | 'red';
+  successStatus?: 'green' | 'red';
 }
 
 interface Strategy {
@@ -572,7 +571,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleReorderLifeAreas = async (reorderedAreas: LifeArea[]) => {
+  const handleReorderLifeAreas = async (reorderedAreas: Array<LifeArea & { depth: number }>) => {
     // Guard clause: ensure data is valid
     if (!reorderedAreas || !Array.isArray(reorderedAreas) || reorderedAreas.length === 0) {
       console.error('[Settings] Invalid data for reordering:', reorderedAreas);
@@ -581,43 +580,53 @@ export default function SettingsScreen() {
     }
     
     try {
-      console.log('[Settings] Reordering life areas, count:', reorderedAreas.length);
+      console.log('[Settings] Reordering life areas with re-nesting support, count:', reorderedAreas.length);
       
-      // Rebuild the hierarchy from the flat reordered list
-      // The reordered list is flat, so we need to reconstruct the nested structure
-      const rebuiltHierarchy: LifeArea[] = [];
-      const areaMap = new Map<string, LifeArea>();
+      // Build updates array with parentId and displayOrder based on depth changes
+      const updates: Array<{ id: string; parentId: string | null; displayOrder: number }> = [];
       
-      // First pass: create a map of all areas
-      reorderedAreas.forEach(area => {
-        areaMap.set(area.id, { ...area, children: [] });
-      });
-      
-      // Second pass: build the hierarchy
-      reorderedAreas.forEach(area => {
-        const areaWithChildren = areaMap.get(area.id)!;
-        if (area.parentId) {
-          const parent = areaMap.get(area.parentId);
-          if (parent) {
-            parent.children = parent.children || [];
-            parent.children.push(areaWithChildren);
+      for (let i = 0; i < reorderedAreas.length; i++) {
+        const currentArea = reorderedAreas[i];
+        const prevArea = i > 0 ? reorderedAreas[i - 1] : null;
+        const nextArea = i < reorderedAreas.length - 1 ? reorderedAreas[i + 1] : null;
+        
+        let newParentId: string | null = null;
+        
+        // Determine parent based on depth relative to neighbors
+        if (currentArea.depth > 0 && prevArea) {
+          if (currentArea.depth > prevArea.depth) {
+            // This area is a child of the previous area
+            newParentId = prevArea.id;
+          } else if (currentArea.depth === prevArea.depth) {
+            // Same level as previous area, share the same parent
+            newParentId = prevArea.parentId || null;
           } else {
-            // Parent not found, treat as top-level
-            rebuiltHierarchy.push(areaWithChildren);
+            // Less depth than previous, need to find the correct parent by going up
+            // Find the closest ancestor at depth - 1
+            for (let j = i - 1; j >= 0; j--) {
+              if (reorderedAreas[j].depth === currentArea.depth - 1) {
+                newParentId = reorderedAreas[j].id;
+                break;
+              } else if (reorderedAreas[j].depth < currentArea.depth - 1) {
+                // No direct parent found at depth - 1, use null (top level)
+                newParentId = null;
+                break;
+              }
+            }
           }
-        } else {
-          rebuiltHierarchy.push(areaWithChildren);
         }
-      });
+        
+        updates.push({
+          id: currentArea.id,
+          parentId: newParentId,
+          displayOrder: i,
+        });
+      }
       
-      // Optimistic update with rebuilt hierarchy
-      setLifeAreas(rebuiltHierarchy);
+      console.log('[Settings] Sending updates to backend:', updates);
       
-      // Send only the IDs in the new order to the backend (backend expects { lifeAreaIds: string[] })
-      const lifeAreaIds = reorderedAreas.map(area => area.id);
-      console.log('[Settings] Reordered IDs:', lifeAreaIds);
-      
-      await authenticatedPut('/api/life-areas/reorder', { lifeAreaIds });
+      // Send updates to backend
+      await authenticatedPut('/api/life-areas/reorder', { updates });
       console.log('[Settings] Life areas reordered successfully');
       
       // Reload to get the correct structure from backend
@@ -980,80 +989,242 @@ export default function SettingsScreen() {
     return result;
   };
 
+  const handleIndentArea = (areaId: string, direction: 'left' | 'right') => {
+    const flatAreas = flattenLifeAreas(lifeAreas);
+    const areaIndex = flatAreas.findIndex(a => a.id === areaId);
+    
+    if (areaIndex === -1) return;
+    
+    const updatedAreas = [...flatAreas];
+    const currentArea = updatedAreas[areaIndex];
+    
+    if (direction === 'right') {
+      // Indent (increase depth) - make it a child of the previous sibling
+      if (areaIndex > 0) {
+        const prevArea = updatedAreas[areaIndex - 1];
+        // Can only indent if previous area is at same or greater depth
+        if (prevArea.depth >= currentArea.depth) {
+          currentArea.depth = prevArea.depth + 1;
+          currentArea.parentId = prevArea.id;
+        }
+      }
+    } else {
+      // Outdent (decrease depth) - move up one level
+      if (currentArea.depth > 0) {
+        currentArea.depth = currentArea.depth - 1;
+        // Find new parent (the parent of current parent)
+        if (currentArea.parentId) {
+          const currentParent = updatedAreas.find(a => a.id === currentArea.parentId);
+          currentArea.parentId = currentParent?.parentId || null;
+        }
+      }
+    }
+    
+    // Update all children to maintain relative depth
+    const updateChildrenDepth = (parentId: string, depthDelta: number) => {
+      for (const area of updatedAreas) {
+        if (area.parentId === parentId) {
+          area.depth += depthDelta;
+          updateChildrenDepth(area.id, depthDelta);
+        }
+      }
+    };
+    
+    handleReorderLifeAreas(updatedAreas);
+  };
+
   const renderLifeAreas = () => {
     const flatAreas = flattenLifeAreas(lifeAreas);
 
-    const renderItem = ({ item, drag, isActive }: RenderItemParams<LifeArea & { depth: number }>) => {
-      const iconName = item.icon;
-      const areaColor = item.color || colors.primary;
-      const percentage = item.successPercentage || 0;
-      const percentageText = `${Math.round(percentage)}%`;
-      const percentageColor = (item.percentageColor === 'green') ? colors.success : colors.error;
-      const activeGoalsCount = item.goals?.filter(g => g.status === 'ACTIVE').length || 0;
-      
+    const LifeAreaDraggableList = () => {
+      const [items, setItems] = useState(flatAreas);
+      const [dragIndex, setDragIndex] = useState<number | null>(null);
+      const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+      const isDragging = useRef(false);
+      const dragStartY = useRef(0);
+      const itemHeight = 56; // approximate height of each item
+
+      // Sync items when flatAreas changes
+      useEffect(() => {
+        setItems(flatAreas);
+      }, [lifeAreas]);
+
+      const handleDragStart = (index: number, e: any) => {
+        if (Platform.OS === 'web') {
+          // Web: use HTML5 drag events via nativeEvent
+          isDragging.current = true;
+          setDragIndex(index);
+          dragStartY.current = e.nativeEvent?.pageY || 0;
+        }
+      };
+
+      const handleDragOver = (index: number) => {
+        if (isDragging.current && dragIndex !== null && index !== dragIndex) {
+          setDragOverIndex(index);
+        }
+      };
+
+      const handleDrop = (dropIndex: number) => {
+        if (dragIndex === null || dragIndex === dropIndex) {
+          setDragIndex(null);
+          setDragOverIndex(null);
+          isDragging.current = false;
+          return;
+        }
+
+        const newItems = [...items];
+        const [removed] = newItems.splice(dragIndex, 1);
+        newItems.splice(dropIndex, 0, removed);
+        setItems(newItems);
+        setDragIndex(null);
+        setDragOverIndex(null);
+        isDragging.current = false;
+
+        // Trigger backend update
+        handleReorderLifeAreas(newItems);
+      };
+
+      const handleDragEnd = () => {
+        if (dragOverIndex !== null && dragIndex !== null) {
+          handleDrop(dragOverIndex);
+        } else {
+          setDragIndex(null);
+          setDragOverIndex(null);
+          isDragging.current = false;
+        }
+      };
+
       return (
-        <ScaleDecorator>
-          <TouchableOpacity
-            onLongPress={drag}
-            disabled={isActive}
-            style={[
-              styles.lifeAreaCardCompact,
-              { marginLeft: item.depth * 16, borderLeftColor: areaColor },
-              isActive && styles.lifeAreaDragging,
-            ]}
-          >
-            <View style={styles.lifeAreaCompactContent}>
-              <View style={styles.lifeAreaCompactLeft}>
-                <IconSymbol
-                  ios_icon_name="line.3.horizontal"
-                  android_material_icon_name="drag-handle"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-                {iconName ? (
-                  <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
-                ) : (
-                  <View style={styles.iconPlaceholder} />
-                )}
-                <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
-                {item.showProgress && (
-                  <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
-                    {percentageText}
-                  </Text>
-                )}
+        <ScrollView style={styles.listContainer}>
+          {items.map((item, index) => {
+            const iconName = item.icon;
+            const areaColor = item.color || colors.primary;
+            const percentage = item.successPercentage || 0;
+            const percentageText = `${Math.round(percentage)}%`;
+            const statusColor = item.percentageColor || item.successStatus;
+            const percentageColor = (statusColor === 'green') ? colors.success : colors.error;
+            const canIndentRight = index > 0;
+            const canIndentLeft = item.depth > 0;
+            const isBeingDragged = dragIndex === index;
+            const isDragTarget = dragOverIndex === index;
+
+            return (
+              <View
+                key={item.id}
+                style={[
+                  styles.lifeAreaCardCompact,
+                  { marginLeft: item.depth * 20, borderLeftColor: areaColor },
+                  isBeingDragged && styles.lifeAreaDragging,
+                  isDragTarget && styles.lifeAreaDragTarget,
+                ]}
+                // Web drag-and-drop via onMouseEnter
+                onMouseEnter={() => handleDragOver(index)}
+              >
+                <View style={styles.lifeAreaCompactContent}>
+                  <View style={styles.lifeAreaCompactLeft}>
+                    {/* Drag handle - draggable on web */}
+                    <View
+                      style={styles.dragHandle}
+                      draggable={Platform.OS === 'web'}
+                      onDragStart={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          e.dataTransfer?.setData('text/plain', String(index));
+                          handleDragStart(index, e);
+                        }
+                      }}
+                      onDragEnd={() => handleDragEnd()}
+                      onDragOver={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          e.preventDefault?.();
+                          handleDragOver(index);
+                        }
+                      }}
+                      onDrop={(e: any) => {
+                        if (Platform.OS === 'web') {
+                          e.preventDefault?.();
+                          handleDrop(index);
+                        }
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="line.3.horizontal"
+                        android_material_icon_name="drag-handle"
+                        size={20}
+                        color={colors.textSecondary}
+                      />
+                    </View>
+                    {iconName ? (
+                      <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
+                    ) : (
+                      <View style={styles.iconPlaceholder} />
+                    )}
+                    <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
+                    {item.showProgress && (
+                      <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
+                        {percentageText}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.lifeAreaCompactActions}>
+                    {canIndentLeft && (
+                      <TouchableOpacity
+                        onPress={() => handleIndentArea(item.id, 'left')}
+                        style={styles.iconButtonCompact}
+                      >
+                        <IconSymbol
+                          ios_icon_name="chevron.left"
+                          android_material_icon_name="chevron-left"
+                          size={16}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                    )}
+                    {canIndentRight && (
+                      <TouchableOpacity
+                        onPress={() => handleIndentArea(item.id, 'right')}
+                        style={styles.iconButtonCompact}
+                      >
+                        <IconSymbol
+                          ios_icon_name="chevron.right"
+                          android_material_icon_name="chevron-right"
+                          size={16}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => openEditModal('lifeArea', item)}
+                      style={styles.iconButtonCompact}
+                    >
+                      <IconSymbol
+                        ios_icon_name="pencil"
+                        android_material_icon_name="edit"
+                        size={16}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => confirmDelete('lifeArea', item.id, item.name)}
+                      style={styles.iconButtonCompact}
+                    >
+                      <IconSymbol
+                        ios_icon_name="trash"
+                        android_material_icon_name="delete"
+                        size={16}
+                        color={colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
-              <View style={styles.lifeAreaCompactActions}>
-                <TouchableOpacity
-                  onPress={() => openEditModal('lifeArea', item)}
-                  style={styles.iconButtonCompact}
-                >
-                  <IconSymbol
-                    ios_icon_name="pencil"
-                    android_material_icon_name="edit"
-                    size={16}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => confirmDelete('lifeArea', item.id, item.name)}
-                  style={styles.iconButtonCompact}
-                >
-                  <IconSymbol
-                    ios_icon_name="trash"
-                    android_material_icon_name="delete"
-                    size={16}
-                    color={colors.error}
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </ScaleDecorator>
+            );
+          })}
+        </ScrollView>
       );
     };
 
     return (
-      <GestureHandlerRootView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => setCurrentSection('main')}>
             <IconSymbol
@@ -1073,20 +1244,17 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
+        <Text style={styles.helperText}>
+          Drag the ≡ handle to reorder. Use arrows to change nesting level.
+        </Text>
         {flatAreas.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
           </View>
         ) : (
-          <DraggableFlatList
-            data={flatAreas}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id}
-            onDragEnd={({ data }) => handleReorderLifeAreas(data)}
-            containerStyle={styles.listContainer}
-          />
+          <LifeAreaDraggableList />
         )}
-      </GestureHandlerRootView>
+      </View>
     );
   };
 
@@ -2656,6 +2824,10 @@ const styles = StyleSheet.create({
   iconButtonCompact: {
     padding: 4,
   },
+  dragHandle: {
+    padding: 4,
+    marginRight: 4,
+  },
   currencyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3091,12 +3263,17 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
   },
   lifeAreaDragging: {
-    opacity: 0.7,
+    opacity: 0.5,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+  },
+  lifeAreaDragTarget: {
+    borderTopWidth: 2,
+    borderTopColor: colors.primary,
+    backgroundColor: colors.primary + '15',
   },
   lifeAreaCompactContent: {
     flexDirection: 'row',

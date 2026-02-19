@@ -38,6 +38,7 @@ interface LifeArea {
   }>;
   successPercentage?: number;
   percentageColor?: 'green' | 'red';
+  successStatus?: 'green' | 'red';
 }
 
 interface Strategy {
@@ -621,7 +622,7 @@ export default function SettingsScreen() {
   };
 
   const handleReorderLifeAreas = async ({ data }: { data: Array<LifeArea & { depth: number }> }) => {
-    console.log('[Settings iOS] Reordering life areas...');
+    console.log('[Settings iOS] Reordering life areas with re-nesting support...');
     
     // Guard clause: ensure data is valid
     if (!data || !Array.isArray(data) || data.length === 0) {
@@ -631,13 +632,51 @@ export default function SettingsScreen() {
     }
     
     try {
-      // Extract IDs from the reordered data
-      const reorderedIds = data.map(item => item.id);
+      // Build updates array with parentId and displayOrder based on depth changes
+      const updates: Array<{ id: string; parentId: string | null; displayOrder: number }> = [];
       
-      console.log('[Settings iOS] Reordered IDs:', reorderedIds);
+      for (let i = 0; i < data.length; i++) {
+        const currentArea = data[i];
+        const prevArea = i > 0 ? data[i - 1] : null;
+        const nextArea = i < data.length - 1 ? data[i + 1] : null;
+        
+        let newParentId: string | null = null;
+        
+        // Determine parent based on depth relative to neighbors
+        if (currentArea.depth > 0 && prevArea) {
+          if (currentArea.depth > prevArea.depth) {
+            // This area is a child of the previous area
+            newParentId = prevArea.id;
+          } else if (currentArea.depth === prevArea.depth) {
+            // Same level as previous area, share the same parent
+            newParentId = prevArea.parentId || null;
+          } else {
+            // Less depth than previous, need to find the correct parent by going up
+            // Find the closest ancestor at depth - 1
+            for (let j = i - 1; j >= 0; j--) {
+              if (data[j].depth === currentArea.depth - 1) {
+                newParentId = data[j].id;
+                break;
+              } else if (data[j].depth < currentArea.depth - 1) {
+                // No direct parent found at depth - 1, use null (top level)
+                newParentId = null;
+                break;
+              }
+            }
+          }
+        }
+        
+        updates.push({
+          id: currentArea.id,
+          parentId: newParentId,
+          displayOrder: i,
+        });
+      }
       
-      // Send the new order to the backend (backend expects { lifeAreaIds: string[] })
-      await authenticatedPut('/api/life-areas/reorder', { lifeAreaIds: reorderedIds });
+      console.log('[Settings iOS] Sending updates to backend:', updates);
+      
+      // Send updates to backend
+      await authenticatedPut('/api/life-areas/reorder', { updates });
       console.log('[Settings iOS] Life areas reordered successfully');
       
       // Reload data to get the updated structure
@@ -651,6 +690,50 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleIndentArea = (areaId: string, direction: 'left' | 'right') => {
+    const flatAreas = flattenLifeAreas(lifeAreas);
+    const areaIndex = flatAreas.findIndex(a => a.id === areaId);
+    
+    if (areaIndex === -1) return;
+    
+    const updatedAreas = [...flatAreas];
+    const currentArea = updatedAreas[areaIndex];
+    
+    if (direction === 'right') {
+      // Indent (increase depth) - make it a child of the previous sibling
+      if (areaIndex > 0) {
+        const prevArea = updatedAreas[areaIndex - 1];
+        // Can only indent if previous area is at same or greater depth
+        if (prevArea.depth >= currentArea.depth) {
+          currentArea.depth = prevArea.depth + 1;
+          currentArea.parentId = prevArea.id;
+        }
+      }
+    } else {
+      // Outdent (decrease depth) - move up one level
+      if (currentArea.depth > 0) {
+        currentArea.depth = currentArea.depth - 1;
+        // Find new parent (the parent of current parent)
+        if (currentArea.parentId) {
+          const currentParent = updatedAreas.find(a => a.id === currentArea.parentId);
+          currentArea.parentId = currentParent?.parentId || null;
+        }
+      }
+    }
+    
+    // Update all children to maintain relative depth
+    const updateChildrenDepth = (parentId: string, depthDelta: number) => {
+      for (const area of updatedAreas) {
+        if (area.parentId === parentId) {
+          area.depth += depthDelta;
+          updateChildrenDepth(area.id, depthDelta);
+        }
+      }
+    };
+    
+    handleReorderLifeAreas({ data: updatedAreas });
+  };
+
   const renderLifeAreas = () => {
     const flatAreas = flattenLifeAreas(lifeAreas);
 
@@ -659,27 +742,30 @@ export default function SettingsScreen() {
       const areaColor = item.color || colors.primary;
       const percentage = item.successPercentage || 0;
       const percentageText = `${Math.round(percentage)}%`;
-      const percentageColor = (item.percentageColor === 'green') ? colors.success : colors.error;
+      const statusColor = item.percentageColor || item.successStatus;
+      const percentageColor = (statusColor === 'green') ? colors.success : colors.error;
+      const canIndentRight = flatAreas.findIndex(a => a.id === item.id) > 0;
+      const canIndentLeft = item.depth > 0;
       
       return (
         <ScaleDecorator>
-          <TouchableOpacity
-            onLongPress={drag}
-            disabled={isActive}
+          <View
             style={[
               styles.lifeAreaCardCompact,
-              { marginLeft: item.depth * 16, borderLeftColor: areaColor },
+              { marginLeft: item.depth * 20, borderLeftColor: areaColor },
               isActive && styles.lifeAreaCardActive,
             ]}
           >
             <View style={styles.lifeAreaCompactContent}>
               <View style={styles.lifeAreaCompactLeft}>
-                <IconSymbol
-                  ios_icon_name="line.3.horizontal"
-                  android_material_icon_name="drag-handle"
-                  size={20}
-                  color={colors.textSecondary}
-                />
+                <TouchableOpacity onLongPress={drag} disabled={isActive} style={styles.dragHandle}>
+                  <IconSymbol
+                    ios_icon_name="line.3.horizontal"
+                    android_material_icon_name="drag-handle"
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
                 {iconName ? (
                   <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
                 ) : (
@@ -693,6 +779,32 @@ export default function SettingsScreen() {
                 )}
               </View>
               <View style={styles.lifeAreaCompactActions}>
+                {canIndentLeft && (
+                  <TouchableOpacity
+                    onPress={() => handleIndentArea(item.id, 'left')}
+                    style={styles.iconButtonCompact}
+                  >
+                    <IconSymbol
+                      ios_icon_name="chevron.left"
+                      android_material_icon_name="chevron-left"
+                      size={16}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                )}
+                {canIndentRight && (
+                  <TouchableOpacity
+                    onPress={() => handleIndentArea(item.id, 'right')}
+                    style={styles.iconButtonCompact}
+                  >
+                    <IconSymbol
+                      ios_icon_name="chevron.right"
+                      android_material_icon_name="chevron-right"
+                      size={16}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   onPress={() => openEditModal('lifeArea', item)}
                   style={styles.iconButtonCompact}
@@ -717,7 +829,7 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </TouchableOpacity>
+          </View>
         </ScaleDecorator>
       );
     };
@@ -743,6 +855,9 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
+        <Text style={styles.helperText}>
+          Long press to drag. Use arrows to change nesting level.
+        </Text>
         {flatAreas.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
@@ -2324,6 +2439,10 @@ const styles = StyleSheet.create({
   },
   iconButtonCompact: {
     padding: 4,
+  },
+  dragHandle: {
+    padding: 4,
+    marginRight: 4,
   },
   currencyTypeText: {
     fontSize: 13,
