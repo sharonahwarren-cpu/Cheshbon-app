@@ -143,7 +143,7 @@ export default function SettingsScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   // Confirm delete modal state
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -298,7 +298,11 @@ export default function SettingsScreen() {
 
   const showSuccess = (message: string) => {
     setSuccessMessage(message);
-    setShowSuccessModal(true);
+    setShowSuccessToast(true);
+    // Auto-dismiss after 2 seconds
+    setTimeout(() => {
+      setShowSuccessToast(false);
+    }, 2000);
   };
 
   const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
@@ -526,7 +530,10 @@ export default function SettingsScreen() {
     ];
 
     return (
-      <View style={styles.container}>
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+      >
         <Text style={styles.sectionTitle}>Settings</Text>
         {menuItems.map((item, index) => (
           <React.Fragment key={index}>
@@ -552,7 +559,7 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </React.Fragment>
         ))}
-      </View>
+      </ScrollView>
     );
   };
 
@@ -820,7 +827,7 @@ export default function SettingsScreen() {
               renderItem={renderLifeAreaItem}
               contentContainerStyle={[
                 styles.draggableListContent,
-                { paddingBottom: insets.bottom + 80 }
+                { paddingBottom: insets.bottom + 100 }
               ]}
             />
           </GestureHandlerRootView>
@@ -851,7 +858,10 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.listContainer}>
+        <ScrollView 
+          style={styles.listContainer}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
           {strategies.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No strategies yet. Create one to help achieve your goals!</Text>
@@ -927,7 +937,10 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.listContainer}>
+        <ScrollView 
+          style={styles.listContainer}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
           {currencies.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No currencies yet. Create one to get started!</Text>
@@ -1014,7 +1027,10 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.listContainer}>
+        <ScrollView 
+          style={styles.listContainer}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
           {gainsLosses.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No gains or losses yet. Create some to track in reflections!</Text>
@@ -1139,7 +1155,10 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.formContainer}>
+        <ScrollView 
+          style={styles.formContainer}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
           <View style={styles.formGroup}>
             <View style={styles.switchRow}>
               <Text style={styles.label}>Enable Notifications</Text>
@@ -1258,7 +1277,10 @@ export default function SettingsScreen() {
           <Text style={styles.headerTitle}>Reflection Preferences</Text>
           <View style={{ width: 24 }} />
         </View>
-        <ScrollView style={styles.formContainer}>
+        <ScrollView 
+          style={styles.formContainer}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
+        >
           <View style={styles.formGroup}>
             <View style={styles.reflectionToggleContainer}>
               <View style={styles.reflectionToggleTextContainer}>
@@ -1351,7 +1373,10 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.listContainer}>
+        <ScrollView 
+          style={styles.listContainer}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
           {sortedGoals.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No goals yet. Create one to get started!</Text>
@@ -1540,7 +1565,10 @@ export default function SettingsScreen() {
           <Text style={styles.headerTitle}>Reports</Text>
           <View style={{ width: 24 }} />
         </View>
-        <ScrollView style={styles.listContainer}>
+        <ScrollView 
+          style={styles.listContainer}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
           {worthItTallies && worthItTallies.total > 0 && (
             <>
               <Text style={styles.sectionSubtitle}>Reflection Worth It Analysis</Text>
@@ -1749,25 +1777,18 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      <Modal
-        visible={showSuccessModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowSuccessModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertModal}>
-            <Text style={styles.alertTitle}>Success</Text>
-            <Text style={styles.alertMessage}>{successMessage}</Text>
-            <TouchableOpacity
-              style={styles.alertButton}
-              onPress={() => setShowSuccessModal(false)}
-            >
-              <Text style={styles.alertButtonText}>OK</Text>
-            </TouchableOpacity>
-          </View>
+      {/* Success Toast - Auto-dismissing */}
+      {showSuccessToast && (
+        <View style={styles.successToast}>
+          <IconSymbol
+            ios_icon_name="checkmark.circle.fill"
+            android_material_icon_name="check-circle"
+            size={20}
+            color={colors.success}
+          />
+          <Text style={styles.successToastText}>{successMessage}</Text>
         </View>
-      </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -2448,5 +2469,29 @@ const styles = StyleSheet.create({
   },
   currencyTypeConsequence: {
     color: colors.error,
+  },
+  successToast: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 9999,
+  },
+  successToastText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
   },
 });
