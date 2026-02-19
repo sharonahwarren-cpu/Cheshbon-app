@@ -53,7 +53,12 @@ type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Mont
 
 export default function CreateGoalScreen() {
   const router = useRouter();
-  const { id: editingGoalId, fromReflection } = useLocalSearchParams<{ id?: string; fromReflection?: string }>();
+  const { id: editingGoalId, fromReflection, lifeAreaId: preselectedLifeAreaId, returnToSettings } = useLocalSearchParams<{ 
+    id?: string; 
+    fromReflection?: string;
+    lifeAreaId?: string;
+    returnToSettings?: string;
+  }>();
 
   // Form state
   const [title, setTitle] = useState('');
@@ -137,6 +142,12 @@ export default function CreateGoalScreen() {
       setLifeAreas(lifeAreas);
       setStrategies(strategies);
       setCurrencies(currencies);
+
+      // If a life area was pre-selected (from Edit Life Area), set it
+      if (preselectedLifeAreaId && !editingGoalId) {
+        console.log('[CreateGoal iOS] Pre-selecting life area:', preselectedLifeAreaId);
+        setLifeAreaId(preselectedLifeAreaId);
+      }
 
       // If editing, populate the form with existing goal data
       if (editingGoalId && goalDetailsData) {
@@ -255,15 +266,33 @@ export default function CreateGoalScreen() {
         console.log('Clearing consequence data');
       }
 
+      let createdOrUpdatedGoal: any;
+      
       if (editingGoalId) {
         console.log('[API] Updating goal with data:', goalData);
-        const updatedGoal = await authenticatedPut(`/api/goals/${editingGoalId}`, goalData);
-        console.log('[API] Goal updated successfully:', updatedGoal);
+        createdOrUpdatedGoal = await authenticatedPut(`/api/goals/${editingGoalId}`, goalData);
+        console.log('[API] Goal updated successfully:', createdOrUpdatedGoal);
         showSuccess('Goal updated successfully!');
       } else {
         console.log('[API] Creating goal with data:', goalData);
-        const createdGoal = await authenticatedPost('/api/goals', goalData);
-        console.log('[API] Goal created successfully:', createdGoal);
+        createdOrUpdatedGoal = await authenticatedPost('/api/goals', goalData);
+        console.log('[API] Goal created successfully:', createdOrUpdatedGoal);
+        
+        // If a life area was pre-selected, link the newly created goal to it
+        if (preselectedLifeAreaId && createdOrUpdatedGoal) {
+          const goalId = createdOrUpdatedGoal.id || createdOrUpdatedGoal.data?.id;
+          if (goalId) {
+            console.log('[API] Linking newly created goal to life area:', { goalId, lifeAreaId: preselectedLifeAreaId });
+            try {
+              await authenticatedPost(`/api/life-areas/${preselectedLifeAreaId}/goals`, { goalId });
+              console.log('[API] Goal linked to life area successfully');
+            } catch (linkError) {
+              console.error('[API] Error linking goal to life area:', linkError);
+              // Don't fail the whole operation if linking fails
+            }
+          }
+        }
+        
         showSuccess('Goal created successfully!');
       }
       
@@ -271,6 +300,9 @@ export default function CreateGoalScreen() {
         if (fromReflection === 'true') {
           // Navigate back to reflection screen to continue the reflection
           router.push('/(tabs)/reflect');
+        } else if (returnToSettings === 'true') {
+          // Navigate back to settings (Edit Life Area modal will still be open)
+          router.back();
         } else {
           router.back();
         }

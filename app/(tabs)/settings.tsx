@@ -511,22 +511,36 @@ export default function SettingsScreen() {
     try {
       console.log('[Settings] Linking goal to life area:', { goalId, lifeAreaId });
       await authenticatedPost(`/api/life-areas/${lifeAreaId}/goals`, { goalId });
+      
+      // Find the goal that was just linked
+      const linkedGoal = goals.find(g => g.id === goalId);
+      
+      if (linkedGoal) {
+        // Update formData immediately (optimistic update)
+        const updatedGoals = [
+          ...(formData.goals || []),
+          {
+            id: linkedGoal.id,
+            title: linkedGoal.title,
+            status: linkedGoal.status || 'ACTIVE',
+            successCount: linkedGoal.successCount || 0,
+            struggleCount: linkedGoal.struggleCount || 0,
+          }
+        ];
+        const updatedFormData = { ...formData, goals: updatedGoals };
+        setFormData(updatedFormData);
+        setEditingItem(updatedFormData);
+      }
+      
       showSuccess('Goal linked to life area successfully');
       
-      // Reload data to get updated life areas with linked goals
+      // Reload data in the background to ensure consistency
       await loadData();
-      
-      // Update the formData and editingItem to show the newly linked goal immediately
-      if (editingItem && editingItem.id === lifeAreaId) {
-        const updatedLifeArea = lifeAreas.find(la => la.id === lifeAreaId);
-        if (updatedLifeArea) {
-          setEditingItem(updatedLifeArea);
-          setFormData(updatedLifeArea);
-        }
-      }
     } catch (error) {
       console.error('Error linking goal to life area:', error);
       showError('Failed to link goal to life area');
+      // Reload data to revert optimistic update
+      await loadData();
     }
   };
 
@@ -2360,7 +2374,7 @@ export default function SettingsScreen() {
                   style={styles.alertButton}
                   onPress={() => {
                     setShowCreateGoalModal(false);
-                    setShowModal(false);
+                    // Keep the Edit Life Area modal open
                     router.push(`/create-goal?lifeAreaId=${editingItem?.id}&returnToSettings=true`);
                   }}
                 >
