@@ -680,7 +680,8 @@ export default function SettingsScreen() {
       
       // Reload data to get the updated structure
       await loadData();
-      showSuccess('Life areas reordered successfully');
+      // REMOVED: showSuccess('Life areas recorded successfully');
+      // No success message shown after reordering
     } catch (error: any) {
       console.error('[Settings iOS] Error reordering life areas:', error);
       showError(error.message || 'Failed to reorder life areas');
