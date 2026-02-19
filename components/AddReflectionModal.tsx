@@ -202,10 +202,10 @@ export function AddReflectionModal({
   const handleAdditionalThoughtsFocus = () => {
     console.log('Additional thoughts input focused on Step 4');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
-      // Scroll to position the Notes text box above the keyboard
+      // Scroll to position the Notes text box above the keyboard and Next button
       // Account for: Gains section (~100px) + Losses section (~100px) + Was it worth it section (~150px) + Notes label (~40px)
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 400, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 450, animated: true });
       }, 100);
     }
   };
@@ -214,9 +214,9 @@ export function AddReflectionModal({
   const handleAdditionalThoughtsContentSizeChange = () => {
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
       console.log('Additional thoughts content size changed, maintaining scroll position');
-      // Keep the scroll position stable so the text box stays visible
+      // Keep the scroll position stable so the text box stays visible above keyboard and Next button
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 400, animated: false });
+        scrollViewRef.current?.scrollTo({ y: 450, animated: false });
       }, 50);
     }
   };
@@ -299,24 +299,37 @@ export function AddReflectionModal({
     return { ios: 'sparkles', android: 'auto-awesome' };
   };
 
+  // Dynamic description placeholder based on Type and Category
   const getDescriptionPlaceholder = () => {
-    if (!category) {
-      return type === 'Proactive' 
-        ? 'I chose to or didn\'t refrain from...' 
-        : 'I refrained from or didn\'t...';
-    }
-
+    const categoryLower = category?.toLowerCase();
+    
     if (type === 'Proactive') {
-      if (category === 'Action') return 'Describe what you chose to do';
-      if (category === 'Speech') return 'Describe what you chose to say';
-      if (category === 'Thought' || category === 'Feeling') return 'Describe what you chose to think/feel';
+      // Proactive: "Describe what you chose to do/say/think/feel (or didn't actively refrain from doing/saying/thinking/feeling)"
+      if (categoryLower === 'action') {
+        return 'Describe what you chose to do (or didn\'t actively refrain from doing)';
+      } else if (categoryLower === 'speech') {
+        return 'Describe what you chose to say (or didn\'t actively refrain from saying)';
+      } else if (categoryLower === 'thought') {
+        return 'Describe what you chose to think (or didn\'t actively refrain from thinking)';
+      } else if (categoryLower === 'feeling') {
+        return 'Describe what you chose to feel (or didn\'t actively refrain from feeling)';
+      } else {
+        return 'Describe what you chose to do/say/think/feel (or didn\'t actively refrain from)';
+      }
     } else {
-      if (category === 'Action') return 'Describe what you refrained from doing';
-      if (category === 'Speech') return 'Describe what you refrained from saying';
-      if (category === 'Thought' || category === 'Feeling') return 'Describe what you refrained from thinking/feeling';
+      // Restraint: "Describe what you refrained from doing/saying/thinking/feeling (or didn't actively do/say/think/feel)"
+      if (categoryLower === 'action') {
+        return 'Describe what you refrained from doing (or didn\'t actively do)';
+      } else if (categoryLower === 'speech') {
+        return 'Describe what you refrained from saying (or didn\'t actively say)';
+      } else if (categoryLower === 'thought') {
+        return 'Describe what you refrained from thinking (or didn\'t actively think)';
+      } else if (categoryLower === 'feeling') {
+        return 'Describe what you refrained from feeling (or didn\'t actively feel)';
+      } else {
+        return 'Describe what you refrained from doing/saying/thinking/feeling (or didn\'t actively do/say/think/feel)';
+      }
     }
-
-    return 'Describe your reflection';
   };
 
   // Auto-advance to Step 2 when category is selected in Step 1
@@ -648,7 +661,7 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 2: Type and Description */}
+            {/* STEP 2: Type and Description - Dynamic placeholder based on Type and Category */}
             {step === 2 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
@@ -706,7 +719,7 @@ export function AddReflectionModal({
                     <Text style={styles.required}> *</Text>
                   </View>
                   <Text style={styles.helperText}>
-                    Describe what happened in detail
+                    {getDescriptionPlaceholder()}
                   </Text>
                   <TextInput
                     ref={descriptionInputRef}
@@ -1107,7 +1120,7 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 5: Strategies - No default selection */}
+            {/* STEP 5: Strategies - Tick/cross next to selected strategies */}
             {step === 5 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
@@ -1121,7 +1134,7 @@ export function AddReflectionModal({
                     <Text style={styles.label}>Strategies (Optional)</Text>
                   </View>
                   <Text style={styles.helperText}>
-                    Select strategies you used or want to use for this reflection
+                    Select strategies you used and mark whether they worked
                   </Text>
                   <TouchableOpacity
                     style={styles.goalPickerButton}
@@ -1142,35 +1155,62 @@ export function AddReflectionModal({
                     <View style={styles.pickerContainer}>
                       <ScrollView style={styles.pickerList}>
                         {strategies.map((strategy, index) => {
-                          const isSelected = strategyEffectiveness.some(se => se.strategyId === strategy.id);
+                          const effectiveness = strategyEffectiveness.find(se => se.strategyId === strategy.id);
+                          const isSelected = !!effectiveness;
                           const successRateText = `${Math.round(strategy.successRate)}%`;
                           const timesUsedText = `${strategy.timesUsed} times`;
                           
                           return (
                             <React.Fragment key={index}>
-                              <TouchableOpacity
-                                style={[styles.strategyListItem, isSelected && styles.goalItemSelected]}
-                                onPress={() => toggleStrategy(strategy.id)}
-                              >
-                                <View style={styles.strategyListItemContent}>
-                                  <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
-                                    {strategy.name}
-                                  </Text>
-                                  <View style={styles.strategyStats}>
-                                    <Text style={styles.strategyStatText}>{successRateText}</Text>
-                                    <Text style={styles.strategyStatText}>•</Text>
-                                    <Text style={styles.strategyStatText}>{timesUsedText}</Text>
+                              <View style={styles.strategyListItemWithFeedback}>
+                                <TouchableOpacity
+                                  style={[styles.strategyListItemMain, isSelected && styles.goalItemSelected]}
+                                  onPress={() => toggleStrategy(strategy.id)}
+                                >
+                                  <View style={styles.strategyListItemContent}>
+                                    <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                      {strategy.name}
+                                    </Text>
+                                    <View style={styles.strategyStats}>
+                                      <Text style={styles.strategyStatText}>{successRateText}</Text>
+                                      <Text style={styles.strategyStatText}>•</Text>
+                                      <Text style={styles.strategyStatText}>{timesUsedText}</Text>
+                                    </View>
                                   </View>
-                                </View>
-                                {isSelected && (
-                                  <IconSymbol
-                                    ios_icon_name="checkmark.circle.fill"
-                                    android_material_icon_name="check-circle"
-                                    size={20}
-                                    color={colors.primary}
-                                  />
-                                )}
-                              </TouchableOpacity>
+                                  {isSelected && (
+                                    <View style={styles.strategyFeedbackIcons}>
+                                      <TouchableOpacity
+                                        style={[
+                                          styles.strategyFeedbackIcon,
+                                          effectiveness.worked === true && styles.strategyFeedbackIconWorked
+                                        ]}
+                                        onPress={() => setStrategyWorked(strategy.id, true)}
+                                      >
+                                        <IconSymbol
+                                          ios_icon_name="checkmark.circle.fill"
+                                          android_material_icon_name="check-circle"
+                                          size={24}
+                                          color={effectiveness.worked === true ? colors.background : colors.success}
+                                        />
+                                      </TouchableOpacity>
+                                      <TouchableOpacity
+                                        style={[
+                                          styles.strategyFeedbackIcon,
+                                          effectiveness.worked === false && styles.strategyFeedbackIconDidntWork
+                                        ]}
+                                        onPress={() => setStrategyWorked(strategy.id, false)}
+                                      >
+                                        <IconSymbol
+                                          ios_icon_name="xmark.circle.fill"
+                                          android_material_icon_name="cancel"
+                                          size={24}
+                                          color={effectiveness.worked === false ? colors.background : colors.error}
+                                        />
+                                      </TouchableOpacity>
+                                    </View>
+                                  )}
+                                </TouchableOpacity>
+                              </View>
                             </React.Fragment>
                           );
                         })}
@@ -1190,79 +1230,6 @@ export function AddReflectionModal({
                     </View>
                   )}
                 </View>
-
-                {strategyEffectiveness.length > 0 && (
-                  <View style={styles.formGroup}>
-                    <Text style={styles.label}>Did these strategies work?</Text>
-                    {strategyEffectiveness.map((se, index) => {
-                      const strategy = strategies.find(s => s.id === se.strategyId);
-                      if (!strategy) return null;
-                      
-                      const successRateText = `${Math.round(strategy.successRate)}%`;
-                      const fractionText = `${strategy.successCount}/${strategy.timesUsed}`;
-                      
-                      return (
-                        <React.Fragment key={index}>
-                          <View style={styles.strategyEffectivenessCard}>
-                            <View style={styles.strategyEffectivenessHeader}>
-                              <Text style={styles.strategyEffectivenessName}>{strategy.name}</Text>
-                              <Text style={styles.strategyEffectivenessRate}>
-                                {successRateText} ({fractionText})
-                              </Text>
-                            </View>
-                            {strategy.description && (
-                              <Text style={styles.strategyEffectivenessDescription}>
-                                {strategy.description}
-                              </Text>
-                            )}
-                            <View style={styles.strategyEffectivenessButtons}>
-                              <TouchableOpacity
-                                style={[
-                                  styles.strategyEffectivenessButton,
-                                  se.worked === true && styles.strategyEffectivenessButtonWorked
-                                ]}
-                                onPress={() => setStrategyWorked(se.strategyId, true)}
-                              >
-                                <IconSymbol
-                                  ios_icon_name="checkmark.circle.fill"
-                                  android_material_icon_name="check-circle"
-                                  size={20}
-                                  color={se.worked === true ? colors.background : colors.success}
-                                />
-                                <Text style={[
-                                  styles.strategyEffectivenessButtonText,
-                                  se.worked === true && styles.strategyEffectivenessButtonTextSelected
-                                ]}>
-                                  Worked
-                                </Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                style={[
-                                  styles.strategyEffectivenessButton,
-                                  se.worked === false && styles.strategyEffectivenessButtonDidntWork
-                                ]}
-                                onPress={() => setStrategyWorked(se.strategyId, false)}
-                              >
-                                <IconSymbol
-                                  ios_icon_name="xmark.circle.fill"
-                                  android_material_icon_name="cancel"
-                                  size={20}
-                                  color={se.worked === false ? colors.background : colors.error}
-                                />
-                                <Text style={[
-                                  styles.strategyEffectivenessButtonText,
-                                  se.worked === false && styles.strategyEffectivenessButtonTextSelected
-                                ]}>
-                                  Didn't work
-                                </Text>
-                              </TouchableOpacity>
-                            </View>
-                          </View>
-                        </React.Fragment>
-                      );
-                    })}
-                  </View>
-                )}
               </React.Fragment>
             )}
           </ScrollView>
@@ -1869,10 +1836,12 @@ const styles = StyleSheet.create({
   worthItTextSelected: {
     color: colors.background,
   },
-  strategyListItem: {
-    padding: 14,
+  strategyListItemWithFeedback: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  strategyListItemMain: {
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1889,67 +1858,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
   },
-  strategyEffectivenessCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  strategyEffectivenessHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  strategyEffectivenessName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-    flex: 1,
-  },
-  strategyEffectivenessRate: {
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  strategyEffectivenessDescription: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: 10,
-  },
-  strategyEffectivenessButtons: {
+  strategyFeedbackIcons: {
     flexDirection: 'row',
     gap: 8,
+    marginLeft: 12,
   },
-  strategyEffectivenessButton: {
-    flex: 1,
-    flexDirection: 'row',
+  strategyFeedbackIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    padding: 10,
-    borderRadius: 8,
     backgroundColor: colors.background,
     borderWidth: 2,
     borderColor: colors.border,
   },
-  strategyEffectivenessButtonWorked: {
+  strategyFeedbackIconWorked: {
     backgroundColor: colors.success,
     borderColor: colors.success,
   },
-  strategyEffectivenessButtonDidntWork: {
+  strategyFeedbackIconDidntWork: {
     backgroundColor: colors.error,
     borderColor: colors.error,
-  },
-  strategyEffectivenessButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  strategyEffectivenessButtonTextSelected: {
-    color: colors.background,
   },
   button: {
     padding: 14,
