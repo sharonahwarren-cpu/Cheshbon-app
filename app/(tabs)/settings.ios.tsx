@@ -720,7 +720,7 @@ export default function SettingsScreen() {
       setTempDepthAdjustment(0);
     } else if (nativeEvent.state === State.ACTIVE) {
       const deltaX = nativeEvent.x - dragStartX.current;
-      const INDENT_THRESHOLD = 40;
+      const INDENT_THRESHOLD = 30; // Reduced from 40 to make it more responsive
       
       // Calculate depth adjustment based on horizontal movement
       const depthChange = Math.floor(deltaX / INDENT_THRESHOLD);
@@ -770,7 +770,7 @@ export default function SettingsScreen() {
                     <IconSymbol
                       ios_icon_name="line.3.horizontal"
                       android_material_icon_name="drag-handle"
-                      size={20}
+                      size={24}
                       color={colors.textSecondary}
                     />
                   </TouchableOpacity>
@@ -834,7 +834,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Long press ≡ and drag vertically to reorder. While dragging, swipe left/right to change nesting level.
+          Long press the ≡ handle and drag vertically to reorder. While dragging, swipe left/right to change nesting level.
         </Text>
         {lifeAreasData.length === 0 ? (
           <View style={styles.emptyState}>
@@ -2368,7 +2368,7 @@ const styles = StyleSheet.create({
   },
   lifeAreaCardCompact: {
     backgroundColor: colors.card,
-    padding: 12,
+    padding: 16,
     borderRadius: 8,
     marginBottom: 8,
     borderLeftWidth: 3,
@@ -2413,7 +2413,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   dragHandle: {
-    padding: 4,
+    padding: 8,
     marginRight: 4,
   },
   currencyTypeText: {
