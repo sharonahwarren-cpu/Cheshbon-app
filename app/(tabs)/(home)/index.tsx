@@ -579,7 +579,6 @@ export default function HomeScreen() {
       currencyId: string;
     }> = [];
 
-    // Calculate reward currency impact
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
       const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
       if (rewardCurrency) {
@@ -606,7 +605,6 @@ export default function HomeScreen() {
       }
     }
 
-    // Calculate consequence currency impact
     if (goal.consequenceCurrencyId && goal.consequenceAmount && goal.consequenceFailures) {
       const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
       if (consequenceCurrency) {
@@ -622,13 +620,10 @@ export default function HomeScreen() {
           }
           
           if (consequenceTally !== 0) {
-            // Check if same currency as reward - if so, combine them
             const existingTallyIndex = tallies.findIndex(t => t.currencyId === consequenceCurrency.id);
             if (existingTallyIndex !== -1) {
-              // Same currency - combine the tallies
               tallies[existingTallyIndex].tally += consequenceTally;
             } else {
-              // Different currency - add separately
               tallies.push({
                 tally: consequenceTally,
                 currencySymbol: consequenceCurrency.symbol || '',
@@ -858,7 +853,6 @@ export default function HomeScreen() {
   const tabLabel = activeTab === 'reports' ? 'Reports' : 'Express';
   const dateDisplay = formatDateDisplay(selectedDate);
 
-  // Map goals for modal with correct field names that AddReflectionModal expects
   const goalsForModal = activatedGoals.map(g => {
     console.log('[Express] Mapping goal for modal:', {
       id: g.id,
@@ -873,17 +867,16 @@ export default function HomeScreen() {
       struggleCount: g.struggleCount,
     });
     
-    // Map backend field names to what AddReflectionModal expects
     return {
       id: g.id,
       title: g.title,
       behaviorCategories: g.behaviorCategories,
       rewardCurrencyId: g.rewardCurrencyId,
       rewardAmount: g.rewardAmount,
-      rewardSuccesses: g.rewardSuccesses, // Backend uses rewardSuccesses, modal expects this
+      rewardSuccesses: g.rewardSuccesses,
       consequenceCurrencyId: g.consequenceCurrencyId,
       consequenceAmount: g.consequenceAmount,
-      consequenceFailures: g.consequenceFailures, // Backend uses consequenceFailures, modal expects this
+      consequenceFailures: g.consequenceFailures,
       successCount: g.successCount,
       struggleCount: g.struggleCount,
     };
@@ -898,7 +891,6 @@ export default function HomeScreen() {
           resizeMode="contain"
         />
         <Text style={styles.headerTitle}>Cheshbon</Text>
-        <Text style={styles.headerSubtitle}>Your personal growth companion</Text>
       </View>
 
       <View style={styles.tabContainer}>
@@ -1578,29 +1570,24 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 20 : 10,
-    paddingBottom: 16,
+    paddingTop: Platform.OS === 'android' ? 12 : 4,
+    paddingBottom: 12,
     alignItems: 'center',
   },
   logo: {
-    width: 60,
-    height: 60,
-    marginBottom: 12,
+    width: 80,
+    height: 80,
+    marginBottom: 8,
   },
   headerTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: colors.textSecondary,
   },
   tabContainer: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 12,
   },
   tab: {
