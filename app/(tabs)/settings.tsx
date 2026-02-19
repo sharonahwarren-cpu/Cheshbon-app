@@ -3109,8 +3109,8 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   lifeAreaCompactPercentage: {
-    fontSize: 13,
-    fontWeight: 'bold',
+    fontSize: 10,
+    fontWeight: '600',
     marginLeft: 4,
   },
   lifeAreaCompactActions: {

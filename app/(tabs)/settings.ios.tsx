@@ -17,6 +17,8 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 interface LifeArea {
   id: string;
@@ -618,8 +620,98 @@ export default function SettingsScreen() {
     return result;
   };
 
+  const handleReorderLifeAreas = async ({ data }: { data: Array<LifeArea & { depth: number }> }) => {
+    console.log('[Settings iOS] Reordering life areas...');
+    
+    // Update local state immediately for optimistic UI
+    const reorderedIds = data.map(item => item.id);
+    
+    try {
+      // Send the new order to the backend
+      await authenticatedPut('/api/life-areas/reorder', { ids: reorderedIds });
+      console.log('[Settings iOS] Life areas reordered successfully');
+      
+      // Reload data to get the updated structure
+      await loadData();
+      showSuccess('Life areas reordered successfully');
+    } catch (error: any) {
+      console.error('[Settings iOS] Error reordering life areas:', error);
+      showError(error.message || 'Failed to reorder life areas');
+      // Reload data to revert to previous state
+      await loadData();
+    }
+  };
+
   const renderLifeAreas = () => {
     const flatAreas = flattenLifeAreas(lifeAreas);
+
+    const renderLifeAreaItem = ({ item, drag, isActive }: RenderItemParams<LifeArea & { depth: number }>) => {
+      const iconName = item.icon;
+      const areaColor = item.color || colors.primary;
+      const percentage = item.successPercentage || 0;
+      const percentageText = `${Math.round(percentage)}%`;
+      const percentageColor = (item.percentageColor === 'green') ? colors.success : colors.error;
+      
+      return (
+        <ScaleDecorator>
+          <TouchableOpacity
+            onLongPress={drag}
+            disabled={isActive}
+            style={[
+              styles.lifeAreaCardCompact,
+              { marginLeft: item.depth * 16, borderLeftColor: areaColor },
+              isActive && styles.lifeAreaCardActive,
+            ]}
+          >
+            <View style={styles.lifeAreaCompactContent}>
+              <View style={styles.lifeAreaCompactLeft}>
+                <IconSymbol
+                  ios_icon_name="line.3.horizontal"
+                  android_material_icon_name="drag-handle"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+                {iconName ? (
+                  <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
+                ) : (
+                  <View style={styles.iconPlaceholder} />
+                )}
+                <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
+                {item.showProgress && (
+                  <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
+                    {percentageText}
+                  </Text>
+                )}
+              </View>
+              <View style={styles.lifeAreaCompactActions}>
+                <TouchableOpacity
+                  onPress={() => openEditModal('lifeArea', item)}
+                  style={styles.iconButtonCompact}
+                >
+                  <IconSymbol
+                    ios_icon_name="pencil"
+                    android_material_icon_name="edit"
+                    size={16}
+                    color={colors.primary}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleDeleteItem('lifeArea', item.id)}
+                  style={styles.iconButtonCompact}
+                >
+                  <IconSymbol
+                    ios_icon_name="trash"
+                    android_material_icon_name="delete"
+                    size={16}
+                    color={colors.error}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </ScaleDecorator>
+      );
+    };
 
     return (
       <View style={styles.container}>
@@ -642,72 +734,21 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.listContainer}>
-          {flatAreas.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
-            </View>
-          ) : (
-            flatAreas.map((area, index) => {
-              const iconName = area.icon;
-              const areaColor = area.color || colors.primary;
-              const percentage = area.successPercentage || 0;
-              const percentageText = `${Math.round(percentage)}%`;
-              const percentageColor = (area.percentageColor === 'green') ? colors.success : colors.error;
-              
-              return (
-                <React.Fragment key={index}>
-                  <View
-                    style={[
-                      styles.lifeAreaCardCompact,
-                      { marginLeft: area.depth * 16, borderLeftColor: areaColor },
-                    ]}
-                  >
-                    <View style={styles.lifeAreaCompactContent}>
-                      <View style={styles.lifeAreaCompactLeft}>
-                        {iconName ? (
-                          <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
-                        ) : (
-                          <View style={styles.iconPlaceholder} />
-                        )}
-                        <Text style={styles.lifeAreaCompactName}>{area.name}</Text>
-                        {area.showProgress && (
-                          <Text style={[styles.lifeAreaCompactPercentage, { color: percentageColor }]}>
-                            {percentageText}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={styles.lifeAreaCompactActions}>
-                        <TouchableOpacity
-                          onPress={() => openEditModal('lifeArea', area)}
-                          style={styles.iconButtonCompact}
-                        >
-                          <IconSymbol
-                            ios_icon_name="pencil"
-                            android_material_icon_name="edit"
-                            size={16}
-                            color={colors.primary}
-                          />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => handleDeleteItem('lifeArea', area.id)}
-                          style={styles.iconButtonCompact}
-                        >
-                          <IconSymbol
-                            ios_icon_name="trash"
-                            android_material_icon_name="delete"
-                            size={16}
-                            color={colors.error}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                </React.Fragment>
-              );
-            })
-          )}
-        </ScrollView>
+        {flatAreas.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
+          </View>
+        ) : (
+          <GestureHandlerRootView style={styles.listContainer}>
+            <DraggableFlatList
+              data={flatAreas}
+              onDragEnd={handleReorderLifeAreas}
+              keyExtractor={(item) => item.id}
+              renderItem={renderLifeAreaItem}
+              contentContainerStyle={styles.draggableListContent}
+            />
+          </GestureHandlerRootView>
+        )}
       </View>
     );
   };
@@ -2231,6 +2272,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderLeftWidth: 3,
   },
+  lifeAreaCardActive: {
+    backgroundColor: colors.border,
+    opacity: 0.8,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  draggableListContent: {
+    paddingBottom: 20,
+  },
   lifeAreaCompactContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2252,8 +2305,8 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   lifeAreaCompactPercentage: {
-    fontSize: 13,
-    fontWeight: 'bold',
+    fontSize: 10,
+    fontWeight: '600',
     marginLeft: 4,
   },
   lifeAreaCompactActions: {
