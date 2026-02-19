@@ -931,9 +931,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   journalAppIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
+    width: 42,
+    height: 42,
+    borderRadius: 9,
   },
   journalCardTitle: {
     fontSize: 20,
@@ -946,9 +946,9 @@ const styles = StyleSheet.create({
     paddingVertical: 40,
   },
   journalPlaceholderIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
+    width: 72,
+    height: 72,
+    borderRadius: 15,
     opacity: 0.6,
   },
   journalPlaceholderText: {
