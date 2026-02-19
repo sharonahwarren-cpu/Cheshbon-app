@@ -43,10 +43,12 @@ interface Goal {
 
 export default function LifeAreaWizardScreen() {
   const router = useRouter();
-  const { id: editingLifeAreaId } = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; step?: string; newGoalCreated?: string }>();
+  const editingLifeAreaId = params.id;
+  const initialStep = params.step ? parseInt(params.step) : 1;
 
   // Step state
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(initialStep);
   
   // Step 1 form data
   const [name, setName] = useState('');
@@ -80,6 +82,14 @@ export default function LifeAreaWizardScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Reload goals when returning from goal creation
+  useEffect(() => {
+    if (params.newGoalCreated === 'true') {
+      console.log('[LifeAreaWizard iOS] New goal created, reloading goals...');
+      loadGoals();
+    }
+  }, [params.newGoalCreated]);
 
   const loadData = async () => {
     console.log('[LifeAreaWizard iOS] Loading data...');
@@ -128,12 +138,16 @@ export default function LifeAreaWizardScreen() {
           const linkedIds = (lifeAreaData.goals || []).map((g: any) => g.id);
           setLinkedGoalIds(linkedIds);
           
-          // If editing, start at step 2 (goal linking)
-          setCurrentStep(2);
+          // If editing and step is specified, go to that step
+          if (initialStep === 2) {
+            setCurrentStep(2);
+          }
         } else {
           console.warn('[LifeAreaWizard iOS] Life area not found in list, ID:', editingLifeAreaId);
           setSavedLifeAreaId(editingLifeAreaId);
-          setCurrentStep(2);
+          if (initialStep === 2) {
+            setCurrentStep(2);
+          }
         }
       }
     } catch (error: any) {
@@ -141,6 +155,18 @@ export default function LifeAreaWizardScreen() {
       showError(error.message || 'Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGoals = async () => {
+    console.log('[LifeAreaWizard iOS] Reloading goals...');
+    try {
+      const goalsRes = await authenticatedGet('/api/goals');
+      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      setGoals(goalsData);
+      console.log('[LifeAreaWizard iOS] Goals reloaded, count:', goalsData.length);
+    } catch (error: any) {
+      console.error('[LifeAreaWizard iOS] Error reloading goals:', error);
     }
   };
 
@@ -152,6 +178,10 @@ export default function LifeAreaWizardScreen() {
   const showSuccess = (message: string) => {
     setSuccessMessage(message);
     setShowSuccessModal(true);
+    // Auto-dismiss after 1.5 seconds
+    setTimeout(() => {
+      setShowSuccessModal(false);
+    }, 1500);
   };
 
   const handleStep1Save = async () => {
@@ -183,14 +213,14 @@ export default function LifeAreaWizardScreen() {
         console.log('[API] Creating life area:', lifeAreaData);
         result = await authenticatedPost('/api/life-areas', lifeAreaData);
         const createdId = result?.id || result?.data?.id;
+        console.log('[API] Life area created with ID:', createdId);
         setSavedLifeAreaId(createdId);
       }
 
-      showSuccess('Life Area saved! Now you can link goals.');
+      showSuccess('Saved!');
       
       // Move to step 2 after a brief delay
       setTimeout(() => {
-        setShowSuccessModal(false);
         setCurrentStep(2);
       }, 1500);
     } catch (error: any) {
@@ -202,19 +232,18 @@ export default function LifeAreaWizardScreen() {
   };
 
   const handleLinkGoal = async (goalId: string) => {
-    if (!savedLifeAreaId) return;
+    if (!savedLifeAreaId) {
+      showError('Please save the Life Area first');
+      return;
+    }
     
     try {
       console.log('[API] Linking goal to life area:', { goalId, lifeAreaId: savedLifeAreaId });
       await authenticatedPost(`/api/life-areas/${savedLifeAreaId}/goals`, { goalId });
       
-      // Update local state
+      // Update local state immediately
       setLinkedGoalIds([...linkedGoalIds, goalId]);
-      showSuccess('Goal linked successfully!');
-      
-      setTimeout(() => {
-        setShowSuccessModal(false);
-      }, 1000);
+      showSuccess('Goal linked!');
     } catch (error: any) {
       console.error('[API] Error linking goal:', error);
       showError(error.message || 'Failed to link goal');
@@ -228,13 +257,9 @@ export default function LifeAreaWizardScreen() {
       console.log('[API] Unlinking goal from life area:', { goalId, lifeAreaId: savedLifeAreaId });
       await authenticatedDelete(`/api/life-areas/${savedLifeAreaId}/goals/${goalId}`);
       
-      // Update local state
+      // Update local state immediately
       setLinkedGoalIds(linkedGoalIds.filter(id => id !== goalId));
-      showSuccess('Goal unlinked successfully!');
-      
-      setTimeout(() => {
-        setShowSuccessModal(false);
-      }, 1000);
+      showSuccess('Goal unlinked!');
     } catch (error: any) {
       console.error('[API] Error unlinking goal:', error);
       showError(error.message || 'Failed to unlink goal');
@@ -242,18 +267,33 @@ export default function LifeAreaWizardScreen() {
   };
 
   const handleCreateNewGoal = () => {
+    if (!savedLifeAreaId) {
+      showError('Please save the Life Area first');
+      return;
+    }
+    
     console.log('[LifeAreaWizard iOS] Creating new goal for life area:', savedLifeAreaId);
-    // Navigate to create goal with prefilled life area
-    router.push(`/create-goal?lifeAreaId=${savedLifeAreaId}&returnToLifeAreaWizard=true`);
+    // Navigate to create goal with prefilled life area and return params
+    router.push(`/create-goal?lifeAreaId=${savedLifeAreaId}&returnToLifeAreaWizard=true&wizardLifeAreaId=${savedLifeAreaId}`);
   };
 
   const handleFinish = () => {
     console.log('[LifeAreaWizard iOS] Finishing wizard, returning to settings');
-    showSuccess('Life Area saved successfully!');
+    showSuccess('Life Area saved!');
     
     setTimeout(() => {
       router.back();
     }, 1500);
+  };
+
+  const handleBackNavigation = () => {
+    if (currentStep === 2) {
+      // If on Step 2, go back to Step 1
+      setCurrentStep(1);
+    } else {
+      // If on Step 1, go back to settings
+      router.back();
+    }
   };
 
   const addCustomColor = () => {
@@ -263,7 +303,6 @@ export default function LifeAreaWizardScreen() {
       setCustomColorInput('');
       setShowColorPicker(false);
       showSuccess('Custom color added');
-      setTimeout(() => setShowSuccessModal(false), 1000);
     } else {
       showError('Please enter a valid hex color (e.g., #FF5733)');
     }
@@ -292,7 +331,22 @@ export default function LifeAreaWizardScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Stack.Screen options={{ title: screenTitle, headerShown: true }} />
+        <Stack.Screen 
+          options={{ 
+            title: screenTitle, 
+            headerShown: true,
+            headerLeft: () => (
+              <TouchableOpacity onPress={handleBackNavigation}>
+                <IconSymbol
+                  ios_icon_name="chevron.left"
+                  android_material_icon_name="arrow-back"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            ),
+          }} 
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -302,7 +356,22 @@ export default function LifeAreaWizardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: screenTitle, headerShown: true }} />
+      <Stack.Screen 
+        options={{ 
+          title: screenTitle, 
+          headerShown: true,
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleBackNavigation}>
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={24}
+                color={colors.text}
+              />
+            </TouchableOpacity>
+          ),
+        }} 
+      />
       
       <View style={styles.stepIndicator}>
         <View style={[styles.stepDot, currentStep >= 1 && styles.stepDotActive]}>
@@ -552,22 +621,13 @@ export default function LifeAreaWizardScreen() {
               <Text style={styles.secondaryButtonText}>Create New Goal</Text>
             </TouchableOpacity>
 
-            {/* Navigation Buttons */}
-            <View style={styles.navigationButtons}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => setCurrentStep(1)}
-              >
-                <Text style={styles.backButtonText}>Back to Step 1</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.finishButton}
-                onPress={handleFinish}
-              >
-                <Text style={styles.finishButtonText}>Finish</Text>
-              </TouchableOpacity>
-            </View>
+            {/* Finish Button */}
+            <TouchableOpacity
+              style={styles.finishButton}
+              onPress={handleFinish}
+            >
+              <Text style={styles.finishButtonText}>Finish</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -693,7 +753,7 @@ export default function LifeAreaWizardScreen() {
         </View>
       </Modal>
 
-      {/* Success Modal */}
+      {/* Success Modal - Auto-dismisses, no OK button */}
       <Modal
         visible={showSuccessModal}
         transparent
@@ -704,12 +764,6 @@ export default function LifeAreaWizardScreen() {
           <View style={styles.alertModal}>
             <Text style={styles.alertTitle}>Success</Text>
             <Text style={styles.alertMessage}>{successMessage}</Text>
-            <TouchableOpacity
-              style={styles.alertButton}
-              onPress={() => setShowSuccessModal(false)}
-            >
-              <Text style={styles.alertButtonText}>OK</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -990,31 +1044,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  navigationButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 32,
-  },
-  backButton: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  backButtonText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-  },
   finishButton: {
-    flex: 1,
     backgroundColor: colors.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    marginTop: 32,
   },
   finishButtonText: {
     color: colors.background,

@@ -179,6 +179,10 @@ export default function LifeAreaWizardScreen() {
   const showSuccess = (message: string) => {
     setSuccessMessage(message);
     setShowSuccessModal(true);
+    // Auto-dismiss after 1.5 seconds
+    setTimeout(() => {
+      setShowSuccessModal(false);
+    }, 1500);
   };
 
   const handleStep1Save = async () => {
@@ -214,11 +218,10 @@ export default function LifeAreaWizardScreen() {
         setSavedLifeAreaId(createdId);
       }
 
-      showSuccess('Life Area saved! Now you can link goals.');
+      showSuccess('Saved!');
       
       // Move to step 2 after a brief delay
       setTimeout(() => {
-        setShowSuccessModal(false);
         setCurrentStep(2);
       }, 1500);
     } catch (error: any) {
@@ -241,11 +244,7 @@ export default function LifeAreaWizardScreen() {
       
       // Update local state immediately
       setLinkedGoalIds([...linkedGoalIds, goalId]);
-      showSuccess('Goal linked successfully!');
-      
-      setTimeout(() => {
-        setShowSuccessModal(false);
-      }, 1000);
+      showSuccess('Goal linked!');
     } catch (error: any) {
       console.error('[API] Error linking goal:', error);
       showError(error.message || 'Failed to link goal');
@@ -261,11 +260,7 @@ export default function LifeAreaWizardScreen() {
       
       // Update local state immediately
       setLinkedGoalIds(linkedGoalIds.filter(id => id !== goalId));
-      showSuccess('Goal unlinked successfully!');
-      
-      setTimeout(() => {
-        setShowSuccessModal(false);
-      }, 1000);
+      showSuccess('Goal unlinked!');
     } catch (error: any) {
       console.error('[API] Error unlinking goal:', error);
       showError(error.message || 'Failed to unlink goal');
@@ -285,11 +280,21 @@ export default function LifeAreaWizardScreen() {
 
   const handleFinish = () => {
     console.log('[LifeAreaWizard] Finishing wizard, returning to settings');
-    showSuccess('Life Area saved successfully!');
+    showSuccess('Life Area saved!');
     
     setTimeout(() => {
       router.back();
     }, 1500);
+  };
+
+  const handleBackNavigation = () => {
+    if (currentStep === 2) {
+      // If on Step 2, go back to Step 1
+      setCurrentStep(1);
+    } else {
+      // If on Step 1, go back to settings
+      router.back();
+    }
   };
 
   const addCustomColor = () => {
@@ -299,7 +304,6 @@ export default function LifeAreaWizardScreen() {
       setCustomColorInput('');
       setShowColorPicker(false);
       showSuccess('Custom color added');
-      setTimeout(() => setShowSuccessModal(false), 1000);
     } else {
       showError('Please enter a valid hex color (e.g., #FF5733)');
     }
@@ -328,7 +332,22 @@ export default function LifeAreaWizardScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Stack.Screen options={{ title: screenTitle, headerShown: true }} />
+        <Stack.Screen 
+          options={{ 
+            title: screenTitle, 
+            headerShown: true,
+            headerLeft: () => (
+              <TouchableOpacity onPress={handleBackNavigation}>
+                <IconSymbol
+                  ios_icon_name="chevron.left"
+                  android_material_icon_name="arrow-back"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            ),
+          }} 
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -338,7 +357,22 @@ export default function LifeAreaWizardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: screenTitle, headerShown: true }} />
+      <Stack.Screen 
+        options={{ 
+          title: screenTitle, 
+          headerShown: true,
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleBackNavigation}>
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={24}
+                color={colors.text}
+              />
+            </TouchableOpacity>
+          ),
+        }} 
+      />
       
       <View style={styles.stepIndicator}>
         <View style={[styles.stepDot, currentStep >= 1 && styles.stepDotActive]}>
@@ -588,22 +622,13 @@ export default function LifeAreaWizardScreen() {
               <Text style={styles.secondaryButtonText}>Create New Goal</Text>
             </TouchableOpacity>
 
-            {/* Navigation Buttons */}
-            <View style={styles.navigationButtons}>
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => setCurrentStep(1)}
-              >
-                <Text style={styles.backButtonText}>Back to Step 1</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.finishButton}
-                onPress={handleFinish}
-              >
-                <Text style={styles.finishButtonText}>Finish</Text>
-              </TouchableOpacity>
-            </View>
+            {/* Finish Button */}
+            <TouchableOpacity
+              style={styles.finishButton}
+              onPress={handleFinish}
+            >
+              <Text style={styles.finishButtonText}>Finish</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -729,7 +754,7 @@ export default function LifeAreaWizardScreen() {
         </View>
       </Modal>
 
-      {/* Success Modal */}
+      {/* Success Modal - Auto-dismisses, no OK button */}
       <Modal
         visible={showSuccessModal}
         transparent
@@ -740,12 +765,6 @@ export default function LifeAreaWizardScreen() {
           <View style={styles.alertModal}>
             <Text style={styles.alertTitle}>Success</Text>
             <Text style={styles.alertMessage}>{successMessage}</Text>
-            <TouchableOpacity
-              style={styles.alertButton}
-              onPress={() => setShowSuccessModal(false)}
-            >
-              <Text style={styles.alertButtonText}>OK</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1026,31 +1045,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  navigationButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 32,
-  },
-  backButton: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  backButtonText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-  },
   finishButton: {
-    flex: 1,
     backgroundColor: colors.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
+    marginTop: 32,
   },
   finishButtonText: {
     color: colors.background,
