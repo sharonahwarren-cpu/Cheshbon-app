@@ -122,6 +122,7 @@ export default function SettingsScreen() {
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
+  const [lifeAreasData, setLifeAreasData] = useState<Array<LifeArea & { depth: number }>>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
@@ -173,6 +174,12 @@ export default function SettingsScreen() {
       loadCurrencyBalances();
     }
   }, [currentSection]);
+
+  // Update flattened life areas when lifeAreas changes
+  useEffect(() => {
+    const flatAreas = flattenLifeAreas(lifeAreas);
+    setLifeAreasData(flatAreas);
+  }, [lifeAreas]);
 
   const loadData = async () => {
     console.log('[Settings iOS] Loading settings data...');
@@ -633,57 +640,35 @@ export default function SettingsScreen() {
       return;
     }
     
+    // Optimistically update UI
+    setLifeAreasData(data);
+    
     try {
-      // Calculate new depth based on drop position
-      const draggedItem = data[to];
-      const prevItem = to > 0 ? data[to - 1] : null;
-      const nextItem = to < data.length - 1 ? data[to + 1] : null;
-      
-      // Determine if we should nest (make child of previous item)
-      // This happens when dropping onto an item (not between items)
-      let newDepth = draggedItem.depth;
-      let newParentId = draggedItem.parentId;
-      
-      // If dropped right after an item at the same or lower depth, check if we should nest
-      if (prevItem) {
-        // If the next item has greater depth than prev, we're dropping INTO prev
-        if (nextItem && nextItem.depth > prevItem.depth && nextItem.parentId === prevItem.id) {
-          // Nest under previous item
-          newDepth = prevItem.depth + 1;
-          newParentId = prevItem.id;
-          console.log('[Settings iOS] Nesting under previous item:', prevItem.name);
-        } else if (draggedItem.depth !== prevItem.depth) {
-          // Maintain same depth as previous item (sibling)
-          newDepth = prevItem.depth;
-          newParentId = prevItem.parentId || null;
-          console.log('[Settings iOS] Making sibling of previous item');
-        }
-      } else {
-        // Dropped at top, make it root level
-        newDepth = 0;
-        newParentId = null;
-        console.log('[Settings iOS] Moving to root level');
-      }
-      
-      // Update the dragged item with new depth and parent
-      const updatedData = data.map((item, index) => {
-        if (index === to) {
-          return { ...item, depth: newDepth, parentId: newParentId };
-        }
-        return item;
-      });
-      
-      // Build updates array with parentId and displayOrder
+      // Reconstruct parentId and displayOrder from the flat list
       const updates: Array<{ id: string; parentId: string | null; displayOrder: number }> = [];
+      const parentStack: Array<{ id: string; depth: number }> = [];
       
-      for (let i = 0; i < updatedData.length; i++) {
-        const currentArea = updatedData[i];
+      for (let i = 0; i < data.length; i++) {
+        const currentItem = data[i];
+        
+        // Adjust parent stack based on current item's depth
+        while (parentStack.length > 0 && parentStack[parentStack.length - 1].depth >= currentItem.depth) {
+          parentStack.pop();
+        }
+        
+        // Determine parent ID
+        const parentId = parentStack.length > 0 ? parentStack[parentStack.length - 1].id : null;
         
         updates.push({
-          id: currentArea.id,
-          parentId: currentArea.parentId || null,
+          id: currentItem.id,
+          parentId,
           displayOrder: i,
         });
+        
+        // If next item has greater depth, this item is a parent
+        if (i + 1 < data.length && data[i + 1].depth > currentItem.depth) {
+          parentStack.push({ id: currentItem.id, depth: currentItem.depth });
+        }
       }
       
       console.log('[Settings iOS] Sending updates to backend:', updates);
@@ -703,8 +688,6 @@ export default function SettingsScreen() {
   };
 
   const renderLifeAreas = () => {
-    const flatAreas = flattenLifeAreas(lifeAreas);
-
     const renderLifeAreaItem = ({ item, drag, isActive }: RenderItemParams<LifeArea & { depth: number }>) => {
       const iconName = item.icon;
       const areaColor = item.color || colors.primary;
@@ -787,16 +770,16 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Long press the ≡ handle and drag to reorder. Drop onto another item to nest it as a child.
+          Long press the ≡ handle and drag to reorder. Drag left/right to change nesting level.
         </Text>
-        {flatAreas.length === 0 ? (
+        {lifeAreasData.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
           </View>
         ) : (
           <GestureHandlerRootView style={styles.listContainer}>
             <DraggableFlatList
-              data={flatAreas}
+              data={lifeAreasData}
               onDragEnd={handleReorderLifeAreas}
               keyExtractor={(item) => item.id}
               renderItem={renderLifeAreaItem}
