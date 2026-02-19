@@ -20,8 +20,8 @@ import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDel
 import DateTimePicker from '@react-native-community/datetimepicker';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ColorPicker, HueSlider, fromHsv } from 'react-native-color-picker';
-import Slider from '@react-native-community/slider';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { COLOR_PALETTE, COLOR_GRID_COLUMNS } from '@/utils/colorPalette';
 
 interface LifeArea {
   id: string;
@@ -124,11 +124,6 @@ const ICON_OPTIONS = [
   'music-note', 'palette', 'book', 'attach-money', 'volunteer-activism'
 ];
 
-const COLOR_OPTIONS = [
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8',
-  '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B739', '#52B788', '#E74C3C'
-];
-
 export default function SettingsScreen() {
   const router = useRouter();
   const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
@@ -157,6 +152,12 @@ export default function SettingsScreen() {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  // Confirm delete modal state
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleteItemType, setDeleteItemType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | 'goal' | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<string>('');
+  const [deleteItemName, setDeleteItemName] = useState<string>('');
+
   // Currency claim/pay modal state
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
   const [currencyModalType, setCurrencyModalType] = useState<'claim' | 'pay'>('claim');
@@ -169,8 +170,7 @@ export default function SettingsScreen() {
   
   // Color picker state
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [customColor, setCustomColor] = useState('');
-  const [showCustomColorInput, setShowCustomColorInput] = useState(false);
+  const [customColorInput, setCustomColorInput] = useState('');
   
   // Icon picker state (for image upload)
   const [uploadingIcon, setUploadingIcon] = useState(false);
@@ -430,28 +430,41 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleDeleteItem = async (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', id: string) => {
+  const confirmDelete = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | 'goal', id: string, name: string) => {
+    setDeleteItemType(type);
+    setDeleteItemId(id);
+    setDeleteItemName(name);
+    setShowConfirmDelete(true);
+  };
+
+  const handleDeleteItem = async () => {
+    if (!deleteItemType || !deleteItemId) return;
+
     try {
       setLoading(true);
+      setShowConfirmDelete(false);
       
-      if (type === 'lifeArea') {
-        await authenticatedDelete(`/api/life-areas/${id}`);
+      if (deleteItemType === 'lifeArea') {
+        await authenticatedDelete(`/api/life-areas/${deleteItemId}`);
         showSuccess('Life area deleted successfully');
-      } else if (type === 'strategy') {
-        await authenticatedDelete(`/api/strategies/${id}`);
+      } else if (deleteItemType === 'strategy') {
+        await authenticatedDelete(`/api/strategies/${deleteItemId}`);
         showSuccess('Strategy deleted successfully');
-      } else if (type === 'currency') {
-        await authenticatedDelete(`/api/currencies/${id}`);
+      } else if (deleteItemType === 'currency') {
+        await authenticatedDelete(`/api/currencies/${deleteItemId}`);
         showSuccess('Currency deleted successfully');
-      } else if (type === 'gainLoss') {
-        await authenticatedDelete(`/api/gains-losses/${id}`);
+      } else if (deleteItemType === 'gainLoss') {
+        await authenticatedDelete(`/api/gains-losses/${deleteItemId}`);
         showSuccess('Gain/Loss deleted successfully');
-      } else if (type === 'alarm') {
+      } else if (deleteItemType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
-        const updatedAlarms = alarms.filter(a => a.id !== id);
+        const updatedAlarms = alarms.filter(a => a.id !== deleteItemId);
         await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
         setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         showSuccess('Notification alarm deleted successfully');
+      } else if (deleteItemType === 'goal') {
+        await authenticatedDelete(`/api/goals/${deleteItemId}`);
+        showSuccess('Goal deleted successfully');
       }
 
       await loadData();
@@ -460,20 +473,9 @@ export default function SettingsScreen() {
       showError('Failed to delete item');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDeleteGoal = async (id: string) => {
-    try {
-      setLoading(true);
-      await authenticatedDelete(`/api/goals/${id}`);
-      showSuccess('Goal deleted successfully');
-      await loadData();
-    } catch (error) {
-      console.error('Error deleting goal:', error);
-      showError('Failed to delete goal');
-    } finally {
-      setLoading(false);
+      setDeleteItemType(null);
+      setDeleteItemId('');
+      setDeleteItemName('');
     }
   };
 
@@ -620,14 +622,12 @@ export default function SettingsScreen() {
   };
 
   const addCustomColor = () => {
-    if (customColor && /^#[0-9A-F]{6}$/i.test(customColor)) {
-      if (!COLOR_OPTIONS.includes(customColor.toUpperCase())) {
-        COLOR_OPTIONS.push(customColor.toUpperCase());
-      }
-      setFormData({ ...formData, color: customColor.toUpperCase() });
-      setCustomColor('');
-      setShowCustomColorInput(false);
+    const hexPattern = /^#[0-9A-F]{6}$/i;
+    if (customColorInput && hexPattern.test(customColorInput)) {
+      setFormData({ ...formData, color: customColorInput.toUpperCase() });
+      setCustomColorInput('');
       setShowColorPicker(false);
+      showSuccess('Custom color added');
     } else {
       showError('Please enter a valid hex color (e.g., #FF5733)');
     }
@@ -863,7 +863,7 @@ export default function SettingsScreen() {
                           />
                         </TouchableOpacity>
                         <TouchableOpacity
-                          onPress={() => handleDeleteGoal(goal.id)}
+                          onPress={() => confirmDelete('goal', goal.id, goal.title)}
                           style={styles.iconButton}
                         >
                           <IconSymbol
@@ -1006,7 +1006,7 @@ export default function SettingsScreen() {
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => handleDeleteItem('lifeArea', item.id)}
+                  onPress={() => confirmDelete('lifeArea', item.id, item.name)}
                   style={styles.iconButtonCompact}
                 >
                   <IconSymbol
@@ -1116,7 +1116,7 @@ export default function SettingsScreen() {
                         />
                       </TouchableOpacity>
                       <TouchableOpacity
-                        onPress={() => handleDeleteItem('strategy', strategy.id)}
+                        onPress={() => confirmDelete('strategy', strategy.id, strategy.name)}
                         style={styles.iconButton}
                       >
                         <IconSymbol
@@ -1200,7 +1200,7 @@ export default function SettingsScreen() {
                         />
                       </TouchableOpacity>
                       <TouchableOpacity
-                        onPress={() => handleDeleteItem('currency', currency.id)}
+                        onPress={() => confirmDelete('currency', currency.id, currency.name)}
                         style={styles.iconButton}
                       >
                         <IconSymbol
@@ -1279,7 +1279,7 @@ export default function SettingsScreen() {
                               />
                             </TouchableOpacity>
                             <TouchableOpacity
-                              onPress={() => handleDeleteItem('gainLoss', gain.id)}
+                              onPress={() => confirmDelete('gainLoss', gain.id, gain.name)}
                               style={styles.iconButton}
                             >
                               <IconSymbol
@@ -1323,7 +1323,7 @@ export default function SettingsScreen() {
                               />
                             </TouchableOpacity>
                             <TouchableOpacity
-                              onPress={() => handleDeleteItem('gainLoss', loss.id)}
+                              onPress={() => confirmDelete('gainLoss', loss.id, loss.name)}
                               style={styles.iconButton}
                             >
                               <IconSymbol
@@ -1427,7 +1427,7 @@ export default function SettingsScreen() {
                             />
                           </TouchableOpacity>
                           <TouchableOpacity
-                            onPress={() => handleDeleteItem('alarm', alarm.id)}
+                            onPress={() => confirmDelete('alarm', alarm.id, alarm.name)}
                             style={styles.iconButton}
                           >
                             <IconSymbol
@@ -1816,25 +1816,48 @@ export default function SettingsScreen() {
                     </TouchableOpacity>
                     {showColorPicker && (
                       <View style={styles.colorPickerContainer}>
-                        <ColorPicker
-                          color={formData.color || '#FF6B6B'}
-                          onColorChange={(color) => {
-                            const hexColor = fromHsv(color);
-                            setFormData({ ...formData, color: hexColor });
-                          }}
-                          style={styles.colorWheel}
-                          sliderComponent={Slider}
-                        />
+                        <Text style={styles.colorPickerTitle}>Select a Color</Text>
+                        <View style={styles.colorGrid}>
+                          {COLOR_PALETTE.map((color, index) => {
+                            const isSelected = formData.color === color;
+                            
+                            return (
+                              <React.Fragment key={index}>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.colorSquare,
+                                    { backgroundColor: color },
+                                    isSelected && styles.colorSquareSelected
+                                  ]}
+                                  onPress={() => {
+                                    setFormData({ ...formData, color });
+                                    setShowColorPicker(false);
+                                  }}
+                                >
+                                  {isSelected && (
+                                    <IconSymbol
+                                      ios_icon_name="checkmark"
+                                      android_material_icon_name="check"
+                                      size={16}
+                                      color={color === '#FFFFFF' || color === '#E0E0E0' || color === '#FFFACD' || color === '#FFFFE0' || color === '#FFDAB9' || color === '#FF7F7F' || color === '#E6E6FA' || color === '#FFC0CB' || color === '#FFB6C1' || color === '#AFEEEE' || color === '#E0FFFF' || color === '#B0E0E6' || color === '#98FB98' || color === '#90EE90' ? '#000000' : '#FFFFFF'}
+                                    />
+                                  )}
+                                </TouchableOpacity>
+                              </React.Fragment>
+                            );
+                          })}
+                        </View>
                         <View style={styles.customColorInputContainer}>
                           <TextInput
                             style={styles.customColorInput}
-                            value={customColor}
-                            onChangeText={setCustomColor}
+                            value={customColorInput}
+                            onChangeText={setCustomColorInput}
                             placeholder="#RRGGBB"
                             placeholderTextColor={colors.textSecondary}
                             autoCapitalize="characters"
                             autoCorrect={false}
                             keyboardType="default"
+                            maxLength={7}
                           />
                           <TouchableOpacity
                             style={styles.addCustomColorButton}
@@ -1842,23 +1865,6 @@ export default function SettingsScreen() {
                           >
                             <Text style={styles.addCustomColorButtonText}>Add</Text>
                           </TouchableOpacity>
-                        </View>
-                        <View style={styles.colorGrid}>
-                          {COLOR_OPTIONS.map((color, index) => {
-                            const isSelected = formData.color === color;
-                            
-                            return (
-                              <React.Fragment key={index}>
-                                <TouchableOpacity
-                                  style={[styles.colorOption, { backgroundColor: color }, isSelected && styles.colorOptionSelected]}
-                                  onPress={() => {
-                                    setFormData({ ...formData, color });
-                                    setShowColorPicker(false);
-                                  }}
-                                />
-                              </React.Fragment>
-                            );
-                          })}
                         </View>
                       </View>
                     )}
@@ -2341,7 +2347,7 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
               <Text style={styles.alertMessage}>
-                This will open the Create Goal screen. After creating the goal, you can return here to link it to this life area.
+                This will open the Create Goal screen. The life area will be pre-selected. After creating the goal, you'll return here to continue editing.
               </Text>
               <View style={styles.alertButtons}>
                 <TouchableOpacity
@@ -2355,7 +2361,7 @@ export default function SettingsScreen() {
                   onPress={() => {
                     setShowCreateGoalModal(false);
                     setShowModal(false);
-                    router.push(`/create-goal?lifeAreaId=${editingItem?.id}`);
+                    router.push(`/create-goal?lifeAreaId=${editingItem?.id}&returnToSettings=true`);
                   }}
                 >
                   <Text style={styles.alertButtonText}>Create Goal</Text>
@@ -2391,6 +2397,17 @@ export default function SettingsScreen() {
       )}
 
       {renderEditModal()}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        visible={showConfirmDelete}
+        title={`Delete ${deleteItemType === 'lifeArea' ? 'Life Area' : deleteItemType === 'gainLoss' ? 'Gain/Loss' : deleteItemType || ''}?`}
+        message={`Are you sure you want to delete "${deleteItemName}"? This action cannot be undone.`}
+        onConfirm={handleDeleteItem}
+        onCancel={() => setShowConfirmDelete(false)}
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
+      />
 
       {/* Currency Claim/Pay Modal */}
       <Modal
@@ -3103,20 +3120,21 @@ const styles = StyleSheet.create({
   colorGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     marginTop: 12,
   },
-  colorOption: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    borderWidth: 3,
+  colorSquare: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    borderWidth: 2,
     borderColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  colorOptionSelected: {
+  colorSquareSelected: {
     borderColor: colors.text,
+    borderWidth: 3,
   },
   colorOptionText: {
     fontSize: 12,
@@ -3132,8 +3150,7 @@ const styles = StyleSheet.create({
   customColorInputContainer: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 12,
-    marginBottom: 12,
+    marginTop: 16,
   },
   customColorInput: {
     flex: 1,
@@ -3256,11 +3273,17 @@ const styles = StyleSheet.create({
   },
   colorPickerContainer: {
     marginTop: 12,
-    padding: 12,
+    padding: 16,
     backgroundColor: colors.card,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  colorPickerTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
   },
   colorWheel: {
     height: 200,
