@@ -53,12 +53,15 @@ type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Mont
 
 export default function CreateGoalScreen() {
   const router = useRouter();
-  const { id: editingGoalId, fromReflection, lifeAreaId: preselectedLifeAreaId, returnToSettings } = useLocalSearchParams<{ 
+  const { id: editingGoalId, fromReflection, lifeAreaId: preselectedLifeAreaId, returnToSettings, returnToLifeAreaWizard } = useLocalSearchParams<{ 
     id?: string; 
     fromReflection?: string;
     lifeAreaId?: string;
     returnToSettings?: string;
+    returnToLifeAreaWizard?: string;
   }>();
+  
+  const [showCreateAnotherPrompt, setShowCreateAnotherPrompt] = useState(false);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -297,7 +300,11 @@ export default function CreateGoalScreen() {
       }
       
       setTimeout(() => {
-        if (fromReflection === 'true') {
+        if (returnToLifeAreaWizard === 'true') {
+          // Show prompt to create another goal
+          setShowSuccessModal(false);
+          setShowCreateAnotherPrompt(true);
+        } else if (fromReflection === 'true') {
           // Navigate back to reflection screen to continue the reflection
           router.push('/(tabs)/reflect');
         } else if (returnToSettings === 'true') {
@@ -1071,6 +1078,58 @@ export default function CreateGoalScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Create Another Goal Prompt */}
+      <Modal
+        visible={showCreateAnotherPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateAnotherPrompt(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Create Another Goal?</Text>
+            <Text style={styles.alertMessage}>
+              Would you like to create another goal for this Life Area?
+            </Text>
+            <View style={styles.promptButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setShowCreateAnotherPrompt(false);
+                  router.back();
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>No, Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={() => {
+                  setShowCreateAnotherPrompt(false);
+                  // Reset form for new goal
+                  setTitle('');
+                  setDescription('');
+                  setParentGoalId(undefined);
+                  // Keep lifeAreaId prefilled
+                  setBehaviorCategories([]);
+                  setType('Proactive');
+                  setStrategyIds([]);
+                  setScheduleType('Always Active');
+                  setScheduleTimesPerDay('');
+                  setRewardCurrencyId(undefined);
+                  setRewardSuccesses('');
+                  setRewardAmount('');
+                  setConsequenceCurrencyId(undefined);
+                  setConsequenceFailures('');
+                  setConsequenceAmount('');
+                }}
+              >
+                <Text style={styles.alertButtonText}>Yes, Create Another</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1317,6 +1376,21 @@ const styles = StyleSheet.create({
   },
   alertButtonText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  promptButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  alertButtonSecondary: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  alertButtonSecondaryText: {
+    color: colors.text,
     fontSize: 16,
     fontWeight: '600',
   },

@@ -283,6 +283,13 @@ export default function SettingsScreen() {
   };
 
   const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
+    if (type === 'lifeArea') {
+      // Navigate to the new Life Area wizard screen
+      console.log('[Settings iOS] Opening Life Area wizard');
+      router.push('/life-area-wizard');
+      return;
+    }
+    
     setModalType(type);
     setEditingItem(null);
     if (type === 'alarm') {
@@ -308,15 +315,6 @@ export default function SettingsScreen() {
         onSuccess: 'ADD',
         onFailure: 'ADD',
       });
-    } else if (type === 'lifeArea') {
-      setFormData({
-        name: '',
-        parentId: null,
-        icon: null,
-        color: null,
-        displayOrder: lifeAreas.length,
-        showProgress: true,
-      });
     } else {
       setFormData({});
     }
@@ -324,6 +322,13 @@ export default function SettingsScreen() {
   };
 
   const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', item: any) => {
+    if (type === 'lifeArea') {
+      // Navigate to the Life Area wizard screen with edit mode
+      console.log('[Settings iOS] Opening Life Area wizard for editing:', item.id);
+      router.push(`/life-area-wizard?id=${item.id}`);
+      return;
+    }
+    
     setModalType(type);
     setEditingItem(item);
     setFormData(item);
