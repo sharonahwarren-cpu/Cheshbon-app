@@ -303,7 +303,7 @@ export default function CreateGoalScreen() {
       setTimeout(() => {
         if (returnToLifeAreaWizard === 'true') {
           // Show prompt to create another goal
-          setShowSuccessModal(false);
+          setModalVisible(false);
           setShowCreateAnotherPrompt(true);
         } else if (fromReflection === 'true') {
           // Navigate back to reflection screen to continue the reflection

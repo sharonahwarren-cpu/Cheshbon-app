@@ -15,7 +15,7 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import { COLOR_PALETTE } from '@/utils/colorPalette';
 
 interface LifeArea {
@@ -96,25 +96,45 @@ export default function LifeAreaWizardScreen() {
       setLifeAreas(lifeAreasData);
       setGoals(goalsData);
 
-      // If editing, load the life area details
+      // If editing, find the life area from the already-loaded list
       if (editingLifeAreaId) {
-        console.log('[LifeAreaWizard iOS] Loading life area for editing:', editingLifeAreaId);
-        const lifeAreaRes = await authenticatedGet(`/api/life-areas/${editingLifeAreaId}`);
-        const lifeAreaData = lifeAreaRes?.data || lifeAreaRes;
+        console.log('[LifeAreaWizard iOS] Finding life area for editing:', editingLifeAreaId);
         
-        setName(lifeAreaData.name || '');
-        setParentId(lifeAreaData.parentId || null);
-        setIcon(lifeAreaData.icon || '');
-        setColor(lifeAreaData.color || null);
-        setShowProgress(lifeAreaData.showProgress !== false);
-        setSavedLifeAreaId(editingLifeAreaId);
+        // Flatten the hierarchy to find the area by ID
+        const flattenAreas = (areas: any[]): any[] => {
+          let result: any[] = [];
+          areas.forEach(area => {
+            result.push(area);
+            if (area.children && area.children.length > 0) {
+              result = result.concat(flattenAreas(area.children));
+            }
+          });
+          return result;
+        };
         
-        // Extract linked goal IDs
-        const linkedIds = (lifeAreaData.goals || []).map((g: any) => g.id);
-        setLinkedGoalIds(linkedIds);
+        const allAreas = flattenAreas(lifeAreasData);
+        const lifeAreaData = allAreas.find((a: any) => a.id === editingLifeAreaId);
         
-        // If editing, start at step 2 (goal linking)
-        setCurrentStep(2);
+        if (lifeAreaData) {
+          console.log('[LifeAreaWizard iOS] Found life area data:', lifeAreaData);
+          setName(lifeAreaData.name || '');
+          setParentId(lifeAreaData.parentId || null);
+          setIcon(lifeAreaData.icon || '');
+          setColor(lifeAreaData.color || null);
+          setShowProgress(lifeAreaData.showProgress !== false);
+          setSavedLifeAreaId(editingLifeAreaId);
+          
+          // Extract linked goal IDs from the goals array
+          const linkedIds = (lifeAreaData.goals || []).map((g: any) => g.id);
+          setLinkedGoalIds(linkedIds);
+          
+          // If editing, start at step 2 (goal linking)
+          setCurrentStep(2);
+        } else {
+          console.warn('[LifeAreaWizard iOS] Life area not found in list, ID:', editingLifeAreaId);
+          setSavedLifeAreaId(editingLifeAreaId);
+          setCurrentStep(2);
+        }
       }
     } catch (error: any) {
       console.error('[LifeAreaWizard iOS] Error loading data:', error);
@@ -206,7 +226,7 @@ export default function LifeAreaWizardScreen() {
     
     try {
       console.log('[API] Unlinking goal from life area:', { goalId, lifeAreaId: savedLifeAreaId });
-      await authenticatedPut(`/api/life-areas/${savedLifeAreaId}/goals/${goalId}`, {});
+      await authenticatedDelete(`/api/life-areas/${savedLifeAreaId}/goals/${goalId}`);
       
       // Update local state
       setLinkedGoalIds(linkedGoalIds.filter(id => id !== goalId));

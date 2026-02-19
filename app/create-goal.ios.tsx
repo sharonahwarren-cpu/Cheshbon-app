@@ -302,7 +302,7 @@ export default function CreateGoalScreen() {
       setTimeout(() => {
         if (returnToLifeAreaWizard === 'true') {
           // Show prompt to create another goal
-          setShowSuccessModal(false);
+          setModalVisible(false);
           setShowCreateAnotherPrompt(true);
         } else if (fromReflection === 'true') {
           // Navigate back to reflection screen to continue the reflection
@@ -406,6 +406,15 @@ export default function CreateGoalScreen() {
       );
     });
   };
+
+  const scheduleTypes: ScheduleType[] = [
+    'Always Active',
+    'Daily',
+    'Weekly',
+    'Fortnightly',
+    'Monthly',
+    'Yearly',
+  ];
 
   const scheduleTypes: ScheduleType[] = [
     'Always Active',
@@ -1135,6 +1144,7 @@ export default function CreateGoalScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ... (same styles as base file)
   container: {
     flex: 1,
     backgroundColor: colors.background,
