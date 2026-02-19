@@ -19,6 +19,7 @@ import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDel
 import DateTimePicker from '@react-native-community/datetimepicker';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator, DragEndParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ConfirmModal } from '@/components/ConfirmModal';
 
 interface LifeArea {
   id: string;
@@ -143,6 +144,12 @@ export default function SettingsScreen() {
   const [successMessage, setSuccessMessage] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  // Confirm delete modal state
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleteItemType, setDeleteItemType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | 'goal' | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<string>('');
+  const [deleteItemName, setDeleteItemName] = useState<string>('');
 
   // Currency claim/pay modal state
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -402,28 +409,41 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleDeleteItem = async (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', id: string) => {
+  const confirmDelete = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | 'goal', id: string, name: string) => {
+    setDeleteItemType(type);
+    setDeleteItemId(id);
+    setDeleteItemName(name);
+    setShowConfirmDelete(true);
+  };
+
+  const handleDeleteItem = async () => {
+    if (!deleteItemType || !deleteItemId) return;
+
     try {
       setLoading(true);
+      setShowConfirmDelete(false);
       
-      if (type === 'lifeArea') {
-        await authenticatedDelete(`/api/life-areas/${id}`);
+      if (deleteItemType === 'lifeArea') {
+        await authenticatedDelete(`/api/life-areas/${deleteItemId}`);
         showSuccess('Life area deleted successfully');
-      } else if (type === 'strategy') {
-        await authenticatedDelete(`/api/strategies/${id}`);
+      } else if (deleteItemType === 'strategy') {
+        await authenticatedDelete(`/api/strategies/${deleteItemId}`);
         showSuccess('Strategy deleted successfully');
-      } else if (type === 'currency') {
-        await authenticatedDelete(`/api/currencies/${id}`);
+      } else if (deleteItemType === 'currency') {
+        await authenticatedDelete(`/api/currencies/${deleteItemId}`);
         showSuccess('Currency deleted successfully');
-      } else if (type === 'gainLoss') {
-        await authenticatedDelete(`/api/gains-losses/${id}`);
+      } else if (deleteItemType === 'gainLoss') {
+        await authenticatedDelete(`/api/gains-losses/${deleteItemId}`);
         showSuccess('Gain/Loss deleted successfully');
-      } else if (type === 'alarm') {
+      } else if (deleteItemType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
-        const updatedAlarms = alarms.filter(a => a.id !== id);
+        const updatedAlarms = alarms.filter(a => a.id !== deleteItemId);
         await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
         setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         showSuccess('Notification alarm deleted successfully');
+      } else if (deleteItemType === 'goal') {
+        await authenticatedDelete(`/api/goals/${deleteItemId}`);
+        showSuccess('Goal deleted successfully');
       }
 
       await loadData();
@@ -432,20 +452,9 @@ export default function SettingsScreen() {
       showError('Failed to delete item');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleDeleteGoal = async (id: string) => {
-    try {
-      setLoading(true);
-      await authenticatedDelete(`/api/goals/${id}`);
-      showSuccess('Goal deleted successfully');
-      await loadData();
-    } catch (error) {
-      console.error('[Settings iOS] Error deleting goal:', error);
-      showError('Failed to delete goal');
-    } finally {
-      setLoading(false);
+      setDeleteItemType(null);
+      setDeleteItemId('');
+      setDeleteItemName('');
     }
   };
 
@@ -749,7 +758,7 @@ export default function SettingsScreen() {
                   />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => handleDeleteItem('lifeArea', item.id)}
+                  onPress={() => confirmDelete('lifeArea', item.id, item.name)}
                   style={styles.iconButtonCompact}
                 >
                   <IconSymbol
@@ -867,7 +876,7 @@ export default function SettingsScreen() {
                         />
                       </TouchableOpacity>
                       <TouchableOpacity
-                        onPress={() => handleDeleteItem('strategy', strategy.id)}
+                        onPress={() => confirmDelete('strategy', strategy.id, strategy.name)}
                         style={styles.iconButton}
                       >
                         <IconSymbol
@@ -951,7 +960,7 @@ export default function SettingsScreen() {
                         />
                       </TouchableOpacity>
                       <TouchableOpacity
-                        onPress={() => handleDeleteItem('currency', currency.id)}
+                        onPress={() => confirmDelete('currency', currency.id, currency.name)}
                         style={styles.iconButton}
                       >
                         <IconSymbol
@@ -1030,7 +1039,7 @@ export default function SettingsScreen() {
                               />
                             </TouchableOpacity>
                             <TouchableOpacity
-                              onPress={() => handleDeleteItem('gainLoss', gain.id)}
+                              onPress={() => confirmDelete('gainLoss', gain.id, gain.name)}
                               style={styles.iconButton}
                             >
                               <IconSymbol
@@ -1074,7 +1083,7 @@ export default function SettingsScreen() {
                               />
                             </TouchableOpacity>
                             <TouchableOpacity
-                              onPress={() => handleDeleteItem('gainLoss', loss.id)}
+                              onPress={() => confirmDelete('gainLoss', loss.id, loss.name)}
                               style={styles.iconButton}
                             >
                               <IconSymbol
@@ -1178,7 +1187,7 @@ export default function SettingsScreen() {
                             />
                           </TouchableOpacity>
                           <TouchableOpacity
-                            onPress={() => handleDeleteItem('alarm', alarm.id)}
+                            onPress={() => confirmDelete('alarm', alarm.id, alarm.name)}
                             style={styles.iconButton}
                           >
                             <IconSymbol
@@ -1404,7 +1413,7 @@ export default function SettingsScreen() {
                           />
                         </TouchableOpacity>
                         <TouchableOpacity
-                          onPress={() => handleDeleteGoal(goal.id)}
+                          onPress={() => confirmDelete('goal', goal.id, goal.title)}
                           style={styles.iconButton}
                         >
                           <IconSymbol
@@ -1679,6 +1688,15 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        visible={showConfirmDelete}
+        title="Confirm Delete"
+        message={`Are you sure you want to delete "${deleteItemName}"? This action cannot be undone.`}
+        onConfirm={handleDeleteItem}
+        onCancel={() => setShowConfirmDelete(false)}
+      />
 
       <Modal
         visible={showErrorModal}
