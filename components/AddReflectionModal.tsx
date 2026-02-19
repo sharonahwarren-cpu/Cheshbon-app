@@ -139,7 +139,9 @@ export function AddReflectionModal({
   const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
   const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(editingReflection?.wasWorthIt);
   const [additionalThoughts, setAdditionalThoughts] = useState(editingReflection?.additionalThoughts || '');
-  const [strategyEffectiveness, setStrategyEffectiveness] = useState<{strategyId: string; worked: boolean}[]>(editingReflection?.strategyEffectiveness || []);
+  const [strategyEffectiveness, setStrategyEffectiveness] = useState<{strategyId: string; worked: boolean | null}[]>(
+    editingReflection?.strategyEffectiveness?.map(se => ({ strategyId: se.strategyId, worked: se.worked })) || []
+  );
   const [loading, setLoading] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [goalSearchQuery, setGoalSearchQuery] = useState('');
@@ -202,10 +204,10 @@ export function AddReflectionModal({
   const handleAdditionalThoughtsFocus = () => {
     console.log('Additional thoughts input focused on Step 4');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
-      // Scroll to position the Notes text box above the keyboard and Next button
-      // Account for: Gains section (~100px) + Losses section (~100px) + Was it worth it section (~150px) + Notes label (~40px)
+      // Scroll to position the Notes text box lower for better visibility above keyboard and Next button
+      // Increased offset to 520 to position the textbox down a bit lower
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 450, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 520, animated: true });
       }, 100);
     }
   };
@@ -216,7 +218,7 @@ export function AddReflectionModal({
       console.log('Additional thoughts content size changed, maintaining scroll position');
       // Keep the scroll position stable so the text box stays visible above keyboard and Next button
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 450, animated: false });
+        scrollViewRef.current?.scrollTo({ y: 520, animated: false });
       }, 50);
     }
   };
@@ -406,6 +408,9 @@ export function AddReflectionModal({
     try {
       const dateString = selectedDate.toISOString().split('T')[0];
       
+      // Filter out strategies with null worked value before saving
+      const validStrategyEffectiveness = strategyEffectiveness.filter(se => se.worked !== null);
+      
       const payload = {
         date: dateString,
         category: categoriesEnabled ? category : undefined,
@@ -417,7 +422,7 @@ export function AddReflectionModal({
         lostIds: lostIds.length > 0 ? lostIds : undefined,
         wasWorthIt: wasWorthIt !== undefined ? wasWorthIt : undefined,
         additionalThoughts: additionalThoughts.trim() || undefined,
-        strategyEffectiveness: strategyEffectiveness.length > 0 ? strategyEffectiveness : undefined,
+        strategyEffectiveness: validStrategyEffectiveness.length > 0 ? validStrategyEffectiveness : undefined,
       };
 
       let savedReflection;
@@ -538,16 +543,20 @@ export function AddReflectionModal({
   };
 
   const toggleStrategy = (strategyId: string) => {
+    console.log('[AddReflectionModal] Toggling strategy:', strategyId);
     const existing = strategyEffectiveness.find(se => se.strategyId === strategyId);
     if (existing) {
+      console.log('[AddReflectionModal] Removing strategy from selection');
       setStrategyEffectiveness(strategyEffectiveness.filter(se => se.strategyId !== strategyId));
     } else {
-      // Don't set a default value - user must explicitly choose
-      setStrategyEffectiveness([...strategyEffectiveness, { strategyId, worked: true }]);
+      console.log('[AddReflectionModal] Adding strategy with NO default selection (worked: null)');
+      // CRITICAL FIX: Set worked to null (no default selection)
+      setStrategyEffectiveness([...strategyEffectiveness, { strategyId, worked: null }]);
     }
   };
 
   const setStrategyWorked = (strategyId: string, worked: boolean) => {
+    console.log('[AddReflectionModal] Setting strategy worked status:', strategyId, worked);
     setStrategyEffectiveness(strategyEffectiveness.map(se => 
       se.strategyId === strategyId ? { ...se, worked } : se
     ));
@@ -661,7 +670,7 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 2: Type and Description - Dynamic placeholder based on Type and Category */}
+            {/* STEP 2: Type and Description - Only "Description" heading, placeholder has the full text */}
             {step === 2 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
@@ -718,9 +727,6 @@ export function AddReflectionModal({
                     <Text style={styles.label}>Description</Text>
                     <Text style={styles.required}> *</Text>
                   </View>
-                  <Text style={styles.helperText}>
-                    {getDescriptionPlaceholder()}
-                  </Text>
                   <TextInput
                     ref={descriptionInputRef}
                     style={[styles.input, styles.textArea]}
@@ -1120,7 +1126,7 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 5: Strategies - Tick/cross next to selected strategies */}
+            {/* STEP 5: Strategies - No default selection, user must choose worked/didn't work */}
             {step === 5 && (
               <React.Fragment>
                 <View style={styles.formGroup}>
@@ -1182,7 +1188,7 @@ export function AddReflectionModal({
                                       <TouchableOpacity
                                         style={[
                                           styles.strategyFeedbackIcon,
-                                          effectiveness.worked === true && styles.strategyFeedbackIconWorked
+                                          effectiveness?.worked === true && styles.strategyFeedbackIconWorked
                                         ]}
                                         onPress={() => setStrategyWorked(strategy.id, true)}
                                       >
@@ -1190,13 +1196,13 @@ export function AddReflectionModal({
                                           ios_icon_name="checkmark.circle.fill"
                                           android_material_icon_name="check-circle"
                                           size={24}
-                                          color={effectiveness.worked === true ? colors.background : colors.success}
+                                          color={effectiveness?.worked === true ? colors.background : colors.success}
                                         />
                                       </TouchableOpacity>
                                       <TouchableOpacity
                                         style={[
                                           styles.strategyFeedbackIcon,
-                                          effectiveness.worked === false && styles.strategyFeedbackIconDidntWork
+                                          effectiveness?.worked === false && styles.strategyFeedbackIconDidntWork
                                         ]}
                                         onPress={() => setStrategyWorked(strategy.id, false)}
                                       >
@@ -1204,7 +1210,7 @@ export function AddReflectionModal({
                                           ios_icon_name="xmark.circle.fill"
                                           android_material_icon_name="cancel"
                                           size={24}
-                                          color={effectiveness.worked === false ? colors.background : colors.error}
+                                          color={effectiveness?.worked === false ? colors.background : colors.error}
                                         />
                                       </TouchableOpacity>
                                     </View>
