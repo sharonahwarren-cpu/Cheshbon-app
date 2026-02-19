@@ -131,6 +131,7 @@ export default function SettingsScreen() {
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
+  const [lifeAreasData, setLifeAreasData] = useState<Array<LifeArea & { depth: number }>>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
@@ -264,6 +265,11 @@ export default function SettingsScreen() {
       
       setGoals(goalsWithBalances);
       setLifeAreas(lifeAreasData);
+      
+      // Flatten life areas for drag-and-drop
+      const flatAreas = flattenLifeAreas(lifeAreasData);
+      setLifeAreasData(flatAreas);
+      
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
@@ -572,42 +578,17 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleReorderLifeAreas = async (reorderedAreas: LifeArea[]) => {
+  const handleReorderLifeAreas = async ({ data }: { data: Array<LifeArea & { depth: number }> }) => {
     try {
-      console.log('[Settings] Reordering life areas, count:', reorderedAreas.length);
+      console.log('[Settings] Drag ended, reordering life areas, count:', data.length);
       
-      // Rebuild the hierarchy from the flat reordered list
-      // The reordered list is flat, so we need to reconstruct the nested structure
-      const rebuiltHierarchy: LifeArea[] = [];
-      const areaMap = new Map<string, LifeArea>();
-      
-      // First pass: create a map of all areas
-      reorderedAreas.forEach(area => {
-        areaMap.set(area.id, { ...area, children: [] });
-      });
-      
-      // Second pass: build the hierarchy
-      reorderedAreas.forEach(area => {
-        const areaWithChildren = areaMap.get(area.id)!;
-        if (area.parentId) {
-          const parent = areaMap.get(area.parentId);
-          if (parent) {
-            parent.children = parent.children || [];
-            parent.children.push(areaWithChildren);
-          } else {
-            // Parent not found, treat as top-level
-            rebuiltHierarchy.push(areaWithChildren);
-          }
-        } else {
-          rebuiltHierarchy.push(areaWithChildren);
-        }
-      });
-      
-      // Optimistic update with rebuilt hierarchy
-      setLifeAreas(rebuiltHierarchy);
+      // Optimistic update
+      setLifeAreasData(data);
       
       // Send only the IDs in the new order to the backend
-      const lifeAreaIds = reorderedAreas.map(area => area.id);
+      const lifeAreaIds = data.map(area => area.id);
+      console.log('[Settings] Sending reorder request with IDs:', lifeAreaIds);
+      
       await authenticatedPut('/api/life-areas/reorder', { lifeAreaIds });
       console.log('[Settings] Life areas reordered successfully');
       
@@ -971,15 +952,12 @@ export default function SettingsScreen() {
   };
 
   const renderLifeAreas = () => {
-    const flatAreas = flattenLifeAreas(lifeAreas);
-
     const renderItem = ({ item, drag, isActive }: RenderItemParams<LifeArea & { depth: number }>) => {
       const iconName = item.icon;
       const areaColor = item.color || colors.primary;
       const percentage = item.successPercentage || 0;
       const percentageText = `${Math.round(percentage)}%`;
       const percentageColor = (item.percentageColor === 'green') ? colors.success : colors.error;
-      const activeGoalsCount = item.goals?.filter(g => g.status === 'ACTIVE').length || 0;
       
       return (
         <ScaleDecorator>
@@ -1043,39 +1021,41 @@ export default function SettingsScreen() {
     };
 
     return (
-      <GestureHandlerRootView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
-            <IconSymbol
-              ios_icon_name="chevron.left"
-              android_material_icon_name="arrow-back"
-              size={24}
-              color={colors.text}
-            />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Life Areas</Text>
-          <TouchableOpacity onPress={() => openAddModal('lifeArea')}>
-            <IconSymbol
-              ios_icon_name="plus"
-              android_material_icon_name="add"
-              size={24}
-              color={colors.primary}
-            />
-          </TouchableOpacity>
-        </View>
-        {flatAreas.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => setCurrentSection('main')}>
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={24}
+                color={colors.text}
+              />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Life Areas</Text>
+            <TouchableOpacity onPress={() => openAddModal('lifeArea')}>
+              <IconSymbol
+                ios_icon_name="plus"
+                android_material_icon_name="add"
+                size={24}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
           </View>
-        ) : (
-          <DraggableFlatList
-            data={flatAreas}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id}
-            onDragEnd={({ data }) => handleReorderLifeAreas(data)}
-            containerStyle={styles.listContainer}
-          />
-        )}
+          {lifeAreasData.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
+            </View>
+          ) : (
+            <DraggableFlatList
+              data={lifeAreasData}
+              renderItem={renderItem}
+              keyExtractor={(item) => item.id}
+              onDragEnd={handleReorderLifeAreas}
+              containerStyle={styles.listContainer}
+            />
+          )}
+        </View>
       </GestureHandlerRootView>
     );
   };
