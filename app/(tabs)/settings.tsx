@@ -1041,18 +1041,57 @@ export default function SettingsScreen() {
     
     if (areaIndex === -1) return;
     
+    const currentArea = flatAreas[areaIndex];
+    
+    // Helper function to get all descendants of an area
+    const getDescendants = (parentId: string): string[] => {
+      const descendants: string[] = [];
+      for (let i = 0; i < flatAreas.length; i++) {
+        if (flatAreas[i].parentId === parentId) {
+          descendants.push(flatAreas[i].id);
+          descendants.push(...getDescendants(flatAreas[i].id));
+        }
+      }
+      return descendants;
+    };
+    
+    // Get all descendants of the current area
+    const descendantIds = getDescendants(currentArea.id);
+    const allMovingIds = [currentArea.id, ...descendantIds];
+    
+    // Find the indices of all items that need to move together
+    const movingIndices = flatAreas
+      .map((area, idx) => allMovingIds.includes(area.id) ? idx : -1)
+      .filter(idx => idx !== -1);
+    
+    if (movingIndices.length === 0) return;
+    
+    const firstMovingIndex = movingIndices[0];
+    const lastMovingIndex = movingIndices[movingIndices.length - 1];
+    
     const updatedAreas = [...flatAreas];
     
-    if (direction === 'up' && areaIndex > 0) {
-      // Swap with previous item
-      const temp = updatedAreas[areaIndex];
-      updatedAreas[areaIndex] = updatedAreas[areaIndex - 1];
-      updatedAreas[areaIndex - 1] = temp;
-    } else if (direction === 'down' && areaIndex < updatedAreas.length - 1) {
-      // Swap with next item
-      const temp = updatedAreas[areaIndex];
-      updatedAreas[areaIndex] = updatedAreas[areaIndex + 1];
-      updatedAreas[areaIndex + 1] = temp;
+    if (direction === 'up' && firstMovingIndex > 0) {
+      // Extract the moving block
+      const movingBlock = updatedAreas.splice(firstMovingIndex, movingIndices.length);
+      
+      // Find the target position (before the previous item)
+      const targetIndex = firstMovingIndex - 1;
+      
+      // Insert the moving block at the target position
+      updatedAreas.splice(targetIndex, 0, ...movingBlock);
+    } else if (direction === 'down' && lastMovingIndex < flatAreas.length - 1) {
+      // Extract the moving block
+      const movingBlock = updatedAreas.splice(firstMovingIndex, movingIndices.length);
+      
+      // Find the target position (after the next item)
+      const targetIndex = firstMovingIndex + 1;
+      
+      // Insert the moving block at the target position
+      updatedAreas.splice(targetIndex, 0, ...movingBlock);
+    } else {
+      // Can't move in the requested direction
+      return;
     }
     
     handleReorderLifeAreas(updatedAreas);
@@ -1107,7 +1146,7 @@ export default function SettingsScreen() {
                     { marginLeft: item.depth * 20, borderLeftColor: areaColor },
                   ]}
                 >
-                  <View style={styles.lifeAreaCompactContent}>
+                  <View style={styles.lifeAreaCompactRow}>
                     <View style={styles.lifeAreaCompactLeft}>
                       {iconName ? (
                         <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
@@ -2538,7 +2577,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderLeftWidth: 3,
   },
-  lifeAreaCompactContent: {
+  lifeAreaCompactRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -2548,6 +2587,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flex: 1,
+    marginRight: 8,
   },
   lifeAreaIcon: {
     fontSize: 20,
@@ -2557,10 +2597,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: colors.text,
+    flex: 1,
   },
   lifeAreaCompactActions: {
     flexDirection: 'row',
     gap: 4,
+    flexShrink: 0,
   },
   iconButtonCompact: {
     padding: 4,
