@@ -10,6 +10,8 @@ import {
   Modal,
   ActivityIndicator,
   Switch,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -386,252 +388,269 @@ export default function LifeAreaWizardScreen() {
 
       <Text style={styles.stepTitle}>{stepTitle}</Text>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {currentStep === 1 && (
-          <>
-            {/* Name */}
-            <View style={styles.section}>
-              <Text style={styles.label}>
-                Name
-                <Text style={styles.required}> *</Text>
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={name}
-                onChangeText={setName}
-                placeholder="Enter life area name"
-                placeholderTextColor={colors.textSecondary}
-              />
-            </View>
-
-            {/* Parent Life Area */}
-            <View style={styles.section}>
-              <Text style={styles.label}>Parent Life Area</Text>
-              <TouchableOpacity
-                style={styles.picker}
-                onPress={() => setShowParentPicker(true)}
-              >
-                <Text style={styles.pickerText}>
-                  {parentId 
-                    ? flattenLifeAreas(lifeAreas).find(a => a.id === parentId)?.name || 'None'
-                    : 'None (Top Level)'}
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
+        <ScrollView 
+          style={styles.scrollView} 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={true}
+        >
+          {currentStep === 1 && (
+            <>
+              {/* Name */}
+              <View style={styles.section}>
+                <Text style={styles.label}>
+                  Name
+                  <Text style={styles.required}> *</Text>
                 </Text>
-                <IconSymbol
-                  ios_icon_name="chevron.down"
-                  android_material_icon_name="arrow-drop-down"
-                  size={24}
-                  color={colors.text}
+                <TextInput
+                  style={styles.input}
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Enter life area name"
+                  placeholderTextColor={colors.textSecondary}
                 />
-              </TouchableOpacity>
-            </View>
+              </View>
 
-            {/* Icon */}
-            <View style={styles.section}>
-              <Text style={styles.label}>Icon</Text>
-              <Text style={styles.helperText}>Enter an emoji or symbol from your keyboard</Text>
-              <TextInput
-                style={styles.input}
-                value={icon}
-                onChangeText={setIcon}
-                placeholder="e.g., 📚, 🏃‍♀️, ✨"
-                placeholderTextColor={colors.textSecondary}
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
-              {icon && (
-                <View style={styles.iconPreviewContainer}>
-                  <Text style={styles.iconPreviewText}>Preview:</Text>
-                  <Text style={styles.iconPreview}>{icon}</Text>
+              {/* Parent Life Area */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Parent Life Area</Text>
+                <TouchableOpacity
+                  style={styles.picker}
+                  onPress={() => setShowParentPicker(true)}
+                >
+                  <Text style={styles.pickerText}>
+                    {parentId 
+                      ? flattenLifeAreas(lifeAreas).find(a => a.id === parentId)?.name || 'None'
+                      : 'None (Top Level)'}
+                  </Text>
+                  <IconSymbol
+                    ios_icon_name="chevron.down"
+                    android_material_icon_name="arrow-drop-down"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Icon */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Icon</Text>
+                <Text style={styles.helperText}>Enter an emoji or symbol from your keyboard</Text>
+                <TextInput
+                  style={styles.input}
+                  value={icon}
+                  onChangeText={setIcon}
+                  placeholder="e.g., 📚, 🏃‍♀️, ✨"
+                  placeholderTextColor={colors.textSecondary}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+                {icon && (
+                  <View style={styles.iconPreviewContainer}>
+                    <Text style={styles.iconPreviewText}>Preview:</Text>
+                    <Text style={styles.iconPreview}>{icon}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Color */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Color</Text>
+                <TouchableOpacity
+                  style={styles.colorPickerButton}
+                  onPress={() => setShowColorPicker(!showColorPicker)}
+                >
+                  <View style={styles.colorPreview}>
+                    {color ? (
+                      <View style={[styles.colorSwatch, { backgroundColor: color }]} />
+                    ) : (
+                      <Text style={styles.colorPreviewText}>No color selected</Text>
+                    )}
+                  </View>
+                  <IconSymbol
+                    ios_icon_name={showColorPicker ? "chevron.up" : "chevron.down"}
+                    android_material_icon_name={showColorPicker ? "arrow-drop-up" : "arrow-drop-down"}
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+                {showColorPicker && (
+                  <View style={styles.colorPickerContainer}>
+                    <Text style={styles.colorPickerTitle}>Select a Color</Text>
+                    <View style={styles.colorGrid}>
+                      {COLOR_PALETTE.map((paletteColor, index) => {
+                        const isSelected = color === paletteColor;
+                        
+                        return (
+                          <TouchableOpacity
+                            key={index}
+                            style={[
+                              styles.colorSquare,
+                              { backgroundColor: paletteColor },
+                              isSelected && styles.colorSquareSelected
+                            ]}
+                            onPress={() => {
+                              setColor(paletteColor);
+                              setShowColorPicker(false);
+                            }}
+                          >
+                            {isSelected && (
+                              <IconSymbol
+                                ios_icon_name="checkmark"
+                                android_material_icon_name="check"
+                                size={16}
+                                color={paletteColor === '#FFFFFF' || paletteColor === '#E0E0E0' ? '#000000' : '#FFFFFF'}
+                              />
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <View style={styles.customColorInputContainer}>
+                      <TextInput
+                        style={styles.customColorInput}
+                        value={customColorInput}
+                        onChangeText={setCustomColorInput}
+                        placeholder="#RRGGBB"
+                        placeholderTextColor={colors.textSecondary}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        maxLength={7}
+                      />
+                      <TouchableOpacity
+                        style={styles.addCustomColorButton}
+                        onPress={addCustomColor}
+                      >
+                        <Text style={styles.addCustomColorButtonText}>Add</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Show Progress Toggle */}
+              <View style={styles.section}>
+                <View style={styles.switchRow}>
+                  <Text style={styles.label}>Show Progress Percentage</Text>
+                  <Switch
+                    value={showProgress}
+                    onValueChange={setShowProgress}
+                    trackColor={{ false: colors.border, true: colors.primary }}
+                    thumbColor={colors.background}
+                  />
                 </View>
-              )}
-            </View>
+                <Text style={styles.helperText}>
+                  Display success percentage based on active goals in this life area
+                </Text>
+              </View>
 
-            {/* Color */}
-            <View style={styles.section}>
-              <Text style={styles.label}>Color</Text>
+              {/* Save and Continue Button */}
               <TouchableOpacity
-                style={styles.colorPickerButton}
-                onPress={() => setShowColorPicker(!showColorPicker)}
+                style={styles.primaryButton}
+                onPress={handleStep1Save}
+                disabled={submitting}
               >
-                <View style={styles.colorPreview}>
-                  {color ? (
-                    <View style={[styles.colorSwatch, { backgroundColor: color }]} />
-                  ) : (
-                    <Text style={styles.colorPreviewText}>No color selected</Text>
-                  )}
-                </View>
-                <IconSymbol
-                  ios_icon_name={showColorPicker ? "chevron.up" : "chevron.down"}
-                  android_material_icon_name={showColorPicker ? "arrow-drop-up" : "arrow-drop-down"}
-                  size={24}
-                  color={colors.text}
-                />
+                {submitting ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>
+                    {savedLifeAreaId ? 'Update & Continue' : 'Save & Continue'}
+                  </Text>
+                )}
               </TouchableOpacity>
-              {showColorPicker && (
-                <View style={styles.colorPickerContainer}>
-                  <Text style={styles.colorPickerTitle}>Select a Color</Text>
-                  <View style={styles.colorGrid}>
-                    {COLOR_PALETTE.map((paletteColor, index) => {
-                      const isSelected = color === paletteColor;
+              
+              {/* Extra padding at bottom for keyboard */}
+              <View style={styles.bottomPadding} />
+            </>
+          )}
+
+          {currentStep === 2 && (
+            <>
+              {/* Linked Goals Section */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Linked Goals</Text>
+                {linkedGoals.length === 0 ? (
+                  <Text style={styles.emptyText}>No goals linked yet</Text>
+                ) : (
+                  <View style={styles.linkedGoalsList}>
+                    {linkedGoals.map((goal) => {
+                      const statusText = goal.status === 'ACTIVE' ? 'Active' : 'Deactivated';
+                      const statusColor = goal.status === 'ACTIVE' ? colors.success : colors.textSecondary;
                       
                       return (
-                        <TouchableOpacity
-                          key={index}
-                          style={[
-                            styles.colorSquare,
-                            { backgroundColor: paletteColor },
-                            isSelected && styles.colorSquareSelected
-                          ]}
-                          onPress={() => {
-                            setColor(paletteColor);
-                            setShowColorPicker(false);
-                          }}
-                        >
-                          {isSelected && (
+                        <View key={goal.id} style={styles.linkedGoalItem}>
+                          <View style={styles.linkedGoalInfo}>
+                            <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
+                            <Text style={[styles.linkedGoalStatus, { color: statusColor }]}>{statusText}</Text>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => handleUnlinkGoal(goal.id)}
+                            style={styles.unlinkButton}
+                          >
                             <IconSymbol
-                              ios_icon_name="checkmark"
-                              android_material_icon_name="check"
-                              size={16}
-                              color={paletteColor === '#FFFFFF' || paletteColor === '#E0E0E0' ? '#000000' : '#FFFFFF'}
+                              ios_icon_name="xmark.circle.fill"
+                              android_material_icon_name="cancel"
+                              size={24}
+                              color={colors.error}
                             />
-                          )}
-                        </TouchableOpacity>
+                          </TouchableOpacity>
+                        </View>
                       );
                     })}
                   </View>
-                  <View style={styles.customColorInputContainer}>
-                    <TextInput
-                      style={styles.customColorInput}
-                      value={customColorInput}
-                      onChangeText={setCustomColorInput}
-                      placeholder="#RRGGBB"
-                      placeholderTextColor={colors.textSecondary}
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                      maxLength={7}
-                    />
-                    <TouchableOpacity
-                      style={styles.addCustomColorButton}
-                      onPress={addCustomColor}
-                    >
-                      <Text style={styles.addCustomColorButtonText}>Add</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* Show Progress Toggle */}
-            <View style={styles.section}>
-              <View style={styles.switchRow}>
-                <Text style={styles.label}>Show Progress Percentage</Text>
-                <Switch
-                  value={showProgress}
-                  onValueChange={setShowProgress}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                  thumbColor={colors.background}
-                />
+                )}
               </View>
-              <Text style={styles.helperText}>
-                Display success percentage based on active goals in this life area
-              </Text>
-            </View>
 
-            {/* Save and Continue Button */}
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleStep1Save}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <Text style={styles.primaryButtonText}>
-                  {savedLifeAreaId ? 'Update & Continue' : 'Save & Continue'}
-                </Text>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
+              {/* Add Existing Goal */}
+              <View style={styles.section}>
+                <Text style={styles.label}>Add Existing Goal</Text>
+                <TouchableOpacity
+                  style={styles.picker}
+                  onPress={() => setShowGoalPicker(true)}
+                >
+                  <Text style={styles.pickerText}>Select a goal to link...</Text>
+                  <IconSymbol
+                    ios_icon_name="chevron.down"
+                    android_material_icon_name="arrow-drop-down"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
 
-        {currentStep === 2 && (
-          <>
-            {/* Linked Goals Section */}
-            <View style={styles.section}>
-              <Text style={styles.label}>Linked Goals</Text>
-              {linkedGoals.length === 0 ? (
-                <Text style={styles.emptyText}>No goals linked yet</Text>
-              ) : (
-                <View style={styles.linkedGoalsList}>
-                  {linkedGoals.map((goal) => {
-                    const statusText = goal.status === 'ACTIVE' ? 'Active' : 'Deactivated';
-                    const statusColor = goal.status === 'ACTIVE' ? colors.success : colors.textSecondary;
-                    
-                    return (
-                      <View key={goal.id} style={styles.linkedGoalItem}>
-                        <View style={styles.linkedGoalInfo}>
-                          <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
-                          <Text style={[styles.linkedGoalStatus, { color: statusColor }]}>{statusText}</Text>
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => handleUnlinkGoal(goal.id)}
-                          style={styles.unlinkButton}
-                        >
-                          <IconSymbol
-                            ios_icon_name="xmark.circle.fill"
-                            android_material_icon_name="cancel"
-                            size={24}
-                            color={colors.error}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-
-            {/* Add Existing Goal */}
-            <View style={styles.section}>
-              <Text style={styles.label}>Add Existing Goal</Text>
+              {/* Create New Goal Button */}
               <TouchableOpacity
-                style={styles.picker}
-                onPress={() => setShowGoalPicker(true)}
+                style={styles.secondaryButton}
+                onPress={handleCreateNewGoal}
               >
-                <Text style={styles.pickerText}>Select a goal to link...</Text>
                 <IconSymbol
-                  ios_icon_name="chevron.down"
-                  android_material_icon_name="arrow-drop-down"
-                  size={24}
-                  color={colors.text}
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={20}
+                  color={colors.primary}
                 />
+                <Text style={styles.secondaryButtonText}>Create New Goal</Text>
               </TouchableOpacity>
-            </View>
 
-            {/* Create New Goal Button */}
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={handleCreateNewGoal}
-            >
-              <IconSymbol
-                ios_icon_name="plus.circle.fill"
-                android_material_icon_name="add-circle"
-                size={20}
-                color={colors.primary}
-              />
-              <Text style={styles.secondaryButtonText}>Create New Goal</Text>
-            </TouchableOpacity>
-
-            {/* Finish Button */}
-            <TouchableOpacity
-              style={styles.finishButton}
-              onPress={handleFinish}
-            >
-              <Text style={styles.finishButtonText}>Finish</Text>
-            </TouchableOpacity>
-          </>
-        )}
-      </ScrollView>
+              {/* Finish Button */}
+              <TouchableOpacity
+                style={styles.finishButton}
+                onPress={handleFinish}
+              >
+                <Text style={styles.finishButtonText}>Finish</Text>
+              </TouchableOpacity>
+              
+              {/* Extra padding at bottom */}
+              <View style={styles.bottomPadding} />
+            </>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Parent Picker Modal */}
       <Modal
@@ -827,6 +846,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
     paddingHorizontal: 20,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
@@ -1057,6 +1079,9 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontSize: 16,
     fontWeight: '600',
+  },
+  bottomPadding: {
+    height: 100,
   },
   modalOverlay: {
     flex: 1,
