@@ -51,15 +51,18 @@ export function registerJournalsRoutes(app: App) {
 
     const body = request.body as {
       date: string;
-      content: string;
+      content?: string;
     };
 
-    if (!body.date || !body.content) {
-      app.logger.warn({ userId: session.user.id }, 'Missing required fields in POST journals by date');
-      return reply.status(400).send({ error: 'Missing required fields: date and content' });
+    if (!body.date) {
+      app.logger.warn({ userId: session.user.id }, 'Missing date in POST journals by date');
+      return reply.status(400).send({ error: 'Missing required field: date' });
     }
 
-    app.logger.info({ userId: session.user.id, date: body.date }, 'Creating/updating journal entry for date');
+    // Check if content is empty or only whitespace
+    const isContentEmpty = !body.content || body.content.trim() === '';
+
+    app.logger.info({ userId: session.user.id, date: body.date, contentEmpty: isContentEmpty }, 'Processing journal entry for date');
 
     try {
       // Check if entry exists for this date
@@ -72,6 +75,24 @@ export function registerJournalsRoutes(app: App) {
         ))
         .limit(1);
 
+      if (isContentEmpty) {
+        // If content is empty, delete the entry if it exists
+        if (existing.length > 0) {
+          await app.db
+            .delete(schema.journalEntries)
+            .where(and(
+              eq(schema.journalEntries.userId, session.user.id),
+              eq(schema.journalEntries.entryDate, body.date)
+            ));
+
+          app.logger.info({ userId: session.user.id, entryId: existing[0].id, date: body.date }, 'Journal entry deleted (empty content)');
+        } else {
+          app.logger.info({ userId: session.user.id, date: body.date }, 'No journal entry to delete (empty content, no existing entry)');
+        }
+        return null;
+      }
+
+      // Content is not empty, create or update
       if (existing.length > 0) {
         // Update existing entry
         const updatedEntries = await app.db
