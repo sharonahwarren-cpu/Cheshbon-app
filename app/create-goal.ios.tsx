@@ -416,15 +416,6 @@ export default function CreateGoalScreen() {
     'Yearly',
   ];
 
-  const scheduleTypes: ScheduleType[] = [
-    'Always Active',
-    'Daily',
-    'Weekly',
-    'Fortnightly',
-    'Monthly',
-    'Yearly',
-  ];
-
   const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
   const submitButtonTitle = editingGoalId ? 'Update Goal' : 'Create Goal';
   const rewardActionText = getRewardActionText();
@@ -1144,7 +1135,6 @@ export default function CreateGoalScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ... (same styles as base file)
   container: {
     flex: 1,
     backgroundColor: colors.background,
