@@ -1216,7 +1216,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Drag the ≡ handle to reorder. Use arrow buttons to change nesting level (indent).
+          Drag the ≡ handle to reorder. Use arrow buttons to change nesting level.
         </Text>
         {flatAreas.length === 0 ? (
           <View style={styles.emptyState}>
