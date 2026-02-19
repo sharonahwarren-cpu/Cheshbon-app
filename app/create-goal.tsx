@@ -65,7 +65,12 @@ export default function CreateGoalScreen() {
     lifeAreaId: preselectedLifeAreaId, 
     returnToSettings, 
     returnToLifeAreaWizard,
-    wizardLifeAreaId 
+    wizardLifeAreaId,
+    returnToAddReflection,
+    reflectionCategory,
+    reflectionType,
+    reflectionDescription,
+    reflectionDate
   } = useLocalSearchParams<{ 
     id?: string; 
     fromReflection?: string;
@@ -73,6 +78,11 @@ export default function CreateGoalScreen() {
     returnToSettings?: string;
     returnToLifeAreaWizard?: string;
     wizardLifeAreaId?: string;
+    returnToAddReflection?: string;
+    reflectionCategory?: string;
+    reflectionType?: string;
+    reflectionDescription?: string;
+    reflectionDate?: string;
   }>();
   
   const [showCreateAnotherPrompt, setShowCreateAnotherPrompt] = useState(false);
@@ -346,6 +356,16 @@ export default function CreateGoalScreen() {
           // Show prompt to create another goal
           setModalVisible(false);
           setShowCreateAnotherPrompt(true);
+        } else if (returnToAddReflection === 'true') {
+          // Navigate back to reflect screen with params to reopen AddReflectionModal
+          const params = new URLSearchParams({
+            openModal: 'true',
+            reflectionCategory: reflectionCategory || '',
+            reflectionType: reflectionType || 'Proactive',
+            reflectionDescription: reflectionDescription || '',
+            reflectionDate: reflectionDate || new Date().toISOString(),
+          });
+          router.push(`/(tabs)/reflect?${params.toString()}`);
         } else if (fromReflection === 'true') {
           // Navigate back to reflection screen to continue the reflection
           router.push('/(tabs)/reflect');

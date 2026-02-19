@@ -320,16 +320,18 @@ export function AddReflectionModal({
   };
 
   const handleNext = () => {
-    // CRITICAL: When behaviors are enabled, category is MANDATORY in step 1
+    // Step 1: Category validation (when enabled)
     if (step === 1 && categoriesEnabled && !category) {
       alert('Please select a category');
       return;
     }
     
-    if (step === 1 && !description.trim()) {
+    // Step 2: Description validation
+    if (step === 2 && !description.trim()) {
       alert('Please enter a description');
       return;
     }
+    
     Keyboard.dismiss();
     setStep(step + 1);
     setTimeout(() => {
@@ -403,10 +405,19 @@ export function AddReflectionModal({
   };
 
   const handleCreateGoal = () => {
-    console.log('[AddReflectionModal] Navigating to create goal screen');
+    console.log('[AddReflectionModal] Navigating to create goal screen with return params');
+    // Store the current reflection state in URL params so we can restore it when returning
+    const params = new URLSearchParams({
+      returnToAddReflection: 'true',
+      reflectionCategory: category || '',
+      reflectionType: type,
+      reflectionDescription: description,
+      reflectionDate: selectedDate.toISOString(),
+    });
+    
     onClose(); // Close the reflection modal first
     setTimeout(() => {
-      router.push('/create-goal');
+      router.push(`/create-goal?${params.toString()}`);
     }, 300);
   };
 
@@ -502,7 +513,7 @@ export function AddReflectionModal({
   };
 
   const modalTitle = editingReflection ? 'Edit Reflection' : 'Add Reflection';
-  const totalSteps = 4;
+  const totalSteps = 5;
   const progressPercent = (step / totalSteps) * 100;
 
   // Calculate bottom padding for ScrollView to ensure content is above the Next button
@@ -596,7 +607,11 @@ export function AddReflectionModal({
                     </View>
                   </View>
                 )}
+              </React.Fragment>
+            )}
 
+            {step === 5 && (
+              <React.Fragment>
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
@@ -983,8 +998,8 @@ export function AddReflectionModal({
                   </View>
                   <View style={styles.optionsColumn}>
                     {[
-                      { label: 'Yes, worth it', value: true },
-                      { label: 'No, not worth it', value: false },
+                      { label: 'Yes, worth it', value: true, icon: { ios: 'hand.thumbsup.fill', android: 'thumb-up' } },
+                      { label: 'No, not worth it', value: false, icon: { ios: 'hand.thumbsdown.fill', android: 'thumb-down' } },
                     ].map((option, index) => {
                       const isSelected = wasWorthIt === option.value;
                       
@@ -994,6 +1009,12 @@ export function AddReflectionModal({
                             style={[styles.optionButtonLarge, isSelected && styles.optionButtonSelected]}
                             onPress={() => setWasWorthIt(option.value)}
                           >
+                            <IconSymbol
+                              ios_icon_name={option.icon.ios}
+                              android_material_icon_name={option.icon.android}
+                              size={20}
+                              color={isSelected ? colors.background : colors.primary}
+                            />
                             <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                               {option.label}
                             </Text>
@@ -1512,6 +1533,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   optionButtonLarge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: 12,

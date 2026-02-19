@@ -58,12 +58,30 @@ type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Mont
 
 export default function CreateGoalScreen() {
   const router = useRouter();
-  const { id: editingGoalId, fromReflection, lifeAreaId: preselectedLifeAreaId, returnToSettings, returnToLifeAreaWizard } = useLocalSearchParams<{ 
+  const { 
+    id: editingGoalId, 
+    fromReflection, 
+    lifeAreaId: preselectedLifeAreaId, 
+    returnToSettings, 
+    returnToLifeAreaWizard,
+    wizardLifeAreaId,
+    returnToAddReflection,
+    reflectionCategory,
+    reflectionType,
+    reflectionDescription,
+    reflectionDate
+  } = useLocalSearchParams<{ 
     id?: string; 
     fromReflection?: string;
     lifeAreaId?: string;
     returnToSettings?: string;
     returnToLifeAreaWizard?: string;
+    wizardLifeAreaId?: string;
+    returnToAddReflection?: string;
+    reflectionCategory?: string;
+    reflectionType?: string;
+    reflectionDescription?: string;
+    reflectionDate?: string;
   }>();
   
   const [showCreateAnotherPrompt, setShowCreateAnotherPrompt] = useState(false);
@@ -333,10 +351,20 @@ export default function CreateGoalScreen() {
       }
       
       setTimeout(() => {
-        if (returnToLifeAreaWizard === 'true') {
+        if (returnToLifeAreaWizard === 'true' && wizardLifeAreaId) {
           // Show prompt to create another goal
           setModalVisible(false);
           setShowCreateAnotherPrompt(true);
+        } else if (returnToAddReflection === 'true') {
+          // Navigate back to reflect screen with params to reopen AddReflectionModal
+          const params = new URLSearchParams({
+            openModal: 'true',
+            reflectionCategory: reflectionCategory || '',
+            reflectionType: reflectionType || 'Proactive',
+            reflectionDescription: reflectionDescription || '',
+            reflectionDate: reflectionDate || new Date().toISOString(),
+          });
+          router.push(`/(tabs)/reflect?${params.toString()}`);
         } else if (fromReflection === 'true') {
           // Navigate back to reflection screen to continue the reflection
           router.push('/(tabs)/reflect');
@@ -1146,7 +1174,8 @@ export default function CreateGoalScreen() {
                 style={[styles.alertButton, styles.alertButtonSecondary]}
                 onPress={() => {
                   setShowCreateAnotherPrompt(false);
-                  router.back();
+                  // Return to wizard with newGoalCreated flag
+                  router.push(`/life-area-wizard?id=${wizardLifeAreaId}&step=2&newGoalCreated=true`);
                 }}
               >
                 <Text style={styles.alertButtonSecondaryText}>No, Go Back</Text>
