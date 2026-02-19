@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Keyboard,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
@@ -101,6 +102,14 @@ interface UserPreferences {
   reflectionCategories?: string[];
 }
 
+// Helper function to format date as YYYY-MM-DD in local timezone
+function formatDateLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function ReflectScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ date?: string; reflectionId?: string; openModal?: string; goalId?: string }>();
@@ -179,11 +188,10 @@ export default function ReflectScreen() {
   }, [showSuccessModal]);
 
   const loadData = async () => {
-    console.log('Loading reflect data for date:', selectedDate.toISOString().split('T')[0]);
+    const dateString = formatDateLocal(selectedDate);
+    console.log('Loading reflect data for date (local):', dateString);
     setLoading(true);
     try {
-      const dateString = selectedDate.toISOString().split('T')[0];
-      
       const [journalRes, reflectionsRes, goalsRes, currenciesRes, prefsRes, gainsLossesRes, strategiesRes] = await Promise.all([
         authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
@@ -246,7 +254,7 @@ export default function ReflectScreen() {
     console.log('Saving journal entry...');
     try {
       setLoading(true);
-      const dateString = selectedDate.toISOString().split('T')[0];
+      const dateString = formatDateLocal(selectedDate);
       
       const response = await authenticatedPost('/api/journals/by-date', {
         date: dateString,
@@ -445,11 +453,9 @@ export default function ReflectScreen() {
           >
             <View style={styles.journalCardHeader}>
               <View style={styles.journalCardTitleRow}>
-                <IconSymbol
-                  ios_icon_name="book.fill"
-                  android_material_icon_name="menu-book"
-                  size={28}
-                  color="#4A90E2"
+                <Image 
+                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                  style={styles.journalAppIcon}
                 />
                 <Text style={styles.journalCardTitle}>Daily Journal</Text>
               </View>
@@ -457,11 +463,9 @@ export default function ReflectScreen() {
             
             {!hasJournalContent ? (
               <View style={styles.journalPlaceholder}>
-                <IconSymbol
-                  ios_icon_name="book.closed.fill"
-                  android_material_icon_name="menu-book"
-                  size={48}
-                  color={colors.textSecondary}
+                <Image 
+                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                  style={styles.journalPlaceholderIcon}
                 />
                 <Text style={styles.journalPlaceholderText}>Tap to write about your day…</Text>
               </View>
@@ -741,11 +745,9 @@ export default function ReflectScreen() {
           >
             <View style={styles.journalModalHeader}>
               <View style={styles.journalModalTitleRow}>
-                <IconSymbol
-                  ios_icon_name="book.fill"
-                  android_material_icon_name="menu-book"
-                  size={24}
-                  color="#4A90E2"
+                <Image 
+                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                  style={styles.journalModalIcon}
                 />
                 <Text style={styles.journalModalTitle}>Daily Journal</Text>
               </View>
@@ -928,6 +930,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  journalAppIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+  },
   journalCardTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -937,6 +944,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 40,
+  },
+  journalPlaceholderIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    opacity: 0.6,
   },
   journalPlaceholderText: {
     fontSize: 16,
@@ -1255,6 +1268,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  journalModalIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 5,
   },
   journalModalTitle: {
     fontSize: 24,
