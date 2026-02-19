@@ -1571,13 +1571,13 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? 12 : 4,
-    paddingBottom: 12,
+    paddingBottom: 8,
     alignItems: 'center',
   },
   logo: {
-    width: 80,
-    height: 80,
-    marginBottom: 8,
+    width: 100,
+    height: 100,
+    marginBottom: 4,
   },
   headerTitle: {
     fontSize: 28,
