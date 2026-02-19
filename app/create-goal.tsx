@@ -54,12 +54,20 @@ type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Mont
 
 export default function CreateGoalScreen() {
   const router = useRouter();
-  const { id: editingGoalId, fromReflection, lifeAreaId: preselectedLifeAreaId, returnToSettings, returnToLifeAreaWizard } = useLocalSearchParams<{ 
+  const { 
+    id: editingGoalId, 
+    fromReflection, 
+    lifeAreaId: preselectedLifeAreaId, 
+    returnToSettings, 
+    returnToLifeAreaWizard,
+    wizardLifeAreaId 
+  } = useLocalSearchParams<{ 
     id?: string; 
     fromReflection?: string;
     lifeAreaId?: string;
     returnToSettings?: string;
     returnToLifeAreaWizard?: string;
+    wizardLifeAreaId?: string;
   }>();
   
   const [showCreateAnotherPrompt, setShowCreateAnotherPrompt] = useState(false);
@@ -147,7 +155,7 @@ export default function CreateGoalScreen() {
       setStrategies(strategies);
       setCurrencies(currencies);
 
-      // If a life area was pre-selected (from Edit Life Area), set it
+      // If a life area was pre-selected (from Edit Life Area or Wizard), set it
       if (preselectedLifeAreaId && !editingGoalId) {
         console.log('[CreateGoal] Pre-selecting life area:', preselectedLifeAreaId);
         setLifeAreaId(preselectedLifeAreaId);
@@ -301,7 +309,7 @@ export default function CreateGoalScreen() {
       }
       
       setTimeout(() => {
-        if (returnToLifeAreaWizard === 'true') {
+        if (returnToLifeAreaWizard === 'true' && wizardLifeAreaId) {
           // Show prompt to create another goal
           setModalVisible(false);
           setShowCreateAnotherPrompt(true);
@@ -1098,7 +1106,8 @@ export default function CreateGoalScreen() {
                 style={[styles.alertButton, styles.alertButtonSecondary]}
                 onPress={() => {
                   setShowCreateAnotherPrompt(false);
-                  router.back();
+                  // Return to wizard with newGoalCreated flag
+                  router.push(`/life-area-wizard?id=${wizardLifeAreaId}&step=2&newGoalCreated=true`);
                 }}
               >
                 <Text style={styles.alertButtonSecondaryText}>No, Go Back</Text>

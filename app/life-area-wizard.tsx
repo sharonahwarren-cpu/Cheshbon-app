@@ -44,10 +44,12 @@ interface Goal {
 
 export default function LifeAreaWizardScreen() {
   const router = useRouter();
-  const { id: editingLifeAreaId } = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; step?: string; newGoalCreated?: string }>();
+  const editingLifeAreaId = params.id;
+  const initialStep = params.step ? parseInt(params.step) : 1;
 
   // Step state
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(initialStep);
   
   // Step 1 form data
   const [name, setName] = useState('');
@@ -71,7 +73,6 @@ export default function LifeAreaWizardScreen() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [customColorInput, setCustomColorInput] = useState('');
   const [showGoalPicker, setShowGoalPicker] = useState(false);
-  const [showCreateAnotherGoalPrompt, setShowCreateAnotherGoalPrompt] = useState(false);
   
   // Modal state
   const [errorMessage, setErrorMessage] = useState('');
@@ -82,6 +83,14 @@ export default function LifeAreaWizardScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Reload goals when returning from goal creation
+  useEffect(() => {
+    if (params.newGoalCreated === 'true') {
+      console.log('[LifeAreaWizard] New goal created, reloading goals...');
+      loadGoals();
+    }
+  }, [params.newGoalCreated]);
 
   const loadData = async () => {
     console.log('[LifeAreaWizard] Loading data...');
@@ -100,7 +109,7 @@ export default function LifeAreaWizardScreen() {
 
       // If editing, find the life area from the already-loaded list
       if (editingLifeAreaId) {
-        console.log('[LifeAreaWizard] Finding life area for editing:', editingLifeAreaId);
+        console.log('[LifeAreaWizard] Editing life area:', editingLifeAreaId);
         
         // Flatten the hierarchy to find the area by ID
         const flattenAreas = (areas: any[]): any[] => {
@@ -130,12 +139,16 @@ export default function LifeAreaWizardScreen() {
           const linkedIds = (lifeAreaData.goals || []).map((g: any) => g.id);
           setLinkedGoalIds(linkedIds);
           
-          // If editing, start at step 2 (goal linking)
-          setCurrentStep(2);
+          // If editing and step is specified, go to that step
+          if (initialStep === 2) {
+            setCurrentStep(2);
+          }
         } else {
           console.warn('[LifeAreaWizard] Life area not found in list, ID:', editingLifeAreaId);
           setSavedLifeAreaId(editingLifeAreaId);
-          setCurrentStep(2);
+          if (initialStep === 2) {
+            setCurrentStep(2);
+          }
         }
       }
     } catch (error: any) {
@@ -143,6 +156,18 @@ export default function LifeAreaWizardScreen() {
       showError(error.message || 'Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGoals = async () => {
+    console.log('[LifeAreaWizard] Reloading goals...');
+    try {
+      const goalsRes = await authenticatedGet('/api/goals');
+      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      setGoals(goalsData);
+      console.log('[LifeAreaWizard] Goals reloaded, count:', goalsData.length);
+    } catch (error: any) {
+      console.error('[LifeAreaWizard] Error reloading goals:', error);
     }
   };
 
@@ -185,6 +210,7 @@ export default function LifeAreaWizardScreen() {
         console.log('[API] Creating life area:', lifeAreaData);
         result = await authenticatedPost('/api/life-areas', lifeAreaData);
         const createdId = result?.id || result?.data?.id;
+        console.log('[API] Life area created with ID:', createdId);
         setSavedLifeAreaId(createdId);
       }
 
@@ -204,13 +230,16 @@ export default function LifeAreaWizardScreen() {
   };
 
   const handleLinkGoal = async (goalId: string) => {
-    if (!savedLifeAreaId) return;
+    if (!savedLifeAreaId) {
+      showError('Please save the Life Area first');
+      return;
+    }
     
     try {
       console.log('[API] Linking goal to life area:', { goalId, lifeAreaId: savedLifeAreaId });
       await authenticatedPost(`/api/life-areas/${savedLifeAreaId}/goals`, { goalId });
       
-      // Update local state
+      // Update local state immediately
       setLinkedGoalIds([...linkedGoalIds, goalId]);
       showSuccess('Goal linked successfully!');
       
@@ -230,7 +259,7 @@ export default function LifeAreaWizardScreen() {
       console.log('[API] Unlinking goal from life area:', { goalId, lifeAreaId: savedLifeAreaId });
       await authenticatedDelete(`/api/life-areas/${savedLifeAreaId}/goals/${goalId}`);
       
-      // Update local state
+      // Update local state immediately
       setLinkedGoalIds(linkedGoalIds.filter(id => id !== goalId));
       showSuccess('Goal unlinked successfully!');
       
@@ -244,9 +273,14 @@ export default function LifeAreaWizardScreen() {
   };
 
   const handleCreateNewGoal = () => {
+    if (!savedLifeAreaId) {
+      showError('Please save the Life Area first');
+      return;
+    }
+    
     console.log('[LifeAreaWizard] Creating new goal for life area:', savedLifeAreaId);
-    // Navigate to create goal with prefilled life area
-    router.push(`/create-goal?lifeAreaId=${savedLifeAreaId}&returnToLifeAreaWizard=true`);
+    // Navigate to create goal with prefilled life area and return params
+    router.push(`/create-goal?lifeAreaId=${savedLifeAreaId}&returnToLifeAreaWizard=true&wizardLifeAreaId=${savedLifeAreaId}`);
   };
 
   const handleFinish = () => {
