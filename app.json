@@ -4,11 +4,11 @@
     "slug": "Cheshbon",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/Chesbon_app_Logo.png",
+    "icon": "./assets/images/Chesbon_app_Logo Small.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/Chesbon_app_Logo.png",
+      "image": "./assets/images/Chesbon_app_Logo Small.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
@@ -21,7 +21,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/Chesbon_app_Logo.png",
+        "foregroundImage": "./assets/images/Chesbon_app_Logo Small.png",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
