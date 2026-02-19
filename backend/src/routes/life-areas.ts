@@ -387,7 +387,21 @@ export function registerLifeAreasRoutes(app: App) {
     }
   });
 
-  // PUT /api/life-areas/reorder - Reorder multiple life areas
+  // Helper function to check if parentId would create a circular reference
+  function wouldCreateCircularReference(areaId: string, newParentId: string | null, areaMap: Map<string, any>): boolean {
+    if (!newParentId) return false;
+    if (areaId === newParentId) return true;
+
+    let current = newParentId;
+    while (current) {
+      if (current === areaId) return true;
+      const parent = areaMap.get(current);
+      current = parent?.parentId;
+    }
+    return false;
+  }
+
+  // PUT /api/life-areas/reorder - Update hierarchy and ordering of multiple life areas
   app.fastify.put('/api/life-areas/reorder', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -396,42 +410,62 @@ export function registerLifeAreasRoutes(app: App) {
     if (!session) return;
 
     const body = request.body as {
-      lifeAreaIds: string[];
+      updates: Array<{ id: string; parentId: string | null; displayOrder: number }>;
     };
 
-    app.logger.info({ userId: session.user.id, count: body.lifeAreaIds.length }, 'Reordering life areas');
+    app.logger.info({ userId: session.user.id, count: body.updates.length }, 'Updating life areas hierarchy and order');
 
     try {
-      // Verify all areas belong to user
+      // Verify all areas belong to user and build area map
       const areas = await app.db
         .select()
         .from(schema.lifeAreas)
-        .where(and(
-          eq(schema.lifeAreas.userId, session.user.id),
-        ));
+        .where(eq(schema.lifeAreas.userId, session.user.id));
 
-      const areaSet = new Set(areas.map(a => a.id));
-      for (const areaId of body.lifeAreaIds) {
-        if (!areaSet.has(areaId)) {
-          app.logger.warn({ userId: session.user.id, areaId }, 'Area not found or unauthorized');
+      const areaMap = new Map(areas.map(a => [a.id, a]));
+
+      // Validate all updates
+      for (const update of body.updates) {
+        // Check if area exists and belongs to user
+        if (!areaMap.has(update.id)) {
+          app.logger.warn({ userId: session.user.id, areaId: update.id }, 'Area not found or unauthorized');
           return reply.status(404).send({ error: 'Area not found' });
+        }
+
+        // Check for circular references
+        if (wouldCreateCircularReference(update.id, update.parentId, areaMap)) {
+          app.logger.warn(
+            { userId: session.user.id, areaId: update.id, newParentId: update.parentId },
+            'Circular reference detected'
+          );
+          return reply.status(400).send({ error: 'Cannot set a descendant as parent (circular reference)' });
+        }
+
+        // If new parent is specified, verify it belongs to user
+        if (update.parentId && !areaMap.has(update.parentId)) {
+          app.logger.warn({ userId: session.user.id, parentId: update.parentId }, 'Parent area not found or unauthorized');
+          return reply.status(404).send({ error: 'Parent area not found' });
         }
       }
 
-      // Update display_order based on array position
-      for (let i = 0; i < body.lifeAreaIds.length; i++) {
+      // Perform updates
+      for (const update of body.updates) {
         await app.db
           .update(schema.lifeAreas)
-          .set({ displayOrder: i, updatedAt: new Date() })
-          .where(eq(schema.lifeAreas.id, body.lifeAreaIds[i]));
+          .set({
+            parentId: update.parentId || null,
+            displayOrder: update.displayOrder,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.lifeAreas.id, update.id));
       }
 
-      app.logger.info({ userId: session.user.id, count: body.lifeAreaIds.length }, 'Life areas reordered successfully');
+      app.logger.info({ userId: session.user.id, count: body.updates.length }, 'Life areas hierarchy and order updated successfully');
       return { success: true };
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id },
-        'Failed to reorder life areas'
+        'Failed to update life areas hierarchy and order'
       );
       throw error;
     }
