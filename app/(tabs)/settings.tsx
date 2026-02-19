@@ -1035,164 +1035,31 @@ export default function SettingsScreen() {
     handleReorderLifeAreas(updatedAreas);
   };
 
+  const handleMoveArea = (areaId: string, direction: 'up' | 'down') => {
+    const flatAreas = flattenLifeAreas(lifeAreas);
+    const areaIndex = flatAreas.findIndex(a => a.id === areaId);
+    
+    if (areaIndex === -1) return;
+    
+    const updatedAreas = [...flatAreas];
+    
+    if (direction === 'up' && areaIndex > 0) {
+      // Swap with previous item
+      const temp = updatedAreas[areaIndex];
+      updatedAreas[areaIndex] = updatedAreas[areaIndex - 1];
+      updatedAreas[areaIndex - 1] = temp;
+    } else if (direction === 'down' && areaIndex < updatedAreas.length - 1) {
+      // Swap with next item
+      const temp = updatedAreas[areaIndex];
+      updatedAreas[areaIndex] = updatedAreas[areaIndex + 1];
+      updatedAreas[areaIndex + 1] = temp;
+    }
+    
+    handleReorderLifeAreas(updatedAreas);
+  };
+
   const renderLifeAreas = () => {
     const flatAreas = flattenLifeAreas(lifeAreas);
-
-    const LifeAreaDraggableList = () => {
-      const [items, setItems] = useState(flatAreas);
-      const [dragIndex, setDragIndex] = useState<number | null>(null);
-      const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-      // Sync items when flatAreas changes
-      useEffect(() => {
-        setItems(flatAreas);
-      }, [lifeAreas]);
-
-      const handleDragStart = (index: number, e: any) => {
-        console.log('[Settings Web] Drag start:', index);
-        setDragIndex(index);
-        if (e.dataTransfer) {
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/html', String(index));
-        }
-      };
-
-      const handleDragOver = (index: number, e: any) => {
-        e.preventDefault();
-        if (dragIndex !== null && index !== dragIndex) {
-          setDragOverIndex(index);
-        }
-      };
-
-      const handleDrop = (dropIndex: number, e: any) => {
-        e.preventDefault();
-        console.log('[Settings Web] Drop:', { dragIndex, dropIndex });
-        
-        if (dragIndex === null || dragIndex === dropIndex) {
-          setDragIndex(null);
-          setDragOverIndex(null);
-          return;
-        }
-
-        const newItems = [...items];
-        const [removed] = newItems.splice(dragIndex, 1);
-        newItems.splice(dropIndex, 0, removed);
-        
-        console.log('[Settings Web] Reordered items:', newItems.map(i => i.name));
-        setItems(newItems);
-        setDragIndex(null);
-        setDragOverIndex(null);
-
-        // Trigger backend update
-        handleReorderLifeAreas(newItems);
-      };
-
-      const handleDragEnd = () => {
-        console.log('[Settings Web] Drag end');
-        setDragIndex(null);
-        setDragOverIndex(null);
-      };
-
-      return (
-        <ScrollView style={styles.listContainer}>
-          {items.map((item, index) => {
-            const iconName = item.icon;
-            const areaColor = item.color || colors.primary;
-            const canIndentRight = index > 0;
-            const canIndentLeft = item.depth > 0;
-            const isBeingDragged = dragIndex === index;
-            const isDragTarget = dragOverIndex === index;
-
-            return (
-              <View
-                key={item.id}
-                style={[
-                  styles.lifeAreaCardCompact,
-                  { marginLeft: item.depth * 20, borderLeftColor: areaColor },
-                  isBeingDragged && styles.lifeAreaDragging,
-                  isDragTarget && styles.lifeAreaDragTarget,
-                ]}
-                draggable
-                onDragStart={(e: any) => handleDragStart(index, e)}
-                onDragOver={(e: any) => handleDragOver(index, e)}
-                onDrop={(e: any) => handleDrop(index, e)}
-                onDragEnd={handleDragEnd}
-              >
-                <View style={styles.lifeAreaCompactContent}>
-                  <View style={styles.lifeAreaCompactLeft}>
-                    {/* Drag handle - cursor pointer for web */}
-                    <View style={[styles.dragHandle, { cursor: 'grab' }]}>
-                      <IconSymbol
-                        ios_icon_name="line.3.horizontal"
-                        android_material_icon_name="drag-handle"
-                        size={20}
-                        color={colors.textSecondary}
-                      />
-                    </View>
-                    {iconName ? (
-                      <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
-                    ) : (
-                      <View style={styles.iconPlaceholder} />
-                    )}
-                    <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
-                  </View>
-                  <View style={styles.lifeAreaCompactActions}>
-                    {canIndentLeft && (
-                      <TouchableOpacity
-                        onPress={() => handleIndentArea(item.id, 'left')}
-                        style={styles.iconButtonCompact}
-                      >
-                        <IconSymbol
-                          ios_icon_name="chevron.left"
-                          android_material_icon_name="chevron-left"
-                          size={16}
-                          color={colors.primary}
-                        />
-                      </TouchableOpacity>
-                    )}
-                    {canIndentRight && (
-                      <TouchableOpacity
-                        onPress={() => handleIndentArea(item.id, 'right')}
-                        style={styles.iconButtonCompact}
-                      >
-                        <IconSymbol
-                          ios_icon_name="chevron.right"
-                          android_material_icon_name="chevron-right"
-                          size={16}
-                          color={colors.primary}
-                        />
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity
-                      onPress={() => openEditModal('lifeArea', item)}
-                      style={styles.iconButtonCompact}
-                    >
-                      <IconSymbol
-                        ios_icon_name="pencil"
-                        android_material_icon_name="edit"
-                        size={16}
-                        color={colors.primary}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => confirmDelete('lifeArea', item.id, item.name)}
-                      style={styles.iconButtonCompact}
-                    >
-                      <IconSymbol
-                        ios_icon_name="trash"
-                        android_material_icon_name="delete"
-                        size={16}
-                        color={colors.error}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
-      );
-    };
 
     return (
       <View style={styles.container}>
@@ -1216,14 +1083,120 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         <Text style={styles.helperText}>
-          Drag the ≡ handle to reorder. Use arrow buttons to change nesting level.
+          Use arrow buttons to reorder and change nesting level.
         </Text>
         {flatAreas.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No life areas yet. Create one to organize your goals!</Text>
           </View>
         ) : (
-          <LifeAreaDraggableList />
+          <ScrollView style={styles.listContainer}>
+            {flatAreas.map((item, index) => {
+              const iconName = item.icon;
+              const areaColor = item.color || colors.primary;
+              const canMoveUp = index > 0;
+              const canMoveDown = index < flatAreas.length - 1;
+              const canIndentRight = index > 0;
+              const canIndentLeft = item.depth > 0;
+
+              return (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.lifeAreaCardCompact,
+                    { marginLeft: item.depth * 20, borderLeftColor: areaColor },
+                  ]}
+                >
+                  <View style={styles.lifeAreaCompactContent}>
+                    <View style={styles.lifeAreaCompactLeft}>
+                      {iconName ? (
+                        <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>{iconName}</Text>
+                      ) : (
+                        <View style={styles.iconPlaceholder} />
+                      )}
+                      <Text style={styles.lifeAreaCompactName}>{item.name}</Text>
+                    </View>
+                    <View style={styles.lifeAreaCompactActions}>
+                      {canMoveUp && (
+                        <TouchableOpacity
+                          onPress={() => handleMoveArea(item.id, 'up')}
+                          style={styles.iconButtonCompact}
+                        >
+                          <IconSymbol
+                            ios_icon_name="chevron.up"
+                            android_material_icon_name="arrow-upward"
+                            size={16}
+                            color={colors.primary}
+                          />
+                        </TouchableOpacity>
+                      )}
+                      {canMoveDown && (
+                        <TouchableOpacity
+                          onPress={() => handleMoveArea(item.id, 'down')}
+                          style={styles.iconButtonCompact}
+                        >
+                          <IconSymbol
+                            ios_icon_name="chevron.down"
+                            android_material_icon_name="arrow-downward"
+                            size={16}
+                            color={colors.primary}
+                          />
+                        </TouchableOpacity>
+                      )}
+                      {canIndentLeft && (
+                        <TouchableOpacity
+                          onPress={() => handleIndentArea(item.id, 'left')}
+                          style={styles.iconButtonCompact}
+                        >
+                          <IconSymbol
+                            ios_icon_name="chevron.left"
+                            android_material_icon_name="chevron-left"
+                            size={16}
+                            color={colors.primary}
+                          />
+                        </TouchableOpacity>
+                      )}
+                      {canIndentRight && (
+                        <TouchableOpacity
+                          onPress={() => handleIndentArea(item.id, 'right')}
+                          style={styles.iconButtonCompact}
+                        >
+                          <IconSymbol
+                            ios_icon_name="chevron.right"
+                            android_material_icon_name="chevron-right"
+                            size={16}
+                            color={colors.primary}
+                          />
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={() => openEditModal('lifeArea', item)}
+                        style={styles.iconButtonCompact}
+                      >
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={16}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => confirmDelete('lifeArea', item.id, item.name)}
+                        style={styles.iconButtonCompact}
+                      >
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={16}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </ScrollView>
         )}
       </View>
     );
@@ -2565,16 +2538,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderLeftWidth: 3,
   },
-  lifeAreaDragging: {
-    opacity: 0.5,
-  },
-  lifeAreaDragTarget: {
-    borderTopWidth: 3,
-    borderTopColor: colors.primary,
-  },
-  draggableListContent: {
-    paddingBottom: 20,
-  },
   lifeAreaCompactContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2601,10 +2564,6 @@ const styles = StyleSheet.create({
   },
   iconButtonCompact: {
     padding: 4,
-  },
-  dragHandle: {
-    padding: 4,
-    marginRight: 4,
   },
   currencyTypeText: {
     fontSize: 13,
