@@ -135,6 +135,90 @@ export function registerLifeAreasRoutes(app: App) {
     }
   });
 
+  // GET /api/life-areas/:id - Get a single life area by ID
+  app.fastify.get('/api/life-areas/:id', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { id } = request.params as { id: string };
+
+    app.logger.info({ userId: session.user.id, areaId: id }, 'Fetching single life area');
+
+    try {
+      const area = await app.db
+        .select()
+        .from(schema.lifeAreas)
+        .where(eq(schema.lifeAreas.id, id))
+        .limit(1);
+
+      if (!area.length) {
+        app.logger.warn({ userId: session.user.id, areaId: id }, 'Life area not found');
+        return reply.status(404).send({ error: 'Life area not found' });
+      }
+
+      if (area[0].userId !== session.user.id) {
+        app.logger.warn(
+          { userId: session.user.id, areaId: id, ownerId: area[0].userId },
+          'Unauthorized access to life area'
+        );
+        return reply.status(403).send({ error: 'Unauthorized' });
+      }
+
+      // Get all goals for this user to find those linked to this area
+      const goals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.userId, session.user.id));
+
+      // Get reflections to count successes and struggles per goal
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(eq(schema.reflections.userId, session.user.id));
+
+      // Calculate success/struggle counts for each goal
+      const goalsForArea = goals
+        .filter(g => g.lifeAreaId === id)
+        .map(goal => {
+          let successCount = 0;
+          let struggleCount = 0;
+          for (const reflection of reflections) {
+            if (reflection.linkedGoalId === goal.id) {
+              if (reflection.outcome === 'success') successCount++;
+              else if (reflection.outcome === 'struggled') struggleCount++;
+            }
+          }
+          return {
+            id: goal.id,
+            title: goal.title,
+            status: goal.status || 'ACTIVE',
+            successCount,
+            struggleCount,
+          };
+        });
+
+      const response = {
+        id: area[0].id,
+        name: area[0].name,
+        parentId: area[0].parentId,
+        icon: area[0].icon,
+        color: area[0].color,
+        displayOrder: area[0].displayOrder,
+        showProgress: area[0].showProgress,
+        goals: goalsForArea,
+      };
+
+      app.logger.info({ userId: session.user.id, areaId: id }, 'Single life area fetched successfully');
+      return response;
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, areaId: id }, 'Failed to fetch single life area');
+      throw error;
+    }
+  });
+
   // POST /api/life-areas - Create a new life area
   app.fastify.post('/api/life-areas', async (
     request: FastifyRequest,
