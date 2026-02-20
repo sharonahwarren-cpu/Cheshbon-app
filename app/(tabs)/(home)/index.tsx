@@ -12,7 +12,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from "react-native";
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from "@/utils/api";
+import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
 import React, { useState, useEffect, useRef } from "react";
 import { colors } from "@/styles/commonStyles";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
@@ -274,14 +274,23 @@ export default function HomeScreen() {
     
     try {
       const timestamp = new Date(selectedDate).toISOString();
-      await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
-      await loadData();
+      const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
       
-      if (scrollViewRef.current && scrollPositionRef.current > 0) {
-        setTimeout(() => {
-          scrollViewRef.current?.scrollTo({ y: scrollPositionRef.current, animated: false });
-        }, 50);
-      }
+      setActivatedGoals(prevGoals => 
+        prevGoals.map(goal => {
+          if (goal.id === goalId) {
+            return {
+              ...goal,
+              dailyEntries: goal.dailyEntries?.map(e => 
+                e.id === newEntry.id ? { ...e, id: response.entryId || e.id } : e
+              ),
+              todaySuccessCount: response.todaySuccessCount || goal.todaySuccessCount,
+              successCount: response.successCount || goal.successCount,
+            };
+          }
+          return goal;
+        })
+      );
     } catch (error: any) {
       console.error("Error recording success:", error);
       showError(error.message || "Failed to record success");
@@ -327,14 +336,23 @@ export default function HomeScreen() {
     
     try {
       const timestamp = new Date(selectedDate).toISOString();
-      await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
-      await loadData();
+      const response = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
       
-      if (scrollViewRef.current && scrollPositionRef.current > 0) {
-        setTimeout(() => {
-          scrollViewRef.current?.scrollTo({ y: scrollPositionRef.current, animated: false });
-        }, 50);
-      }
+      setActivatedGoals(prevGoals => 
+        prevGoals.map(goal => {
+          if (goal.id === goalId) {
+            return {
+              ...goal,
+              dailyEntries: goal.dailyEntries?.map(e => 
+                e.id === newEntry.id ? { ...e, id: response.entryId || e.id } : e
+              ),
+              todayStruggleCount: response.todayStruggleCount || goal.todayStruggleCount,
+              struggleCount: response.struggleCount || goal.struggleCount,
+            };
+          }
+          return goal;
+        })
+      );
     } catch (error: any) {
       console.error("Error recording struggle:", error);
       showError(error.message || "Failed to record struggle");
@@ -357,12 +375,29 @@ export default function HomeScreen() {
 
   const handleDeleteEntry = async (goalId: string, entryId: string) => {
     console.log("Deleting entry:", entryId, "for goal:", goalId);
+    
+    setActivatedGoals(prevGoals => 
+      prevGoals.map(goal => {
+        if (goal.id === goalId) {
+          const entryToDelete = goal.dailyEntries?.find(e => e.id === entryId);
+          const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== entryId);
+          return {
+            ...goal,
+            dailyEntries: filteredEntries,
+            todaySuccessCount: entryToDelete?.type === 'success' ? Math.max(0, goal.todaySuccessCount - 1) : goal.todaySuccessCount,
+            todayStruggleCount: entryToDelete?.type === 'struggle' ? Math.max(0, goal.todayStruggleCount - 1) : goal.todayStruggleCount,
+          };
+        }
+        return goal;
+      })
+    );
+    
     try {
       await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
-      await loadData();
     } catch (error: any) {
       console.error("Error deleting entry:", error);
       showError(error.message || "Failed to delete entry");
+      await loadData();
     }
   };
 
@@ -604,6 +639,16 @@ export default function HomeScreen() {
     return count;
   };
 
+  const hasActiveGoalsInHierarchy = (area: LifeAreaNode): boolean => {
+    if (area.goals.length > 0) return true;
+    
+    for (const child of area.children) {
+      if (hasActiveGoalsInHierarchy(child)) return true;
+    }
+    
+    return false;
+  };
+
   const getGoalsForArea = (areaId: string): ActivatedGoal[] => {
     return activatedGoals.filter(goal => goal.lifeArea?.id === areaId);
   };
@@ -752,7 +797,7 @@ export default function HomeScreen() {
               size={18}
               color="#FFFFFF"
             />
-            <Text style={styles.actionButtonText}>Success</Text>
+            <Text style={styles.actionButtonText}>✓</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -765,7 +810,7 @@ export default function HomeScreen() {
               size={18}
               color="#FFFFFF"
             />
-            <Text style={styles.actionButtonText}>Struggle</Text>
+            <Text style={styles.actionButtonText}>✗</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -790,6 +835,10 @@ export default function HomeScreen() {
     const goalsForThisArea = getGoalsForArea(area.id);
     const hasChildren = area.children.length > 0;
     const hasGoals = goalsForThisArea.length > 0;
+    
+    if (depth > 0 && !hasActiveGoalsInHierarchy(area)) {
+      return null;
+    }
     
     const areaIconName = area.icon;
     const areaColor = area.color || colors.primary;
@@ -1742,8 +1791,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   actionButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   journalModalContainer: {
