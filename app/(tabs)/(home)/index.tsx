@@ -1313,7 +1313,7 @@ const styles = StyleSheet.create({
   journalCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     marginBottom: 20,
     borderWidth: 2,
     borderColor: colors.border,
@@ -1324,7 +1324,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   journalCardHeader: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   journalCardTitleRow: {
     flexDirection: 'row',
@@ -1332,30 +1332,30 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   journalAppIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 9,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
   },
   journalCardTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.text,
   },
   journalPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
+    paddingVertical: 20,
   },
   journalPlaceholderIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 15,
-    opacity: 0.6,
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    opacity: 0.5,
   },
   journalPlaceholderText: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.textSecondary,
-    marginTop: 12,
+    marginTop: 8,
     textAlign: 'center',
   },
   journalPreviewContainer: {
