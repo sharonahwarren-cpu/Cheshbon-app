@@ -32,7 +32,7 @@ interface ActivatedGoal {
   title: string;
   description?: string;
   type: 'RESTRAINING' | 'PROACTIVE';
-  lifeArea?: { id: string; name: string; parentId?: string; level: number };
+  lifeArea?: { id: string; name: string; parentId?: string; level: number; icon?: string; color?: string };
   subCategory?: string;
   behaviorCategories: string[];
   todaySuccessCount: number;
@@ -48,6 +48,18 @@ interface ActivatedGoal {
   consequenceAmount?: number;
 }
 
+interface LifeAreaNode {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  icon?: string;
+  color?: string;
+  displayOrder: number;
+  showProgress: boolean;
+  children: LifeAreaNode[];
+  goals: ActivatedGoal[];
+}
+
 interface Currency {
   id: string;
   name: string;
@@ -55,14 +67,6 @@ interface Currency {
   type?: 'reward' | 'consequence';
   onSuccess?: 'ADD' | 'SUBTRACT' | 'NONE';
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
-}
-
-interface CategoryGroup {
-  name: string;
-  id: string;
-  level: number;
-  subCategories: Record<string, CategoryGroup>;
-  goals: ActivatedGoal[];
 }
 
 interface GainLoss {
@@ -141,8 +145,8 @@ export default function HomeScreen() {
   const [currentView, setCurrentView] = useState<'reflect' | 'express'>('reflect');
   
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
-  const [categoryGroups, setCategoryGroups] = useState<Record<string, CategoryGroup>>({});
-  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [lifeAreaHierarchy, setLifeAreaHierarchy] = useState<LifeAreaNode[]>([]);
+  const [collapsedAreas, setCollapsedAreas] = useState<Record<string, boolean>>({});
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   
   const [errorModalVisible, setErrorModalVisible] = useState(false);
@@ -164,6 +168,7 @@ export default function HomeScreen() {
   const [tempJournalContent, setTempJournalContent] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     console.log("HomeScreen iOS mounted");
@@ -199,8 +204,9 @@ export default function HomeScreen() {
     setLoading(true);
     try {
       const dateString = formatDateLocal(selectedDate);
-      const [goalsRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes] = await Promise.all([
         authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
+        authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
@@ -210,6 +216,7 @@ export default function HomeScreen() {
       ]);
       
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const lifeAreasData = Array.isArray(lifeAreasRes) ? lifeAreasRes : (lifeAreasRes?.data || []);
       const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
@@ -217,9 +224,11 @@ export default function HomeScreen() {
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       
+      console.log('[Home iOS] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
       
       setActivatedGoals(goalsData);
+      setLifeAreaHierarchy(lifeAreasData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
@@ -228,75 +237,6 @@ export default function HomeScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       
-      const groups: Record<string, CategoryGroup> = {};
-      
-      goalsData.forEach((goal: ActivatedGoal) => {
-        if (!goal.lifeArea) {
-          if (!groups['Uncategorized']) {
-            groups['Uncategorized'] = {
-              name: 'Uncategorized',
-              id: 'uncategorized',
-              level: 0,
-              subCategories: {},
-              goals: [],
-            };
-          }
-          groups['Uncategorized'].goals.push(goal);
-          return;
-        }
-
-        const lifeArea = goal.lifeArea;
-        const categoryKey = lifeArea.id;
-        
-        if (lifeArea.level === 1 || !lifeArea.parentId) {
-          if (!groups[categoryKey]) {
-            groups[categoryKey] = {
-              name: lifeArea.name,
-              id: lifeArea.id,
-              level: lifeArea.level,
-              subCategories: {},
-              goals: [],
-            };
-          }
-          groups[categoryKey].goals.push(goal);
-        } else {
-          const parentId = lifeArea.parentId;
-          
-          if (!groups[parentId]) {
-            groups[parentId] = {
-              name: 'Parent Category',
-              id: parentId,
-              level: 1,
-              subCategories: {},
-              goals: [],
-            };
-          }
-          
-          if (!groups[parentId].subCategories[categoryKey]) {
-            groups[parentId].subCategories[categoryKey] = {
-              name: lifeArea.name,
-              id: lifeArea.id,
-              level: lifeArea.level,
-              subCategories: {},
-              goals: [],
-            };
-          }
-          groups[parentId].subCategories[categoryKey].goals.push(goal);
-        }
-      });
-      
-      const sortedGroups: Record<string, CategoryGroup> = {};
-      const categoryKeys = Object.keys(groups).sort((a, b) => {
-        if (a === 'Uncategorized') return 1;
-        if (b === 'Uncategorized') return -1;
-        return groups[a].name.localeCompare(groups[b].name);
-      });
-      
-      categoryKeys.forEach(key => {
-        sortedGroups[key] = groups[key];
-      });
-      
-      setCategoryGroups(sortedGroups);
       console.log("Home data loaded successfully iOS");
     } catch (error: any) {
       console.error("Error loading home data iOS:", error);
@@ -439,10 +379,10 @@ export default function HomeScreen() {
     }
   };
 
-  const toggleCategory = (categoryKey: string) => {
-    setCollapsedCategories(prev => ({
+  const toggleLifeArea = (areaId: string) => {
+    setCollapsedAreas(prev => ({
       ...prev,
-      [categoryKey]: !prev[categoryKey],
+      [areaId]: !prev[areaId],
     }));
   };
 
@@ -569,6 +509,18 @@ export default function HomeScreen() {
     if (categoryLower === 'thought') return { ios: 'cloud.fill', android: 'cloud' };
     if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
     return { ios: 'sparkles', android: 'auto-awesome' };
+  };
+
+  const countTotalGoals = (area: LifeAreaNode): number => {
+    let count = area.goals.length;
+    for (const child of area.children) {
+      count += countTotalGoals(child);
+    }
+    return count;
+  };
+
+  const getGoalsForArea = (areaId: string): ActivatedGoal[] => {
+    return activatedGoals.filter(goal => goal.lifeArea?.id === areaId);
   };
 
   if (loading) {
@@ -743,39 +695,44 @@ export default function HomeScreen() {
     );
   };
 
-  const renderCategoryGroup = (group: CategoryGroup, depth: number = 0): React.ReactNode => {
-    const isCollapsed = collapsedCategories[group.id];
-    const totalGoals = group.goals.length + 
-      Object.values(group.subCategories).reduce((sum, subGroup) => {
-        return sum + subGroup.goals.length + 
-          Object.values(subGroup.subCategories).reduce((subSum, subSubGroup) => subSum + subSubGroup.goals.length, 0);
-      }, 0);
+  const renderLifeAreaNode = (area: LifeAreaNode, depth: number = 0): React.ReactNode => {
+    const isCollapsed = collapsedAreas[area.id];
+    const totalGoals = countTotalGoals(area);
+    const goalsForThisArea = getGoalsForArea(area.id);
+    const hasChildren = area.children.length > 0;
+    const hasGoals = goalsForThisArea.length > 0;
+    
+    const areaIconName = area.icon;
+    const areaColor = area.color || colors.primary;
     
     return (
-      <View key={group.id} style={[styles.categorySection, { marginLeft: depth * 16 }]}>
+      <View key={area.id} style={[styles.lifeAreaSection, { marginLeft: depth * 16 }]}>
         <TouchableOpacity 
-          style={styles.categoryHeader}
-          onPress={() => toggleCategory(group.id)}
+          style={styles.lifeAreaHeader}
+          onPress={() => toggleLifeArea(area.id)}
         >
-          <View style={styles.categoryTitleRow}>
+          <View style={styles.lifeAreaTitleRow}>
             <IconSymbol
               ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
               android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
               size={20}
               color={colors.text}
             />
-            <Text style={styles.categoryTitle}>{group.name}</Text>
+            {areaIconName && (
+              <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>
+                {areaIconName}
+              </Text>
+            )}
+            <Text style={styles.lifeAreaTitle}>{area.name}</Text>
           </View>
-          <Text style={styles.categoryCount}>{totalGoals}</Text>
+          <Text style={styles.lifeAreaCount}>{totalGoals}</Text>
         </TouchableOpacity>
         
         {!isCollapsed && (
           <>
-            {Object.values(group.subCategories).sort((a, b) => a.name.localeCompare(b.name)).map(subGroup => 
-              renderCategoryGroup(subGroup, depth + 1)
-            )}
+            {hasChildren && area.children.map(child => renderLifeAreaNode(child, depth + 1))}
             
-            {group.goals.map(goal => renderGoalCard(goal))}
+            {hasGoals && goalsForThisArea.map(goal => renderGoalCard(goal))}
           </>
         )}
       </View>
@@ -813,6 +770,8 @@ export default function HomeScreen() {
 
   const hasJournalContent = journalContent && journalContent.trim().length > 0;
   const journalPreview = hasJournalContent ? journalContent.substring(0, 100) + (journalContent.length > 100 ? '...' : '') : '';
+
+  const uncategorizedGoals = activatedGoals.filter(goal => !goal.lifeArea);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -1085,7 +1044,7 @@ export default function HomeScreen() {
             </>
           ) : (
             <>
-              {Object.keys(categoryGroups).length === 0 ? (
+              {lifeAreaHierarchy.length === 0 && uncategorizedGoals.length === 0 ? (
                 <View style={styles.emptyState}>
                   <IconSymbol
                     ios_icon_name="bolt"
@@ -1099,7 +1058,21 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               ) : (
-                Object.values(categoryGroups).map(group => renderCategoryGroup(group))
+                <>
+                  {lifeAreaHierarchy.map(area => renderLifeAreaNode(area))}
+                  
+                  {uncategorizedGoals.length > 0 && (
+                    <View style={styles.lifeAreaSection}>
+                      <View style={styles.lifeAreaHeader}>
+                        <View style={styles.lifeAreaTitleRow}>
+                          <Text style={styles.lifeAreaTitle}>Uncategorized</Text>
+                        </View>
+                        <Text style={styles.lifeAreaCount}>{uncategorizedGoals.length}</Text>
+                      </View>
+                      {uncategorizedGoals.map(goal => renderGoalCard(goal))}
+                    </View>
+                  )}
+                </>
               )}
             </>
           )}
@@ -1528,10 +1501,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
-  categorySection: {
+  lifeAreaSection: {
     marginBottom: 12,
   },
-  categoryHeader: {
+  lifeAreaHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1543,18 +1516,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  categoryTitleRow: {
+  lifeAreaTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flex: 1,
   },
-  categoryTitle: {
+  lifeAreaIcon: {
+    fontSize: 20,
+  },
+  lifeAreaTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
   },
-  categoryCount: {
+  lifeAreaCount: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
