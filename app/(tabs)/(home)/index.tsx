@@ -836,7 +836,7 @@ export default function HomeScreen() {
     const hasChildren = area.children.length > 0;
     const hasGoals = goalsForThisArea.length > 0;
     
-    if (depth > 0 && !hasActiveGoalsInHierarchy(area)) {
+    if (!hasActiveGoalsInHierarchy(area)) {
       return null;
     }
     
