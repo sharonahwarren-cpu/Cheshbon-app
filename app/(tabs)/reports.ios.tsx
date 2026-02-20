@@ -177,7 +177,7 @@ export default function ReportsScreen() {
       setBehaviorCounts(behaviorCountsData);
       setGoalProgress(goalProgressData);
 
-      console.log("Reports data loaded successfully iOS");
+      console.log("Reports data loaded successfully iOS - Currency Balances:", currencyData.length);
     } catch (error: any) {
       console.error("Error loading reports data iOS:", error);
       showError(error.message || "Failed to load reports");
@@ -251,7 +251,398 @@ export default function ReportsScreen() {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <Text style={styles.headerTitle}>Reports</Text>
 
-        {currencyBalances.length === 0 && !winsVsLosses && !successVsStruggles ? (
+        {currencyBalances.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Total Currency Balances</Text>
+            {currencyBalances.map((balance, index) => {
+              const symbolText = balance.symbol || '';
+              const totalBalanceText = `${balance.totalBalance}`;
+              const totalBalanceColor = balance.totalBalance >= 0 ? colors.success : colors.error;
+              const currency = currencies.find(c => c.id === balance.currencyId);
+              
+              let buttonType: 'claim' | 'pay' = 'claim';
+              if (balance.totalBalance > 0) {
+                buttonType = (currency && isRewardCurrency(currency)) ? 'claim' : 'pay';
+              } else if (balance.totalBalance < 0) {
+                buttonType = (currency && isRewardCurrency(currency)) ? 'pay' : 'claim';
+              }
+              
+              const buttonText = buttonType === 'claim' ? 'Claim' : 'Pay';
+              const buttonIcon = buttonType === 'claim' ? 'download' : 'upload';
+              const buttonIosIcon = buttonType === 'claim' ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill';
+              
+              return (
+                <View key={index} style={styles.reportCard}>
+                  <View style={styles.reportHeader}>
+                    <Text style={styles.reportTitle}>{balance.currencyName}</Text>
+                    {symbolText && <Text style={styles.reportSymbol}>{symbolText}</Text>}
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Total Balance:</Text>
+                    <Text style={[styles.reportValue, { color: totalBalanceColor }]}>
+                      {totalBalanceText}
+                    </Text>
+                  </View>
+                  
+                  {balance.totalBalance !== 0 && (
+                    <TouchableOpacity
+                      style={[styles.currencyActionButton, buttonType === 'claim' ? styles.claimButton : styles.payButton]}
+                      onPress={() => openCurrencyModal(balance.currencyId, balance.currencyName, symbolText, balance.totalBalance, buttonType)}
+                    >
+                      <IconSymbol
+                        ios_icon_name={buttonIosIcon}
+                        android_material_icon_name={buttonIcon}
+                        size={18}
+                        color={colors.background}
+                      />
+                      <Text style={styles.currencyActionButtonText}>{buttonText}</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {balance.goalBreakdown && balance.goalBreakdown.length > 0 && (
+                    <View style={styles.goalBreakdownSection}>
+                      <Text style={styles.goalBreakdownTitle}>Per Goal:</Text>
+                      {balance.goalBreakdown.map((goalBalance, idx) => {
+                        const goalBalanceText = `${goalBalance.balance}`;
+                        const goalBalanceColor = goalBalance.balance >= 0 ? colors.success : colors.error;
+                        
+                        return (
+                          <View key={idx} style={styles.goalBreakdownRow}>
+                            <Text style={styles.goalBreakdownGoal}>{goalBalance.goalTitle}</Text>
+                            <Text style={[styles.goalBreakdownBalance, { color: goalBalanceColor }]}>
+                              {symbolText}{goalBalanceText}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                  
+                  <TouchableOpacity 
+                    style={styles.drillDownHint}
+                    onPress={() => {
+                      console.log("Navigating to currency reflections for:", balance.currencyId);
+                      router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
+                    }}
+                  >
+                    <IconSymbol
+                      ios_icon_name="chevron.right"
+                      android_material_icon_name="arrow-forward"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.drillDownText}>Tap to view related reflections</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </>
+        )}
+
+        {winsVsLosses && (
+          <>
+            <Text style={styles.sectionTitle}>Wins vs Losses</Text>
+            <TouchableOpacity 
+              style={styles.reportCard}
+              onPress={() => {
+                console.log("Navigating to reflections");
+                router.push('/(tabs)/reflect');
+              }}
+            >
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Wins:</Text>
+                <Text style={[styles.reportValue, { color: colors.success }]}>
+                  {winsVsLosses.wins}
+                </Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Losses:</Text>
+                <Text style={[styles.reportValue, { color: colors.error }]}>
+                  {winsVsLosses.losses}
+                </Text>
+              </View>
+              <View style={styles.drillDownHint}>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.drillDownText}>Tap to view reflections</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {successVsStruggles && (
+          <>
+            <Text style={styles.sectionTitle}>Success vs Struggles</Text>
+            <TouchableOpacity 
+              style={styles.reportCard}
+              onPress={() => {
+                console.log("Navigating to reflections");
+                router.push('/(tabs)/reflect');
+              }}
+            >
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Successes:</Text>
+                <Text style={[styles.reportValue, { color: colors.success }]}>
+                  {successVsStruggles.successes}
+                </Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Struggles:</Text>
+                <Text style={[styles.reportValue, { color: colors.error }]}>
+                  {successVsStruggles.struggles}
+                </Text>
+              </View>
+              <View style={styles.drillDownHint}>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.drillDownText}>Tap to view reflections</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {reflectionStats && (
+          <>
+            <Text style={styles.sectionTitle}>Reflection Statistics</Text>
+            <TouchableOpacity 
+              style={styles.reportCard}
+              onPress={() => {
+                console.log("Navigating to reflections");
+                router.push('/(tabs)/reflect');
+              }}
+            >
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Total Reflections:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalReflections}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Restraints:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalRestraints}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Proactive:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalProactive}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Worth It %:</Text>
+                <Text style={[styles.reportValue, { color: colors.primary }]}>
+                  {reflectionStats.worthItPercentage}%
+                </Text>
+              </View>
+              <View style={styles.drillDownHint}>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.drillDownText}>Tap to view reflections</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {journalCount && (
+          <>
+            <Text style={styles.sectionTitle}>Journal Entries</Text>
+            <View style={styles.reportCard}>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Total Entries:</Text>
+                <Text style={styles.reportValue}>{journalCount.count}</Text>
+              </View>
+            </View>
+          </>
+        )}
+
+        {gainsLossesSummary && (
+          <>
+            <Text style={styles.sectionTitle}>Gains and Losses</Text>
+            <TouchableOpacity 
+              style={styles.reportCard}
+              onPress={() => {
+                console.log("Navigating to reflections");
+                router.push('/(tabs)/reflect');
+              }}
+            >
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Total Gains:</Text>
+                <Text style={[styles.reportValue, { color: colors.success }]}>
+                  {gainsLossesSummary.totalGains}
+                </Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Total Losses:</Text>
+                <Text style={[styles.reportValue, { color: colors.error }]}>
+                  {gainsLossesSummary.totalLosses}
+                </Text>
+              </View>
+              
+              {gainsLossesSummary.topGains.length > 0 && (
+                <>
+                  <Text style={styles.reportSubtitle}>Top 3 Gains:</Text>
+                  {gainsLossesSummary.topGains.map((gain, idx) => {
+                    const countText = `${gain.count}x`;
+                    
+                    return (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{gain.name}:</Text>
+                        <Text style={styles.reportValue}>{countText}</Text>
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+              
+              {gainsLossesSummary.topLosses.length > 0 && (
+                <>
+                  <Text style={styles.reportSubtitle}>Top 3 Losses:</Text>
+                  {gainsLossesSummary.topLosses.map((loss, idx) => {
+                    const countText = `${loss.count}x`;
+                    
+                    return (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{loss.name}:</Text>
+                        <Text style={styles.reportValue}>{countText}</Text>
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+              <View style={styles.drillDownHint}>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.drillDownText}>Tap to view reflections</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {behaviorCounts && (
+          <>
+            <Text style={styles.sectionTitle}>Behavior Entries</Text>
+            <TouchableOpacity 
+              style={styles.reportCard}
+              onPress={() => {
+                console.log("Navigating to reflections");
+                router.push('/(tabs)/reflect');
+              }}
+            >
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Action Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.actionEntries}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Speech Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.speechEntries}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Thought Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.thoughtEntries}</Text>
+              </View>
+              <View style={styles.drillDownHint}>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.drillDownText}>Tap to view reflections</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {goalProgress.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Goal Progress</Text>
+            {goalProgress.map((goal, index) => {
+              const progressText = `${goal.progress || 0}%`;
+              
+              const hasRewardBalance = goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null;
+              const hasConsequenceBalance = goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null;
+              
+              return (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.reportCard}
+                  onPress={() => {
+                    console.log("Navigating to reflections for goal:", goal.goalId);
+                    router.push({
+                      pathname: '/(tabs)/reflect',
+                      params: { goalId: goal.goalId },
+                    });
+                  }}
+                >
+                  <Text style={styles.goalTitle}>{goal.goalTitle}</Text>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: progressText }]} />
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Progress:</Text>
+                    <Text style={styles.reportValue}>{progressText}</Text>
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Successes:</Text>
+                    <Text style={[styles.reportValue, { color: colors.success }]}>
+                      {goal.successCount}
+                    </Text>
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Struggles:</Text>
+                    <Text style={[styles.reportValue, { color: colors.error }]}>
+                      {goal.struggleCount}
+                    </Text>
+                  </View>
+                  
+                  {(hasRewardBalance || hasConsequenceBalance) && (
+                    <View style={styles.currencySection}>
+                      {hasRewardBalance && (
+                        <View style={styles.reportRow}>
+                          <Text style={styles.reportLabel}>Reward Balance:</Text>
+                          <Text style={[styles.reportValue, { color: colors.success }]}>
+                            {goal.rewardCurrencyBalance} {goal.rewardCurrencySymbol || ''}
+                          </Text>
+                        </View>
+                      )}
+                      {hasConsequenceBalance && (
+                        <View style={styles.reportRow}>
+                          <Text style={styles.reportLabel}>Consequence Balance:</Text>
+                          <Text style={[styles.reportValue, { color: colors.error }]}>
+                            {goal.consequenceCurrencyBalance} {goal.consequenceCurrencySymbol || ''}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                  
+                  <View style={styles.drillDownHint}>
+                    <IconSymbol
+                      ios_icon_name="chevron.right"
+                      android_material_icon_name="arrow-forward"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.drillDownText}>Tap to view reflections</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        )}
+
+        {currencyBalances.length === 0 && !winsVsLosses && !successVsStruggles && (
           <View style={styles.emptyState}>
             <IconSymbol
               ios_icon_name="chart.bar"
@@ -264,12 +655,96 @@ export default function ReportsScreen() {
               Start tracking your goals and reflections to see reports here
             </Text>
           </View>
-        ) : (
-          <Text style={styles.placeholderText}>
-            View detailed reports in Settings
-          </Text>
         )}
       </ScrollView>
+
+      <Modal
+        visible={showCurrencyModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCurrencyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.currencyModal}>
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setShowCurrencyModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              <Text style={styles.modalTitle}>{currencyModalType === 'claim' ? 'Claim' : 'Pay'} {selectedCurrencyName}</Text>
+              <View style={{ width: 24 }} />
+            </View>
+            
+            <View style={styles.currencyModalContent}>
+              <Text style={styles.currencyModalLabel}>Amount {selectedCurrencySymbol && `(${selectedCurrencySymbol})`}</Text>
+              <TextInput
+                style={styles.currencyModalInput}
+                value={currencyModalAmount}
+                onChangeText={setCurrencyModalAmount}
+                placeholder="Enter amount"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="numeric"
+              />
+              <Text style={styles.currencyModalHelper}>
+                Maximum: {currencyModalMaxAmount} {selectedCurrencySymbol}
+              </Text>
+              
+              <View style={styles.quickAmountButtons}>
+                <TouchableOpacity
+                  style={styles.quickAmountButton}
+                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount / 4).toFixed(2))}
+                >
+                  <Text style={styles.quickAmountButtonText}>25%</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAmountButton}
+                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount / 2).toFixed(2))}
+                >
+                  <Text style={styles.quickAmountButtonText}>50%</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAmountButton}
+                  onPress={() => setCurrencyModalAmount((currencyModalMaxAmount * 0.75).toFixed(2))}
+                >
+                  <Text style={styles.quickAmountButtonText}>75%</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.quickAmountButton}
+                  onPress={() => setCurrencyModalAmount(currencyModalMaxAmount.toString())}
+                >
+                  <Text style={styles.quickAmountButtonText}>100%</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => setShowCurrencyModal(false)}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={handleCurrencyAction}
+                disabled={currencyModalLoading}
+              >
+                {currencyModalLoading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.modalButtonPrimaryText}>
+                    {currencyModalType === 'claim' ? 'Claim' : 'Pay'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={errorModalVisible}
@@ -338,6 +813,140 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 24,
   },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  reportCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  reportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  reportTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  reportSymbol: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  reportRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reportLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  reportValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  reportSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  goalTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: colors.cardBorder,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 4,
+  },
+  goalBreakdownSection: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  goalBreakdownTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  goalBreakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  goalBreakdownGoal: {
+    fontSize: 14,
+    color: colors.text,
+    flex: 1,
+  },
+  goalBreakdownBalance: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  currencyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  claimButton: {
+    backgroundColor: colors.success,
+  },
+  payButton: {
+    backgroundColor: colors.error,
+  },
+  currencyActionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background,
+  },
+  drillDownHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  drillDownText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -356,17 +965,103 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 40,
   },
-  placeholderText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 40,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  currencyModal: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  currencyModalContent: {
+    padding: 20,
+  },
+  currencyModalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  currencyModalInput: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 18,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 8,
+  },
+  currencyModalHelper: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  quickAmountButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickAmountButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  quickAmountButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalButtonPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  modalButtonPrimaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
   alertModal: {
     backgroundColor: colors.backgroundAlt,
@@ -400,6 +1095,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     textAlign: 'center',
+  },
+  currencySection: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   successModal: {
     backgroundColor: colors.background,
