@@ -140,6 +140,8 @@ export default function HomeScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollPositionRef = useRef(0);
   
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -249,25 +251,107 @@ export default function HomeScreen() {
 
   const handleGoalSuccess = async (goalId: string) => {
     console.log("Recording success for goal:", goalId);
+    
+    const newEntry: DailyEntry = {
+      id: `temp-${Date.now()}`,
+      type: 'success',
+      timestamp: new Date(selectedDate).toISOString(),
+    };
+    
+    setActivatedGoals(prevGoals => 
+      prevGoals.map(goal => {
+        if (goal.id === goalId) {
+          const updatedEntries = [...(goal.dailyEntries || []), newEntry];
+          return {
+            ...goal,
+            dailyEntries: updatedEntries,
+            todaySuccessCount: goal.todaySuccessCount + 1,
+          };
+        }
+        return goal;
+      })
+    );
+    
     try {
       const timestamp = new Date(selectedDate).toISOString();
       await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
       await loadData();
+      
+      if (scrollViewRef.current && scrollPositionRef.current > 0) {
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ y: scrollPositionRef.current, animated: false });
+        }, 50);
+      }
     } catch (error: any) {
       console.error("Error recording success:", error);
       showError(error.message || "Failed to record success");
+      
+      setActivatedGoals(prevGoals => 
+        prevGoals.map(goal => {
+          if (goal.id === goalId) {
+            const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== newEntry.id);
+            return {
+              ...goal,
+              dailyEntries: filteredEntries,
+              todaySuccessCount: Math.max(0, goal.todaySuccessCount - 1),
+            };
+          }
+          return goal;
+        })
+      );
     }
   };
 
   const handleGoalStruggle = async (goalId: string) => {
     console.log("Recording struggle for goal:", goalId);
+    
+    const newEntry: DailyEntry = {
+      id: `temp-${Date.now()}`,
+      type: 'struggle',
+      timestamp: new Date(selectedDate).toISOString(),
+    };
+    
+    setActivatedGoals(prevGoals => 
+      prevGoals.map(goal => {
+        if (goal.id === goalId) {
+          const updatedEntries = [...(goal.dailyEntries || []), newEntry];
+          return {
+            ...goal,
+            dailyEntries: updatedEntries,
+            todayStruggleCount: goal.todayStruggleCount + 1,
+          };
+        }
+        return goal;
+      })
+    );
+    
     try {
       const timestamp = new Date(selectedDate).toISOString();
       await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
       await loadData();
+      
+      if (scrollViewRef.current && scrollPositionRef.current > 0) {
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({ y: scrollPositionRef.current, animated: false });
+        }, 50);
+      }
     } catch (error: any) {
       console.error("Error recording struggle:", error);
       showError(error.message || "Failed to record struggle");
+      
+      setActivatedGoals(prevGoals => 
+        prevGoals.map(goal => {
+          if (goal.id === goalId) {
+            const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== newEntry.id);
+            return {
+              ...goal,
+              dailyEntries: filteredEntries,
+              todayStruggleCount: Math.max(0, goal.todayStruggleCount - 1),
+            };
+          }
+          return goal;
+        })
+      );
     }
   };
 
@@ -524,6 +608,10 @@ export default function HomeScreen() {
     return activatedGoals.filter(goal => goal.lifeArea?.id === areaId);
   };
 
+  const handleScroll = (event: any) => {
+    scrollPositionRef.current = event.nativeEvent.contentOffset.y;
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -707,9 +795,9 @@ export default function HomeScreen() {
     const areaColor = area.color || colors.primary;
     
     return (
-      <View key={area.id} style={[styles.lifeAreaSection, { marginLeft: depth * 16 }]}>
+      <View key={area.id} style={styles.lifeAreaSection}>
         <TouchableOpacity 
-          style={styles.lifeAreaHeader}
+          style={[styles.lifeAreaHeader, { marginLeft: depth * 16 }]}
           onPress={() => toggleLifeArea(area.id)}
         >
           <View style={styles.lifeAreaTitleRow}>
@@ -731,9 +819,9 @@ export default function HomeScreen() {
         
         {!isCollapsed && (
           <>
-            {hasChildren && area.children.map(child => renderLifeAreaNode(child, depth + 1))}
-            
             {hasGoals && goalsForThisArea.map(goal => renderGoalCard(goal))}
+            
+            {hasChildren && area.children.map(child => renderLifeAreaNode(child, depth + 1))}
           </>
         )}
       </View>
@@ -776,7 +864,13 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.content} 
+        contentContainerStyle={styles.contentContainer}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
         <View style={styles.header}>
           <Image
             source={require('@/assets/images/Chesbon_app_Logo.png')}
