@@ -10,6 +10,7 @@ import {
   Image,
   TextInput,
   KeyboardAvoidingView,
+  RefreshControl,
 } from "react-native";
 import React, { useState, useEffect, useRef } from "react";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
@@ -143,6 +144,7 @@ export default function HomeScreen() {
   const scrollPositionRef = useRef(0);
   
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentView, setCurrentView] = useState<'reflect' | 'express'>('reflect');
   
@@ -201,9 +203,13 @@ export default function HomeScreen() {
     setShowSuccessModal(true);
   };
 
-  const loadData = async () => {
+  const loadData = async (isRefreshing: boolean = false) => {
     console.log("Loading home screen data iOS");
-    setLoading(true);
+    if (isRefreshing) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const dateString = formatDateLocal(selectedDate);
       const [goalsRes, lifeAreasRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes] = await Promise.all([
@@ -244,8 +250,17 @@ export default function HomeScreen() {
       console.error("Error loading home data iOS:", error);
       showError(error.message || "Failed to load data");
     } finally {
-      setLoading(false);
+      if (isRefreshing) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
+  };
+
+  const handleRefresh = async () => {
+    console.log("Pull-to-refresh triggered on Home screen iOS");
+    await loadData(true);
   };
 
   const handleGoalSuccess = async (goalId: string) => {
@@ -922,6 +937,14 @@ export default function HomeScreen() {
         minimumZoomScale={1.0}
         maximumZoomScale={1.5}
         bouncesZoom={true}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         <View style={styles.header}>
           <Image

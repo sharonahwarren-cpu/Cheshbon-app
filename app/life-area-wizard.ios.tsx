@@ -12,6 +12,7 @@ import {
   Switch,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -69,6 +70,7 @@ export default function LifeAreaWizardScreen() {
   
   // UI state
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showParentPicker, setShowParentPicker] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -93,9 +95,13 @@ export default function LifeAreaWizardScreen() {
     }
   }, [params.newGoalCreated]);
 
-  const loadData = async () => {
+  const loadData = async (isRefreshing: boolean = false) => {
     console.log('[LifeAreaWizard iOS] Loading data...');
-    setLoading(true);
+    if (isRefreshing) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const [lifeAreasRes, goalsRes] = await Promise.all([
         authenticatedGet('/api/life-areas'),
@@ -156,8 +162,17 @@ export default function LifeAreaWizardScreen() {
       console.error('[LifeAreaWizard iOS] Error loading data:', error);
       showError(error.message || 'Failed to load data');
     } finally {
-      setLoading(false);
+      if (isRefreshing) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
+  };
+
+  const handleRefresh = async () => {
+    console.log('[LifeAreaWizard iOS] Pull-to-refresh triggered');
+    await loadData(true);
   };
 
   const loadGoals = async () => {
@@ -397,6 +412,14 @@ export default function LifeAreaWizardScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={true}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         >
           {currentStep === 1 && (
             <>

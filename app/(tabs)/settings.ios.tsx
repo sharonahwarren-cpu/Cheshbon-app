@@ -10,6 +10,7 @@ import {
   Modal,
   ActivityIndicator,
   Switch,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
@@ -121,6 +122,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
@@ -190,9 +192,13 @@ export default function SettingsScreen() {
     }, [])
   );
 
-  const loadData = async () => {
+  const loadData = async (isRefreshing: boolean = false) => {
     console.log('[Settings iOS] Loading settings data...');
-    setLoading(true);
+    if (isRefreshing) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes, goalProgressRes] = await Promise.all([
         authenticatedGet('/api/goals'),
@@ -268,7 +274,19 @@ export default function SettingsScreen() {
       console.error('[Settings iOS] Error loading settings data:', error);
       showError('Failed to load settings data');
     } finally {
-      setLoading(false);
+      if (isRefreshing) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleRefresh = async () => {
+    console.log('[Settings iOS] Pull-to-refresh triggered');
+    await loadData(true);
+    if (currentSection === 'reports') {
+      await loadCurrencyBalances();
     }
   };
 
@@ -533,6 +551,14 @@ export default function SettingsScreen() {
       <ScrollView 
         style={styles.container}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       >
         <Text style={styles.sectionTitle}>Settings</Text>
         {menuItems.map((item, index) => (
@@ -829,6 +855,14 @@ export default function SettingsScreen() {
                 styles.draggableListContent,
                 { paddingBottom: insets.bottom + 100 }
               ]}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={handleRefresh}
+                  tintColor={colors.primary}
+                  colors={[colors.primary]}
+                />
+              }
             />
           </GestureHandlerRootView>
         )}
@@ -861,6 +895,14 @@ export default function SettingsScreen() {
         <ScrollView 
           style={styles.listContainer}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         >
           {strategies.length === 0 ? (
             <View style={styles.emptyState}>
@@ -940,6 +982,14 @@ export default function SettingsScreen() {
         <ScrollView 
           style={styles.listContainer}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         >
           {currencies.length === 0 ? (
             <View style={styles.emptyState}>
@@ -1030,6 +1080,14 @@ export default function SettingsScreen() {
         <ScrollView 
           style={styles.listContainer}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         >
           {gainsLosses.length === 0 ? (
             <View style={styles.emptyState}>
@@ -1376,6 +1434,14 @@ export default function SettingsScreen() {
         <ScrollView 
           style={styles.listContainer}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         >
           {sortedGoals.length === 0 ? (
             <View style={styles.emptyState}>
@@ -1568,6 +1634,14 @@ export default function SettingsScreen() {
         <ScrollView 
           style={styles.listContainer}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         >
           {worthItTallies && worthItTallies.total > 0 && (
             <>
