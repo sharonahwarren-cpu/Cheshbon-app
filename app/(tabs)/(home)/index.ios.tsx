@@ -8,8 +8,10 @@ import {
   ActivityIndicator,
   Modal,
   Image,
+  TextInput,
+  KeyboardAvoidingView,
 } from "react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { IconSymbol } from "@/components/IconSymbol";
@@ -17,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@/styles/commonStyles";
 import { useAuth } from "@/contexts/AuthContext";
 import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface DailyEntry {
   id: string;
@@ -113,6 +116,21 @@ interface UserPreferences {
   reflectionCategories?: string[];
 }
 
+interface JournalEntry {
+  id: string;
+  content: string;
+  entryDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function formatDateLocal(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function HomeScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -120,6 +138,7 @@ export default function HomeScreen() {
   
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentView, setCurrentView] = useState<'reflect' | 'express'>('reflect');
   
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
   const [categoryGroups, setCategoryGroups] = useState<Record<string, CategoryGroup>>({});
@@ -138,6 +157,14 @@ export default function HomeScreen() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
+  const [journalEntry, setJournalEntry] = useState<JournalEntry | null>(null);
+  const [journalContent, setJournalContent] = useState('');
+  const [reflections, setReflections] = useState<Reflection[]>([]);
+  const [showJournalModal, setShowJournalModal] = useState(false);
+  const [tempJournalContent, setTempJournalContent] = useState('');
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
+
   useEffect(() => {
     console.log("HomeScreen iOS mounted");
     loadData();
@@ -148,6 +175,15 @@ export default function HomeScreen() {
     loadData();
   }, [selectedDate]);
 
+  useEffect(() => {
+    if (showSuccessModal) {
+      const timer = setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccessModal]);
+
   const showError = (message: string) => {
     setErrorMessage(message);
     setErrorModalVisible(true);
@@ -156,22 +192,21 @@ export default function HomeScreen() {
   const showSuccess = (message: string) => {
     setSuccessModalMessage(message);
     setShowSuccessModal(true);
-    setTimeout(() => {
-      setShowSuccessModal(false);
-    }, 2000);
   };
 
   const loadData = async () => {
     console.log("Loading home screen data iOS");
     setLoading(true);
     try {
-      const dateString = selectedDate.toISOString().split('T')[0];
-      const [goalsRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes] = await Promise.all([
+      const dateString = formatDateLocal(selectedDate);
+      const [goalsRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes] = await Promise.all([
         authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
         authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/user-preferences'),
+        authenticatedGet(`/api/journals/by-date?date=${dateString}`),
+        authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
       ]);
       
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
@@ -179,6 +214,8 @@ export default function HomeScreen() {
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
+      const journalData = journalRes?.data || journalRes || null;
+      const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       
       console.log('[Home iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
       
@@ -187,6 +224,9 @@ export default function HomeScreen() {
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
       setUserPreferences(prefsData);
+      setJournalEntry(journalData);
+      setJournalContent(journalData?.content || '');
+      setReflections(reflectionsData);
       
       const groups: Record<string, CategoryGroup> = {};
       
@@ -309,21 +349,107 @@ export default function HomeScreen() {
   const openAddReflectionModal = (goalId?: string) => {
     console.log("Opening Add Reflection modal from Home iOS", goalId ? `for goal: ${goalId}` : "");
     setPrefilledGoalId(goalId);
+    setEditingReflection(null);
+    setShowAddReflectionModal(true);
+  };
+
+  const openEditReflectionModal = (reflection: Reflection) => {
+    setEditingReflection(reflection);
+    setPrefilledGoalId(undefined);
     setShowAddReflectionModal(true);
   };
 
   const handleReflectionSaved = (reflection: Reflection) => {
     console.log('[Home iOS] Reflection saved, closing modal and reloading data');
+    if (editingReflection) {
+      setReflections(reflections.map(r => r.id === reflection.id ? reflection : r));
+    } else {
+      setReflections([...reflections, reflection]);
+    }
     setShowAddReflectionModal(false);
     setPrefilledGoalId(undefined);
+    setEditingReflection(null);
     showSuccess('Reflection saved successfully');
     loadData();
+  };
+
+  const handleDeleteReflection = async (id: string) => {
+    console.log('Deleting reflection iOS:', id);
+    try {
+      setLoading(true);
+      await authenticatedDelete(`/api/reflections/${id}`);
+      setReflections(reflections.filter(r => r.id !== id));
+      showSuccess('Reflection deleted successfully');
+    } catch (error) {
+      console.error('Error deleting reflection iOS:', error);
+      showError('Failed to delete reflection');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenJournalModal = () => {
+    console.log('Opening journal modal iOS');
+    setTempJournalContent(journalContent);
+    setShowJournalModal(true);
+  };
+
+  const handleCloseJournalModal = () => {
+    console.log('Closing journal modal without saving iOS');
+    setShowJournalModal(false);
+    setTempJournalContent('');
+  };
+
+  const handleSaveJournal = async () => {
+    console.log('Saving journal entry iOS...');
+    try {
+      setLoading(true);
+      const dateString = formatDateLocal(selectedDate);
+      
+      const response = await authenticatedPost('/api/journals/by-date', {
+        date: dateString,
+        content: tempJournalContent,
+      });
+
+      const savedEntry = response?.data || response;
+      
+      if (savedEntry && savedEntry.deleted) {
+        console.log('Journal entry deleted (content was empty) iOS');
+        setJournalEntry(null);
+        setJournalContent('');
+        showSuccess('Journal entry deleted');
+      } else if (savedEntry) {
+        console.log('Journal entry saved iOS');
+        setJournalEntry(savedEntry);
+        setJournalContent(tempJournalContent);
+        showSuccess('Journal saved successfully');
+      } else {
+        console.log('No journal entry (content was empty and no existing entry) iOS');
+        setJournalEntry(null);
+        setJournalContent('');
+      }
+      
+      setShowJournalModal(false);
+      setTempJournalContent('');
+    } catch (error) {
+      console.error('Error saving journal iOS:', error);
+      showError('Failed to save journal entry');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleCategory = (categoryKey: string) => {
     setCollapsedCategories(prev => ({
       ...prev,
       [categoryKey]: !prev[categoryKey],
+    }));
+  };
+
+  const toggleReflectionCategory = (category: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category],
     }));
   };
 
@@ -337,6 +463,13 @@ export default function HomeScreen() {
     const newDate = new Date(selectedDate);
     newDate.setDate(newDate.getDate() + 1);
     setSelectedDate(newDate);
+  };
+
+  const handleDateChange = (event: any, date?: Date) => {
+    setShowDatePicker(false);
+    if (date) {
+      setSelectedDate(date);
+    }
   };
 
   const formatDateDisplay = (date: Date) => {
@@ -427,6 +560,15 @@ export default function HomeScreen() {
     }
     
     return tallies.filter(t => t.tally !== 0);
+  };
+
+  const getCategoryIcon = (category: string) => {
+    const categoryLower = category.toLowerCase();
+    if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
+    if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
+    if (categoryLower === 'thought') return { ios: 'cloud.fill', android: 'cloud' };
+    if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
+    return { ios: 'sparkles', android: 'auto-awesome' };
   };
 
   if (loading) {
@@ -656,6 +798,22 @@ export default function HomeScreen() {
     struggleCount: g.struggleCount,
   }));
 
+  const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
+  const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+
+  const groupedReflections: Record<string, Reflection[]> = {};
+  if (categoriesEnabled) {
+    availableCategories.forEach(cat => {
+      groupedReflections[cat] = reflections.filter(r => r.category === cat);
+    });
+    groupedReflections['Other'] = reflections.filter(r => !r.category || !availableCategories.includes(r.category));
+  } else {
+    groupedReflections['All'] = reflections;
+  }
+
+  const hasJournalContent = journalContent && journalContent.trim().length > 0;
+  const journalPreview = hasJournalContent ? journalContent.substring(0, 100) + (journalContent.length > 100 ? '...' : '') : '';
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView 
@@ -674,10 +832,10 @@ export default function HomeScreen() {
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={styles.actionButtonLarge}
+            style={[styles.actionButtonLarge, currentView === 'reflect' && styles.actionButtonLargeActive]}
             onPress={() => {
-              console.log("Navigating to Reflect screen iOS");
-              router.push('/(tabs)/reflect');
+              console.log("Switching to Reflect view iOS");
+              setCurrentView('reflect');
             }}
           >
             <IconSymbol
@@ -690,8 +848,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
           
           <TouchableOpacity
-            style={styles.actionButtonLarge}
-            onPress={() => openAddReflectionModal()}
+            style={[styles.actionButtonLarge, currentView === 'express' && styles.actionButtonLargeActive]}
+            onPress={() => {
+              console.log("Switching to Express view iOS");
+              setCurrentView('express');
+            }}
           >
             <IconSymbol
               ios_icon_name="bolt.fill"
@@ -716,7 +877,9 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
           
-          <Text style={styles.dateDisplay}>{dateDisplay}</Text>
+          <TouchableOpacity onPress={() => setShowDatePicker(true)}>
+            <Text style={styles.dateDisplay}>{dateDisplay}</Text>
+          </TouchableOpacity>
           
           <TouchableOpacity 
             style={styles.dateNavButton}
@@ -731,25 +894,280 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {showDatePicker && (
+          <DateTimePicker
+            value={selectedDate}
+            mode="date"
+            display="inline"
+            onChange={handleDateChange}
+          />
+        )}
+
         <View style={styles.content}>
-          {Object.keys(categoryGroups).length === 0 ? (
-            <View style={styles.emptyState}>
-              <IconSymbol
-                ios_icon_name="bolt"
-                android_material_icon_name="flash-on"
-                size={64}
-                color={colors.muted}
-              />
-              <Text style={styles.emptyStateTitle}>No active goals today</Text>
-              <Text style={styles.emptyStateText}>
-                Create goals in Settings to track them here
-              </Text>
-            </View>
+          {currentView === 'reflect' ? (
+            <>
+              <TouchableOpacity 
+                style={styles.journalCard}
+                onPress={handleOpenJournalModal}
+                activeOpacity={0.7}
+              >
+                <View style={styles.journalCardHeader}>
+                  <View style={styles.journalCardTitleRow}>
+                    <Image 
+                      source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                      style={styles.journalAppIcon}
+                    />
+                    <Text style={styles.journalCardTitle}>Daily Journal</Text>
+                  </View>
+                </View>
+                
+                {!hasJournalContent ? (
+                  <View style={styles.journalPlaceholder}>
+                    <Image 
+                      source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                      style={styles.journalPlaceholderIcon}
+                    />
+                    <Text style={styles.journalPlaceholderText}>Tap to write about your day…</Text>
+                  </View>
+                ) : (
+                  <View style={styles.journalPreviewContainer}>
+                    <Text style={styles.journalPreviewText} numberOfLines={3}>
+                      {journalPreview}
+                    </Text>
+                    {journalEntry && (
+                      <Text style={styles.journalTimestamp}>
+                        Last saved: {new Date(journalEntry.updatedAt).toLocaleString()}
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionHeaderRow}>
+                    <IconSymbol
+                      ios_icon_name="sparkles"
+                      android_material_icon_name="auto-awesome"
+                      size={22}
+                      color="#9B59B6"
+                    />
+                    <Text style={styles.sectionTitle}>Reflections</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => openAddReflectionModal()} style={styles.addButton}>
+                    <IconSymbol
+                      ios_icon_name="plus.circle.fill"
+                      android_material_icon_name="add-circle"
+                      size={28}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {reflections.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <IconSymbol
+                      ios_icon_name="sparkles"
+                      android_material_icon_name="auto-awesome"
+                      size={48}
+                      color={colors.textSecondary}
+                    />
+                    <Text style={styles.emptyStateText}>
+                      No reflections for this day. Tap + to add one.
+                    </Text>
+                  </View>
+                ) : (
+                  Object.entries(groupedReflections).map(([category, categoryReflections], catIndex) => {
+                    if (categoryReflections.length === 0) return null;
+                    
+                    const categoryIcon = getCategoryIcon(category);
+                    const isCollapsed = collapsedCategories[category];
+                    
+                    return (
+                      <React.Fragment key={catIndex}>
+                        {categoriesEnabled && category !== 'All' && (
+                          <TouchableOpacity 
+                            style={styles.reflectionCategoryHeader}
+                            onPress={() => toggleReflectionCategory(category)}
+                          >
+                            <IconSymbol
+                              ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
+                              android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
+                              size={20}
+                              color={colors.text}
+                            />
+                            <IconSymbol
+                              ios_icon_name={categoryIcon.ios}
+                              android_material_icon_name={categoryIcon.android}
+                              size={20}
+                              color={colors.primary}
+                            />
+                            <Text style={styles.reflectionCategoryTitle}>{category}</Text>
+                            <View style={styles.reflectionCategoryBadge}>
+                              <Text style={styles.reflectionCategoryBadgeText}>{categoryReflections.length}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        )}
+                        
+                        {!isCollapsed && categoryReflections.map((reflection, index) => {
+                          const typeText = reflection.type;
+                          const outcomeText = reflection.outcome ? 
+                            (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
+                            null;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <View style={styles.reflectionCard}>
+                                <View style={styles.reflectionHeader}>
+                                  <View style={styles.reflectionBadges}>
+                                    <View style={[styles.badge, reflection.type === 'Proactive' ? styles.badgeProactive : styles.badgeRestraint]}>
+                                      <Text style={styles.badgeText}>{typeText}</Text>
+                                    </View>
+                                    {reflection.outcome && (
+                                      <View style={[styles.badge, reflection.outcome === 'success' ? styles.badgeSuccess : styles.badgeStruggle]}>
+                                        <Text style={styles.badgeText}>{outcomeText}</Text>
+                                      </View>
+                                    )}
+                                  </View>
+                                  <View style={styles.reflectionActions}>
+                                    <TouchableOpacity
+                                      onPress={() => openEditReflectionModal(reflection)}
+                                      style={styles.iconButton}
+                                    >
+                                      <IconSymbol
+                                        ios_icon_name="pencil"
+                                        android_material_icon_name="edit"
+                                        size={20}
+                                        color={colors.primary}
+                                      />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                      onPress={() => handleDeleteReflection(reflection.id)}
+                                      style={styles.iconButton}
+                                    >
+                                      <IconSymbol
+                                        ios_icon_name="trash"
+                                        android_material_icon_name="delete"
+                                        size={20}
+                                        color={colors.error}
+                                      />
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
+
+                                <Text style={styles.reflectionDescription}>{reflection.description}</Text>
+
+                                {reflection.linkedGoalId && (
+                                  <View style={styles.linkedGoalSection}>
+                                    <View style={styles.linkedGoalHeader}>
+                                      <IconSymbol
+                                        ios_icon_name="target"
+                                        android_material_icon_name="flag"
+                                        size={16}
+                                        color={colors.primary}
+                                      />
+                                      <Text style={styles.linkedGoalLabel}>Linked Goal</Text>
+                                    </View>
+                                    <Text style={styles.linkedGoalTitle}>
+                                      {reflection.linkedGoalTitle || goalsForModal.find(g => g.id === reflection.linkedGoalId)?.title || 'Unknown Goal'}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            </React.Fragment>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </View>
+            </>
           ) : (
-            Object.values(categoryGroups).map(group => renderCategoryGroup(group))
+            <>
+              {Object.keys(categoryGroups).length === 0 ? (
+                <View style={styles.emptyState}>
+                  <IconSymbol
+                    ios_icon_name="bolt"
+                    android_material_icon_name="flash-on"
+                    size={64}
+                    color={colors.muted}
+                  />
+                  <Text style={styles.emptyStateTitle}>No active goals today</Text>
+                  <Text style={styles.emptyStateText}>
+                    Create goals in Settings to track them here
+                  </Text>
+                </View>
+              ) : (
+                Object.values(categoryGroups).map(group => renderCategoryGroup(group))
+              )}
+            </>
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showJournalModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={handleCloseJournalModal}
+      >
+        <SafeAreaView style={styles.journalModalContainer} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView 
+            style={styles.journalModalContent}
+            behavior="padding"
+          >
+            <View style={styles.journalModalHeader}>
+              <View style={styles.journalModalTitleRow}>
+                <Image 
+                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                  style={styles.journalModalIcon}
+                />
+                <Text style={styles.journalModalTitle}>Daily Journal</Text>
+              </View>
+              <TouchableOpacity onPress={handleCloseJournalModal} style={styles.closeButton}>
+                <IconSymbol
+                  ios_icon_name="xmark.circle.fill"
+                  android_material_icon_name="close"
+                  size={28}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.journalModalInput}
+              value={tempJournalContent}
+              onChangeText={setTempJournalContent}
+              placeholder="Write your thoughts for today..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              textAlignVertical="top"
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={styles.saveJournalButton}
+              onPress={handleSaveJournal}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.background} />
+              ) : (
+                <React.Fragment>
+                  <IconSymbol
+                    ios_icon_name="checkmark.circle.fill"
+                    android_material_icon_name="check-circle"
+                    size={24}
+                    color={colors.background}
+                  />
+                  <Text style={styles.saveJournalButtonText}>Save & Close</Text>
+                </React.Fragment>
+              )}
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
 
       {showAddReflectionModal && (
         <AddReflectionModal
@@ -758,17 +1176,18 @@ export default function HomeScreen() {
             console.log('[Home iOS] Closing AddReflectionModal without saving');
             setShowAddReflectionModal(false);
             setPrefilledGoalId(undefined);
+            setEditingReflection(null);
           }}
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
           goals={goalsForModal}
           currencies={currencies}
           userPreferences={userPreferences}
-          editingReflection={null}
+          editingReflection={editingReflection}
           gainsLosses={gainsLosses}
           strategies={strategies}
           prefilledGoalId={prefilledGoalId}
-          sourceScreen="express"
+          sourceScreen={currentView}
         />
       )}
 
@@ -864,6 +1283,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: colors.primary,
     gap: 8,
+    opacity: 0.6,
+  },
+  actionButtonLargeActive: {
+    opacity: 1,
   },
   actionButtonLargeText: {
     fontSize: 16,
@@ -894,6 +1317,89 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
   },
+  journalCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  journalCardHeader: {
+    marginBottom: 16,
+  },
+  journalCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  journalAppIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 9,
+  },
+  journalCardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  journalPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+  },
+  journalPlaceholderIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 15,
+    opacity: 0.6,
+  },
+  journalPlaceholderText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  journalPreviewContainer: {
+    gap: 8,
+  },
+  journalPreviewText: {
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 22,
+  },
+  journalTimestamp: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  addButton: {
+    padding: 4,
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -911,6 +1417,116 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  reflectionCategoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  reflectionCategoryTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    flex: 1,
+  },
+  reflectionCategoryBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  reflectionCategoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.background,
+  },
+  reflectionCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  reflectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  reflectionBadges: {
+    flexDirection: 'row',
+    gap: 6,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeProactive: {
+    backgroundColor: colors.primary + '20',
+  },
+  badgeRestraint: {
+    backgroundColor: colors.secondary + '20',
+  },
+  badgeSuccess: {
+    backgroundColor: colors.success + '20',
+  },
+  badgeStruggle: {
+    backgroundColor: colors.error + '20',
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  reflectionActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconButton: {
+    padding: 4,
+  },
+  reflectionDescription: {
+    fontSize: 15,
+    color: colors.text,
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  linkedGoalSection: {
+    backgroundColor: colors.primary + '10',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  linkedGoalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  linkedGoalLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  linkedGoalTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
   },
   categorySection: {
     marginBottom: 12,
@@ -1066,6 +1682,69 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  journalModalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  journalModalContent: {
+    flex: 1,
+    padding: 20,
+  },
+  journalModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  journalModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  journalModalIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 5,
+  },
+  journalModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  journalModalInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 20,
+    fontSize: 16,
+    color: colors.text,
+    textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 20,
+  },
+  saveJournalButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveJournalButtonText: {
+    color: colors.background,
+    fontSize: 18,
+    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,
