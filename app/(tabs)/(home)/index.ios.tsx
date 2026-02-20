@@ -793,10 +793,10 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="checkmark"
               android_material_icon_name="check"
-              size={18}
+              size={16}
               color="#FFFFFF"
             />
-            <Text style={styles.actionButtonText}>✓</Text>
+            <Text style={styles.actionButtonText}>Success</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -806,10 +806,10 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="xmark"
               android_material_icon_name="close"
-              size={18}
+              size={16}
               color="#FFFFFF"
             />
-            <Text style={styles.actionButtonText}>✗</Text>
+            <Text style={styles.actionButtonText}>Struggle</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -919,7 +919,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        minimumZoomScale={0.8}
+        minimumZoomScale={1.0}
         maximumZoomScale={1.5}
         bouncesZoom={true}
       >
@@ -1784,7 +1784,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 8,
-    gap: 6,
+    gap: 4,
   },
   successButton: {
     backgroundColor: colors.success,
@@ -1798,7 +1798,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   actionButtonText: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
   },
