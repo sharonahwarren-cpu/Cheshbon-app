@@ -332,23 +332,23 @@ export function registerReflectionsRoutes(app: App) {
       const existingReflections = await app.db
         .select()
         .from(schema.reflections)
-        .where(eq(schema.reflections.id, id))
+        .where(and(
+          eq(schema.reflections.id, id),
+          eq(schema.reflections.userId, session.user.id)
+        ))
         .limit(1);
 
       if (!existingReflections.length) {
-        app.logger.warn({ userId: session.user.id, reflectionId: id }, 'Reflection not found');
+        app.logger.warn({ userId: session.user.id, reflectionId: id }, 'Reflection not found or unauthorized');
         return reply.status(404).send({ error: 'Reflection not found' });
       }
 
-      if (existingReflections[0].userId !== session.user.id) {
-        app.logger.warn(
-          { userId: session.user.id, reflectionId: id, ownerId: existingReflections[0].userId },
-          'Unauthorized access to reflection'
-        );
-        return reply.status(403).send({ error: 'Unauthorized' });
-      }
-
-      await app.db.delete(schema.reflections).where(eq(schema.reflections.id, id));
+      await app.db
+        .delete(schema.reflections)
+        .where(and(
+          eq(schema.reflections.id, id),
+          eq(schema.reflections.userId, session.user.id)
+        ));
 
       app.logger.info({ userId: session.user.id, reflectionId: id }, 'Reflection deleted');
       return { success: true };
