@@ -47,6 +47,9 @@ interface Strategy {
   name: string;
   description?: string;
   linkedGoalIds?: string[];
+  difficulties?: string;
+  overcomeDifficulties?: string;
+  confidenceRating?: number;
 }
 
 interface Currency {
@@ -358,6 +361,14 @@ export default function SettingsScreen() {
         type: 'consequence', // Default to consequence as per requirements
         onSuccess: 'NONE',
         onFailure: 'NONE',
+      });
+    } else if (type === 'strategy') {
+      setFormData({
+        name: '',
+        description: '',
+        difficulties: '',
+        overcomeDifficulties: '',
+        confidenceRating: 3,
       });
     } else {
       setFormData({});
@@ -2005,6 +2016,54 @@ export default function SettingsScreen() {
                   numberOfLines={4}
                 />
               </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>What difficulties may arise with this strategy?</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={formData.difficulties || ''}
+                  onChangeText={(text) => setFormData({ ...formData, difficulties: text })}
+                  placeholder="Describe potential difficulties..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>How are you going to overcome those difficulties?</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={formData.overcomeDifficulties || ''}
+                  onChangeText={(text) => setFormData({ ...formData, overcomeDifficulties: text })}
+                  placeholder="Describe how you'll overcome them..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Rate your strategy (1 = not likely, 5 = highly confident)</Text>
+                <View style={styles.ratingContainer}>
+                  {[1, 2, 3, 4, 5].map((rating) => {
+                    const isSelected = formData.confidenceRating === rating;
+                    const ratingText = rating === 1 ? 'Not Likely' : rating === 5 ? 'Highly Confident' : `${rating}`;
+                    
+                    return (
+                      <TouchableOpacity
+                        key={rating}
+                        style={[styles.ratingButton, isSelected && styles.ratingButtonSelected]}
+                        onPress={() => setFormData({ ...formData, confidenceRating: rating })}
+                      >
+                        <Text style={[styles.ratingButtonText, isSelected && styles.ratingButtonTextSelected]}>
+                          {rating}
+                        </Text>
+                        <Text style={[styles.ratingButtonLabel, isSelected && styles.ratingButtonLabelSelected]}>
+                          {ratingText}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
             </ScrollView>
             <View style={styles.modalFooter}>
               <TouchableOpacity
@@ -2721,5 +2780,42 @@ const styles = StyleSheet.create({
   },
   currencyTypeConsequence: {
     color: colors.error,
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  ratingButton: {
+    flex: 1,
+    minWidth: 60,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  ratingButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  ratingButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  ratingButtonTextSelected: {
+    color: colors.background,
+  },
+  ratingButtonLabel: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  ratingButtonLabelSelected: {
+    color: colors.background,
   },
 });
