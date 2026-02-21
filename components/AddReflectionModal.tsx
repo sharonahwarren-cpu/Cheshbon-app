@@ -388,88 +388,26 @@ export function AddReflectionModal({
     }
   };
 
-  // Dynamic Notes header based on Goal's original Type and Outcome
+  // Simplified Notes header - only based on behavior category
   const getNotesHeader = () => {
     const categoryLower = category?.toLowerCase();
     
-    // Use the goal's original type from prefilledGoalData if available, otherwise use the reflection type
-    const originalGoalType = prefilledGoalData?.type || type;
-    
-    // Determine effective type based on outcome
-    // If outcome is 'struggled' (failure), flip the type
-    const effectiveType = outcome === 'struggled' 
-      ? (originalGoalType === 'Proactive' ? 'Restraint' : 'Proactive') 
-      : originalGoalType;
-    
-    if (effectiveType === 'Proactive') {
-      // Proactive Action: "Why did I do it"
-      if (categoryLower === 'action') {
-        return 'Why did I do it';
-      } else if (categoryLower === 'speech') {
-        return 'Why did I say it';
-      } else if (categoryLower === 'thought') {
-        return 'Why did I think it';
-      } else if (categoryLower === 'feeling') {
-        return 'Why did I feel it';
-      } else {
-        return 'Why did I do it';
-      }
+    if (categoryLower === 'action') {
+      return 'Why did/didn\'t I act that way...?';
+    } else if (categoryLower === 'speech') {
+      return 'Why did/didn\'t I speak that way...?';
+    } else if (categoryLower === 'thought') {
+      return 'Why did/didn\'t I think that way...?';
+    } else if (categoryLower === 'feeling') {
+      return 'Why did/didn\'t I feel that way...?';
     } else {
-      // Restraint Action: "Why didn't I do it"
-      if (categoryLower === 'action') {
-        return 'Why didn\'t I do it';
-      } else if (categoryLower === 'speech') {
-        return 'Why didn\'t I say it';
-      } else if (categoryLower === 'thought') {
-        return 'Why didn\'t I think it';
-      } else if (categoryLower === 'feeling') {
-        return 'Why didn\'t I feel it';
-      } else {
-        return 'Why didn\'t I do it';
-      }
+      return 'Why did/didn\'t I do that...?';
     }
   };
 
-  // Dynamic Notes placeholder based on Goal's original Type and Outcome
+  // Simplified Notes placeholder - always the same
   const getNotesPlaceholder = () => {
-    const categoryLower = category?.toLowerCase();
-    
-    // Use the goal's original type from prefilledGoalData if available, otherwise use the reflection type
-    const originalGoalType = prefilledGoalData?.type || type;
-    
-    // Determine effective type based on outcome
-    // If outcome is 'struggled' (failure), flip the type
-    const effectiveType = outcome === 'struggled' 
-      ? (originalGoalType === 'Proactive' ? 'Restraint' : 'Proactive') 
-      : originalGoalType;
-    
-    if (effectiveType === 'Proactive') {
-      // Proactive: "What motivated me to do/say/think/feel like that"
-      if (categoryLower === 'action') {
-        return 'What motivated me to do like that';
-      } else if (categoryLower === 'speech') {
-        return 'What motivated me to say like that';
-      } else if (categoryLower === 'thought') {
-        return 'What motivated me to think like that';
-      } else if (categoryLower === 'feeling') {
-        return 'What motivated me to feel like that';
-      } else {
-        return 'What motivated me to do/say/think/feel like that';
-      }
-    } else {
-      // Restraint: "What motivated me not to do/say/think/feel like that"
-      if (categoryLower === 'action') {
-        return 'What motivated me not to do like that';
-      } else if (categoryLower === 'speech') {
-        return 'What motivated me not to say like that';
-      } else if (categoryLower === 'thought') {
-        return 'What motivated me not to think like that';
-      } else if (categoryLower === 'feeling') {
-        return 'What motivated me not to feel like that';
-      } else {
-        return 'What motivated me not to do/say/think/feel like that';
-      }
-    }
+    return 'What motivated me?';
   };
 
   // Auto-advance to Step 2 when category is selected in Step 1
