@@ -36,6 +36,9 @@ export const strategies = pgTable('strategies', {
   successCount: integer('success_count').default(0).notNull(),
   failureCount: integer('failure_count').default(0).notNull(),
   timesUsed: integer('times_used').default(0).notNull(),
+  difficulties: text('difficulties'),
+  overcomeDifficulties: text('overcome_difficulties'),
+  confidenceRating: integer('confidence_rating'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
