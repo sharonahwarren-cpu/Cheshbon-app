@@ -1250,6 +1250,8 @@ export default function SettingsScreen() {
   };
 
   const renderStrategies = () => {
+    console.log('[Settings Web] Rendering strategies section, count:', strategies.length);
+    
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -1262,7 +1264,10 @@ export default function SettingsScreen() {
             />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Strategies</Text>
-          <TouchableOpacity onPress={() => openAddModal('strategy')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings Web] Add strategy button pressed');
+            openAddModal('strategy');
+          }}>
             <IconSymbol
               ios_icon_name="plus"
               android_material_icon_name="add"
@@ -1293,7 +1298,10 @@ export default function SettingsScreen() {
                     </View>
                     <View style={styles.listItemActions}>
                       <TouchableOpacity
-                        onPress={() => openEditModal('strategy', strategy)}
+                        onPress={() => {
+                          console.log('[Settings Web] Edit strategy button pressed for:', strategy.id);
+                          openEditModal('strategy', strategy);
+                        }}
                         style={styles.iconButton}
                       >
                         <IconSymbol
@@ -1953,6 +1961,73 @@ export default function SettingsScreen() {
         onConfirm={handleDeleteItem}
         onCancel={() => setShowConfirmDelete(false)}
       />
+
+      {/* Strategy Add/Edit Modal */}
+      <Modal
+        visible={showModal && modalType === 'strategy'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Strategy' : 'Add Strategy'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name || ''}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholder="Strategy name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Description</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={formData.description || ''}
+                  onChangeText={(text) => setFormData({ ...formData, description: text })}
+                  placeholder="Describe this strategy..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading || !formData.name}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showErrorModal}

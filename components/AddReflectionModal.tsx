@@ -157,6 +157,7 @@ export function AddReflectionModal({
   const [strategyEffectiveness, setStrategyEffectiveness] = useState<{strategyId: string; worked: boolean | null}[]>(
     editingReflection?.strategyEffectiveness?.map(se => ({ strategyId: se.strategyId, worked: se.worked })) || []
   );
+  const [futureStrategyId, setFutureStrategyId] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [goalSearchQuery, setGoalSearchQuery] = useState('');
@@ -166,6 +167,8 @@ export function AddReflectionModal({
   const [lossesSearchQuery, setLossesSearchQuery] = useState('');
   const [showStrategyPicker, setShowStrategyPicker] = useState(false);
   const [strategySearchQuery, setStrategySearchQuery] = useState('');
+  const [showFutureStrategyPicker, setShowFutureStrategyPicker] = useState(false);
+  const [futureStrategySearchQuery, setFutureStrategySearchQuery] = useState('');
   const [showCreateGainModal, setShowCreateGainModal] = useState(false);
   const [showCreateLossModal, setShowCreateLossModal] = useState(false);
   const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
@@ -284,6 +287,12 @@ export function AddReflectionModal({
   const filteredStrategies = strategies.filter(strategy => {
     if (!strategySearchQuery) return true;
     return strategy.name.toLowerCase().includes(strategySearchQuery.toLowerCase());
+  });
+
+  // Filter future strategies by search query
+  const filteredFutureStrategies = strategies.filter(strategy => {
+    if (!futureStrategySearchQuery) return true;
+    return strategy.name.toLowerCase().includes(futureStrategySearchQuery.toLowerCase());
   });
 
   const selectedGoal = goals.find(g => g.id === linkedGoalId);
@@ -499,6 +508,7 @@ export function AddReflectionModal({
         wasWorthIt: wasWorthIt !== undefined ? wasWorthIt : undefined,
         additionalThoughts: additionalThoughts.trim() || undefined,
         strategyEffectiveness: validStrategyEffectiveness.length > 0 ? validStrategyEffectiveness : undefined,
+        futureStrategyId: futureStrategyId || undefined,
       };
 
       let savedReflection;
@@ -1322,6 +1332,99 @@ export function AddReflectionModal({
                                   )}
                                 </TouchableOpacity>
                               </View>
+                            </React.Fragment>
+                          );
+                        })}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={() => setShowCreateStrategyModal(true)}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Add New Strategy</Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+
+                {/* FUTURE STRATEGY SECTION */}
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="sparkles"
+                      android_material_icon_name="auto-awesome"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>Future Strategy (Optional)</Text>
+                  </View>
+                  <Text style={styles.helperText}>
+                    Select a strategy you think may help you with this in the future
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.goalPickerButton}
+                    onPress={() => setShowFutureStrategyPicker(!showFutureStrategyPicker)}
+                  >
+                    <Text style={styles.goalPickerText}>
+                      {futureStrategyId ? strategies.find(s => s.id === futureStrategyId)?.name || 'Select a strategy...' : 'Select a strategy...'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+
+                  {showFutureStrategyPicker && (
+                    <View style={styles.pickerContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        value={futureStrategySearchQuery}
+                        onChangeText={setFutureStrategySearchQuery}
+                        placeholder="Search strategies..."
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                      <ScrollView style={styles.pickerList}>
+                        <TouchableOpacity
+                          style={styles.goalItem}
+                          onPress={() => {
+                            setFutureStrategyId(undefined);
+                            setShowFutureStrategyPicker(false);
+                          }}
+                        >
+                          <Text style={styles.goalItemText}>None</Text>
+                        </TouchableOpacity>
+                        {filteredFutureStrategies.map((strategy, index) => {
+                          const isSelected = futureStrategyId === strategy.id;
+                          const successRateText = `${Math.round(strategy.successRate)}%`;
+                          const timesUsedText = `${strategy.timesUsed} times`;
+                          
+                          return (
+                            <React.Fragment key={index}>
+                              <TouchableOpacity
+                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                onPress={() => {
+                                  setFutureStrategyId(strategy.id);
+                                  setShowFutureStrategyPicker(false);
+                                }}
+                              >
+                                <View style={styles.strategyListItemContent}>
+                                  <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                    {strategy.name}
+                                  </Text>
+                                  <View style={styles.strategyStats}>
+                                    <Text style={styles.strategyStatText}>{successRateText}</Text>
+                                    <Text style={styles.strategyStatText}>•</Text>
+                                    <Text style={styles.strategyStatText}>{timesUsedText}</Text>
+                                  </View>
+                                </View>
+                              </TouchableOpacity>
                             </React.Fragment>
                           );
                         })}
