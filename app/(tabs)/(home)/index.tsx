@@ -146,6 +146,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentView, setCurrentView] = useState<'reflect' | 'express'>('reflect');
+  const [expressViewMode, setExpressViewMode] = useState<'detailed' | 'concise'>('detailed');
   
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
   const [lifeAreaHierarchy, setLifeAreaHierarchy] = useState<LifeAreaNode[]>([]);
@@ -416,7 +417,6 @@ export default function HomeScreen() {
     setPrefilledGoalId(goalId);
     setEditingReflection(null);
     
-    // If opening from Express with a goal, pre-fill the modal with goal data
     if (goalId && currentView === 'express') {
       const goal = activatedGoals.find(g => g.id === goalId);
       if (goal) {
@@ -426,11 +426,9 @@ export default function HomeScreen() {
           description: goal.title,
         });
         
-        // Map goal type to reflection type
         const reflectionType: 'Restraint' | 'Proactive' = 
           goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive';
         
-        // Use first behavior category if available
         const behaviorCategory = goal.behaviorCategories?.[0];
         
         setPrefilledGoalData({
@@ -692,6 +690,18 @@ export default function HomeScreen() {
     scrollPositionRef.current = event.nativeEvent.contentOffset.y;
   };
 
+  const calculateTodayTotals = () => {
+    const todaySuccesses = activatedGoals.reduce((sum, goal) => sum + goal.todaySuccessCount, 0);
+    const todayStruggles = activatedGoals.reduce((sum, goal) => sum + goal.todayStruggleCount, 0);
+    return { todaySuccesses, todayStruggles };
+  };
+
+  const calculateLifetimeTotals = () => {
+    const lifetimeSuccesses = activatedGoals.reduce((sum, goal) => sum + goal.successCount, 0);
+    const lifetimeStruggles = activatedGoals.reduce((sum, goal) => sum + goal.struggleCount, 0);
+    return { lifetimeSuccesses, lifetimeStruggles };
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -864,6 +874,43 @@ export default function HomeScreen() {
     );
   };
 
+  const renderConciseGoalCard = (goal: ActivatedGoal) => {
+    const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
+    const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
+    const successCount = dailySuccessEntries.length;
+    const struggleCount = dailyStruggleEntries.length;
+    
+    return (
+      <View key={goal.id} style={styles.conciseGoalCard}>
+        <View style={styles.conciseGoalContent}>
+          <Text style={styles.conciseGoalTitle} numberOfLines={1}>{goal.title}</Text>
+          <View style={styles.conciseTallyRow}>
+            <View style={styles.conciseTallyItem}>
+              <Text style={[styles.conciseTallyCount, { color: colors.success }]}>{successCount}</Text>
+              <Text style={styles.conciseTallyLabel}>Today</Text>
+            </View>
+            <View style={styles.conciseTallyDivider} />
+            <View style={styles.conciseTallyItem}>
+              <Text style={[styles.conciseTallyCount, { color: colors.primary }]}>{goal.successCount}</Text>
+              <Text style={styles.conciseTallyLabel}>Total</Text>
+            </View>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.conciseCheckButton}
+          onPress={() => handleGoalSuccess(goal.id)}
+        >
+          <IconSymbol
+            ios_icon_name="checkmark.circle.fill"
+            android_material_icon_name="check-circle"
+            size={32}
+            color={colors.success}
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderLifeAreaNode = (area: LifeAreaNode, depth: number = 0): React.ReactNode => {
     const isCollapsed = collapsedAreas[area.id];
     const totalGoals = countTotalGoals(area);
@@ -903,7 +950,9 @@ export default function HomeScreen() {
         
         {!isCollapsed && (
           <>
-            {hasGoals && goalsForThisArea.map(goal => renderGoalCard(goal))}
+            {hasGoals && goalsForThisArea.map(goal => 
+              expressViewMode === 'detailed' ? renderGoalCard(goal) : renderConciseGoalCard(goal)
+            )}
             
             {hasChildren && area.children.map(child => renderLifeAreaNode(child, depth + 1))}
           </>
@@ -945,6 +994,9 @@ export default function HomeScreen() {
   const journalPreview = hasJournalContent ? journalContent.substring(0, 100) + (journalContent.length > 100 ? '...' : '') : '';
 
   const uncategorizedGoals = activatedGoals.filter(goal => !goal.lifeArea);
+
+  const todayTotals = calculateTodayTotals();
+  const lifetimeTotals = calculateLifetimeTotals();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -1218,6 +1270,86 @@ export default function HomeScreen() {
           </>
         ) : (
           <>
+            <View style={styles.expressHeader}>
+              <View style={styles.tallyCardsContainer}>
+                <View style={styles.tallyCard}>
+                  <Text style={styles.tallyCardLabel}>Today</Text>
+                  <View style={styles.tallyCardRow}>
+                    <View style={styles.tallyCardItem}>
+                      <Text style={[styles.tallyCardNumber, { color: colors.success }]}>
+                        {todayTotals.todaySuccesses}
+                      </Text>
+                      <IconSymbol
+                        ios_icon_name="checkmark.circle.fill"
+                        android_material_icon_name="check-circle"
+                        size={20}
+                        color={colors.success}
+                      />
+                    </View>
+                    <View style={styles.tallyCardDivider} />
+                    <View style={styles.tallyCardItem}>
+                      <Text style={[styles.tallyCardNumber, { color: colors.error }]}>
+                        {todayTotals.todayStruggles}
+                      </Text>
+                      <IconSymbol
+                        ios_icon_name="xmark.circle.fill"
+                        android_material_icon_name="cancel"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                <View style={styles.tallyCard}>
+                  <Text style={styles.tallyCardLabel}>Lifetime</Text>
+                  <View style={styles.tallyCardRow}>
+                    <View style={styles.tallyCardItem}>
+                      <Text style={[styles.tallyCardNumber, { color: colors.success }]}>
+                        {lifetimeTotals.lifetimeSuccesses}
+                      </Text>
+                      <IconSymbol
+                        ios_icon_name="checkmark.circle.fill"
+                        android_material_icon_name="check-circle"
+                        size={20}
+                        color={colors.success}
+                      />
+                    </View>
+                    <View style={styles.tallyCardDivider} />
+                    <View style={styles.tallyCardItem}>
+                      <Text style={[styles.tallyCardNumber, { color: colors.error }]}>
+                        {lifetimeTotals.lifetimeStruggles}
+                      </Text>
+                      <IconSymbol
+                        ios_icon_name="xmark.circle.fill"
+                        android_material_icon_name="cancel"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.viewModeToggle}
+                onPress={() => {
+                  console.log("Toggling Express view mode");
+                  setExpressViewMode(prev => prev === 'detailed' ? 'concise' : 'detailed');
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name={expressViewMode === 'detailed' ? 'list.bullet' : 'square.grid.2x2'}
+                  android_material_icon_name={expressViewMode === 'detailed' ? 'view-list' : 'view-module'}
+                  size={24}
+                  color={colors.primary}
+                />
+                <Text style={styles.viewModeToggleText}>
+                  {expressViewMode === 'detailed' ? 'Concise' : 'Detailed'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             {lifeAreaHierarchy.length === 0 && uncategorizedGoals.length === 0 ? (
               <View style={styles.emptyState}>
                 <IconSymbol
@@ -1243,7 +1375,9 @@ export default function HomeScreen() {
                       </View>
                       <Text style={styles.lifeAreaCount}>{uncategorizedGoals.length}</Text>
                     </View>
-                    {uncategorizedGoals.map(goal => renderGoalCard(goal))}
+                    {uncategorizedGoals.map(goal => 
+                      expressViewMode === 'detailed' ? renderGoalCard(goal) : renderConciseGoalCard(goal)
+                    )}
                   </View>
                 )}
               </>
@@ -1462,6 +1596,64 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: 20,
     paddingBottom: 100,
+  },
+  expressHeader: {
+    marginBottom: 20,
+  },
+  tallyCardsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  tallyCard: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: colors.border,
+  },
+  tallyCardLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  tallyCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  tallyCardItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  tallyCardNumber: {
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  tallyCardDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
+  },
+  viewModeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  viewModeToggleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
   },
   journalCard: {
     backgroundColor: colors.card,
@@ -1831,6 +2023,52 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  conciseGoalCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  conciseGoalContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  conciseGoalTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  conciseTallyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  conciseTallyItem: {
+    alignItems: 'center',
+  },
+  conciseTallyCount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  conciseTallyLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  conciseTallyDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: colors.border,
+  },
+  conciseCheckButton: {
+    padding: 4,
   },
   journalModalContainer: {
     flex: 1,
