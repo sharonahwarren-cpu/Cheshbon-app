@@ -1918,7 +1918,7 @@ export default function SettingsScreen() {
                 />
               </View>
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Rate your strategy (1 = not likely, 5 = highly confident)</Text>
+                <Text style={styles.label}>Rate the likely success of your strategy</Text>
                 <View style={styles.ratingContainer}>
                   {[1, 2, 3, 4, 5].map((rating) => {
                     const isSelected = formData.confidenceRating === rating;
