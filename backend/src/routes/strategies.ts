@@ -50,6 +50,9 @@ export function registerStrategiesRoutes(app: App) {
       description?: string;
       category?: string;
       linkedGoalIds?: string[];
+      difficulties?: string;
+      overcomeDifficulties?: string;
+      confidenceRating?: number;
     };
 
     app.logger.info(
@@ -66,6 +69,9 @@ export function registerStrategiesRoutes(app: App) {
           description: body.description || null,
           category: body.category || null,
           linkedGoalIds: (body.linkedGoalIds?.length ? body.linkedGoalIds : null) as string[] | null,
+          difficulties: body.difficulties || null,
+          overcomeDifficulties: body.overcomeDifficulties || null,
+          confidenceRating: body.confidenceRating || null,
         })
         .returning();
       const strategy = strategies[0];
@@ -95,6 +101,9 @@ export function registerStrategiesRoutes(app: App) {
       description?: string;
       category?: string;
       linkedGoalIds?: string[];
+      difficulties?: string;
+      overcomeDifficulties?: string;
+      confidenceRating?: number;
     };
 
     app.logger.info({ userId: session.user.id, strategyId: id }, 'Updating strategy');
@@ -125,6 +134,9 @@ export function registerStrategiesRoutes(app: App) {
       if (body.description !== undefined) updateData.description = body.description || null;
       if (body.category !== undefined) updateData.category = body.category || null;
       if (body.linkedGoalIds !== undefined) updateData.linkedGoalIds = (body.linkedGoalIds?.length ? body.linkedGoalIds : null) as string[] | null;
+      if (body.difficulties !== undefined) updateData.difficulties = body.difficulties || null;
+      if (body.overcomeDifficulties !== undefined) updateData.overcomeDifficulties = body.overcomeDifficulties || null;
+      if (body.confidenceRating !== undefined) updateData.confidenceRating = body.confidenceRating || null;
       updateData.updatedAt = new Date();
 
       const updatedStrategies = await app.db
