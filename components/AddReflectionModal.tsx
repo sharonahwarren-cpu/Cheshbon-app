@@ -388,13 +388,18 @@ export function AddReflectionModal({
     }
   };
 
-  // Dynamic Notes header based on Type, Category, and Outcome
+  // Dynamic Notes header based on Goal's original Type and Outcome
   const getNotesHeader = () => {
     const categoryLower = category?.toLowerCase();
     
+    // Use the goal's original type from prefilledGoalData if available, otherwise use the reflection type
+    const originalGoalType = prefilledGoalData?.type || type;
+    
     // Determine effective type based on outcome
     // If outcome is 'struggled' (failure), flip the type
-    const effectiveType = outcome === 'struggled' ? (type === 'Proactive' ? 'Restraint' : 'Proactive') : type;
+    const effectiveType = outcome === 'struggled' 
+      ? (originalGoalType === 'Proactive' ? 'Restraint' : 'Proactive') 
+      : originalGoalType;
     
     if (effectiveType === 'Proactive') {
       // Proactive Action: "Why did I do it"
@@ -425,42 +430,44 @@ export function AddReflectionModal({
     }
   };
 
-  // Dynamic Notes placeholder based on Type, Category, and Outcome
+  // Dynamic Notes placeholder based on Goal's original Type and Outcome
   const getNotesPlaceholder = () => {
     const categoryLower = category?.toLowerCase();
     
+    // Use the goal's original type from prefilledGoalData if available, otherwise use the reflection type
+    const originalGoalType = prefilledGoalData?.type || type;
+    
     // Determine effective type based on outcome
     // If outcome is 'struggled' (failure), flip the type
-    const effectiveType = outcome === 'struggled' ? (type === 'Proactive' ? 'Restraint' : 'Proactive') : type;
+    const effectiveType = outcome === 'struggled' 
+      ? (originalGoalType === 'Proactive' ? 'Restraint' : 'Proactive') 
+      : originalGoalType;
     
     if (effectiveType === 'Proactive') {
-      // Proactive: "What motivated me to do/say/think/feel that"
-      // For failure on Restraint goal (flipped to Proactive), use "LIKE that"
-      const suffix = outcome === 'struggled' ? ' LIKE that' : ' that';
-      
+      // Proactive: "What motivated me to do/say/think/feel like that"
       if (categoryLower === 'action') {
-        return 'What motivated me to do' + suffix;
+        return 'What motivated me to do like that';
       } else if (categoryLower === 'speech') {
-        return 'What motivated me to say' + suffix;
+        return 'What motivated me to say like that';
       } else if (categoryLower === 'thought') {
-        return 'What motivated me to think' + suffix;
+        return 'What motivated me to think like that';
       } else if (categoryLower === 'feeling') {
-        return 'What motivated me to feel' + suffix;
+        return 'What motivated me to feel like that';
       } else {
-        return 'What motivated me to do/say/think/feel' + suffix;
+        return 'What motivated me to do/say/think/feel like that';
       }
     } else {
-      // Restraint: "What motivated me not to do/say/think/feel that"
+      // Restraint: "What motivated me not to do/say/think/feel like that"
       if (categoryLower === 'action') {
-        return 'What motivated me not to do that';
+        return 'What motivated me not to do like that';
       } else if (categoryLower === 'speech') {
-        return 'What motivated me not to say that';
+        return 'What motivated me not to say like that';
       } else if (categoryLower === 'thought') {
-        return 'What motivated me not to think that';
+        return 'What motivated me not to think like that';
       } else if (categoryLower === 'feeling') {
-        return 'What motivated me not to feel that';
+        return 'What motivated me not to feel like that';
       } else {
-        return 'What motivated me not to do/say/think/feel that';
+        return 'What motivated me not to do/say/think/feel like that';
       }
     }
   };
