@@ -172,6 +172,11 @@ export default function HomeScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [prefilledGoalData, setPrefilledGoalData] = useState<{
+    category?: string;
+    type?: 'Restraint' | 'Proactive';
+    description?: string;
+  } | undefined>(undefined);
 
   useEffect(() => {
     console.log("HomeScreen mounted");
@@ -410,6 +415,36 @@ export default function HomeScreen() {
     console.log("Opening Add Reflection modal from Home", goalId ? `for goal: ${goalId}` : "");
     setPrefilledGoalId(goalId);
     setEditingReflection(null);
+    
+    // If opening from Express with a goal, pre-fill the modal with goal data
+    if (goalId && currentView === 'express') {
+      const goal = activatedGoals.find(g => g.id === goalId);
+      if (goal) {
+        console.log('[Home] Pre-filling reflection modal with goal data:', {
+          category: goal.behaviorCategories?.[0],
+          type: goal.type === 'PROACTIVE' ? 'Proactive' : 'Restraint',
+          description: goal.title,
+        });
+        
+        // Map goal type to reflection type
+        const reflectionType: 'Restraint' | 'Proactive' = 
+          goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive';
+        
+        // Use first behavior category if available
+        const behaviorCategory = goal.behaviorCategories?.[0];
+        
+        setPrefilledGoalData({
+          category: behaviorCategory,
+          type: reflectionType,
+          description: goal.title,
+        });
+      } else {
+        setPrefilledGoalData(undefined);
+      }
+    } else {
+      setPrefilledGoalData(undefined);
+    }
+    
     setShowAddReflectionModal(true);
   };
 
@@ -1288,6 +1323,7 @@ export default function HomeScreen() {
             setShowAddReflectionModal(false);
             setPrefilledGoalId(undefined);
             setEditingReflection(null);
+            setPrefilledGoalData(undefined);
           }}
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
@@ -1299,6 +1335,7 @@ export default function HomeScreen() {
           strategies={strategies}
           prefilledGoalId={prefilledGoalId}
           sourceScreen={currentView}
+          prefilledGoalData={prefilledGoalData}
         />
       )}
 

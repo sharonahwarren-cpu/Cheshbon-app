@@ -106,6 +106,11 @@ interface AddReflectionModalProps {
   strategies: Strategy[];
   prefilledGoalId?: string;
   sourceScreen?: 'express' | 'reflect';
+  prefilledGoalData?: {
+    category?: string;
+    type?: 'Restraint' | 'Proactive';
+    description?: string;
+  };
 }
 
 export function AddReflectionModal({
@@ -121,6 +126,7 @@ export function AddReflectionModal({
   strategies,
   prefilledGoalId,
   sourceScreen,
+  prefilledGoalData,
 }: AddReflectionModalProps) {
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -129,10 +135,19 @@ export function AddReflectionModal({
   const strategyNameInputRef = useRef<TextInput>(null);
   const strategyDescInputRef = useRef<TextInput>(null);
   
-  const [step, setStep] = useState(1);
-  const [category, setCategory] = useState<string | undefined>(editingReflection?.category);
-  const [type, setType] = useState<'Restraint' | 'Proactive'>(editingReflection?.type || 'Proactive');
-  const [description, setDescription] = useState(editingReflection?.description || '');
+  // If prefilledGoalData is provided (from Express), start at Step 3
+  const initialStep = prefilledGoalData ? 3 : 1;
+  
+  const [step, setStep] = useState(initialStep);
+  const [category, setCategory] = useState<string | undefined>(
+    editingReflection?.category || prefilledGoalData?.category
+  );
+  const [type, setType] = useState<'Restraint' | 'Proactive'>(
+    editingReflection?.type || prefilledGoalData?.type || 'Proactive'
+  );
+  const [description, setDescription] = useState(
+    editingReflection?.description || prefilledGoalData?.description || ''
+  );
   const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId || prefilledGoalId);
   const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(editingReflection?.outcome);
   const [gainedIds, setGainedIds] = useState<string[]>(editingReflection?.gainedIds || []);
