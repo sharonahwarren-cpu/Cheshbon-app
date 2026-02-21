@@ -388,6 +388,72 @@ export function AddReflectionModal({
     }
   };
 
+  // Dynamic Notes header based on Type and Category
+  const getNotesHeader = () => {
+    const categoryLower = category?.toLowerCase();
+    
+    if (type === 'Proactive') {
+      // Proactive Action: "Why did I do it"
+      if (categoryLower === 'action') {
+        return 'Why did I do it';
+      } else if (categoryLower === 'speech') {
+        return 'Why did I say it';
+      } else if (categoryLower === 'thought') {
+        return 'Why did I think it';
+      } else if (categoryLower === 'feeling') {
+        return 'Why did I feel it';
+      } else {
+        return 'Why did I do it';
+      }
+    } else {
+      // Restraint Action: "Why didn't I do it"
+      if (categoryLower === 'action') {
+        return 'Why didn\'t I do it';
+      } else if (categoryLower === 'speech') {
+        return 'Why didn\'t I say it';
+      } else if (categoryLower === 'thought') {
+        return 'Why didn\'t I think it';
+      } else if (categoryLower === 'feeling') {
+        return 'Why didn\'t I feel it';
+      } else {
+        return 'Why didn\'t I do it';
+      }
+    }
+  };
+
+  // Dynamic Notes placeholder based on Type and Category
+  const getNotesPlaceholder = () => {
+    const categoryLower = category?.toLowerCase();
+    
+    if (type === 'Proactive') {
+      // Proactive: "What motivated me to do/say/think/feel that"
+      if (categoryLower === 'action') {
+        return 'What motivated me to do that';
+      } else if (categoryLower === 'speech') {
+        return 'What motivated me to say that';
+      } else if (categoryLower === 'thought') {
+        return 'What motivated me to think that';
+      } else if (categoryLower === 'feeling') {
+        return 'What motivated me to feel that';
+      } else {
+        return 'What motivated me to do/say/think/feel that';
+      }
+    } else {
+      // Restraint: "What motivated me not to do/say/think/feel that"
+      if (categoryLower === 'action') {
+        return 'What motivated me not to do that';
+      } else if (categoryLower === 'speech') {
+        return 'What motivated me not to say that';
+      } else if (categoryLower === 'thought') {
+        return 'What motivated me not to think that';
+      } else if (categoryLower === 'feeling') {
+        return 'What motivated me not to feel that';
+      } else {
+        return 'What motivated me not to do/say/think/feel that';
+      }
+    }
+  };
+
   // Auto-advance to Step 2 when category is selected in Step 1
   const handleCategorySelect = (selectedCategory: string) => {
     console.log('Category selected:', selectedCategory);
@@ -629,6 +695,10 @@ export function AddReflectionModal({
   // Get screen dimensions for responsive icon sizing
   const screenWidth = Dimensions.get('window').width;
   const categoryIconSize = Math.min(screenWidth * 0.15, 80); // 15% of screen width, max 80
+
+  // Calculate dynamic header and placeholder for Notes section
+  const notesHeader = getNotesHeader();
+  const notesPlaceholder = getNotesPlaceholder();
 
   return (
     <Modal
@@ -956,9 +1026,36 @@ export function AddReflectionModal({
               </React.Fragment>
             )}
 
-            {/* STEP 4: Gains, Losses, Was it worth it - Side-by-side icons, red NO icon, "Notes" header */}
+            {/* STEP 4: Notes FIRST, then Gains, Losses, Was it worth it */}
             {step === 4 && (
               <React.Fragment>
+                {/* NOTES SECTION - MOVED TO TOP */}
+                <View style={styles.formGroup}>
+                  <View style={styles.labelRow}>
+                    <IconSymbol
+                      ios_icon_name="text.bubble.fill"
+                      android_material_icon_name="chat-bubble"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.label}>{notesHeader}</Text>
+                  </View>
+                  <TextInput
+                    ref={additionalThoughtsInputRef}
+                    style={[styles.input, styles.textAreaFixed]}
+                    value={additionalThoughts}
+                    onChangeText={setAdditionalThoughts}
+                    placeholder={notesPlaceholder}
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                    textAlignVertical="top"
+                    blurOnSubmit={false}
+                    onFocus={handleAdditionalThoughtsFocus}
+                    onContentSizeChange={handleAdditionalThoughtsContentSizeChange}
+                  />
+                </View>
+
+                {/* WHAT WAS GAINED */}
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
@@ -1042,6 +1139,7 @@ export function AddReflectionModal({
                   )}
                 </View>
 
+                {/* WHAT WAS LOST */}
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
@@ -1125,6 +1223,7 @@ export function AddReflectionModal({
                   )}
                 </View>
 
+                {/* WAS IT WORTH IT */}
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
@@ -1165,31 +1264,6 @@ export function AddReflectionModal({
                       </Text>
                     </TouchableOpacity>
                   </View>
-                </View>
-
-                <View style={styles.formGroup}>
-                  <View style={styles.labelRow}>
-                    <IconSymbol
-                      ios_icon_name="text.bubble.fill"
-                      android_material_icon_name="chat-bubble"
-                      size={18}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.label}>Notes</Text>
-                  </View>
-                  <TextInput
-                    ref={additionalThoughtsInputRef}
-                    style={[styles.input, styles.textAreaFixed]}
-                    value={additionalThoughts}
-                    onChangeText={setAdditionalThoughts}
-                    placeholder="Notes on weighing up gains and losses..."
-                    placeholderTextColor={colors.textSecondary}
-                    multiline
-                    textAlignVertical="top"
-                    blurOnSubmit={false}
-                    onFocus={handleAdditionalThoughtsFocus}
-                    onContentSizeChange={handleAdditionalThoughtsContentSizeChange}
-                  />
                 </View>
               </React.Fragment>
             )}
