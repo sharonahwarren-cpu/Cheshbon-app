@@ -101,7 +101,7 @@ export default function CreateGoalScreen() {
   const [type, setType] = useState<GoalType>('Proactive');
   const [strategyIds, setStrategyIds] = useState<string[]>([]);
   
-  // New Goal Scheduler state
+  // New Goal Scheduler state - DEFAULT TO "Always Active"
   const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({
     scheduleType: 'Always Active',
   });
@@ -782,6 +782,7 @@ export default function CreateGoalScreen() {
               <GoalScheduler
                 config={scheduleConfig}
                 onChange={setScheduleConfig}
+                alternativeCalendar={userPreferences.alternativeCalendar}
               />
             </ScrollView>
             <View style={styles.wizardFooter}>
