@@ -43,6 +43,13 @@ const PREFERENCE_SECTIONS = [
     androidIcon: 'notifications',
   },
   {
+    route: '/alarms',
+    title: 'Alarms',
+    description: 'Create and manage smart alarms with astronomical, calendar, and location triggers',
+    iosIcon: 'alarm.fill',
+    androidIcon: 'alarm',
+  },
+  {
     route: '/preferences/alternative-calendars',
     title: 'Alternative Calendars',
     description: 'Use Hebrew, Chinese, or Islamic calendar alongside Gregorian',
