@@ -266,6 +266,10 @@ export default function CreateGoalScreen() {
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error'>('success');
 
+  // Monthly weekday picker state
+  const [tempMonthlyPosition, setTempMonthlyPosition] = useState<string>('');
+  const [tempMonthlyWeekday, setTempMonthlyWeekday] = useState<string>('');
+
   useEffect(() => {
     loadData();
   }, []);
@@ -450,6 +454,7 @@ export default function CreateGoalScreen() {
   const addMonthlyWeekdayRule = (position: string, weekday: string) => {
     const newRules = [...monthlyWeekdayRules, { position, weekday }];
     setMonthlyWeekdayRules(newRules);
+    setShowMonthlyWeekdayPicker(false);
   };
 
   const removeMonthlyWeekdayRule = (index: number) => {
@@ -1154,17 +1159,34 @@ export default function CreateGoalScreen() {
               
               {monthlyType === 'weekday' && (
                 <View style={{ marginTop: 12 }}>
+                  {monthlyWeekdayRules.length > 0 && (
+                    <View style={{ marginBottom: 12 }}>
+                      {monthlyWeekdayRules.map((rule, index) => (
+                        <View key={index} style={styles.ruleItem}>
+                          <Text style={styles.ruleText}>{rule.position} {rule.weekday}</Text>
+                          <TouchableOpacity onPress={() => removeMonthlyWeekdayRule(index)}>
+                            <IconSymbol
+                              ios_icon_name="trash"
+                              android_material_icon_name="delete"
+                              size={20}
+                              color="#ff4444"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                   <TouchableOpacity
-                    style={styles.picker}
+                    style={styles.addButton}
                     onPress={() => setShowMonthlyWeekdayPicker(true)}
                   >
-                    <Text style={styles.pickerText}>{getScheduleSummary()}</Text>
                     <IconSymbol
-                      ios_icon_name="chevron.down"
-                      android_material_icon_name="arrow-drop-down"
-                      size={24}
-                      color={colors.text}
+                      ios_icon_name="plus"
+                      android_material_icon_name="add"
+                      size={20}
+                      color="#fff"
                     />
+                    <Text style={styles.addButtonText}>Add Rule</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1447,6 +1469,92 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
+      {/* Monthly Weekday Picker Modal - FIXED */}
+      <Modal
+        visible={showMonthlyWeekdayPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMonthlyWeekdayPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Weekday Rule</Text>
+              <TouchableOpacity onPress={() => setShowMonthlyWeekdayPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={{ padding: 16 }}>
+                <Text style={styles.helperText}>Select position and weekday (e.g., "First Tuesday")</Text>
+                
+                {WEEK_POSITIONS.map((position) => (
+                  <View key={position} style={{ marginBottom: 16 }}>
+                    <Text style={styles.positionLabel}>{position}</Text>
+                    <View style={styles.weekdayButtonGroup}>
+                      {WEEKDAYS.map((weekday) => (
+                        <TouchableOpacity
+                          key={weekday}
+                          style={styles.weekdayButton}
+                          onPress={() => addMonthlyWeekdayRule(position, weekday)}
+                        >
+                          <Text style={styles.weekdayButtonText}>{weekday.substring(0, 3)}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Monthly Date Picker Modal - FIXED */}
+      <Modal
+        visible={showMonthlyDatePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMonthlyDatePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Dates</Text>
+              <TouchableOpacity onPress={() => setShowMonthlyDatePicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={styles.dateGrid}>
+                {Array.from({ length: getMaxDaysInMonth(1, calendarType) }, (_, i) => i + 1).map((date) => {
+                  const isSelected = monthlyDates.includes(date);
+                  return (
+                    <TouchableOpacity
+                      key={date}
+                      style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                      onPress={() => toggleMonthlyDate(date)}
+                    >
+                      <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>{date}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Yearly Date Picker Modal - Multi-step with calendar-aware months and days */}
       <Modal
         visible={showYearlyDatePicker}
@@ -1653,6 +1761,429 @@ export default function CreateGoalScreen() {
         </View>
       </Modal>
 
+      {/* Parent Goal Picker Modal */}
+      <Modal
+        visible={showParentGoalPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowParentGoalPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Parent Goal</Text>
+              <TouchableOpacity onPress={() => setShowParentGoalPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <TouchableOpacity
+                style={[styles.pickerItem, !parentGoalId && styles.pickerItemSelected]}
+                onPress={() => {
+                  setParentGoalId(undefined);
+                  setShowParentGoalPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, !parentGoalId && styles.pickerItemTextSelected]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {goals.map((goal) => {
+                const isSelected = goal.id === parentGoalId;
+                return (
+                  <TouchableOpacity
+                    key={goal.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      setParentGoalId(goal.id);
+                      setShowParentGoalPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                      {goal.title}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Life Area Picker Modal */}
+      <Modal
+        visible={showLifeAreaPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLifeAreaPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Life Area</Text>
+              <TouchableOpacity onPress={() => setShowLifeAreaPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <TouchableOpacity
+                style={[styles.pickerItem, !lifeAreaId && styles.pickerItemSelected]}
+                onPress={() => {
+                  setLifeAreaId(undefined);
+                  setShowLifeAreaPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, !lifeAreaId && styles.pickerItemTextSelected]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {renderLifeAreaHierarchy(lifeAreas)}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Strategy Picker Modal */}
+      <Modal
+        visible={showStrategyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowStrategyPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Strategies</Text>
+              <TouchableOpacity onPress={() => setShowStrategyPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {strategies.map((strategy) => {
+                const isSelected = strategyIds.includes(strategy.id);
+                return (
+                  <TouchableOpacity
+                    key={strategy.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => toggleStrategy(strategy.id)}
+                  >
+                    <View style={styles.strategyItem}>
+                      <View>
+                        <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                          {strategy.name}
+                        </Text>
+                        {strategy.description && (
+                          <Text style={styles.strategyDescription}>{strategy.description}</Text>
+                        )}
+                      </View>
+                      {isSelected && (
+                        <IconSymbol
+                          ios_icon_name="checkmark"
+                          android_material_icon_name="check"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Schedule Picker Modal */}
+      <Modal
+        visible={showSchedulePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSchedulePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Schedule</Text>
+              <TouchableOpacity onPress={() => setShowSchedulePicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {scheduleTypes.map((schedule) => {
+                const isSelected = schedule === scheduleType;
+                return (
+                  <TouchableOpacity
+                    key={schedule}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      setScheduleType(schedule);
+                      setShowSchedulePicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                      {schedule}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reward Currency Picker Modal */}
+      <Modal
+        visible={showRewardCurrencyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRewardCurrencyPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Reward Currency</Text>
+              <TouchableOpacity onPress={() => setShowRewardCurrencyPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <TouchableOpacity
+                style={[styles.pickerItem, !rewardCurrencyId && styles.pickerItemSelected]}
+                onPress={() => {
+                  setRewardCurrencyId(undefined);
+                  setRewardSuccesses('');
+                  setRewardAmount('');
+                  setShowRewardCurrencyPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, !rewardCurrencyId && styles.pickerItemTextSelected]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {currencies.map((currency) => {
+                const isSelected = currency.id === rewardCurrencyId;
+                const displayText = currency.symbol ? `${currency.name} (${currency.symbol})` : currency.name;
+                return (
+                  <TouchableOpacity
+                    key={currency.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      setRewardCurrencyId(currency.id);
+                      setShowRewardCurrencyPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                      {displayText}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Consequence Currency Picker Modal */}
+      <Modal
+        visible={showConsequenceCurrencyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowConsequenceCurrencyPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Consequence Currency</Text>
+              <TouchableOpacity onPress={() => setShowConsequenceCurrencyPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <TouchableOpacity
+                style={[styles.pickerItem, !consequenceCurrencyId && styles.pickerItemSelected]}
+                onPress={() => {
+                  setConsequenceCurrencyId(undefined);
+                  setConsequenceFailures('');
+                  setConsequenceAmount('');
+                  setShowConsequenceCurrencyPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, !consequenceCurrencyId && styles.pickerItemTextSelected]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {currencies.map((currency) => {
+                const isSelected = currency.id === consequenceCurrencyId;
+                const displayText = currency.symbol ? `${currency.name} (${currency.symbol})` : currency.name;
+                return (
+                  <TouchableOpacity
+                    key={currency.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      setConsequenceCurrencyId(currency.id);
+                      setShowConsequenceCurrencyPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                      {displayText}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Alarm Modal */}
+      <Modal
+        visible={showAlarmModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAlarmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingAlarmIndex !== null ? 'Edit Alarm' : 'Add Alarm'}</Text>
+              <TouchableOpacity onPress={() => setShowAlarmModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 20 }}>
+              <Text style={styles.subLabel}>Alarm Time</Text>
+              <TouchableOpacity
+                style={styles.timePickerButton}
+                onPress={() => setShowAlarmTimePicker(true)}
+              >
+                <IconSymbol
+                  ios_icon_name="clock"
+                  android_material_icon_name="access-time"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.timePickerText}>
+                  {(() => {
+                    const [h, m] = currentAlarmTime.split(':');
+                    const hour = parseInt(h);
+                    const ampm = hour >= 12 ? 'PM' : 'AM';
+                    const displayHour = hour % 12 || 12;
+                    return `${displayHour}:${m} ${ampm}`;
+                  })()}
+                </Text>
+              </TouchableOpacity>
+              
+              {showAlarmTimePicker && (
+                <DateTimePicker
+                  value={alarmTimeDate}
+                  mode="time"
+                  is24Hour={false}
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    setShowAlarmTimePicker(Platform.OS === 'ios');
+                    if (selectedDate) {
+                      setAlarmTimeDate(selectedDate);
+                      const hours = selectedDate.getHours().toString().padStart(2, '0');
+                      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+                      setCurrentAlarmTime(`${hours}:${minutes}`);
+                    }
+                  }}
+                />
+              )}
+              
+              <Text style={[styles.subLabel, { marginTop: 16 }]}>Offset Days</Text>
+              <Text style={styles.helperText}>
+                0 = day of goal, negative = days before, positive = days after
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={currentAlarmOffsetDays}
+                onChangeText={setCurrentAlarmOffsetDays}
+                placeholder="0"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="number-pad"
+              />
+              
+              <TouchableOpacity
+                style={[styles.addButton, { marginTop: 20 }]}
+                onPress={saveAlarm}
+              >
+                <Text style={styles.addButtonText}>
+                  {editingAlarmIndex !== null ? 'Update Alarm' : 'Add Alarm'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Success/Error Modal */}
       <Modal
         visible={modalVisible}
@@ -1674,7 +2205,65 @@ export default function CreateGoalScreen() {
         </View>
       </Modal>
 
-      {/* (Other modals omitted for brevity - they remain unchanged) */}
+      {/* Create Another Goal Prompt */}
+      <Modal
+        visible={showCreateAnotherPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateAnotherPrompt(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Create Another Goal?</Text>
+            <Text style={styles.alertMessage}>
+              Would you like to create another goal for this Life Area?
+            </Text>
+            <View style={styles.promptButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setShowCreateAnotherPrompt(false);
+                  router.push(`/life-area-wizard?id=${wizardLifeAreaId}&step=2&newGoalCreated=true`);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>No, Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={() => {
+                  setShowCreateAnotherPrompt(false);
+                  setTitle('');
+                  setDescription('');
+                  setParentGoalId(undefined);
+                  setBehaviorCategories([]);
+                  setType('Proactive');
+                  setStrategyIds([]);
+                  setScheduleType('Always Active');
+                  setScheduleTimesPerDay('');
+                  setSelectedWeekdays([]);
+                  setSelectedFortnightDays([]);
+                  setMonthlyType('date');
+                  setMonthlyDates([]);
+                  setMonthlyWeekdayRules([]);
+                  setYearlyDates([]);
+                  setCalendarType('Gregorian');
+                  setRewardCurrencyId(undefined);
+                  setRewardSuccesses('');
+                  setRewardAmount('');
+                  setConsequenceCurrencyId(undefined);
+                  setConsequenceFailures('');
+                  setConsequenceAmount('');
+                  setAlarms([]);
+                  setHasEndDate(false);
+                  setEndDate(undefined);
+                }}
+              >
+                <Text style={styles.alertButtonText}>Yes, Create Another</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
