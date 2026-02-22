@@ -830,29 +830,105 @@ export default function CreateGoalScreen() {
             </View>
           )}
           
-          {/* Weekly/Fortnightly: Day selection */}
-          {(scheduleType === 'Weekly' || scheduleType === 'Fortnightly') && (
+          {/* Weekly: Day selection - Auto-show */}
+          {scheduleType === 'Weekly' && (
             <View style={styles.subSection}>
               <Text style={styles.subLabel}>Select days</Text>
-              <TouchableOpacity
-                style={styles.picker}
-                onPress={() => setShowWeekdayPicker(true)}
-              >
-                <Text style={styles.pickerText}>{getScheduleSummary()}</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.down"
-                  android_material_icon_name="arrow-drop-down"
-                  size={24}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
+              <View style={{ padding: 16 }}>
+                <Text style={styles.helperText}>Select one or multiple days</Text>
+                <View style={styles.fortnightGrid}>
+                  {WEEKDAYS.map((weekday, index) => {
+                    const isSelected = selectedWeekdays.includes(weekday);
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[styles.fortnightDayButton, isSelected && styles.fortnightDayButtonSelected]}
+                        onPress={() => toggleWeekday(weekday)}
+                      >
+                        <Text style={[styles.fortnightDayText, isSelected && styles.fortnightDayTextSelected]}>
+                          {weekday.substring(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+          )}
+          
+          {/* Fortnightly: 2 weeks of day selection - Auto-show */}
+          {scheduleType === 'Fortnightly' && (
+            <View style={styles.subSection}>
+              <Text style={styles.subLabel}>Select days (2 weeks)</Text>
+              <View style={{ padding: 16 }}>
+                <Text style={styles.helperText}>Select multiple days across 2 weeks</Text>
+                
+                {/* Week 1 */}
+                <Text style={styles.weekLabel}>Week 1</Text>
+                <View style={styles.fortnightGrid}>
+                  {WEEKDAYS.map((weekday, index) => {
+                    const dayIndex = `week1-${weekday}`;
+                    const isSelected = selectedWeekdays.includes(dayIndex);
+                    return (
+                      <TouchableOpacity
+                        key={dayIndex}
+                        style={[styles.fortnightDayButton, isSelected && styles.fortnightDayButtonSelected]}
+                        onPress={() => toggleWeekday(dayIndex)}
+                      >
+                        <Text style={[styles.fortnightDayText, isSelected && styles.fortnightDayTextSelected]}>
+                          {weekday.substring(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                
+                {/* Week 2 */}
+                <Text style={[styles.weekLabel, { marginTop: 16 }]}>Week 2</Text>
+                <View style={styles.fortnightGrid}>
+                  {WEEKDAYS.map((weekday, index) => {
+                    const dayIndex = `week2-${weekday}`;
+                    const isSelected = selectedWeekdays.includes(dayIndex);
+                    return (
+                      <TouchableOpacity
+                        key={dayIndex}
+                        style={[styles.fortnightDayButton, isSelected && styles.fortnightDayButtonSelected]}
+                        onPress={() => toggleWeekday(dayIndex)}
+                      >
+                        <Text style={[styles.fortnightDayText, isSelected && styles.fortnightDayTextSelected]}>
+                          {weekday.substring(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
             </View>
           )}
           
           {/* Monthly: Date or weekday selection */}
           {scheduleType === 'Monthly' && (
             <View style={styles.subSection}>
-              <Text style={styles.subLabel}>Monthly schedule type</Text>
+              {/* Only show calendar type if alternative calendars are enabled */}
+              {(['Gregorian'] as const).length > 0 && (
+                <>
+                  <Text style={styles.subLabel}>Calendar type</Text>
+                  <TouchableOpacity
+                    style={styles.picker}
+                    onPress={() => setShowCalendarPicker(true)}
+                  >
+                    <Text style={styles.pickerText}>{calendarType}</Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+                </>
+              )}
+              
+              <Text style={[styles.subLabel, { marginTop: 12 }]}>Monthly schedule type</Text>
               <View style={styles.radioGroup}>
                 <TouchableOpacity
                   style={[styles.radio, monthlyType === 'date' && styles.radioSelected]}
@@ -911,19 +987,24 @@ export default function CreateGoalScreen() {
           {/* Yearly: Date selection with calendar type */}
           {scheduleType === 'Yearly' && (
             <View style={styles.subSection}>
-              <Text style={styles.subLabel}>Calendar type</Text>
-              <TouchableOpacity
-                style={styles.picker}
-                onPress={() => setShowCalendarPicker(true)}
-              >
-                <Text style={styles.pickerText}>{calendarType}</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.down"
-                  android_material_icon_name="arrow-drop-down"
-                  size={24}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
+              {/* Only show calendar type if alternative calendars are enabled */}
+              {(['Gregorian'] as const).length > 0 && (
+                <>
+                  <Text style={styles.subLabel}>Calendar type</Text>
+                  <TouchableOpacity
+                    style={styles.picker}
+                    onPress={() => setShowCalendarPicker(true)}
+                  >
+                    <Text style={styles.pickerText}>{calendarType}</Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+                </>
+              )}
               
               <Text style={[styles.subLabel, { marginTop: 12 }]}>Select dates</Text>
               <TouchableOpacity
@@ -1311,25 +1392,61 @@ export default function CreateGoalScreen() {
             </View>
             <ScrollView style={styles.modalScroll}>
               <View style={{ padding: 16 }}>
-                <Text style={styles.helperText}>Add dates like "Dec 1" or "Apr 3"</Text>
-                {yearlyDates.map((date, index) => {
-                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                  return (
-                    <View key={index} style={styles.ruleItem}>
-                      <Text style={styles.ruleText}>{monthNames[date.month - 1]} {date.day}</Text>
-                      <TouchableOpacity onPress={() => removeYearlyDate(index)}>
-                        <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={20} color="#ff4444" />
+                <Text style={styles.helperText}>
+                  Select dates throughout the year
+                </Text>
+                
+                {/* Display selected dates */}
+                {yearlyDates.length > 0 && (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={styles.subLabel}>Selected dates:</Text>
+                    {yearlyDates.map((date, index) => {
+                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                      const dateText = `${monthNames[date.month - 1]} ${date.day}`;
+                      return (
+                        <View key={index} style={styles.ruleItem}>
+                          <Text style={styles.ruleText}>{dateText}</Text>
+                          <TouchableOpacity onPress={() => removeYearlyDate(index)}>
+                            <IconSymbol
+                              ios_icon_name="trash"
+                              android_material_icon_name="delete"
+                              size={20}
+                              color="#ff4444"
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+                
+                {/* Month and Day Selector */}
+                <Text style={styles.subLabel}>Add new date</Text>
+                <Text style={styles.helperText}>Select month and day</Text>
+                
+                {/* Month Selector */}
+                <Text style={[styles.subLabel, { marginTop: 12 }]}>Month</Text>
+                <View style={styles.monthGrid}>
+                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, index) => {
+                    const monthNumber = index + 1;
+                    return (
+                      <TouchableOpacity
+                        key={month}
+                        style={styles.monthButton}
+                        onPress={() => {
+                          // Add date with selected month and day 1 as default
+                          addYearlyDate(monthNumber, 1);
+                        }}
+                      >
+                        <Text style={styles.monthButtonText}>{month}</Text>
                       </TouchableOpacity>
-                    </View>
-                  );
-                })}
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => addYearlyDate(12, 1)}
-                >
-                  <IconSymbol ios_icon_name="plus" android_material_icon_name="add" size={20} color="#fff" />
-                  <Text style={styles.addButtonText}>Add Date (Example: Dec 1)</Text>
-                </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                
+                <Text style={styles.helperText}>
+                  Tap a month to add the 1st of that month. You can then edit the day by removing and re-adding.
+                </Text>
               </View>
             </ScrollView>
           </View>
@@ -2211,6 +2328,58 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  fortnightGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  fortnightDayButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fortnightDayButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  fortnightDayText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  fortnightDayTextSelected: {
+    color: '#fff',
+  },
+  weekLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  monthButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  monthButtonText: {
+    fontSize: 14,
     fontWeight: '600',
     color: '#fff',
   },
