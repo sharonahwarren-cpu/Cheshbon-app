@@ -120,6 +120,11 @@ export default function CreateGoalScreen() {
   const [yearlyDates, setYearlyDates] = useState<Array<{month: number; day: number}>>([]);
   const [calendarType, setCalendarType] = useState<CalendarType>('Gregorian');
   
+  // End date state
+  const [hasEndDate, setHasEndDate] = useState(false);
+  const [endDate, setEndDate] = useState<Date | undefined>();
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  
   // Reward state
   const [rewardCurrencyId, setRewardCurrencyId] = useState<string | undefined>();
   const [rewardSuccesses, setRewardSuccesses] = useState<string>('');
@@ -260,6 +265,12 @@ export default function CreateGoalScreen() {
         }
         if (goalDetails.calendarType) {
           setCalendarType(goalDetails.calendarType);
+        }
+        
+        // Load end date
+        if (goalDetails.endDate) {
+          setHasEndDate(true);
+          setEndDate(new Date(goalDetails.endDate));
         }
         
         if (goalDetails.rewardCurrencyId) {
@@ -434,6 +445,7 @@ export default function CreateGoalScreen() {
         yearlyDates: scheduleType === 'Yearly' && yearlyDates.length > 0 ? yearlyDates : undefined,
         calendarType: (scheduleType === 'Monthly' || scheduleType === 'Yearly') ? calendarType : undefined,
         alarms: alarms.length > 0 ? alarms : undefined,
+        endDate: hasEndDate && endDate ? endDate.toISOString() : null,
       };
 
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
@@ -855,7 +867,7 @@ export default function CreateGoalScreen() {
             </View>
           )}
           
-          {/* Weekly: Day selection */}
+          {/* Weekly: Day selection in box format */}
           {scheduleType === 'Weekly' && (
             <View style={styles.subSection}>
               <Text style={styles.subLabel}>Select days</Text>
@@ -996,6 +1008,56 @@ export default function CreateGoalScreen() {
                   color={colors.text}
                 />
               </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* End Date (Optional) */}
+          {scheduleType !== 'Always Active' && (
+            <View style={styles.subSection}>
+              <View style={styles.endDateHeader}>
+                <Text style={styles.subLabel}>End Date (Optional)</Text>
+                <Switch
+                  value={hasEndDate}
+                  onValueChange={(value) => {
+                    setHasEndDate(value);
+                    if (!value) {
+                      setEndDate(undefined);
+                    }
+                  }}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  thumbColor={colors.background}
+                />
+              </View>
+              {hasEndDate && (
+                <TouchableOpacity
+                  style={styles.picker}
+                  onPress={() => setShowEndDatePicker(true)}
+                >
+                  <Text style={styles.pickerText}>
+                    {endDate ? endDate.toLocaleDateString() : 'Select end date'}
+                  </Text>
+                  <IconSymbol
+                    ios_icon_name="calendar"
+                    android_material_icon_name="calendar-today"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+              )}
+              {showEndDatePicker && (
+                <DateTimePicker
+                  value={endDate || new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    setShowEndDatePicker(Platform.OS === 'ios');
+                    if (selectedDate) {
+                      setEndDate(selectedDate);
+                    }
+                  }}
+                  minimumDate={new Date()}
+                />
+              )}
             </View>
           )}
         </View>
@@ -1187,7 +1249,7 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Weekday Picker Modal */}
+      {/* Weekly Picker Modal - Box format like Fortnightly */}
       <Modal
         visible={showWeekdayPicker}
         transparent
@@ -1208,28 +1270,25 @@ export default function CreateGoalScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll}>
-              {WEEKDAYS.map((weekday, index) => {
-                const isSelected = selectedWeekdays.includes(index);
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                    onPress={() => toggleWeekday(index)}
-                  >
-                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
-                      {weekday}
-                    </Text>
-                    {isSelected && (
-                      <IconSymbol
-                        ios_icon_name="checkmark"
-                        android_material_icon_name="check"
-                        size={20}
-                        color={colors.primary}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+              <View style={{ padding: 16 }}>
+                <Text style={styles.helperText}>Select one or multiple days</Text>
+                <View style={styles.fortnightGrid}>
+                  {WEEKDAYS.map((weekday, index) => {
+                    const isSelected = selectedWeekdays.includes(index);
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[styles.fortnightDayButton, isSelected && styles.fortnightDayButtonSelected]}
+                        onPress={() => toggleWeekday(index)}
+                      >
+                        <Text style={[styles.fortnightDayText, isSelected && styles.fortnightDayTextSelected]}>
+                          {weekday.substring(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -2028,6 +2087,8 @@ export default function CreateGoalScreen() {
                   setConsequenceFailures('');
                   setConsequenceAmount('');
                   setAlarms([]);
+                  setHasEndDate(false);
+                  setEndDate(undefined);
                 }}
               >
                 <Text style={styles.alertButtonText}>Yes, Create Another</Text>
@@ -2171,6 +2232,12 @@ const styles = StyleSheet.create({
   subLabel: {
     fontSize: 14,
     color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  endDateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 8,
   },
   rewardInputs: {
