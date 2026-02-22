@@ -118,7 +118,7 @@ export default function CreateGoalScreen() {
   
   // Alarms state - separate from scheduler
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
-  const [quickAlarmTime, setQuickAlarmTime] = useState('');
+  const [quickAlarmTime, setQuickAlarmTime] = useState<Date | undefined>(undefined);
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
   const [goalAlarms, setGoalAlarms] = useState<Alarm[]>([]);
   
@@ -486,7 +486,9 @@ export default function CreateGoalScreen() {
     }
     // Pass quick alarm time if set
     if (quickAlarmTime) {
-      params.set('quickAlarmTime', quickAlarmTime);
+      const hours = quickAlarmTime.getHours().toString().padStart(2, '0');
+      const minutes = quickAlarmTime.getMinutes().toString().padStart(2, '0');
+      params.set('quickAlarmTime', `${hours}:${minutes}`);
     }
     router.push(`/alarms/create?${params.toString()}`);
   };
@@ -637,8 +639,9 @@ export default function CreateGoalScreen() {
     });
   };
 
-  const formatTime12Hour = (time24: string): string => {
-    const [hours, minutes] = time24.split(':').map(Number);
+  const formatTime12Hour = (date: Date): string => {
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
     const period = hours >= 12 ? 'PM' : 'AM';
     const hours12 = hours % 12 || 12;
     return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
@@ -661,6 +664,17 @@ export default function CreateGoalScreen() {
       return 'yearly';
     }
     return scheduleType.toLowerCase();
+  };
+
+  const handleQuickTimePickerConfirm = (date: Date) => {
+    console.log('User selected quick alarm time:', date);
+    setQuickAlarmTime(date);
+    setShowQuickTimePicker(false);
+  };
+
+  const handleQuickTimePickerCancel = () => {
+    console.log('User cancelled quick alarm time picker');
+    setShowQuickTimePicker(false);
   };
 
   const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
@@ -902,7 +916,10 @@ export default function CreateGoalScreen() {
                 <Text style={styles.quickTimeLabel}>Alarm Time:</Text>
                 <TouchableOpacity
                   style={styles.quickTimeButton}
-                  onPress={() => setShowQuickTimePicker(true)}
+                  onPress={() => {
+                    console.log('User tapped Set time button');
+                    setShowQuickTimePicker(true);
+                  }}
                 >
                   <IconSymbol
                     ios_icon_name="clock"
@@ -1093,23 +1110,12 @@ export default function CreateGoalScreen() {
       <DateTimePickerModal
         isVisible={showQuickTimePicker}
         mode="time"
-        onConfirm={(date) => {
-          const hours = date.getHours().toString().padStart(2, '0');
-          const minutes = date.getMinutes().toString().padStart(2, '0');
-          setQuickAlarmTime(`${hours}:${minutes}`);
-          setShowQuickTimePicker(false);
-        }}
-        onCancel={() => setShowQuickTimePicker(false)}
-        date={(() => {
-          if (!quickAlarmTime) {
-            const now = new Date();
-            now.setHours(9, 0, 0, 0);
-            return now;
-          }
-          const [hours, minutes] = quickAlarmTime.split(':').map(Number);
-          const date = new Date();
-          date.setHours(hours, minutes, 0, 0);
-          return date;
+        onConfirm={handleQuickTimePickerConfirm}
+        onCancel={handleQuickTimePickerCancel}
+        date={quickAlarmTime || (() => {
+          const now = new Date();
+          now.setHours(9, 0, 0, 0);
+          return now;
         })()}
       />
 

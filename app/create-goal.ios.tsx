@@ -113,9 +113,9 @@ export default function CreateGoalScreen() {
   const [scheduleType, setScheduleType] = useState<ScheduleType>('Always Active');
   const [scheduleTimesPerDay, setScheduleTimesPerDay] = useState<string>('');
   
-  // Alarms state
+  // Alarms state - FIXED: Use Date object instead of string
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
-  const [quickAlarmTime, setQuickAlarmTime] = useState('');
+  const [quickAlarmTime, setQuickAlarmTime] = useState<Date | undefined>(undefined);
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
   const [goalAlarms, setGoalAlarms] = useState<Alarm[]>([]);
   
@@ -476,7 +476,9 @@ export default function CreateGoalScreen() {
     });
     // Pass quick alarm time if set
     if (quickAlarmTime) {
-      params.set('quickAlarmTime', quickAlarmTime);
+      const hours = quickAlarmTime.getHours().toString().padStart(2, '0');
+      const minutes = quickAlarmTime.getMinutes().toString().padStart(2, '0');
+      params.set('quickAlarmTime', `${hours}:${minutes}`);
     }
     router.push(`/alarms/create?${params.toString()}`);
   };
@@ -624,6 +626,22 @@ export default function CreateGoalScreen() {
         </React.Fragment>
       );
     });
+  };
+
+  const formatTime12Hour = (date: Date): string => {
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
+  const handleQuickTimeChange = (event: any, selectedDate?: Date) => {
+    console.log('Quick time picker changed:', event.type, selectedDate);
+    if (event.type === 'set' && selectedDate) {
+      setQuickAlarmTime(selectedDate);
+    }
+    setShowQuickTimePicker(false);
   };
 
   const scheduleTypes: ScheduleType[] = [
@@ -880,7 +898,10 @@ export default function CreateGoalScreen() {
                 <Text style={styles.quickTimeLabel}>Alarm Time:</Text>
                 <TouchableOpacity
                   style={styles.quickTimeButton}
-                  onPress={() => setShowQuickTimePicker(true)}
+                  onPress={() => {
+                    console.log('User tapped Set time button');
+                    setShowQuickTimePicker(true);
+                  }}
                 >
                   <IconSymbol
                     ios_icon_name="clock"
@@ -889,7 +910,7 @@ export default function CreateGoalScreen() {
                     color={colors.primary}
                   />
                   <Text style={styles.quickTimeText}>
-                    {quickAlarmTime || 'Set time'}
+                    {quickAlarmTime ? formatTime12Hour(quickAlarmTime) : 'Set time'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1065,30 +1086,71 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Quick Time Picker */}
+      {/* Quick Time Picker - FIXED: Proper Date object handling */}
       {showQuickTimePicker && (
         <DateTimePicker
-          value={(() => {
-            const [hours, minutes] = quickAlarmTime.split(':').map(Number);
-            const date = new Date();
-            date.setHours(hours, minutes, 0, 0);
-            return date;
+          value={quickAlarmTime || (() => {
+            const now = new Date();
+            now.setHours(9, 0, 0, 0);
+            return now;
           })()}
           mode="time"
           display="default"
-          onChange={(event, selectedDate) => {
-            if (event.type === 'set' && selectedDate) {
-              const hours = selectedDate.getHours().toString().padStart(2, '0');
-              const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
-              setQuickAlarmTime(`${hours}:${minutes}`);
-            }
-            setShowQuickTimePicker(false);
-          }}
+          onChange={handleQuickTimeChange}
         />
       )}
 
-      {/* Modals... (Parent Goal, Life Area, Strategy, Schedule, Reward, Consequence pickers) */}
-      {/* I'll include the essential modals for brevity */}
+      {/* Schedule Picker Modal */}
+      <Modal
+        visible={showSchedulePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSchedulePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Schedule Type</Text>
+              <TouchableOpacity onPress={() => setShowSchedulePicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {scheduleTypes.map((type) => {
+                const isSelected = scheduleType === type;
+                return (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      console.log('Selected schedule type:', type);
+                      setScheduleType(type);
+                      setShowSchedulePicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                      {type}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Success/Error Modal */}
       <Modal
@@ -1406,6 +1468,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  modalScroll: {
+    maxHeight: 400,
   },
   alertModal: {
     backgroundColor: colors.background,
