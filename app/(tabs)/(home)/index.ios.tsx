@@ -426,6 +426,11 @@ export default function HomeScreen() {
     router.push(`/create-goal?id=${goalId}`);
   };
 
+  const handleCreateGoal = () => {
+    console.log("Opening goal creation screen iOS");
+    router.push('/create-goal');
+  };
+
   const openAddReflectionModal = (goalId?: string) => {
     console.log("Opening Add Reflection modal from Home iOS", goalId ? `for goal: ${goalId}` : "");
     setPrefilledGoalId(goalId);
@@ -1333,6 +1338,17 @@ export default function HomeScreen() {
             <>
               <View style={styles.expressHeader}>
                 <TouchableOpacity
+                  style={styles.addGoalButton}
+                  onPress={handleCreateGoal}
+                >
+                  <IconSymbol
+                    ios_icon_name="plus.circle.fill"
+                    android_material_icon_name="add-circle"
+                    size={28}
+                    color={colors.primary}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
                   style={styles.viewModeToggle}
                   onPress={() => {
                     console.log("Toggling Express view mode iOS");
@@ -1612,7 +1628,12 @@ const styles = StyleSheet.create({
   },
   expressHeader: {
     marginBottom: 12,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addGoalButton: {
+    padding: 4,
   },
   viewModeToggle: {
     flexDirection: 'row',
