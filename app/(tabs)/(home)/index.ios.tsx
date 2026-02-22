@@ -915,29 +915,39 @@ export default function HomeScreen() {
             </View>
           ))}
           <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.error }]}>{struggleCount}</Text>
-            <IconSymbol
-              ios_icon_name="xmark"
-              android_material_icon_name="close"
-              size={10}
-              color={colors.error}
-            />
+            <Text style={[styles.conciseCounterText, { color: colors.error }]}>X:{struggleCount}</Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={styles.conciseCheckButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleGoalSuccess(goal.id);
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="checkmark.circle.fill"
-            android_material_icon_name="check-circle"
-            size={20}
-            color={colors.success}
-          />
-        </TouchableOpacity>
+        <View style={styles.conciseActions}>
+          <TouchableOpacity
+            style={styles.conciseCheckButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleGoalSuccess(goal.id);
+            }}
+          >
+            <IconSymbol
+              ios_icon_name="checkmark.circle.fill"
+              android_material_icon_name="check-circle"
+              size={20}
+              color={colors.success}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.conciseStruggleButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleGoalStruggle(goal.id);
+            }}
+          >
+            <IconSymbol
+              ios_icon_name="xmark.circle.fill"
+              android_material_icon_name="cancel"
+              size={20}
+              color={colors.error}
+            />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -2016,7 +2026,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
+  conciseActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   conciseCheckButton: {
+    padding: 2,
+  },
+  conciseStruggleButton: {
     padding: 2,
   },
   journalModalContainer: {

@@ -162,6 +162,29 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Preferences Button */}
+        <TouchableOpacity
+          style={styles.preferencesButton}
+          onPress={() => {
+            console.log('Navigating to Preferences');
+            router.push('/preferences');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="gear"
+            android_material_icon_name="settings"
+            size={20}
+            color={colors.primary}
+          />
+          <Text style={styles.preferencesButtonText}>Preferences</Text>
+          <IconSymbol
+            ios_icon_name="chevron.right"
+            android_material_icon_name="chevron-right"
+            size={20}
+            color={colors.textSecondary}
+          />
+        </TouchableOpacity>
+
         {/* About Card with Logo */}
         <View style={styles.card}>
           <View style={styles.aboutLogoContainer}>
@@ -345,6 +368,24 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 12,
+  },
+  preferencesButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  preferencesButtonText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginLeft: 12,
   },
   signOutButton: {
     flexDirection: 'row',

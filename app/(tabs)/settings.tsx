@@ -705,8 +705,6 @@ export default function SettingsScreen() {
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
-      { title: 'Reflection Preferences', icon: 'edit-note', section: 'reflectionPrefs' as SettingsSection },
-      { title: 'Notifications', icon: 'notifications', section: 'notifications' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
     ];
 

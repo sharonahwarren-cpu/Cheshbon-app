@@ -41,6 +41,7 @@ interface ActivatedGoal {
   dailyEntries?: DailyEntry[];
   successCount: number;
   struggleCount: number;
+  streak?: number;
   rewardCurrencyId?: string;
   rewardSuccesses?: number;
   rewardAmount?: number;
@@ -147,6 +148,7 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentView, setCurrentView] = useState<'reflect' | 'express'>('reflect');
   const [expressViewMode, setExpressViewMode] = useState<'detailed' | 'concise'>('detailed');
+  const [homeScreenInitialized, setHomeScreenInitialized] = useState(false);
   
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
   const [lifeAreaHierarchy, setLifeAreaHierarchy] = useState<LifeAreaNode[]>([]);
@@ -245,6 +247,23 @@ export default function HomeScreen() {
       setJournalEntry(journalData);
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
+
+      // Set initial view based on user's preferred home screen (only on first load)
+      if (!homeScreenInitialized) {
+        const preferredScreen = prefsData.preferredHomeScreen;
+        console.log('[Home] Setting initial view based on preferred home screen:', preferredScreen);
+        if (preferredScreen === 'goals-detailed') {
+          setCurrentView('express');
+          setExpressViewMode('detailed');
+        } else if (preferredScreen === 'goals-concise') {
+          setCurrentView('express');
+          setExpressViewMode('concise');
+        } else {
+          // Default to reflect
+          setCurrentView('reflect');
+        }
+        setHomeScreenInitialized(true);
+      }
       
       console.log("Home data loaded successfully");
     } catch (error: any) {
@@ -292,6 +311,7 @@ export default function HomeScreen() {
               ),
               todaySuccessCount: response.todaySuccessCount || goal.todaySuccessCount,
               successCount: response.successCount || goal.successCount,
+              streak: response.streak !== undefined ? response.streak : goal.streak,
             };
           }
           return goal;
@@ -354,6 +374,7 @@ export default function HomeScreen() {
               ),
               todayStruggleCount: response.todayStruggleCount || goal.todayStruggleCount,
               struggleCount: response.struggleCount || goal.struggleCount,
+              streak: response.streak !== undefined ? response.streak : goal.streak,
             };
           }
           return goal;
@@ -783,6 +804,12 @@ export default function HomeScreen() {
               color={colors.error}
             />
           </View>
+          {goal.streak !== undefined && goal.streak > 0 && (
+            <View style={styles.tallySection}>
+              <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{goal.streak}</Text>
+              <Text style={styles.streakEmoji}>🔥</Text>
+            </View>
+          )}
         </View>
         
         {goal.dailyEntries && goal.dailyEntries.length > 0 && (
@@ -885,14 +912,16 @@ export default function HomeScreen() {
         <Text style={styles.conciseGoalTitle} numberOfLines={1}>{goal.title}</Text>
         <View style={styles.conciseCounters}>
           <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.success }]}>{successCount}</Text>
+            <Text style={[styles.conciseCounterText, { color: colors.success }]}>✓{successCount}</Text>
           </View>
           <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.text }]}>{goal.successCount}</Text>
+            <Text style={[styles.conciseCounterText, { color: colors.error }]}>✗{struggleCount}</Text>
           </View>
-          <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.textSecondary }]}>S</Text>
-          </View>
+          {goal.streak !== undefined && goal.streak > 0 && (
+            <View style={styles.conciseCounter}>
+              <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{goal.streak}</Text>
+            </View>
+          )}
           {currencyTallies.map((tally, index) => (
             <View key={index} style={styles.conciseCounter}>
               <Text style={[styles.conciseCounterText, { color: tally.currencyType === 'reward' ? colors.success : colors.error }]}>
@@ -900,30 +929,37 @@ export default function HomeScreen() {
               </Text>
             </View>
           ))}
-          <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.error }]}>{struggleCount}</Text>
+        </View>
+        <View style={styles.conciseActions}>
+          <TouchableOpacity
+            style={styles.conciseCheckButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleGoalSuccess(goal.id);
+            }}
+          >
             <IconSymbol
-              ios_icon_name="xmark"
-              android_material_icon_name="close"
-              size={10}
+              ios_icon_name="checkmark.circle.fill"
+              android_material_icon_name="check-circle"
+              size={20}
+              color={colors.success}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.conciseStruggleButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleGoalStruggle(goal.id);
+            }}
+          >
+            <IconSymbol
+              ios_icon_name="xmark.circle.fill"
+              android_material_icon_name="cancel"
+              size={20}
               color={colors.error}
             />
-          </View>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.conciseCheckButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleGoalSuccess(goal.id);
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="checkmark.circle.fill"
-            android_material_icon_name="check-circle"
-            size={20}
-            color={colors.success}
-          />
-        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
@@ -1903,6 +1939,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
+  streakEmoji: {
+    fontSize: 16,
+  },
   entriesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1986,7 +2025,15 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
+  conciseActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   conciseCheckButton: {
+    padding: 2,
+  },
+  conciseStruggleButton: {
     padding: 2,
   },
   journalModalContainer: {
