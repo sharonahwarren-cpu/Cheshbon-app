@@ -171,3 +171,20 @@ export const currencyTransactions = pgTable('currency_transactions', {
   description: text('description'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const alarms = pgTable('alarms', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  calendarType: text('calendar_type'),
+  eventType: text('event_type'),
+  triggers: jsonb('triggers').notNull(),
+  recurring: boolean('recurring').default(false).notNull(),
+  location: jsonb('location'),
+  timezone: text('timezone').notNull(),
+  nextTriggerTimeUtc: integer('next_trigger_time_utc'),
+  notificationId: text('notification_id'),
+  enabled: boolean('enabled').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
