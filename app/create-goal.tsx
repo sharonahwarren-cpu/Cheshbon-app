@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { getLocalTimezone } from '@/utils/dateUtils';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 
 interface Goal {
   id: string;
@@ -165,6 +166,57 @@ export default function CreateGoalScreen() {
     loadData();
   }, []);
 
+  // Reload alarms when returning from create alarm screen
+  const reloadGoalAlarms = React.useCallback(async () => {
+    if (!editingGoalId) return;
+    
+    try {
+      console.log('[CreateGoal] Reloading alarms on focus for goal:', editingGoalId);
+      const [goalData, allAlarmsData] = await Promise.all([
+        authenticatedGet<any>(`/api/goals/${editingGoalId}`),
+        authenticatedGet<any>('/api/alarms'),
+      ]);
+      
+      const goal = (goalData as any)?.data || goalData;
+      const allAlarms = Array.isArray(allAlarmsData) ? allAlarmsData : (allAlarmsData?.data || []);
+      
+      // Get alarm IDs from goal's alarms field
+      let goalAlarmIds: string[] = [];
+      if (goal?.alarms) {
+        const parsedAlarms = typeof goal.alarms === 'string' 
+          ? JSON.parse(goal.alarms) 
+          : goal.alarms;
+        if (Array.isArray(parsedAlarms)) {
+          goalAlarmIds = parsedAlarms.map((a: any) => 
+            typeof a === 'string' ? a : a.id
+          ).filter(Boolean);
+        }
+      }
+      
+      const filteredAlarms = goalAlarmIds.length > 0
+        ? allAlarms.filter((alarm: any) => goalAlarmIds.includes(alarm.id))
+        : [];
+      
+      console.log('[CreateGoal] Reloaded alarms:', filteredAlarms.length);
+      setGoalAlarms(filteredAlarms);
+      if (filteredAlarms.length > 0) {
+        setAlarmsEnabled(true);
+      }
+    } catch (error: any) {
+      console.error('[CreateGoal] Error reloading alarms:', error);
+    }
+  }, [editingGoalId]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Only reload alarms on focus (not the full data load)
+      // This handles the case when user returns from create alarm screen
+      if (editingGoalId && !loading) {
+        reloadGoalAlarms();
+      }
+    }, [editingGoalId, loading, reloadGoalAlarms])
+  );
+
   const loadData = async () => {
     console.log('Loading form data for goal creation/editing');
     setLoading(true);
@@ -179,11 +231,11 @@ export default function CreateGoalScreen() {
 
       if (editingGoalId) {
         promises.push(authenticatedGet<any>(`/api/goals/${editingGoalId}`));
-        promises.push(authenticatedGet<any>(`/api/alarms?goalId=${editingGoalId}`));
+        promises.push(authenticatedGet<any>(`/api/alarms`));
       }
 
       const results = await Promise.all(promises);
-      const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData, alarmsData] = results;
+      const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData, allAlarmsData] = results;
       
       const goals = Array.isArray(goalsData) ? goalsData : (goalsData?.data || []);
       const lifeAreas = Array.isArray(lifeAreasData) ? lifeAreasData : (lifeAreasData?.data || []);
@@ -247,11 +299,37 @@ export default function CreateGoalScreen() {
           setConsequenceAmount((goalDetails.consequenceAmount || goalDetails.consequence_amount)?.toString() || '');
         }
 
-        // Load alarms for this goal
-        if (alarmsData) {
-          const alarms = Array.isArray(alarmsData) ? alarmsData : (alarmsData?.data || []);
-          setGoalAlarms(alarms);
-          if (alarms.length > 0) {
+        // Load alarms for this goal using the goal's alarms jsonb field to filter
+        if (allAlarmsData) {
+          const allAlarms = Array.isArray(allAlarmsData) ? allAlarmsData : (allAlarmsData?.data || []);
+          
+          // Get the alarm IDs stored in the goal's alarms field
+          const goalAlarmsField = goalDetails.alarms;
+          let goalAlarmIds: string[] = [];
+          
+          if (goalAlarmsField) {
+            const parsedAlarms = typeof goalAlarmsField === 'string' 
+              ? JSON.parse(goalAlarmsField) 
+              : goalAlarmsField;
+            
+            if (Array.isArray(parsedAlarms)) {
+              // Support both array of IDs and array of objects with id field
+              goalAlarmIds = parsedAlarms.map((a: any) => 
+                typeof a === 'string' ? a : a.id
+              ).filter(Boolean);
+            }
+          }
+          
+          console.log('[CreateGoal] Goal alarm IDs from goal record:', goalAlarmIds);
+          
+          // Filter all alarms to only those belonging to this goal
+          const filteredAlarms = goalAlarmIds.length > 0
+            ? allAlarms.filter((alarm: any) => goalAlarmIds.includes(alarm.id))
+            : [];
+          
+          console.log('[CreateGoal] Filtered alarms for goal:', filteredAlarms.length);
+          setGoalAlarms(filteredAlarms);
+          if (filteredAlarms.length > 0) {
             setAlarmsEnabled(true);
           }
         }
@@ -400,7 +478,11 @@ export default function CreateGoalScreen() {
     const params = new URLSearchParams({
       goalId: editingGoalId || '',
       goalTitle: alarmTitle,
+      scheduleType: scheduleConfig.scheduleType,
     });
+    if (scheduleConfig.weekdays && scheduleConfig.weekdays.length > 0) {
+      params.set('scheduleDays', scheduleConfig.weekdays.join(','));
+    }
     router.push(`/alarms/create?${params.toString()}`);
   };
 
@@ -441,7 +523,23 @@ export default function CreateGoalScreen() {
       await authenticatedDelete(`/api/alarms/${alarmToDelete.id}`);
       
       // Update local state
-      setGoalAlarms(goalAlarms.filter(alarm => alarm.id !== alarmToDelete.id));
+      const updatedAlarms = goalAlarms.filter(alarm => alarm.id !== alarmToDelete.id);
+      setGoalAlarms(updatedAlarms);
+      
+      // Update the goal's alarms field to remove this alarm ID
+      if (editingGoalId) {
+        const remainingAlarmIds = updatedAlarms.map(a => a.id);
+        console.log('[API] Updating goal alarms field after deletion:', remainingAlarmIds);
+        try {
+          await authenticatedPut(`/api/goals/${editingGoalId}`, {
+            alarms: remainingAlarmIds.length > 0 ? remainingAlarmIds.map(id => ({ id })) : null,
+          });
+          console.log('[API] Goal alarms field updated successfully');
+        } catch (updateError: any) {
+          console.error('[API] Error updating goal alarms field:', updateError);
+          // Non-critical error - alarm was deleted, just the goal reference wasn't updated
+        }
+      }
       
       showSuccess('Alarm deleted successfully!');
     } catch (error: any) {
@@ -817,19 +915,28 @@ export default function CreateGoalScreen() {
                     const alarmEnabled = alarm.enabled;
                     return (
                       <View key={alarm.id} style={styles.alarmItem}>
-                        <View style={styles.alarmItemInfo}>
-                          <Text style={styles.alarmItemTitle}>{alarm.title}</Text>
-                          <Text style={[styles.alarmItemStatus, alarmEnabled && styles.alarmItemStatusActive]}>
-                            {alarmEnabled ? 'Active' : 'Inactive'}
-                          </Text>
+                        <View style={styles.alarmItemLeft}>
+                          {/* FIXED: Active = green bell, Inactive = greyed bell with slash */}
+                          <IconSymbol
+                            ios_icon_name={alarmEnabled ? 'bell.fill' : 'bell.slash'}
+                            android_material_icon_name={alarmEnabled ? 'notifications' : 'notifications-off'}
+                            size={20}
+                            color={alarmEnabled ? '#4CAF50' : colors.textSecondary}
+                          />
+                          <View style={styles.alarmItemInfo}>
+                            <Text style={styles.alarmItemTitle}>{alarm.title}</Text>
+                            <Text style={[styles.alarmItemStatus, alarmEnabled && styles.alarmItemStatusActive]}>
+                              {alarmEnabled ? 'Active' : 'Inactive'}
+                            </Text>
+                          </View>
                         </View>
                         <View style={styles.alarmItemActions}>
                           <TouchableOpacity onPress={() => handleToggleAlarm(alarm.id, alarmEnabled)}>
                             <IconSymbol
-                              ios_icon_name={alarmEnabled ? 'bell.slash' : 'bell'}
-                              android_material_icon_name={alarmEnabled ? 'notifications-off' : 'notifications'}
+                              ios_icon_name={alarmEnabled ? 'pause.circle' : 'play.circle'}
+                              android_material_icon_name={alarmEnabled ? 'pause-circle' : 'play-circle'}
                               size={20}
-                              color={alarmEnabled ? colors.textSecondary : colors.primary}
+                              color={colors.primary}
                             />
                           </TouchableOpacity>
                           <TouchableOpacity onPress={() => handleEditAlarm(alarm.id)}>
@@ -1649,6 +1756,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  alarmItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
   alarmItemInfo: {
     flex: 1,
   },
@@ -1663,7 +1776,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   alarmItemStatusActive: {
-    color: colors.primary,
+    color: '#4CAF50',
     fontWeight: '600',
   },
   alarmItemActions: {

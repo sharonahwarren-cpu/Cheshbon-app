@@ -16,9 +16,10 @@ import {
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import { getLocalTimezone } from '@/utils/dateUtils';
 import type { Alarm, AlarmTrigger, CalendarType, TriggerType } from '@/types/alarm';
 import { requestAllAlarmPermissions, checkAllPermissions } from '@/utils/alarmPermissions';
@@ -46,6 +47,9 @@ export default function CreateAlarmScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const isEditing = !!params.id;
+  const isFromGoal = !!params.goalId;
+  const goalScheduleType = params.scheduleType as string | undefined;
+  const goalScheduleDays = params.scheduleDays ? (params.scheduleDays as string).split(',').map(Number) : [];
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -56,18 +60,15 @@ export default function CreateAlarmScreen() {
 
   // Alarm fields
   const [title, setTitle] = useState('');
-  const [calendarType, setCalendarType] = useState<CalendarType | undefined>();
+  const [calendarType, setCalendarType] = useState<CalendarType>('gregorian');
   const [eventType, setEventType] = useState<string | undefined>();
   const [triggers, setTriggers] = useState<AlarmTrigger[]>([]);
   const [recurring, setRecurring] = useState(false);
   const [enabled, setEnabled] = useState(true);
-  const [useLocation, setUseLocation] = useState(false);
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
-  const [radius, setRadius] = useState('5000');
 
   // UI state
   const [showEventPicker, setShowEventPicker] = useState(false);
+  const [showCalendarTypePicker, setShowCalendarTypePicker] = useState(false);
   const [showTriggerModal, setShowTriggerModal] = useState(false);
   const [editingTriggerIndex, setEditingTriggerIndex] = useState<number | null>(null);
   const [newTrigger, setNewTrigger] = useState<AlarmTrigger>({
@@ -81,6 +82,9 @@ export default function CreateAlarmScreen() {
     backgroundLocation: false,
     notifications: false,
   });
+
+  // Location state - moved to trigger modal
+  const [homeLocation, setHomeLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => {
     loadPreferencesAndAlarm();
@@ -135,11 +139,9 @@ export default function CreateAlarmScreen() {
     console.log('User tapped Grant Permissions button');
     
     if (Platform.OS === 'web') {
-      // Web has limited support for notifications and no geofencing
       setError('Web browsers have limited notification support. Location-based alarms are not available on web. For full functionality, please use the mobile app.');
       console.warn('[Web] Notification and location permissions are limited on web browsers');
       
-      // Still try to request notification permission on web
       try {
         const granted = await requestAllAlarmPermissions();
         if (granted) {
@@ -152,7 +154,6 @@ export default function CreateAlarmScreen() {
       return;
     }
 
-    // Native platforms (iOS/Android)
     const granted = await requestAllAlarmPermissions();
     if (granted) {
       await checkPermissions();
@@ -173,18 +174,11 @@ export default function CreateAlarmScreen() {
       const alarm = (response as any)?.data || response;
 
       setTitle(alarm.title);
-      setCalendarType(alarm.calendarType);
+      setCalendarType(alarm.calendarType || 'gregorian');
       setEventType(alarm.eventType);
       setTriggers(alarm.triggers || []);
       setRecurring(alarm.recurring ?? false);
       setEnabled(alarm.enabled ?? true);
-
-      if (alarm.location) {
-        setUseLocation(true);
-        setLatitude(alarm.location.latitude.toString());
-        setLongitude(alarm.location.longitude.toString());
-        setRadius((alarm.location.radius || 5000).toString());
-      }
 
       console.log('Alarm loaded for editing');
     } catch (err: any) {
@@ -198,8 +192,7 @@ export default function CreateAlarmScreen() {
     const location = await getCurrentLocation();
 
     if (location) {
-      setLatitude(location.latitude.toString());
-      setLongitude(location.longitude.toString());
+      setHomeLocation(location);
       console.log('Current location set:', location);
     } else {
       setError('Failed to get current location. Please check location permissions.');
@@ -267,12 +260,9 @@ export default function CreateAlarmScreen() {
         timezone,
       };
 
-      if (useLocation && latitude && longitude) {
-        alarmData.location = {
-          latitude: parseFloat(latitude),
-          longitude: parseFloat(longitude),
-          radius: parseInt(radius) || 5000,
-        };
+      // Add goalId if creating from goal
+      if (isFromGoal && params.goalId) {
+        alarmData.goalId = params.goalId;
       }
 
       if (isEditing) {
@@ -281,8 +271,43 @@ export default function CreateAlarmScreen() {
         console.log('Alarm updated successfully');
       } else {
         console.log('[API] Requesting POST /api/alarms...');
-        await authenticatedPost('/api/alarms', alarmData);
-        console.log('Alarm created successfully');
+        const createdAlarm = await authenticatedPost<any>('/api/alarms', alarmData);
+        console.log('Alarm created successfully:', createdAlarm?.id);
+        
+        // If creating from a goal, update the goal's alarms field to track this alarm
+        if (isFromGoal && params.goalId && createdAlarm?.id) {
+          console.log('[API] Updating goal alarms field with new alarm ID:', createdAlarm.id);
+          try {
+            // Fetch current goal to get existing alarm IDs
+            const goalData = await authenticatedGet<any>(`/api/goals/${params.goalId}`);
+            const goal = (goalData as any)?.data || goalData;
+            
+            // Parse existing alarms field
+            let existingAlarmIds: string[] = [];
+            if (goal?.alarms) {
+              const parsedAlarms = typeof goal.alarms === 'string' 
+                ? JSON.parse(goal.alarms) 
+                : goal.alarms;
+              if (Array.isArray(parsedAlarms)) {
+                existingAlarmIds = parsedAlarms.map((a: any) => 
+                  typeof a === 'string' ? a : a.id
+                ).filter(Boolean);
+              }
+            }
+            
+            // Add new alarm ID
+            const updatedAlarmIds = [...existingAlarmIds, createdAlarm.id];
+            console.log('[API] Updated goal alarm IDs:', updatedAlarmIds);
+            
+            await authenticatedPut(`/api/goals/${params.goalId}`, {
+              alarms: updatedAlarmIds.map(id => ({ id })),
+            });
+            console.log('[API] Goal alarms field updated successfully');
+          } catch (goalUpdateError: any) {
+            console.error('[API] Error updating goal alarms field:', goalUpdateError);
+            // Non-critical - alarm was created, just the goal reference wasn't updated
+          }
+        }
       }
 
       router.back();
@@ -294,17 +319,47 @@ export default function CreateAlarmScreen() {
     }
   };
 
+  const handleTimePickerConfirm = (date: Date) => {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const timeString = `${hours}:${minutes}`;
+
+    if (timePickerMode === 'value') {
+      setNewTrigger({ ...newTrigger, value: timeString });
+    } else if (timePickerMode === 'min') {
+      setNewTrigger({ ...newTrigger, min: timeString });
+    } else if (timePickerMode === 'max') {
+      setNewTrigger({ ...newTrigger, max: timeString });
+    }
+
+    setShowTimePicker(false);
+  };
+
+  const parseTimeString = (timeStr: string): Date => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(hours || 9, minutes || 0, 0, 0);
+    return date;
+  };
+
+  const formatTime12Hour = (time24: string): string => {
+    const [hours, minutes] = time24.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
   const renderTriggerItem = (trigger: AlarmTrigger, index: number) => {
     let triggerText = '';
 
     switch (trigger.type) {
       case 'time':
-        triggerText = `Time: ${trigger.value}`;
+        triggerText = `Time: ${formatTime12Hour(trigger.value || '09:00')}`;
         break;
       case 'astronomical':
         triggerText = `Astronomical: ${trigger.value}`;
-        if (trigger.min) triggerText += ` (not before ${trigger.min})`;
-        if (trigger.max) triggerText += ` (not after ${trigger.max})`;
+        if (trigger.min) triggerText += ` (not before ${formatTime12Hour(trigger.min)})`;
+        if (trigger.max) triggerText += ` (not after ${formatTime12Hour(trigger.max)})`;
         break;
       case 'location':
         triggerText = `Location: ${trigger.value}`;
@@ -352,9 +407,10 @@ export default function CreateAlarmScreen() {
   }
 
   const showCalendarTypeSelector = alternativeCalendar !== null;
-  const calendarLabel = alternativeCalendar === 'hebrew' ? 'Hebrew' : 
-                        alternativeCalendar === 'chinese' ? 'Chinese' : 
-                        alternativeCalendar === 'islamic' ? 'Islamic' : 'Gregorian';
+  const calendarOptions = ['gregorian'];
+  if (alternativeCalendar) {
+    calendarOptions.push(alternativeCalendar);
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -375,6 +431,26 @@ export default function CreateAlarmScreen() {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
+
+          {/* Goal Schedule Info Banner - shown when creating alarm from a goal */}
+          {isFromGoal && !isEditing && (
+            <View style={styles.scheduleInfoBanner}>
+              <IconSymbol
+                ios_icon_name="calendar.badge.clock"
+                android_material_icon_name="event"
+                size={20}
+                color={colors.primary}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.scheduleInfoTitle}>Goal-Linked Alarm</Text>
+                <Text style={styles.scheduleInfoText}>
+                  {goalScheduleType && goalScheduleType !== 'Always Active'
+                    ? `This alarm will only trigger on days when the goal is scheduled (${goalScheduleType}${goalScheduleDays.length > 0 ? `, ${goalScheduleDays.length} days/week` : ''}).`
+                    : 'This alarm is linked to your goal and will trigger every day (goal is always active).'}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Permissions Warning */}
           {(!permissions.notifications || !permissions.foregroundLocation) && (
@@ -417,23 +493,28 @@ export default function CreateAlarmScreen() {
           {showCalendarTypeSelector && (
             <View style={styles.section}>
               <Text style={styles.label}>Calendar Type</Text>
-              <View style={styles.calendarTypeDisplay}>
+              <TouchableOpacity
+                style={styles.picker}
+                onPress={() => setShowCalendarTypePicker(true)}
+              >
+                <Text style={styles.pickerText}>
+                  {calendarType.charAt(0).toUpperCase() + calendarType.slice(1)}
+                </Text>
                 <IconSymbol
-                  ios_icon_name="calendar"
-                  android_material_icon_name="calendar-today"
+                  ios_icon_name="chevron.down"
+                  android_material_icon_name="arrow-drop-down"
                   size={20}
-                  color={colors.primary}
+                  color={colors.textSecondary}
                 />
-                <Text style={styles.calendarTypeText}>{calendarLabel}</Text>
-              </View>
+              </TouchableOpacity>
               <Text style={styles.helpText}>
-                Using {calendarLabel} calendar (set in Preferences)
+                Choose between Gregorian and {alternativeCalendar} calendar
               </Text>
             </View>
           )}
 
           {/* Event Type (if Hebrew calendar selected) */}
-          {alternativeCalendar === 'hebrew' && (
+          {calendarType === 'hebrew' && (
             <View style={styles.section}>
               <Text style={styles.label}>Event Type (Optional)</Text>
               <TouchableOpacity
@@ -497,97 +578,6 @@ export default function CreateAlarmScreen() {
             </Text>
           </View>
 
-          {/* Location */}
-          <View style={styles.section}>
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Use Specific Location</Text>
-                <Text style={styles.helpText}>
-                  For astronomical calculations or geofencing
-                </Text>
-              </View>
-              <Switch
-                value={useLocation}
-                onValueChange={setUseLocation}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={useLocation ? colors.background : colors.textSecondary}
-              />
-            </View>
-
-            {useLocation && (
-              <>
-                <View style={styles.locationExplanation}>
-                  <IconSymbol
-                    ios_icon_name="info.circle"
-                    android_material_icon_name="info"
-                    size={18}
-                    color={colors.accent}
-                  />
-                  <Text style={styles.locationExplanationText}>
-                    Set a location for astronomical events (sunrise/sunset) or create a geofence. 
-                    The alarm will trigger when you enter/exit the area defined by the radius.
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.locationButton}
-                  onPress={fetchCurrentLocation}
-                >
-                  <IconSymbol
-                    ios_icon_name="location"
-                    android_material_icon_name="my-location"
-                    size={20}
-                    color={colors.primary}
-                  />
-                  <Text style={styles.locationButtonText}>Use Current Location</Text>
-                </TouchableOpacity>
-
-                <View style={styles.locationInputs}>
-                  <View style={styles.locationInputRow}>
-                    <Text style={styles.locationLabel}>Latitude:</Text>
-                    <TextInput
-                      style={styles.locationInput}
-                      value={latitude}
-                      onChangeText={setLatitude}
-                      placeholder="-37.8136"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={styles.locationInputRow}>
-                    <Text style={styles.locationLabel}>Longitude:</Text>
-                    <TextInput
-                      style={styles.locationInput}
-                      value={longitude}
-                      onChangeText={setLongitude}
-                      placeholder="144.9631"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numeric"
-                    />
-                  </View>
-
-                  <View style={styles.locationInputRow}>
-                    <Text style={styles.locationLabel}>Radius:</Text>
-                    <TextInput
-                      style={styles.locationInput}
-                      value={radius}
-                      onChangeText={setRadius}
-                      placeholder="5000"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numeric"
-                    />
-                    <Text style={styles.locationUnit}>meters (e.g. 5000 = 5km)</Text>
-                  </View>
-                </View>
-
-                <Text style={styles.locationExample}>
-                  Example: Set radius to 5000 meters (5km) to trigger when you're within 5km of the location.
-                </Text>
-              </>
-            )}
-          </View>
-
           {/* Enabled */}
           <View style={styles.section}>
             <View style={styles.switchRow}>
@@ -622,6 +612,37 @@ export default function CreateAlarmScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Calendar Type Picker Modal */}
+      <Modal visible={showCalendarTypePicker} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Calendar Type</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {calendarOptions.map(cal => (
+                <TouchableOpacity
+                  key={cal}
+                  style={styles.modalOption}
+                  onPress={() => {
+                    setCalendarType(cal as CalendarType);
+                    setShowCalendarTypePicker(false);
+                  }}
+                >
+                  <Text style={styles.modalOptionText}>
+                    {cal.charAt(0).toUpperCase() + cal.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={styles.modalCancel}
+              onPress={() => setShowCalendarTypePicker(false)}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Event Type Picker Modal */}
       <Modal visible={showEventPicker} transparent animationType="slide">
@@ -664,9 +685,9 @@ export default function CreateAlarmScreen() {
                 {editingTriggerIndex !== null ? 'Edit Trigger' : 'Add Trigger'}
               </Text>
 
-              <ScrollView style={{ maxHeight: 500 }}>
+              <ScrollView style={{ maxHeight: 500 }} nestedScrollEnabled={true}>
                 {/* Trigger Type */}
-                <Text style={styles.label}>Trigger Type</Text>
+                <Text style={styles.label}>Alarm Type</Text>
                 <View style={styles.triggerTypeRow}>
                   {(['time', 'astronomical', 'location'] as const).map(type => (
                     <TouchableOpacity
@@ -689,18 +710,53 @@ export default function CreateAlarmScreen() {
                   ))}
                 </View>
 
+                {/* AND/OR Logic - Show ALWAYS (not just when triggers.length > 0) */}
+                <Text style={styles.label}>Combine with other triggers using</Text>
+                <View style={styles.triggerTypeRow}>
+                  {(['AND', 'OR'] as const).map(logic => (
+                    <TouchableOpacity
+                      key={logic}
+                      style={[
+                        styles.triggerTypeButton,
+                        newTrigger.logic === logic && styles.triggerTypeButtonActive,
+                      ]}
+                      onPress={() =>
+                        setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.triggerTypeText,
+                          newTrigger.logic === logic && styles.triggerTypeTextActive,
+                        ]}
+                      >
+                        {logic}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 {/* Trigger Value */}
                 {newTrigger.type === 'time' && (
                   <>
-                    <Text style={styles.label}>Time (HH:MM)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={newTrigger.value || ''}
-                      onChangeText={val => setNewTrigger({ ...newTrigger, value: val })}
-                      placeholder="09:00"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numbers-and-punctuation"
-                    />
+                    <Text style={styles.label}>Time</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        setTimePickerMode('value');
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="schedule"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.timePickerButtonText}>
+                        {formatTime12Hour(newTrigger.value || '09:00')}
+                      </Text>
+                    </TouchableOpacity>
                   </>
                 )}
 
@@ -708,7 +764,7 @@ export default function CreateAlarmScreen() {
                   <>
                     <Text style={styles.label}>Astronomical Event</Text>
                     <ScrollView 
-                      style={{ maxHeight: 300 }} 
+                      style={{ maxHeight: 250 }} 
                       nestedScrollEnabled={true}
                       showsVerticalScrollIndicator={true}
                     >
@@ -733,25 +789,43 @@ export default function CreateAlarmScreen() {
                       ))}
                     </ScrollView>
 
-                    <Text style={styles.label}>Not Before (optional, HH:MM)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={newTrigger.min || ''}
-                      onChangeText={val => setNewTrigger({ ...newTrigger, min: val || undefined })}
-                      placeholder="06:00"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numbers-and-punctuation"
-                    />
+                    <Text style={styles.label}>Not Before (optional)</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        setTimePickerMode('min');
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="schedule"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.timePickerButtonText}>
+                        {newTrigger.min ? formatTime12Hour(newTrigger.min) : 'Set minimum time'}
+                      </Text>
+                    </TouchableOpacity>
 
-                    <Text style={styles.label}>Not After (optional, HH:MM)</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={newTrigger.max || ''}
-                      onChangeText={val => setNewTrigger({ ...newTrigger, max: val || undefined })}
-                      placeholder="22:00"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="numbers-and-punctuation"
-                    />
+                    <Text style={styles.label}>Not After (optional)</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        setTimePickerMode('max');
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="schedule"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.timePickerButtonText}>
+                        {newTrigger.max ? formatTime12Hour(newTrigger.max) : 'Set maximum time'}
+                      </Text>
+                    </TouchableOpacity>
                   </>
                 )}
 
@@ -761,6 +835,7 @@ export default function CreateAlarmScreen() {
                     {[
                       { value: 'enterHome', label: 'Enter Home' },
                       { value: 'exitHome', label: 'Exit Home' },
+                      { value: 'useSpecific', label: 'Use Specific Location' },
                     ].map(event => (
                       <TouchableOpacity
                         key={event.value}
@@ -780,39 +855,49 @@ export default function CreateAlarmScreen() {
                         </Text>
                       </TouchableOpacity>
                     ))}
-                    <Text style={styles.helpText}>
-                      Location-based triggers require "Use Specific Location" to be enabled above.
-                    </Text>
-                  </>
-                )}
+                    
+                    {(newTrigger.value === 'enterHome' || newTrigger.value === 'exitHome') && (
+                      <View style={styles.locationInfo}>
+                        <IconSymbol
+                          ios_icon_name="info.circle"
+                          android_material_icon_name="info"
+                          size={18}
+                          color={colors.accent}
+                        />
+                        <Text style={styles.locationInfoText}>
+                          Make sure your home location is set in Preferences. Location permissions are required for this feature to work.
+                        </Text>
+                      </View>
+                    )}
 
-                {/* Logic (AND/OR) for combining with other triggers */}
-                {triggers.length > 0 && (
-                  <>
-                    <Text style={styles.label}>Combine with other triggers using</Text>
-                    <View style={styles.triggerTypeRow}>
-                      {(['AND', 'OR'] as const).map(logic => (
+                    {newTrigger.value === 'useSpecific' && (
+                      <View style={styles.locationSection}>
                         <TouchableOpacity
-                          key={logic}
-                          style={[
-                            styles.triggerTypeButton,
-                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
-                          ]}
-                          onPress={() =>
-                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
-                          }
+                          style={styles.locationButton}
+                          onPress={fetchCurrentLocation}
                         >
-                          <Text
-                            style={[
-                              styles.triggerTypeText,
-                              newTrigger.logic === logic && styles.triggerTypeTextActive,
-                            ]}
-                          >
-                            {logic}
-                          </Text>
+                          <IconSymbol
+                            ios_icon_name="location"
+                            android_material_icon_name="my-location"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.locationButtonText}>Use Current Location</Text>
                         </TouchableOpacity>
-                      ))}
-                    </View>
+                        
+                        {homeLocation && (
+                          <View style={styles.locationDisplay}>
+                            <Text style={styles.locationDisplayText}>
+                              Lat: {homeLocation.latitude.toFixed(4)}, Lon: {homeLocation.longitude.toFixed(4)}
+                            </Text>
+                          </View>
+                        )}
+                        
+                        <Text style={styles.helpText}>
+                          Alarm will trigger when you enter/exit a 5km radius of this location
+                        </Text>
+                      </View>
+                    )}
                   </>
                 )}
               </ScrollView>
@@ -837,6 +922,19 @@ export default function CreateAlarmScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Time Picker Modal */}
+      <DateTimePickerModal
+        isVisible={showTimePicker}
+        mode="time"
+        onConfirm={handleTimePickerConfirm}
+        onCancel={() => setShowTimePicker(false)}
+        date={parseTimeString(
+          timePickerMode === 'value' ? (newTrigger.value || '09:00') :
+          timePickerMode === 'min' ? (newTrigger.min || '06:00') :
+          (newTrigger.max || '22:00')
+        )}
+      />
     </SafeAreaView>
   );
 }
@@ -863,6 +961,29 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.error,
     fontSize: 14,
+  },
+  scheduleInfoBanner: {
+    backgroundColor: `${colors.primary}15`,
+    padding: 12,
+    margin: 16,
+    marginBottom: 0,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+  },
+  scheduleInfoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+    marginBottom: 2,
+  },
+  scheduleInfoText: {
+    fontSize: 13,
+    color: colors.text,
+    lineHeight: 18,
   },
   warningBanner: {
     backgroundColor: '#FFF3CD',
@@ -928,21 +1049,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  calendarTypeDisplay: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  calendarTypeText: {
-    fontSize: 16,
-    color: colors.text,
-    fontWeight: '500',
-  },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -994,71 +1100,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.primary,
     fontWeight: '500',
-  },
-  locationExplanation: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: 12,
-    backgroundColor: `${colors.accent}15`,
-    borderRadius: 8,
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  locationExplanationText: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.text,
-    lineHeight: 18,
-  },
-  locationButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 12,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  locationButtonText: {
-    fontSize: 14,
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  locationInputs: {
-    marginTop: 12,
-  },
-  locationInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  locationLabel: {
-    fontSize: 14,
-    color: colors.text,
-    width: 80,
-  },
-  locationInput: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 8,
-    fontSize: 14,
-    color: colors.text,
-  },
-  locationUnit: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginLeft: 8,
-  },
-  locationExample: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 8,
-    fontStyle: 'italic',
   },
   saveButton: {
     backgroundColor: colors.primary,
@@ -1146,6 +1187,68 @@ const styles = StyleSheet.create({
   triggerTypeTextActive: {
     color: colors.background,
     fontWeight: '600',
+  },
+  timePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 14,
+    marginBottom: 12,
+  },
+  timePickerButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  locationInfo: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 12,
+    backgroundColor: `${colors.accent}15`,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  locationInfoText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.text,
+    lineHeight: 18,
+  },
+  locationSection: {
+    marginTop: 12,
+  },
+  locationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 12,
+  },
+  locationButtonText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  locationDisplay: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  locationDisplayText: {
+    fontSize: 14,
+    color: colors.text,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   triggerModalButtons: {
     flexDirection: 'row',
