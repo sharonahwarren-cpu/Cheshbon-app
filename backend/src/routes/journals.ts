@@ -160,6 +160,7 @@ export function registerJournalsRoutes(app: App) {
         .orderBy((t) => t.entryDate);
 
       // Create excerpts showing context around the keyword
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
       const results = entries.map(entry => {
         const contentLower = entry.content.toLowerCase();
         const queryLower = q.toLowerCase();
@@ -178,7 +179,7 @@ export function registerJournalsRoutes(app: App) {
           id: entry.id,
           content: entry.content,
           entryDate: entry.entryDate,
-          createdAt: entry.createdAt,
+          createdAt: convertToISO(entry.createdAt),
           excerpt,
         };
       });

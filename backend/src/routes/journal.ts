@@ -23,8 +23,15 @@ export function registerJournalRoutes(app: App) {
         .where(eq(schema.journalEntries.userId, session.user.id))
         .orderBy(desc(schema.journalEntries.createdAt));
 
-      app.logger.info({ userId: session.user.id, count: entries.length }, 'Journal entries fetched successfully');
-      return entries;
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const entriesWithDates = entries.map(entry => ({
+        ...entry,
+        createdAt: convertToISO(entry.createdAt),
+        updatedAt: convertToISO(entry.updatedAt),
+      }));
+
+      app.logger.info({ userId: session.user.id, count: entriesWithDates.length }, 'Journal entries fetched successfully');
+      return entriesWithDates;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch journal entries');
       throw error;
@@ -63,8 +70,15 @@ export function registerJournalRoutes(app: App) {
         .returning();
       const entry = entries[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const entryWithDates = {
+        ...entry,
+        createdAt: convertToISO(entry.createdAt),
+        updatedAt: convertToISO(entry.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, entryId: entry.id }, 'Journal entry created successfully');
-      return entry;
+      return entryWithDates;
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id, body: { mood: body.mood } },
@@ -123,8 +137,15 @@ export function registerJournalRoutes(app: App) {
         .returning();
       const updatedEntry = updatedEntries[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const entryWithDates = {
+        ...updatedEntry,
+        createdAt: convertToISO(updatedEntry.createdAt),
+        updatedAt: convertToISO(updatedEntry.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, entryId: id }, 'Journal entry updated successfully');
-      return updatedEntry;
+      return entryWithDates;
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id, entryId: id },

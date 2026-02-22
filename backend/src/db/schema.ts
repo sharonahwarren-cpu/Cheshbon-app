@@ -85,6 +85,7 @@ export const goals = pgTable('goals', {
   consequenceFailures: integer('consequence_failures'),
   consequenceAmount: integer('consequence_amount'),
   alarms: jsonb('alarms'),
+  startDate: timestamp('start_date', { withTimezone: true }),
   endDate: timestamp('end_date', { withTimezone: true }),
   calendarType: text('calendar_type'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -103,6 +104,7 @@ export const userPreferences = pgTable('user_preferences', {
   reflectionCategories: jsonb('reflection_categories'),
   preferredHomeScreen: text('preferred_home_screen').default('reflect').notNull(),
   alternativeCalendar: text('alternative_calendar').default('gregorian').notNull(),
+  timezone: text('timezone').default('UTC').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
