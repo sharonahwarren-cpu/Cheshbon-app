@@ -116,6 +116,7 @@ export function registerReportsRoutes(app: App) {
       const goalMap = new Map(goals.map(g => [g.id, g]));
 
       // Filter reflections that affected this currency
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
       const currencyReflections = reflections
         .filter(reflection => {
           // Check if reflection has currencyChange for this currency
@@ -153,7 +154,7 @@ export function registerReportsRoutes(app: App) {
             linkedGoalTitle: goal?.title || null,
             outcome: reflection.outcome,
             currencyChange: reflection.currencyChange,
-            createdAt: reflection.createdAt,
+            createdAt: convertToISO(reflection.createdAt),
           };
         });
 
@@ -165,14 +166,14 @@ export function registerReportsRoutes(app: App) {
 
         return {
           id: transaction.id,
-          entryDate: transaction.createdAt,
+          entryDate: transaction.createdAt instanceof Date ? transaction.createdAt.toISOString() : new Date(transaction.createdAt).toISOString(),
           type: 'transaction',
           transactionType: isManualClaim ? 'claim' : isManualPay ? 'pay' : transaction.transactionType,
           amount: transaction.amount,
           description: transaction.description,
           linkedGoalId: transaction.goalId,
           linkedGoalTitle: goal?.title || null,
-          createdAt: transaction.createdAt,
+          createdAt: transaction.createdAt instanceof Date ? transaction.createdAt.toISOString() : new Date(transaction.createdAt).toISOString(),
         };
       });
 

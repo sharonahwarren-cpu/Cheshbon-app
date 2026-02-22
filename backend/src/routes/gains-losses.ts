@@ -23,8 +23,15 @@ export function registerGainsLossesRoutes(app: App) {
         .where(eq(schema.gainsLosses.userId, session.user.id))
         .orderBy(desc(schema.gainsLosses.createdAt));
 
-      app.logger.info({ userId: session.user.id, count: items.length }, 'Gains and losses fetched successfully');
-      return items;
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const itemsWithDates = items.map(item => ({
+        ...item,
+        createdAt: convertToISO(item.createdAt),
+        updatedAt: convertToISO(item.updatedAt),
+      }));
+
+      app.logger.info({ userId: session.user.id, count: itemsWithDates.length }, 'Gains and losses fetched successfully');
+      return itemsWithDates;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch gains and losses');
       throw error;
@@ -69,8 +76,15 @@ export function registerGainsLossesRoutes(app: App) {
         .returning();
       const item = items[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const itemWithDates = {
+        ...item,
+        createdAt: convertToISO(item.createdAt),
+        updatedAt: convertToISO(item.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, itemId: item.id }, 'Gain/loss created successfully');
-      return item;
+      return itemWithDates;
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id, name: body.name },
@@ -133,8 +147,15 @@ export function registerGainsLossesRoutes(app: App) {
         .returning();
       const updatedItem = updatedItems[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const itemWithDates = {
+        ...updatedItem,
+        createdAt: convertToISO(updatedItem.createdAt),
+        updatedAt: convertToISO(updatedItem.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, itemId: id }, 'Gain/loss updated successfully');
-      return updatedItem;
+      return itemWithDates;
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id, itemId: id },

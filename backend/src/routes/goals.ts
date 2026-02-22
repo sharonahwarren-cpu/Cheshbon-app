@@ -111,10 +111,18 @@ export function registerGoalRoutes(app: App) {
         ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth)
         : null;
 
+      // Convert dates to ISO 8601 UTC format
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+
       const goalWithBalances = {
         ...goal,
         rewardCurrencyBalance,
         consequenceCurrencyBalance,
+        targetDate: convertToISO(goal.targetDate),
+        startDate: convertToISO(goal.startDate),
+        endDate: convertToISO(goal.endDate),
+        createdAt: convertToISO(goal.createdAt),
+        updatedAt: convertToISO(goal.updatedAt),
         yearlyDates: goal.scheduleDatesOfYear || [],
         monthlyDates: goal.scheduleDatesOfMonth || [],
         monthlyWeekdayRules: monthlyWeekdayRules || [],
@@ -152,7 +160,10 @@ export function registerGoalRoutes(app: App) {
         .from(schema.reflections)
         .where(eq(schema.reflections.userId, session.user.id));
 
-      // Map goals with success/struggle counts
+      // Helper to convert dates to ISO 8601 UTC format
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+
+      // Map goals with success/struggle counts and UTC dates
       const goalsWithCounts = goalsData.map(goal => {
         // Count successes and struggles for this goal
         let successCount = 0;
@@ -171,6 +182,11 @@ export function registerGoalRoutes(app: App) {
         const goalWithCounts = Object.assign({}, goal, {
           successCount,
           struggleCount,
+          targetDate: convertToISO(goal.targetDate),
+          startDate: convertToISO(goal.startDate),
+          endDate: convertToISO(goal.endDate),
+          createdAt: convertToISO(goal.createdAt),
+          updatedAt: convertToISO(goal.updatedAt),
         });
         return goalWithCounts;
       });
@@ -212,6 +228,7 @@ export function registerGoalRoutes(app: App) {
       scheduleType?: string;
       scheduleTimesPerDay?: number;
       targetDate?: string;
+      startDate?: string;
       endDate?: string;
       progress?: number;
       reward?: { currencyId: string; successes: number; amount: number };
@@ -237,14 +254,29 @@ export function registerGoalRoutes(app: App) {
     );
 
     try {
+      // Convert ISO 8601 strings to UTC timestamps
+      const startDate = body.startDate ? new Date(body.startDate) : null;
+      const endDate = body.endDate ? new Date(body.endDate) : null;
+      const targetDate = body.targetDate ? new Date(body.targetDate) : null;
+
+      app.logger.info(
+        {
+          userId: session.user.id,
+          startDate: startDate?.toISOString(),
+          endDate: endDate?.toISOString(),
+        },
+        'Converting goal dates to UTC'
+      );
+
       const goals = await app.db
         .insert(schema.goals)
         .values({
           userId: session.user.id,
           title: body.title,
           description: body.description || null,
-          targetDate: body.targetDate ? new Date(body.targetDate) : null,
-          endDate: body.endDate ? new Date(body.endDate) : null,
+          targetDate,
+          startDate,
+          endDate,
           progress: body.progress || 0,
           parentGoalId: body.parentGoalId || null,
           lifeAreaId: body.lifeAreaId || null,
@@ -300,6 +332,7 @@ export function registerGoalRoutes(app: App) {
       scheduleType?: string;
       scheduleTimesPerDay?: number;
       targetDate?: string;
+      startDate?: string;
       endDate?: string;
       completed?: boolean;
       progress?: number;
@@ -353,7 +386,16 @@ export function registerGoalRoutes(app: App) {
       if (body.scheduleType !== undefined) updateData.scheduleType = body.scheduleType;
       if (body.scheduleTimesPerDay !== undefined) updateData.scheduleTimesPerDay = body.scheduleTimesPerDay || null;
       if (body.targetDate !== undefined) updateData.targetDate = body.targetDate ? new Date(body.targetDate) : null;
-      if (body.endDate !== undefined) updateData.endDate = body.endDate ? new Date(body.endDate) : null;
+      if (body.startDate !== undefined) updateData.startDate = body.startDate ? new Date(body.startDate) : null;
+      if (body.endDate !== undefined) {
+        updateData.endDate = body.endDate ? new Date(body.endDate) : null;
+        if (body.endDate) {
+          app.logger.info(
+            { userId: session.user.id, goalId: id, endDate: new Date(body.endDate).toISOString() },
+            'Updating goal endDate to UTC'
+          );
+        }
+      }
       if (body.selectedWeekdays !== undefined || body.selectedFortnightDays !== undefined) {
         updateData.scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
       }

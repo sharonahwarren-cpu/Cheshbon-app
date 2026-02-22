@@ -86,8 +86,15 @@ export function registerReflectionsRoutes(app: App) {
           eq(schema.reflections.entryDate, date)
         ));
 
-      app.logger.info({ userId: session.user.id, date, count: reflections.length }, 'Reflections retrieved');
-      return reflections;
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const reflectionsWithDates = reflections.map(reflection => ({
+        ...reflection,
+        createdAt: convertToISO(reflection.createdAt),
+        updatedAt: convertToISO(reflection.updatedAt),
+      }));
+
+      app.logger.info({ userId: session.user.id, date, count: reflectionsWithDates.length }, 'Reflections retrieved');
+      return reflectionsWithDates;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, date }, 'Failed to fetch reflections by date');
       throw error;
@@ -222,8 +229,15 @@ export function registerReflectionsRoutes(app: App) {
         }
       }
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const reflectionWithDates = {
+        ...reflection,
+        createdAt: convertToISO(reflection.createdAt),
+        updatedAt: convertToISO(reflection.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, reflectionId: reflection.id, date: body.date }, 'Reflection created');
-      return reflection;
+      return reflectionWithDates;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, date: body.date }, 'Failed to create reflection');
       throw error;
@@ -307,8 +321,15 @@ export function registerReflectionsRoutes(app: App) {
         .returning();
       const updatedReflection = updatedReflections[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const reflectionWithDates = {
+        ...updatedReflection,
+        createdAt: convertToISO(updatedReflection.createdAt),
+        updatedAt: convertToISO(updatedReflection.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, reflectionId: id }, 'Reflection updated');
-      return updatedReflection;
+      return reflectionWithDates;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, reflectionId: id }, 'Failed to update reflection');
       throw error;
@@ -390,8 +411,15 @@ export function registerReflectionsRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const reflectionWithDates = {
+        ...reflections[0],
+        createdAt: convertToISO(reflections[0].createdAt),
+        updatedAt: convertToISO(reflections[0].updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, reflectionId: id }, 'Reflection retrieved');
-      return reflections[0];
+      return reflectionWithDates;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, reflectionId: id }, 'Failed to fetch reflection');
       throw error;

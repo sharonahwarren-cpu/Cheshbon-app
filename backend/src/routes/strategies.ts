@@ -24,8 +24,11 @@ export function registerStrategiesRoutes(app: App) {
         .orderBy(desc(schema.strategies.createdAt));
 
       // Calculate success rate for each strategy
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
       const strategiesWithRate = strategies.map(strategy => ({
         ...strategy,
+        createdAt: convertToISO(strategy.createdAt),
+        updatedAt: convertToISO(strategy.updatedAt),
         successRate: strategy.timesUsed > 0 ? (strategy.successCount / strategy.timesUsed * 100) : 0,
       }));
 
@@ -76,8 +79,15 @@ export function registerStrategiesRoutes(app: App) {
         .returning();
       const strategy = strategies[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const strategyWithDates = {
+        ...strategy,
+        createdAt: convertToISO(strategy.createdAt),
+        updatedAt: convertToISO(strategy.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, strategyId: strategy.id }, 'Strategy created successfully');
-      return strategy;
+      return strategyWithDates;
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id, name: body.name },
@@ -146,8 +156,15 @@ export function registerStrategiesRoutes(app: App) {
         .returning();
       const updatedStrategy = updatedStrategies[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const strategyWithDates = {
+        ...updatedStrategy,
+        createdAt: convertToISO(updatedStrategy.createdAt),
+        updatedAt: convertToISO(updatedStrategy.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, strategyId: id }, 'Strategy updated successfully');
-      return updatedStrategy;
+      return strategyWithDates;
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id, strategyId: id },

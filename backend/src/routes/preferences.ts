@@ -38,6 +38,7 @@ export function registerPreferencesRoutes(app: App) {
             reflectionCategories: JSON.stringify(['Action', 'Speech', 'Thought']),
             preferredHomeScreen: 'reflect',
             alternativeCalendar: 'gregorian',
+            timezone: 'UTC',
           })
           .returning();
         preferences = newPreferences;
@@ -76,6 +77,7 @@ export function registerPreferencesRoutes(app: App) {
       reflectionCategories?: string[];
       preferredHomeScreen?: 'reflect' | 'goals-detailed' | 'goals-concise';
       alternativeCalendar?: 'gregorian' | 'hebrew' | 'chinese';
+      timezone?: string;
     };
 
     app.logger.info(
@@ -106,6 +108,7 @@ export function registerPreferencesRoutes(app: App) {
             reflectionCategories: body.reflectionCategories ? JSON.stringify(body.reflectionCategories) : JSON.stringify(['Action', 'Speech', 'Thought']),
             preferredHomeScreen: body.preferredHomeScreen || 'reflect',
             alternativeCalendar: body.alternativeCalendar || 'gregorian',
+            timezone: body.timezone || 'UTC',
           })
           .returning();
         app.logger.info({ userId: session.user.id }, 'User preferences created successfully');
@@ -122,6 +125,7 @@ export function registerPreferencesRoutes(app: App) {
       if (body.reflectionCategories !== undefined) updateData.reflectionCategories = body.reflectionCategories ? JSON.stringify(body.reflectionCategories) : null;
       if (body.preferredHomeScreen !== undefined) updateData.preferredHomeScreen = body.preferredHomeScreen;
       if (body.alternativeCalendar !== undefined) updateData.alternativeCalendar = body.alternativeCalendar;
+      if (body.timezone !== undefined) updateData.timezone = body.timezone;
       updateData.updatedAt = new Date();
 
       const updatedPreferences = await app.db

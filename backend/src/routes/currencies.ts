@@ -23,8 +23,15 @@ export function registerCurrenciesRoutes(app: App) {
         .where(eq(schema.currencies.userId, session.user.id))
         .orderBy(desc(schema.currencies.createdAt));
 
-      app.logger.info({ userId: session.user.id, count: currencies.length }, 'Currencies fetched successfully');
-      return currencies;
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const currenciesWithDates = currencies.map(currency => ({
+        ...currency,
+        createdAt: convertToISO(currency.createdAt),
+        updatedAt: convertToISO(currency.updatedAt),
+      }));
+
+      app.logger.info({ userId: session.user.id, count: currenciesWithDates.length }, 'Currencies fetched successfully');
+      return currenciesWithDates;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch currencies');
       throw error;
@@ -63,8 +70,15 @@ export function registerCurrenciesRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const currencyWithDates = {
+        ...currencies[0],
+        createdAt: convertToISO(currencies[0].createdAt),
+        updatedAt: convertToISO(currencies[0].updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, currencyId: id }, 'Currency retrieved successfully');
-      return currencies[0];
+      return currencyWithDates;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, currencyId: id }, 'Failed to fetch currency');
       throw error;
@@ -106,8 +120,15 @@ export function registerCurrenciesRoutes(app: App) {
         .returning();
       const currency = currencies[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const currencyWithDates = {
+        ...currency,
+        createdAt: convertToISO(currency.createdAt),
+        updatedAt: convertToISO(currency.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, currencyId: currency.id }, 'Currency created successfully');
-      return currency;
+      return currencyWithDates;
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id, name: body.name },
@@ -172,8 +193,15 @@ export function registerCurrenciesRoutes(app: App) {
         .returning();
       const updatedCurrency = updatedCurrencies[0];
 
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const currencyWithDates = {
+        ...updatedCurrency,
+        createdAt: convertToISO(updatedCurrency.createdAt),
+        updatedAt: convertToISO(updatedCurrency.updatedAt),
+      };
+
       app.logger.info({ userId: session.user.id, currencyId: id }, 'Currency updated successfully');
-      return updatedCurrency;
+      return currencyWithDates;
     } catch (error) {
       app.logger.error(
         { err: error, userId: session.user.id, currencyId: id },
