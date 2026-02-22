@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Switch,
+  Modal,
   Platform,
 } from 'react-native';
 import { IconSymbol } from './IconSymbol';
@@ -54,8 +54,8 @@ export interface ScheduleConfig {
   endDate?: Date;
   exclusionDates?: Date[];
   
-  // Alarms
-  alarmIds?: string[];
+  // Alarms - moved outside
+  alarmsEnabled?: boolean;
 }
 
 interface GoalSchedulerProps {
@@ -90,12 +90,11 @@ const ISLAMIC_MONTHS = ['Muharram', 'Safar', 'Rabi I', 'Rabi II', 'Jumada I', 'J
 
 export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSchedulerProps) {
   const router = useRouter();
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showAlarms, setShowAlarms] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState<'start' | 'end' | 'exclusion' | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState<'end' | 'exclusion' | null>(null);
   const [tempDate, setTempDate] = useState(new Date());
   const [showMonthlyAdvanced, setShowMonthlyAdvanced] = useState(false);
   const [showYearlyAdvanced, setShowYearlyAdvanced] = useState(false);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
     onChange({ ...config, ...updates });
@@ -152,6 +151,76 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           placeholderTextColor={colors.textSecondary}
           keyboardType="number-pad"
         />
+        
+        {/* End Date - Always Visible */}
+        <Text style={styles.subLabel}>End Date (optional)</Text>
+        <TouchableOpacity
+          style={styles.datePickerButton}
+          onPress={() => {
+            setTempDate(config.endDate || new Date());
+            setShowDatePicker('end');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="calendar"
+            android_material_icon_name="calendar-today"
+            size={18}
+            color={colors.text}
+          />
+          <Text style={styles.datePickerText}>
+            {config.endDate ? DateTime.fromJSDate(config.endDate).toFormat('MMM d, yyyy') : 'No end date'}
+          </Text>
+        </TouchableOpacity>
+        {config.endDate && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => updateConfig({ endDate: undefined })}
+          >
+            <Text style={styles.clearButtonText}>Clear End Date</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Exclusion Dates - Always Visible */}
+        <Text style={styles.subLabel}>Exclusion Dates</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => {
+            setTempDate(new Date());
+            setShowDatePicker('exclusion');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="plus.circle.fill"
+            android_material_icon_name="add-circle"
+            size={18}
+            color={colors.primary}
+          />
+          <Text style={styles.addButtonText}>Add Exclusion Date</Text>
+        </TouchableOpacity>
+        {config.exclusionDates && config.exclusionDates.length > 0 && (
+          <View style={styles.exclusionsList}>
+            {config.exclusionDates.map((date, index) => (
+              <View key={index} style={styles.exclusionItem}>
+                <Text style={styles.exclusionText}>
+                  {DateTime.fromJSDate(date).toFormat('MMM d, yyyy')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const updated = config.exclusionDates?.filter((_, i) => i !== index);
+                    updateConfig({ exclusionDates: updated });
+                  }}
+                >
+                  <IconSymbol
+                    ios_icon_name="xmark.circle.fill"
+                    android_material_icon_name="cancel"
+                    size={20}
+                    color={colors.error}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -205,6 +274,75 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
             </Text>
           </TouchableOpacity>
         </View>
+        
+        {/* End Date & Exclusions - Always Visible */}
+        <Text style={styles.subLabel}>End Date (optional)</Text>
+        <TouchableOpacity
+          style={styles.datePickerButton}
+          onPress={() => {
+            setTempDate(config.endDate || new Date());
+            setShowDatePicker('end');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="calendar"
+            android_material_icon_name="calendar-today"
+            size={18}
+            color={colors.text}
+          />
+          <Text style={styles.datePickerText}>
+            {config.endDate ? DateTime.fromJSDate(config.endDate).toFormat('MMM d, yyyy') : 'No end date'}
+          </Text>
+        </TouchableOpacity>
+        {config.endDate && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => updateConfig({ endDate: undefined })}
+          >
+            <Text style={styles.clearButtonText}>Clear End Date</Text>
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.subLabel}>Exclusion Dates</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => {
+            setTempDate(new Date());
+            setShowDatePicker('exclusion');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="plus.circle.fill"
+            android_material_icon_name="add-circle"
+            size={18}
+            color={colors.primary}
+          />
+          <Text style={styles.addButtonText}>Add Exclusion Date</Text>
+        </TouchableOpacity>
+        {config.exclusionDates && config.exclusionDates.length > 0 && (
+          <View style={styles.exclusionsList}>
+            {config.exclusionDates.map((date, index) => (
+              <View key={index} style={styles.exclusionItem}>
+                <Text style={styles.exclusionText}>
+                  {DateTime.fromJSDate(date).toFormat('MMM d, yyyy')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const updated = config.exclusionDates?.filter((_, i) => i !== index);
+                    updateConfig({ exclusionDates: updated });
+                  }}
+                >
+                  <IconSymbol
+                    ios_icon_name="xmark.circle.fill"
+                    android_material_icon_name="cancel"
+                    size={20}
+                    color={colors.error}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -220,52 +358,124 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
       updateConfig({ fortnightDays: updated });
     };
 
+    const isEvenWeek = config.fortnightEvenOdd === 'even';
+    const isOddWeek = config.fortnightEvenOdd === 'odd';
+
     return (
       <View style={styles.optionsContainer}>
-        <Text style={styles.subLabel}>Select Days (2-week cycle)</Text>
-        <Text style={styles.helperText}>
-          Even Weeks/Odd Weeks: Select which weeks of the month this goal is active
-        </Text>
-        <View style={styles.fortnightGrid}>
-          {Array.from({ length: 14 }, (_, i) => {
-            const isSelected = config.fortnightDays?.includes(i) || false;
-            const weekLabel = i < 7 ? 'Week 1' : 'Week 2';
-            const dayLabel = WEEKDAYS[i % 7];
-            return (
-              <TouchableOpacity
-                key={i}
-                style={[styles.fortnightButton, isSelected && styles.fortnightButtonSelected]}
-                onPress={() => toggleFortnightDay(i)}
-              >
-                <Text style={[styles.fortnightButtonText, isSelected && styles.fortnightButtonTextSelected]}>
-                  {dayLabel}
-                </Text>
-                <Text style={[styles.fortnightButtonSubtext, isSelected && styles.fortnightButtonTextSelected]}>
-                  {weekLabel}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        
+        <Text style={styles.subLabel}>Select Week Cycle</Text>
         <View style={styles.toggleRow}>
           <TouchableOpacity
-            style={[styles.toggleButton, config.fortnightEvenOdd === 'even' && styles.toggleButtonActive]}
-            onPress={() => updateConfig({ fortnightEvenOdd: config.fortnightEvenOdd === 'even' ? undefined : 'even' })}
+            style={[styles.toggleButton, isEvenWeek && styles.toggleButtonActive]}
+            onPress={() => updateConfig({ fortnightEvenOdd: isEvenWeek ? undefined : 'even' })}
           >
-            <Text style={[styles.toggleButtonText, config.fortnightEvenOdd === 'even' && styles.toggleButtonTextActive]}>
+            <Text style={[styles.toggleButtonText, isEvenWeek && styles.toggleButtonTextActive]}>
               Even Weeks
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.toggleButton, config.fortnightEvenOdd === 'odd' && styles.toggleButtonActive]}
-            onPress={() => updateConfig({ fortnightEvenOdd: config.fortnightEvenOdd === 'odd' ? undefined : 'odd' })}
+            style={[styles.toggleButton, isOddWeek && styles.toggleButtonActive]}
+            onPress={() => updateConfig({ fortnightEvenOdd: isOddWeek ? undefined : 'odd' })}
           >
-            <Text style={[styles.toggleButtonText, config.fortnightEvenOdd === 'odd' && styles.toggleButtonTextActive]}>
+            <Text style={[styles.toggleButtonText, isOddWeek && styles.toggleButtonTextActive]}>
               Odd Weeks
             </Text>
           </TouchableOpacity>
         </View>
+
+        {(isEvenWeek || isOddWeek) && (
+          <>
+            <Text style={styles.helperText}>
+              {isEvenWeek ? 'Select days for even weeks (2nd, 4th week of month)' : 'Select days for odd weeks (1st, 3rd week of month)'}
+            </Text>
+            <View style={styles.weekdayGrid}>
+              {WEEKDAYS.map((day, index) => {
+                const dayIndex = isEvenWeek ? index + 7 : index;
+                const isSelected = config.fortnightDays?.includes(dayIndex) || false;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[styles.weekdayButton, isSelected && styles.weekdayButtonSelected]}
+                    onPress={() => toggleFortnightDay(dayIndex)}
+                  >
+                    <Text style={[styles.weekdayButtonText, isSelected && styles.weekdayButtonTextSelected]}>
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
+        
+        {/* End Date & Exclusions */}
+        <Text style={styles.subLabel}>End Date (optional)</Text>
+        <TouchableOpacity
+          style={styles.datePickerButton}
+          onPress={() => {
+            setTempDate(config.endDate || new Date());
+            setShowDatePicker('end');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="calendar"
+            android_material_icon_name="calendar-today"
+            size={18}
+            color={colors.text}
+          />
+          <Text style={styles.datePickerText}>
+            {config.endDate ? DateTime.fromJSDate(config.endDate).toFormat('MMM d, yyyy') : 'No end date'}
+          </Text>
+        </TouchableOpacity>
+        {config.endDate && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => updateConfig({ endDate: undefined })}
+          >
+            <Text style={styles.clearButtonText}>Clear End Date</Text>
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.subLabel}>Exclusion Dates</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => {
+            setTempDate(new Date());
+            setShowDatePicker('exclusion');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="plus.circle.fill"
+            android_material_icon_name="add-circle"
+            size={18}
+            color={colors.primary}
+          />
+          <Text style={styles.addButtonText}>Add Exclusion Date</Text>
+        </TouchableOpacity>
+        {config.exclusionDates && config.exclusionDates.length > 0 && (
+          <View style={styles.exclusionsList}>
+            {config.exclusionDates.map((date, index) => (
+              <View key={index} style={styles.exclusionItem}>
+                <Text style={styles.exclusionText}>
+                  {DateTime.fromJSDate(date).toFormat('MMM d, yyyy')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const updated = config.exclusionDates?.filter((_, i) => i !== index);
+                    updateConfig({ exclusionDates: updated });
+                  }}
+                >
+                  <IconSymbol
+                    ios_icon_name="xmark.circle.fill"
+                    android_material_icon_name="cancel"
+                    size={20}
+                    color={colors.error}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -275,6 +485,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
 
     const selectedCalendar = config.monthlyCalendarType || alternativeCalendar || 'gregorian';
     const maxDays = CALENDAR_MAX_DAYS[selectedCalendar];
+    const showCalendarSelector = alternativeCalendar && alternativeCalendar !== 'gregorian';
 
     const toggleDate = (date: number) => {
       const current = config.monthlyDates || [];
@@ -284,45 +495,26 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
       updateConfig({ monthlyDates: updated });
     };
 
-    const addNthDayRule = () => {
-      const current = config.monthlyNthDay || [];
-      updateConfig({ monthlyNthDay: [...current, { day: 'Monday', nth: 1 }] });
-    };
-
-    const removeNthDayRule = (index: number) => {
-      const current = config.monthlyNthDay || [];
-      updateConfig({ monthlyNthDay: current.filter((_, i) => i !== index) });
-    };
-
-    const updateNthDayRule = (index: number, updates: Partial<{ day: string; nth: number }>) => {
-      const current = config.monthlyNthDay || [];
-      const updated = [...current];
-      updated[index] = { ...updated[index], ...updates };
-      updateConfig({ monthlyNthDay: updated });
-    };
-
     return (
       <View style={styles.optionsContainer}>
-        {/* Calendar Type Selector */}
-        {alternativeCalendar && alternativeCalendar !== 'gregorian' && (
+        {/* Calendar Type - Only show if alternative calendar is activated */}
+        {showCalendarSelector && (
           <View style={styles.calendarSection}>
             <Text style={styles.subLabel}>Calendar Type</Text>
-            <View style={styles.calendarGrid}>
-              {CALENDAR_TYPES.map((cal) => {
-                const isSelected = selectedCalendar === cal;
-                return (
-                  <TouchableOpacity
-                    key={cal}
-                    style={[styles.calendarButton, isSelected && styles.calendarButtonSelected]}
-                    onPress={() => updateConfig({ monthlyCalendarType: cal })}
-                  >
-                    <Text style={[styles.calendarButtonText, isSelected && styles.calendarButtonTextSelected]}>
-                      {CALENDAR_LABELS[cal]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <TouchableOpacity
+              style={styles.calendarButton}
+              onPress={() => setShowCalendarPicker(true)}
+            >
+              <Text style={styles.calendarButtonText}>
+                {CALENDAR_LABELS[selectedCalendar]}
+              </Text>
+              <IconSymbol
+                ios_icon_name="chevron.down"
+                android_material_icon_name="arrow-drop-down"
+                size={20}
+                color={colors.text}
+              />
+            </TouchableOpacity>
             <Text style={styles.helperText}>
               {CALENDAR_LABELS[selectedCalendar]} calendar: Max {maxDays} days
             </Text>
@@ -330,6 +522,9 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         )}
 
         <Text style={styles.subLabel}>Select Dates</Text>
+        <Text style={styles.helperText}>
+          Choose specific dates of the month (e.g., 3rd, 15th, 28th)
+        </Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.dateGrid}>
             {Array.from({ length: maxDays }, (_, i) => {
@@ -350,79 +545,26 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         </ScrollView>
         
-        <View style={styles.advancedOptionsRow}>
-          <TouchableOpacity
-            style={styles.advancedOptionButton}
-            onPress={() => setShowMonthlyAdvanced(!showMonthlyAdvanced)}
-          >
-            <IconSymbol
-              ios_icon_name="slider.horizontal.3"
-              android_material_icon_name="tune"
-              size={16}
-              color={colors.primary}
-            />
-            <Text style={styles.advancedOptionText}>More Options</Text>
-          </TouchableOpacity>
-        </View>
+        {/* More Options */}
+        <TouchableOpacity
+          style={styles.advancedOptionButton}
+          onPress={() => setShowMonthlyAdvanced(!showMonthlyAdvanced)}
+        >
+          <IconSymbol
+            ios_icon_name="slider.horizontal.3"
+            android_material_icon_name="tune"
+            size={16}
+            color={colors.primary}
+          />
+          <Text style={styles.advancedOptionText}>More Options</Text>
+        </TouchableOpacity>
         
         {showMonthlyAdvanced && (
           <View style={styles.advancedSection}>
-            <Text style={styles.subLabel}>Nth Day of Month (e.g., 1st Tuesday)</Text>
-            {config.monthlyNthDay && config.monthlyNthDay.length > 0 && (
-              <View style={styles.nthDayList}>
-                {config.monthlyNthDay.map((rule, index) => (
-                  <View key={index} style={styles.nthDayItem}>
-                    <View style={styles.nthDaySelectors}>
-                      <TouchableOpacity
-                        style={styles.nthDaySelector}
-                        onPress={() => {
-                          // Cycle through positions
-                          const positions = [1, 2, 3, 4, -1]; // -1 = Last
-                          const currentIndex = positions.indexOf(rule.nth);
-                          const nextIndex = (currentIndex + 1) % positions.length;
-                          updateNthDayRule(index, { nth: positions[nextIndex] });
-                        }}
-                      >
-                        <Text style={styles.nthDaySelectorText}>
-                          {rule.nth === -1 ? 'Last' : WEEK_POSITIONS[rule.nth - 1]}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.nthDaySelector}
-                        onPress={() => {
-                          // Cycle through days
-                          const days = WEEKDAY_FULL;
-                          const currentIndex = days.indexOf(rule.day);
-                          const nextIndex = (currentIndex + 1) % days.length;
-                          updateNthDayRule(index, { day: days[nextIndex] });
-                        }}
-                      >
-                        <Text style={styles.nthDaySelectorText}>{rule.day}</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <TouchableOpacity onPress={() => removeNthDayRule(index)}>
-                      <IconSymbol
-                        ios_icon_name="xmark.circle.fill"
-                        android_material_icon_name="cancel"
-                        size={20}
-                        color={colors.error}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-            <TouchableOpacity style={styles.addButton} onPress={addNthDayRule}>
-              <IconSymbol
-                ios_icon_name="plus.circle.fill"
-                android_material_icon_name="add-circle"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.addButtonText}>Add Nth Day Rule</Text>
-            </TouchableOpacity>
-            
             <Text style={styles.subLabel}>Date Range</Text>
+            <Text style={styles.helperText}>
+              e.g., from 3rd to 6th of each month
+            </Text>
             <View style={styles.rangeRow}>
               <TextInput
                 style={[styles.input, styles.rangeInput]}
@@ -444,14 +586,86 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
             </View>
             
             <Text style={styles.subLabel}>Random Selection</Text>
+            <Text style={styles.helperText}>
+              e.g., 3 random days per month
+            </Text>
             <TextInput
               style={styles.input}
               value={config.monthlyRandomCount?.toString() || ''}
               onChangeText={(text) => updateConfig({ monthlyRandomCount: text ? parseInt(text) : undefined })}
-              placeholder="Number of random days per month"
+              placeholder="Number of random days"
               placeholderTextColor={colors.textSecondary}
               keyboardType="number-pad"
             />
+          </View>
+        )}
+        
+        {/* End Date & Exclusions */}
+        <Text style={styles.subLabel}>End Date (optional)</Text>
+        <TouchableOpacity
+          style={styles.datePickerButton}
+          onPress={() => {
+            setTempDate(config.endDate || new Date());
+            setShowDatePicker('end');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="calendar"
+            android_material_icon_name="calendar-today"
+            size={18}
+            color={colors.text}
+          />
+          <Text style={styles.datePickerText}>
+            {config.endDate ? DateTime.fromJSDate(config.endDate).toFormat('MMM d, yyyy') : 'No end date'}
+          </Text>
+        </TouchableOpacity>
+        {config.endDate && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => updateConfig({ endDate: undefined })}
+          >
+            <Text style={styles.clearButtonText}>Clear End Date</Text>
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.subLabel}>Exclusion Dates</Text>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => {
+            setTempDate(new Date());
+            setShowDatePicker('exclusion');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="plus.circle.fill"
+            android_material_icon_name="add-circle"
+            size={18}
+            color={colors.primary}
+          />
+          <Text style={styles.addButtonText}>Add Exclusion Date</Text>
+        </TouchableOpacity>
+        {config.exclusionDates && config.exclusionDates.length > 0 && (
+          <View style={styles.exclusionsList}>
+            {config.exclusionDates.map((date, index) => (
+              <View key={index} style={styles.exclusionItem}>
+                <Text style={styles.exclusionText}>
+                  {DateTime.fromJSDate(date).toFormat('MMM d, yyyy')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const updated = config.exclusionDates?.filter((_, i) => i !== index);
+                    updateConfig({ exclusionDates: updated });
+                  }}
+                >
+                  <IconSymbol
+                    ios_icon_name="xmark.circle.fill"
+                    android_material_icon_name="cancel"
+                    size={20}
+                    color={colors.error}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
         )}
       </View>
@@ -466,6 +680,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
                        selectedCalendar === 'hebrew' ? HEBREW_MONTHS :
                        selectedCalendar === 'chinese' ? CHINESE_MONTHS :
                        ISLAMIC_MONTHS;
+    const showCalendarSelector = alternativeCalendar && alternativeCalendar !== 'gregorian';
 
     const toggleMonth = (month: number) => {
       const current = config.yearlyMonths || [];
@@ -494,26 +709,24 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
 
     return (
       <View style={styles.optionsContainer}>
-        {/* Calendar Type Selector */}
-        {alternativeCalendar && alternativeCalendar !== 'gregorian' && (
+        {/* Calendar Type - Only show if alternative calendar is activated */}
+        {showCalendarSelector && (
           <View style={styles.calendarSection}>
             <Text style={styles.subLabel}>Calendar Type</Text>
-            <View style={styles.calendarGrid}>
-              {CALENDAR_TYPES.map((cal) => {
-                const isSelected = selectedCalendar === cal;
-                return (
-                  <TouchableOpacity
-                    key={cal}
-                    style={[styles.calendarButton, isSelected && styles.calendarButtonSelected]}
-                    onPress={() => updateConfig({ yearlyCalendarType: cal })}
-                  >
-                    <Text style={[styles.calendarButtonText, isSelected && styles.calendarButtonTextSelected]}>
-                      {CALENDAR_LABELS[cal]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <TouchableOpacity
+              style={styles.calendarButton}
+              onPress={() => setShowCalendarPicker(true)}
+            >
+              <Text style={styles.calendarButtonText}>
+                {CALENDAR_LABELS[selectedCalendar]}
+              </Text>
+              <IconSymbol
+                ios_icon_name="chevron.down"
+                android_material_icon_name="arrow-drop-down"
+                size={20}
+                color={colors.text}
+              />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -536,24 +749,25 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           })}
         </View>
 
-        <View style={styles.advancedOptionsRow}>
-          <TouchableOpacity
-            style={styles.advancedOptionButton}
-            onPress={() => setShowYearlyAdvanced(!showYearlyAdvanced)}
-          >
-            <IconSymbol
-              ios_icon_name="slider.horizontal.3"
-              android_material_icon_name="tune"
-              size={16}
-              color={colors.primary}
-            />
-            <Text style={styles.advancedOptionText}>Specific Dates & Ranges</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.advancedOptionButton}
+          onPress={() => setShowYearlyAdvanced(!showYearlyAdvanced)}
+        >
+          <IconSymbol
+            ios_icon_name="slider.horizontal.3"
+            android_material_icon_name="tune"
+            size={16}
+            color={colors.primary}
+          />
+          <Text style={styles.advancedOptionText}>Specific Dates & Ranges</Text>
+        </TouchableOpacity>
 
         {showYearlyAdvanced && (
           <View style={styles.advancedSection}>
             <Text style={styles.subLabel}>Specific Dates or Date Ranges</Text>
+            <Text style={styles.helperText}>
+              e.g., 1st of Feb or Jan 31 - Feb 2
+            </Text>
             {config.yearlyDates && config.yearlyDates.length > 0 && (
               <View style={styles.yearlyDatesList}>
                 {config.yearlyDates.map((dateRange, index) => (
@@ -622,154 +836,73 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
             </TouchableOpacity>
           </View>
         )}
-      </View>
-    );
-  };
-
-  const renderAdvancedOptions = () => {
-    if (config.scheduleType === 'Always Active') return null;
-
-    return (
-      <View style={styles.section}>
+        
+        {/* End Date & Exclusions */}
+        <Text style={styles.subLabel}>End Date (optional)</Text>
         <TouchableOpacity
-          style={styles.advancedToggle}
-          onPress={() => setShowAdvanced(!showAdvanced)}
+          style={styles.datePickerButton}
+          onPress={() => {
+            setTempDate(config.endDate || new Date());
+            setShowDatePicker('end');
+          }}
         >
-          <View style={styles.advancedToggleLeft}>
-            <IconSymbol
-              ios_icon_name="calendar.badge.exclamationmark"
-              android_material_icon_name="event-busy"
-              size={18}
-              color={colors.primary}
-            />
-            <Text style={styles.advancedToggleText}>End Date & Exclusions</Text>
-          </View>
           <IconSymbol
-            ios_icon_name={showAdvanced ? 'chevron.up' : 'chevron.down'}
-            android_material_icon_name={showAdvanced ? 'expand-less' : 'expand-more'}
-            size={20}
+            ios_icon_name="calendar"
+            android_material_icon_name="calendar-today"
+            size={18}
             color={colors.text}
           />
+          <Text style={styles.datePickerText}>
+            {config.endDate ? DateTime.fromJSDate(config.endDate).toFormat('MMM d, yyyy') : 'No end date'}
+          </Text>
         </TouchableOpacity>
-
-        {showAdvanced && (
-          <View style={styles.advancedContent}>
-            <Text style={styles.subLabel}>End Date (optional)</Text>
-            <TouchableOpacity
-              style={styles.datePickerButton}
-              onPress={() => {
-                setTempDate(config.endDate || new Date());
-                setShowDatePicker('end');
-              }}
-            >
-              <IconSymbol
-                ios_icon_name="calendar"
-                android_material_icon_name="calendar-today"
-                size={18}
-                color={colors.text}
-              />
-              <Text style={styles.datePickerText}>
-                {config.endDate ? DateTime.fromJSDate(config.endDate).toFormat('MMM d, yyyy') : 'No end date'}
-              </Text>
-            </TouchableOpacity>
-            {config.endDate && (
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={() => updateConfig({ endDate: undefined })}
-              >
-                <Text style={styles.clearButtonText}>Clear End Date</Text>
-              </TouchableOpacity>
-            )}
-
-            <Text style={styles.subLabel}>Exclusion Dates</Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => {
-                setTempDate(new Date());
-                setShowDatePicker('exclusion');
-              }}
-            >
-              <IconSymbol
-                ios_icon_name="plus.circle.fill"
-                android_material_icon_name="add-circle"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.addButtonText}>Add Exclusion Date</Text>
-            </TouchableOpacity>
-            {config.exclusionDates && config.exclusionDates.length > 0 && (
-              <View style={styles.exclusionsList}>
-                {config.exclusionDates.map((date, index) => (
-                  <View key={index} style={styles.exclusionItem}>
-                    <Text style={styles.exclusionText}>
-                      {DateTime.fromJSDate(date).toFormat('MMM d, yyyy')}
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        const updated = config.exclusionDates?.filter((_, i) => i !== index);
-                        updateConfig({ exclusionDates: updated });
-                      }}
-                    >
-                      <IconSymbol
-                        ios_icon_name="xmark.circle.fill"
-                        android_material_icon_name="cancel"
-                        size={20}
-                        color={colors.error}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
+        {config.endDate && (
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={() => updateConfig({ endDate: undefined })}
+          >
+            <Text style={styles.clearButtonText}>Clear End Date</Text>
+          </TouchableOpacity>
         )}
-      </View>
-    );
-  };
 
-  const renderAlarms = () => {
-    if (config.scheduleType === 'Always Active') return null;
-
-    return (
-      <View style={styles.section}>
+        <Text style={styles.subLabel}>Exclusion Dates</Text>
         <TouchableOpacity
-          style={styles.advancedToggle}
-          onPress={() => setShowAlarms(!showAlarms)}
+          style={styles.addButton}
+          onPress={() => {
+            setTempDate(new Date());
+            setShowDatePicker('exclusion');
+          }}
         >
-          <View style={styles.advancedToggleLeft}>
-            <IconSymbol
-              ios_icon_name="bell.fill"
-              android_material_icon_name="notifications"
-              size={18}
-              color={colors.primary}
-            />
-            <Text style={styles.advancedToggleText}>Alarms & Reminders</Text>
-          </View>
           <IconSymbol
-            ios_icon_name={showAlarms ? 'chevron.up' : 'chevron.down'}
-            android_material_icon_name={showAlarms ? 'expand-less' : 'expand-more'}
-            size={20}
-            color={colors.text}
+            ios_icon_name="plus.circle.fill"
+            android_material_icon_name="add-circle"
+            size={18}
+            color={colors.primary}
           />
+          <Text style={styles.addButtonText}>Add Exclusion Date</Text>
         </TouchableOpacity>
-
-        {showAlarms && (
-          <View style={styles.advancedContent}>
-            <Text style={styles.helperText}>
-              Set up powerful alarms with astronomical triggers (sunrise, sunset), location-based triggers, and custom conditions.
-            </Text>
-            <TouchableOpacity
-              style={styles.manageAlarmsButton}
-              onPress={() => router.push('/alarms/create')}
-            >
-              <IconSymbol
-                ios_icon_name="bell.badge.fill"
-                android_material_icon_name="notifications-active"
-                size={18}
-                color="#fff"
-              />
-              <Text style={styles.manageAlarmsButtonText}>Manage Alarms</Text>
-            </TouchableOpacity>
+        {config.exclusionDates && config.exclusionDates.length > 0 && (
+          <View style={styles.exclusionsList}>
+            {config.exclusionDates.map((date, index) => (
+              <View key={index} style={styles.exclusionItem}>
+                <Text style={styles.exclusionText}>
+                  {DateTime.fromJSDate(date).toFormat('MMM d, yyyy')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const updated = config.exclusionDates?.filter((_, i) => i !== index);
+                    updateConfig({ exclusionDates: updated });
+                  }}
+                >
+                  <IconSymbol
+                    ios_icon_name="xmark.circle.fill"
+                    android_material_icon_name="cancel"
+                    size={20}
+                    color={colors.error}
+                  />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
         )}
       </View>
@@ -784,8 +917,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
       {renderFortnightlyOptions()}
       {renderMonthlyOptions()}
       {renderYearlyOptions()}
-      {renderAdvancedOptions()}
-      {renderAlarms()}
 
       {showDatePicker && Platform.OS !== 'web' && (
         <DateTimePicker
@@ -805,6 +936,61 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           }}
         />
       )}
+
+      {/* Calendar Picker Modal */}
+      <Modal
+        visible={showCalendarPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCalendarPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Calendar Type</Text>
+              <TouchableOpacity onPress={() => setShowCalendarPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalScroll}>
+              {CALENDAR_TYPES.map((cal) => {
+                const isSelected = (config.scheduleType === 'Monthly' ? config.monthlyCalendarType : config.yearlyCalendarType) === cal;
+                return (
+                  <TouchableOpacity
+                    key={cal}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      if (config.scheduleType === 'Monthly') {
+                        updateConfig({ monthlyCalendarType: cal });
+                      } else {
+                        updateConfig({ yearlyCalendarType: cal });
+                      }
+                      setShowCalendarPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                      {CALENDAR_LABELS[cal]}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -881,30 +1067,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
   calendarButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  calendarButtonSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
   calendarButtonText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
-  },
-  calendarButtonTextSelected: {
-    color: '#fff',
   },
   weekdayGrid: {
     flexDirection: 'row',
@@ -960,37 +1136,6 @@ const styles = StyleSheet.create({
   toggleButtonTextActive: {
     color: '#fff',
   },
-  fortnightGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  fortnightButton: {
-    width: 70,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  fortnightButtonSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  fortnightButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  fortnightButtonSubtext: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  fortnightButtonTextSelected: {
-    color: '#fff',
-  },
   dateGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1043,14 +1188,12 @@ const styles = StyleSheet.create({
   monthButtonTextSelected: {
     color: '#fff',
   },
-  advancedOptionsRow: {
-    marginTop: 16,
-  },
   advancedOptionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingVertical: 8,
+    marginTop: 16,
   },
   advancedOptionText: {
     fontSize: 14,
@@ -1062,35 +1205,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-  },
-  nthDayList: {
-    gap: 8,
-    marginBottom: 12,
-  },
-  nthDayItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  nthDaySelectors: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  nthDaySelector: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-  },
-  nthDaySelectorText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#fff',
   },
   yearlyDatesList: {
     gap: 8,
@@ -1151,34 +1265,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
   },
-  advancedToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  advancedToggleLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  advancedToggleText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  advancedContent: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 12,
-  },
   datePickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1223,19 +1309,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
   },
-  manageAlarmsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    padding: 14,
-    marginTop: 8,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
-  manageAlarmsButtonText: {
-    fontSize: 15,
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '60%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
     fontWeight: '600',
-    color: '#fff',
+    color: colors.text,
+  },
+  modalScroll: {
+    padding: 20,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  pickerItemSelected: {
+    backgroundColor: colors.card,
+  },
+  pickerItemText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  pickerItemTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });

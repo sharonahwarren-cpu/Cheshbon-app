@@ -106,6 +106,9 @@ export default function CreateGoalScreen() {
     scheduleType: 'Always Active',
   });
   
+  // Alarms state - separate from scheduler
+  const [alarmsEnabled, setAlarmsEnabled] = useState(false);
+  
   // Reward state
   const [rewardCurrencyId, setRewardCurrencyId] = useState<string | undefined>();
   const [rewardSuccesses, setRewardSuccesses] = useState<string>('');
@@ -657,6 +660,47 @@ export default function CreateGoalScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Alarms & Reminders - SEPARATE SECTION */}
+        <View style={styles.section}>
+          <View style={styles.alarmHeader}>
+            <View style={styles.alarmTitleRow}>
+              <IconSymbol
+                ios_icon_name="bell.fill"
+                android_material_icon_name="notifications"
+                size={20}
+                color={colors.primary}
+              />
+              <Text style={styles.label}>Alarms & Reminders</Text>
+            </View>
+            <Switch
+              value={alarmsEnabled}
+              onValueChange={setAlarmsEnabled}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor="#fff"
+            />
+          </View>
+          
+          {alarmsEnabled && (
+            <View style={styles.alarmContent}>
+              <Text style={styles.helperText}>
+                Set up powerful alarms with astronomical triggers (sunrise, sunset), location-based triggers, and custom conditions.
+              </Text>
+              <TouchableOpacity
+                style={styles.manageAlarmsButton}
+                onPress={() => router.push('/alarms/create')}
+              >
+                <IconSymbol
+                  ios_icon_name="bell.badge.fill"
+                  android_material_icon_name="notifications-active"
+                  size={18}
+                  color="#fff"
+                />
+                <Text style={styles.manageAlarmsButtonText}>Add/Manage Alarms</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
         {/* Rewards */}
         <View style={styles.section}>
           <Text style={styles.label}>Rewards</Text>
@@ -1143,6 +1187,7 @@ export default function CreateGoalScreen() {
                   setConsequenceCurrencyId(undefined);
                   setConsequenceFailures('');
                   setConsequenceAmount('');
+                  setAlarmsEnabled(false);
                 }}
               >
                 <Text style={styles.alertButtonText}>Yes, Create Another</Text>
@@ -1315,6 +1360,39 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     width: 80,
     textAlign: 'center',
+  },
+  alarmHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  alarmTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  alarmContent: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 12,
+  },
+  manageAlarmsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    padding: 14,
+    marginTop: 8,
+  },
+  manageAlarmsButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
   },
   buttonContainer: {
     marginTop: 20,
