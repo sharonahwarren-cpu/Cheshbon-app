@@ -37,6 +37,7 @@ export function registerPreferencesRoutes(app: App) {
             reflectionCategoriesEnabled: true,
             reflectionCategories: JSON.stringify(['Action', 'Speech', 'Thought']),
             preferredHomeScreen: 'reflect',
+            alternativeCalendar: 'gregorian',
           })
           .returning();
         preferences = newPreferences;
@@ -74,6 +75,7 @@ export function registerPreferencesRoutes(app: App) {
       reflectionCategoriesEnabled?: boolean;
       reflectionCategories?: string[];
       preferredHomeScreen?: 'reflect' | 'goals-detailed' | 'goals-concise';
+      alternativeCalendar?: 'gregorian' | 'hebrew' | 'chinese';
     };
 
     app.logger.info(
@@ -103,6 +105,7 @@ export function registerPreferencesRoutes(app: App) {
             reflectionCategoriesEnabled: body.reflectionCategoriesEnabled ?? true,
             reflectionCategories: body.reflectionCategories ? JSON.stringify(body.reflectionCategories) : JSON.stringify(['Action', 'Speech', 'Thought']),
             preferredHomeScreen: body.preferredHomeScreen || 'reflect',
+            alternativeCalendar: body.alternativeCalendar || 'gregorian',
           })
           .returning();
         app.logger.info({ userId: session.user.id }, 'User preferences created successfully');
@@ -118,6 +121,7 @@ export function registerPreferencesRoutes(app: App) {
       if (body.reflectionCategoriesEnabled !== undefined) updateData.reflectionCategoriesEnabled = body.reflectionCategoriesEnabled;
       if (body.reflectionCategories !== undefined) updateData.reflectionCategories = body.reflectionCategories ? JSON.stringify(body.reflectionCategories) : null;
       if (body.preferredHomeScreen !== undefined) updateData.preferredHomeScreen = body.preferredHomeScreen;
+      if (body.alternativeCalendar !== undefined) updateData.alternativeCalendar = body.alternativeCalendar;
       updateData.updatedAt = new Date();
 
       const updatedPreferences = await app.db

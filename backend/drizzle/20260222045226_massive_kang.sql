@@ -1,0 +1,1 @@
+ALTER TABLE "user_preferences" ADD COLUMN "alternative_calendar" text DEFAULT 'gregorian' NOT NULL;
