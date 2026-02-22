@@ -7,6 +7,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { colors } from '@/styles/commonStyles';
 import { LoadingButton } from '@/components/LoadingButton';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
 import React, { useState, useEffect } from 'react';
 import {
@@ -636,6 +637,32 @@ export default function CreateGoalScreen() {
     });
   };
 
+  const formatTime12Hour = (time24: string): string => {
+    const [hours, minutes] = time24.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
+  const getScheduleDescription = () => {
+    const scheduleType = scheduleConfig.scheduleType;
+    if (scheduleType === 'Always Active') {
+      return 'every day';
+    } else if (scheduleType === 'Daily') {
+      return 'daily';
+    } else if (scheduleType === 'Weekly') {
+      const dayCount = scheduleConfig.weekdays?.length || 0;
+      return dayCount > 0 ? `${dayCount} days per week` : 'weekly';
+    } else if (scheduleType === 'Fortnightly') {
+      return 'fortnightly';
+    } else if (scheduleType === 'Monthly') {
+      return 'monthly';
+    } else if (scheduleType === 'Yearly') {
+      return 'yearly';
+    }
+    return scheduleType.toLowerCase();
+  };
+
   const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
   const submitButtonTitle = editingGoalId ? 'Update Goal' : 'Create Goal';
   const rewardActionText = getRewardActionText();
@@ -854,7 +881,7 @@ export default function CreateGoalScreen() {
                 size={20}
                 color={colors.primary}
               />
-              <Text style={styles.label}>Alarms & Reminders</Text>
+              <Text style={styles.label}>Alarms</Text>
             </View>
             <Switch
               value={alarmsEnabled}
@@ -867,7 +894,7 @@ export default function CreateGoalScreen() {
           {alarmsEnabled && (
             <View style={styles.alarmContent}>
               <Text style={styles.helperText}>
-                Quick alarm: Set a simple daily alarm time
+                Quick alarm: Set a simple alarm time based on your goal schedule ({getScheduleDescription()})
               </Text>
               
               {/* Quick Time Input */}
@@ -884,7 +911,7 @@ export default function CreateGoalScreen() {
                     color={colors.primary}
                   />
                   <Text style={styles.quickTimeText}>
-                    {quickAlarmTime || 'Set time'}
+                    {quickAlarmTime ? formatTime12Hour(quickAlarmTime) : 'Set time'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1063,26 +1090,28 @@ export default function CreateGoalScreen() {
       </ScrollView>
 
       {/* Quick Time Picker */}
-      {showQuickTimePicker && Platform.OS !== 'web' && (
-        <DateTimePicker
-          value={(() => {
-            const [hours, minutes] = quickAlarmTime.split(':').map(Number);
-            const date = new Date();
-            date.setHours(hours, minutes, 0, 0);
-            return date;
-          })()}
-          mode="time"
-          display="default"
-          onChange={(event, selectedDate) => {
-            if (event.type === 'set' && selectedDate) {
-              const hours = selectedDate.getHours().toString().padStart(2, '0');
-              const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
-              setQuickAlarmTime(`${hours}:${minutes}`);
-            }
-            setShowQuickTimePicker(false);
-          }}
-        />
-      )}
+      <DateTimePickerModal
+        isVisible={showQuickTimePicker}
+        mode="time"
+        onConfirm={(date) => {
+          const hours = date.getHours().toString().padStart(2, '0');
+          const minutes = date.getMinutes().toString().padStart(2, '0');
+          setQuickAlarmTime(`${hours}:${minutes}`);
+          setShowQuickTimePicker(false);
+        }}
+        onCancel={() => setShowQuickTimePicker(false)}
+        date={(() => {
+          if (!quickAlarmTime) {
+            const now = new Date();
+            now.setHours(9, 0, 0, 0);
+            return now;
+          }
+          const [hours, minutes] = quickAlarmTime.split(':').map(Number);
+          const date = new Date();
+          date.setHours(hours, minutes, 0, 0);
+          return date;
+        })()}
+      />
 
       {/* Goal Schedule Wizard Modal */}
       <Modal
