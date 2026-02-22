@@ -13,7 +13,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { Stack, useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
@@ -123,7 +123,20 @@ type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currenci
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [currentSection, setCurrentSection] = useState<SettingsSection>('main');
+  const params = useLocalSearchParams<{ section?: string }>();
+  
+  // Determine initial section from URL params
+  const getInitialSection = (): SettingsSection => {
+    const section = params.section;
+    if (!section) return 'main';
+    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'reflectionPrefs', 'notifications', 'reports'];
+    if (validSections.includes(section as SettingsSection)) {
+      return section as SettingsSection;
+    }
+    return 'main';
+  };
+  
+  const [currentSection, setCurrentSection] = useState<SettingsSection>(getInitialSection());
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   
@@ -180,6 +193,18 @@ export default function SettingsScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // React to URL param changes (e.g., when navigating from settings-menu)
+  useEffect(() => {
+    const section = params.section;
+    if (section) {
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'reflectionPrefs', 'notifications', 'reports'];
+      if (validSections.includes(section as SettingsSection)) {
+        console.log('[Settings iOS] Setting section from URL param:', section);
+        setCurrentSection(section as SettingsSection);
+      }
+    }
+  }, [params.section]);
 
   useEffect(() => {
     if (currentSection === 'reports') {
@@ -555,10 +580,10 @@ export default function SettingsScreen() {
   const renderMainMenu = () => {
     const menuItems = [
       { title: 'Goals', icon: 'flag', section: 'goals' as SettingsSection },
-      { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
-      { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
+      { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
+      { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
     ];
 

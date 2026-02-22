@@ -578,10 +578,12 @@ export default function HomeScreen() {
   };
 
   const handleDateChange = (event: any, date?: Date) => {
-    setShowDatePicker(false);
+    // On iOS with inline display, keep the modal open until user taps Done
     if (date) {
       setSelectedDate(date);
+      console.log('[Home iOS] Date selected:', date.toISOString());
     }
+    // Don't close the modal here - let the Done button handle it
   };
 
   const formatDateDisplay = (date: Date) => {
@@ -1118,7 +1120,10 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
           
-          <TouchableOpacity onPress={() => setShowDatePicker(true)}>
+          <TouchableOpacity onPress={() => {
+            console.log("Opening date picker iOS");
+            setShowDatePicker(true);
+          }}>
             <Text style={styles.dateDisplay}>{dateDisplay}</Text>
           </TouchableOpacity>
           
@@ -1146,12 +1151,30 @@ export default function HomeScreen() {
         </View>
 
         {showDatePicker && (
-          <DateTimePicker
-            value={selectedDate}
-            mode="date"
-            display="inline"
-            onChange={handleDateChange}
-          />
+          <Modal
+            visible={showDatePicker}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowDatePicker(false)}
+          >
+            <View style={styles.datePickerOverlay}>
+              <View style={styles.datePickerContainer}>
+                <View style={styles.datePickerHeader}>
+                  <Text style={styles.datePickerTitle}>Select Date</Text>
+                  <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                    <Text style={styles.datePickerDone}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  display="inline"
+                  onChange={handleDateChange}
+                  style={{ backgroundColor: colors.background }}
+                />
+              </View>
+            </View>
+          </Modal>
         )}
 
         <View style={styles.content}>
@@ -1338,17 +1361,6 @@ export default function HomeScreen() {
             <>
               <View style={styles.expressHeader}>
                 <TouchableOpacity
-                  style={styles.addGoalButton}
-                  onPress={handleCreateGoal}
-                >
-                  <IconSymbol
-                    ios_icon_name="plus.circle.fill"
-                    android_material_icon_name="add-circle"
-                    size={28}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
                   style={styles.viewModeToggle}
                   onPress={() => {
                     console.log("Toggling Express view mode iOS");
@@ -1364,6 +1376,17 @@ export default function HomeScreen() {
                   <Text style={styles.viewModeToggleText}>
                     {expressViewMode === 'detailed' ? 'Concise' : 'Detailed'}
                   </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.addGoalButton}
+                  onPress={handleCreateGoal}
+                >
+                  <IconSymbol
+                    ios_icon_name="plus.circle.fill"
+                    android_material_icon_name="add-circle"
+                    size={32}
+                    color={colors.primary}
+                  />
                 </TouchableOpacity>
               </View>
 
@@ -2177,5 +2200,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
+  },
+  datePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  datePickerContainer: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    overflow: 'hidden',
+    width: '100%',
+    maxWidth: 400,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  datePickerDone: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });

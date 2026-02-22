@@ -18,39 +18,39 @@ export default function SettingsMenuScreen() {
 
   const settingsOptions = [
     {
-      id: 'life-areas',
-      title: 'Life Areas',
-      icon: 'category',
-      iosIcon: 'square.grid.2x2',
-      route: '/settings?section=life-areas',
+      id: 'goals',
+      title: 'Goals',
+      icon: 'flag',
+      iosIcon: 'flag',
+      section: 'goals',
     },
     {
       id: 'strategies',
       title: 'Strategies',
       icon: 'lightbulb',
       iosIcon: 'lightbulb',
-      route: '/settings?section=strategies',
-    },
-    {
-      id: 'currencies',
-      title: 'Currencies',
-      icon: 'attach-money',
-      iosIcon: 'dollarsign.circle',
-      route: '/settings?section=currencies',
+      section: 'strategies',
     },
     {
       id: 'gains-losses',
       title: 'Gains & Losses',
       icon: 'swap-vert',
       iosIcon: 'arrow.up.arrow.down',
-      route: '/settings?section=gains-losses',
+      section: 'gainsLosses',
     },
     {
-      id: 'goals',
-      title: 'Goals',
-      icon: 'flag',
-      iosIcon: 'flag',
-      route: '/settings?section=goals',
+      id: 'life-areas',
+      title: 'Life Areas',
+      icon: 'category',
+      iosIcon: 'square.grid.2x2',
+      section: 'lifeAreas',
+    },
+    {
+      id: 'currencies',
+      title: 'Currencies',
+      icon: 'attach-money',
+      iosIcon: 'dollarsign.circle',
+      section: 'currencies',
     },
   ];
 
@@ -71,7 +71,7 @@ export default function SettingsMenuScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Settings</Text>
           <Text style={styles.headerSubtitle}>
-            Manage your life areas, strategies, currencies, and goals
+            Manage your goals, strategies, life areas, and more
           </Text>
         </View>
 
@@ -81,8 +81,8 @@ export default function SettingsMenuScreen() {
               key={option.id}
               style={styles.optionButton}
               onPress={() => {
-                console.log('Navigating to:', option.route);
-                router.push(option.route as any);
+                console.log('Navigating to settings section:', option.section);
+                router.push(`/(tabs)/settings?section=${option.section}` as any);
               }}
             >
               <View style={styles.optionLeft}>

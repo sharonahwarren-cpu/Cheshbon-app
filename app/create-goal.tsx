@@ -417,62 +417,127 @@ export default function CreateGoalScreen() {
 
       if (editingGoalId && goalDetailsData) {
         const goalDetails = goalDetailsData?.data || goalDetailsData;
-        console.log('[API] Goal details loaded for editing:', goalDetails);
+        console.log('[API] Goal details loaded for editing:', JSON.stringify(goalDetails, null, 2));
         
         setTitle(goalDetails.title || '');
         setDescription(goalDetails.description || '');
-        setParentGoalId(goalDetails.parentGoalId);
-        setLifeAreaId(goalDetails.lifeAreaId);
-        setBehaviorCategories(goalDetails.behaviorCategories || []);
+        // Backend uses camelCase for these fields
+        setParentGoalId(goalDetails.parentGoalId || goalDetails.parent_goal_id);
+        setLifeAreaId(goalDetails.lifeAreaId || goalDetails.life_area_id);
+        setBehaviorCategories(goalDetails.behaviorCategories || goalDetails.behavior_categories || []);
         setType(goalDetails.type || 'Proactive');
-        setStrategyIds(goalDetails.strategyIds || []);
-        setScheduleType(goalDetails.scheduleType || 'Always Active');
-        setScheduleTimesPerDay(goalDetails.scheduleTimesPerDay?.toString() || '');
+        setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
+        setScheduleType(goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active');
+        setScheduleTimesPerDay((goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day)?.toString() || '');
         
-        // Load advanced schedule data
-        if (goalDetails.selectedWeekdays) {
+        // Load advanced schedule data - backend stores in snake_case columns
+        // selectedWeekdays / selectedFortnightDays -> schedule_days_of_week
+        const daysOfWeek = goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week;
+        if (daysOfWeek && Array.isArray(daysOfWeek) && daysOfWeek.length > 0) {
+          const schedType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+          if (schedType === 'Fortnightly') {
+            setSelectedFortnightDays(daysOfWeek);
+          } else {
+            setSelectedWeekdays(daysOfWeek);
+          }
+        }
+        // Also check explicit fields if backend returns them
+        if (goalDetails.selectedWeekdays && Array.isArray(goalDetails.selectedWeekdays)) {
           setSelectedWeekdays(goalDetails.selectedWeekdays);
         }
-        if (goalDetails.selectedFortnightDays) {
+        if (goalDetails.selectedFortnightDays && Array.isArray(goalDetails.selectedFortnightDays)) {
           setSelectedFortnightDays(goalDetails.selectedFortnightDays);
         }
+        
+        // monthlyType - derived from which monthly fields are set
+        const monthlyDatesData = goalDetails.monthlyDates || goalDetails.scheduleDatesOfMonth || goalDetails.schedule_dates_of_month;
+        const monthlyWeekdayRulesData = goalDetails.monthlyWeekdayRules || goalDetails.scheduleNthDayOfMonth || goalDetails.schedule_nth_day_of_month;
+        
+        if (monthlyWeekdayRulesData && (Array.isArray(monthlyWeekdayRulesData) ? monthlyWeekdayRulesData.length > 0 : true)) {
+          setMonthlyType('weekday');
+          const rules = Array.isArray(monthlyWeekdayRulesData) ? monthlyWeekdayRulesData : [monthlyWeekdayRulesData];
+          setMonthlyWeekdayRules(rules);
+        } else if (monthlyDatesData && Array.isArray(monthlyDatesData) && monthlyDatesData.length > 0) {
+          setMonthlyType('date');
+          setMonthlyDates(monthlyDatesData);
+        }
+        
+        // Explicit monthlyType override
         if (goalDetails.monthlyType) {
           setMonthlyType(goalDetails.monthlyType);
         }
-        if (goalDetails.monthlyDates) {
-          setMonthlyDates(goalDetails.monthlyDates);
-        }
-        if (goalDetails.monthlyWeekdayRules) {
-          setMonthlyWeekdayRules(goalDetails.monthlyWeekdayRules);
-        }
-        if (goalDetails.yearlyDates) {
-          setYearlyDates(goalDetails.yearlyDates);
-        }
-        if (goalDetails.calendarType) {
-          setCalendarType(goalDetails.calendarType);
+        
+        // yearlyDates - backend stores as jsonb in schedule_dates_of_year
+        const yearlyDatesData = goalDetails.yearlyDates || goalDetails.scheduleDatesOfYear || goalDetails.schedule_dates_of_year;
+        if (yearlyDatesData) {
+          let parsedYearlyDates: YearlyDateRange[] = [];
+          if (Array.isArray(yearlyDatesData)) {
+            parsedYearlyDates = yearlyDatesData.map((item: any) => {
+              if (typeof item === 'string') {
+                try {
+                  return JSON.parse(item);
+                } catch {
+                  return null;
+                }
+              }
+              return item;
+            }).filter(Boolean);
+          }
+          console.log('[API] Parsed yearly dates:', parsedYearlyDates);
+          setYearlyDates(parsedYearlyDates);
         }
         
-        // Load end date
-        if (goalDetails.endDate) {
+        // calendarType - backend stores in calendar_type column
+        const calendarTypeData = goalDetails.calendarType || goalDetails.calendar_type;
+        if (calendarTypeData) {
+          // Normalize to proper CalendarType format
+          const calendarMap: Record<string, CalendarType> = {
+            'gregorian': 'Gregorian',
+            'hebrew': 'Hebrew',
+            'chinese': 'Chinese',
+            'islamic': 'Islamic',
+            'Gregorian': 'Gregorian',
+            'Hebrew': 'Hebrew',
+            'Chinese': 'Chinese',
+            'Islamic': 'Islamic',
+          };
+          setCalendarType(calendarMap[calendarTypeData] || 'Gregorian');
+        }
+        
+        // Load end date - backend stores in end_date column
+        const endDateData = goalDetails.endDate || goalDetails.end_date;
+        if (endDateData) {
           setHasEndDate(true);
-          setEndDate(new Date(goalDetails.endDate));
+          setEndDate(new Date(endDateData));
+          console.log('[API] Loaded end date:', endDateData, '->', new Date(endDateData));
         }
         
-        if (goalDetails.rewardCurrencyId) {
-          setRewardCurrencyId(goalDetails.rewardCurrencyId);
-          setRewardSuccesses(goalDetails.rewardSuccesses?.toString() || '');
-          setRewardAmount(goalDetails.rewardAmount?.toString() || '');
+        if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {
+          setRewardCurrencyId(goalDetails.rewardCurrencyId || goalDetails.reward_currency_id);
+          setRewardSuccesses((goalDetails.rewardSuccesses || goalDetails.reward_successes)?.toString() || '');
+          setRewardAmount((goalDetails.rewardAmount || goalDetails.reward_amount)?.toString() || '');
         }
         
-        if (goalDetails.consequenceCurrencyId) {
-          setConsequenceCurrencyId(goalDetails.consequenceCurrencyId);
-          setConsequenceFailures(goalDetails.consequenceFailures?.toString() || '');
-          setConsequenceAmount(goalDetails.consequenceAmount?.toString() || '');
+        if (goalDetails.consequenceCurrencyId || goalDetails.consequence_currency_id) {
+          setConsequenceCurrencyId(goalDetails.consequenceCurrencyId || goalDetails.consequence_currency_id);
+          setConsequenceFailures((goalDetails.consequenceFailures || goalDetails.consequence_failures)?.toString() || '');
+          setConsequenceAmount((goalDetails.consequenceAmount || goalDetails.consequence_amount)?.toString() || '');
         }
         
         // Load alarms
-        if (goalDetails.alarms && Array.isArray(goalDetails.alarms)) {
-          setAlarms(goalDetails.alarms);
+        const alarmsData = goalDetails.alarms;
+        if (alarmsData) {
+          let parsedAlarms: AlarmConfig[] = [];
+          if (Array.isArray(alarmsData)) {
+            parsedAlarms = alarmsData;
+          } else if (typeof alarmsData === 'string') {
+            try {
+              parsedAlarms = JSON.parse(alarmsData);
+            } catch {
+              parsedAlarms = [];
+            }
+          }
+          setAlarms(parsedAlarms);
         }
       }
     } catch (error: any) {
@@ -661,6 +726,8 @@ export default function CreateGoalScreen() {
 
     setSubmitting(true);
     try {
+      // Map frontend fields to backend field names
+      // Backend uses: scheduleDaysOfWeek, scheduleDatesOfMonth, scheduleNthDayOfMonth, scheduleDatesOfYear, calendarType, endDate
       const goalData: any = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -671,16 +738,42 @@ export default function CreateGoalScreen() {
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
         scheduleType,
         scheduleTimesPerDay: scheduleType === 'Daily' && scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
+        // Weekly: store selectedWeekdays in scheduleDaysOfWeek
+        scheduleDaysOfWeek: scheduleType === 'Weekly' && selectedWeekdays.length > 0 
+          ? selectedWeekdays 
+          : scheduleType === 'Fortnightly' && selectedFortnightDays.length > 0
+          ? selectedFortnightDays
+          : undefined,
+        // Also send the explicit fields for backward compatibility
         selectedWeekdays: scheduleType === 'Weekly' && selectedWeekdays.length > 0 ? selectedWeekdays : undefined,
         selectedFortnightDays: scheduleType === 'Fortnightly' && selectedFortnightDays.length > 0 ? selectedFortnightDays : undefined,
         monthlyType: scheduleType === 'Monthly' ? monthlyType : undefined,
+        // Monthly dates: store in scheduleDatesOfMonth
+        scheduleDatesOfMonth: scheduleType === 'Monthly' && monthlyType === 'date' && monthlyDates.length > 0 ? monthlyDates : undefined,
         monthlyDates: scheduleType === 'Monthly' && monthlyType === 'date' && monthlyDates.length > 0 ? monthlyDates : undefined,
+        // Monthly weekday rules: store in scheduleNthDayOfMonth
+        scheduleNthDayOfMonth: scheduleType === 'Monthly' && monthlyType === 'weekday' && monthlyWeekdayRules.length > 0 ? monthlyWeekdayRules : undefined,
         monthlyWeekdayRules: scheduleType === 'Monthly' && monthlyType === 'weekday' && monthlyWeekdayRules.length > 0 ? monthlyWeekdayRules : undefined,
+        // Yearly dates: store as jsonb array in scheduleDatesOfYear
+        scheduleDatesOfYear: scheduleType === 'Yearly' && yearlyDates.length > 0 ? yearlyDates : undefined,
         yearlyDates: scheduleType === 'Yearly' && yearlyDates.length > 0 ? yearlyDates : undefined,
+        // Calendar type: store in calendarType column
         calendarType: (scheduleType === 'Monthly' || scheduleType === 'Yearly') ? calendarType : undefined,
         alarms: alarms.length > 0 ? alarms : undefined,
+        // End date: store in endDate (maps to end_date column)
         endDate: hasEndDate && endDate ? endDate.toISOString() : null,
       };
+      
+      console.log('[API] Submitting goal data:', JSON.stringify({
+        scheduleType: goalData.scheduleType,
+        scheduleDaysOfWeek: goalData.scheduleDaysOfWeek,
+        scheduleDatesOfMonth: goalData.scheduleDatesOfMonth,
+        scheduleNthDayOfMonth: goalData.scheduleNthDayOfMonth,
+        scheduleDatesOfYear: goalData.scheduleDatesOfYear,
+        calendarType: goalData.calendarType,
+        endDate: goalData.endDate,
+        yearlyDates: goalData.yearlyDates,
+      }, null, 2));
 
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
         goalData.reward = {
@@ -1556,20 +1649,55 @@ export default function CreateGoalScreen() {
       </ScrollView>
 
       {/* End Date Picker Modal */}
-      {showEndDatePicker && (
-        <DateTimePicker
-          value={endDate || new Date()}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={(event, selectedDate) => {
-            console.log('End date picker changed:', event.type, selectedDate);
-            setShowEndDatePicker(Platform.OS === 'ios');
-            if (event.type === 'set' && selectedDate) {
-              setEndDate(selectedDate);
-            }
-          }}
-          minimumDate={new Date()}
-        />
+      {showEndDatePicker && Platform.OS !== 'web' && (
+        <Modal
+          visible={showEndDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowEndDatePicker(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { maxHeight: 400 }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select End Date</Text>
+                <TouchableOpacity onPress={() => setShowEndDatePicker(false)}>
+                  <IconSymbol
+                    ios_icon_name="xmark"
+                    android_material_icon_name="close"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <DateTimePicker
+                  value={endDate || new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    console.log('[EndDate] Picker changed:', event.type, selectedDate);
+                    if (event.type === 'set' && selectedDate) {
+                      setEndDate(selectedDate);
+                      console.log('[EndDate] Set end date to:', selectedDate.toISOString());
+                    }
+                    if (Platform.OS === 'android') {
+                      setShowEndDatePicker(false);
+                    }
+                  }}
+                  minimumDate={new Date()}
+                />
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={[styles.addButton, { marginTop: 16, width: '100%' }]}
+                    onPress={() => setShowEndDatePicker(false)}
+                  >
+                    <Text style={styles.addButtonText}>Done</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
 
       {/* Monthly Weekday Picker Modal - FIXED */}

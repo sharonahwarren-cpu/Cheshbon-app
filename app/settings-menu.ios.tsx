@@ -17,11 +17,11 @@ export default function SettingsMenuScreen() {
 
   const settingsOptions = [
     {
-      id: 'life-areas',
-      title: 'Life Areas',
-      icon: 'category',
-      iosIcon: 'square.grid.2x2',
-      route: '/settings?section=life-areas',
+      id: 'goals',
+      title: 'Goals',
+      icon: 'flag',
+      iosIcon: 'flag',
+      route: '/settings?section=goals',
     },
     {
       id: 'strategies',
@@ -31,13 +31,6 @@ export default function SettingsMenuScreen() {
       route: '/settings?section=strategies',
     },
     {
-      id: 'currencies',
-      title: 'Currencies',
-      icon: 'attach-money',
-      iosIcon: 'dollarsign.circle',
-      route: '/settings?section=currencies',
-    },
-    {
       id: 'gains-losses',
       title: 'Gains & Losses',
       icon: 'swap-vert',
@@ -45,11 +38,18 @@ export default function SettingsMenuScreen() {
       route: '/settings?section=gains-losses',
     },
     {
-      id: 'goals',
-      title: 'Goals',
-      icon: 'flag',
-      iosIcon: 'flag',
-      route: '/settings?section=goals',
+      id: 'life-areas',
+      title: 'Life Areas',
+      icon: 'category',
+      iosIcon: 'square.grid.2x2',
+      route: '/settings?section=life-areas',
+    },
+    {
+      id: 'currencies',
+      title: 'Currencies',
+      icon: 'attach-money',
+      iosIcon: 'dollarsign.circle',
+      route: '/settings?section=currencies',
     },
   ];
 
@@ -70,7 +70,7 @@ export default function SettingsMenuScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Settings</Text>
           <Text style={styles.headerSubtitle}>
-            Manage your life areas, strategies, currencies, and goals
+            Manage your goals, strategies, life areas, and more
           </Text>
         </View>
 

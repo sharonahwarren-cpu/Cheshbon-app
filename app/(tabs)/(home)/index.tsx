@@ -610,10 +610,14 @@ export default function HomeScreen() {
   };
 
   const handleDateChange = (event: any, date?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
+    // On Android, the picker closes itself after selection
+    // On iOS, we keep the modal open until user taps Done
     if (date) {
       setSelectedDate(date);
+      console.log('[Home] Date selected:', date.toISOString());
     }
+    // Don't close the modal here - let the Done button handle it
+    // (Android will close via the onChange wrapper in the Modal)
   };
 
   const formatDateDisplay = (date: Date) => {
@@ -1143,7 +1147,10 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
           
-          <TouchableOpacity onPress={() => setShowDatePicker(true)}>
+          <TouchableOpacity onPress={() => {
+            console.log("Opening date picker");
+            setShowDatePicker(true);
+          }}>
             <Text style={styles.dateDisplay}>{dateDisplay}</Text>
           </TouchableOpacity>
           
@@ -1170,13 +1177,44 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {showDatePicker && (
-          <DateTimePicker
-            value={selectedDate}
-            mode="date"
-            display="calendar"
-            onChange={handleDateChange}
-          />
+        {showDatePicker && Platform.OS !== 'web' && (
+          <Modal
+            visible={showDatePicker}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowDatePicker(false)}
+          >
+            <View style={styles.datePickerOverlay}>
+              <View style={styles.datePickerContainer}>
+                <View style={styles.datePickerHeader}>
+                  <Text style={styles.datePickerTitle}>Select Date</Text>
+                  <TouchableOpacity onPress={() => setShowDatePicker(false)}>
+                    <Text style={styles.datePickerDone}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
+                  onChange={(event, date) => {
+                    if (Platform.OS === 'android') {
+                      setShowDatePicker(false);
+                    }
+                    handleDateChange(event, date);
+                  }}
+                  style={Platform.OS === 'ios' ? { backgroundColor: colors.background } : undefined}
+                />
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={styles.datePickerDoneButton}
+                    onPress={() => setShowDatePicker(false)}
+                  >
+                    <Text style={styles.datePickerDoneButtonText}>Done</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </Modal>
         )}
 
         {currentView === 'reflect' ? (
@@ -1362,17 +1400,6 @@ export default function HomeScreen() {
           <>
             <View style={styles.expressHeader}>
               <TouchableOpacity
-                style={styles.addGoalButton}
-                onPress={handleCreateGoal}
-              >
-                <IconSymbol
-                  ios_icon_name="plus.circle.fill"
-                  android_material_icon_name="add-circle"
-                  size={28}
-                  color={colors.primary}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
                 style={styles.viewModeToggle}
                 onPress={() => {
                   console.log("Toggling Express view mode");
@@ -1388,6 +1415,17 @@ export default function HomeScreen() {
                 <Text style={styles.viewModeToggleText}>
                   {expressViewMode === 'detailed' ? 'Concise' : 'Detailed'}
                 </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.addGoalButton}
+                onPress={handleCreateGoal}
+              >
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={28}
+                  color={colors.primary}
+                />
               </TouchableOpacity>
             </View>
 
@@ -2201,5 +2239,49 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
+  },
+  datePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  datePickerContainer: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    overflow: 'hidden',
+    width: '100%',
+    maxWidth: 400,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  datePickerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  datePickerDone: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  datePickerDoneButton: {
+    backgroundColor: colors.primary,
+    margin: 16,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+  },
+  datePickerDoneButtonText: {
+    color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
