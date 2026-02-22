@@ -3,14 +3,14 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 
-// Helper function to check if a goal is active today
-function isGoalActiveTodayHelper(goal: any): boolean {
+// Helper function to check if a goal is active on a specific date
+function isGoalActiveOnDateHelper(goal: any, dateStr: string): boolean {
   if (goal.scheduleType === 'Always Active') return true;
 
-  const today = new Date();
-  const dayOfWeek = today.getDay();
-  const dateOfMonth = today.getDate();
-  const month = today.getMonth() + 1;
+  const date = new Date(dateStr);
+  const dayOfWeek = date.getDay();
+  const dateOfMonth = date.getDate();
+  const month = date.getMonth() + 1;
 
   switch (goal.scheduleType) {
     case 'Daily':
@@ -44,6 +44,85 @@ function isGoalActiveTodayHelper(goal: any): boolean {
     default:
       return false;
   }
+}
+
+// Helper function to check if a goal is active today
+function isGoalActiveTodayHelper(goal: any): boolean {
+  const today = new Date().toISOString().split('T')[0];
+  return isGoalActiveOnDateHelper(goal, today);
+}
+
+// Helper function to calculate streak for a goal
+function calculateStreak(goal: any, reflections: any[]): number {
+  if (goal.scheduleType === 'Always Active') {
+    // For always active goals, count consecutive days with success
+    const successDates = reflections
+      .filter(r => r.linkedGoalId === goal.id && r.outcome === 'success')
+      .map(r => r.entryDate)
+      .sort()
+      .reverse();
+
+    if (successDates.length === 0) return 0;
+
+    let streak = 0;
+    let currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 365; i++) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      if (successDates.includes(dateStr)) {
+        streak++;
+      } else {
+        break;
+      }
+      currentDate.setDate(currentDate.getDate() - 1);
+    }
+
+    return streak;
+  }
+
+  // For scheduled goals, count consecutive periods with success
+  const scheduleType = goal.scheduleType;
+  const successDates = reflections
+    .filter(r => r.linkedGoalId === goal.id && r.outcome === 'success')
+    .map(r => r.entryDate)
+    .sort()
+    .reverse();
+
+  if (successDates.length === 0) return 0;
+
+  let streak = 0;
+  let currentDate = new Date();
+  currentDate.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < 365; i++) {
+    const dateStr = currentDate.toISOString().split('T')[0];
+
+    // Check if goal was scheduled on this date
+    if (isGoalActiveOnDateHelper(goal, dateStr)) {
+      // Check if there's a success on this date
+      if (successDates.includes(dateStr)) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    // Move to previous period based on schedule type
+    if (scheduleType === 'Daily') {
+      currentDate.setDate(currentDate.getDate() - 1);
+    } else if (scheduleType === 'Weekly') {
+      currentDate.setDate(currentDate.getDate() - 7);
+    } else if (scheduleType === 'Fortnightly') {
+      currentDate.setDate(currentDate.getDate() - 14);
+    } else if (scheduleType === 'Monthly') {
+      currentDate.setMonth(currentDate.getMonth() - 1);
+    } else if (scheduleType === 'Yearly') {
+      currentDate.setFullYear(currentDate.getFullYear() - 1);
+    }
+  }
+
+  return streak;
 }
 
 export function registerGoalsTrackingRoutes(app: App) {
@@ -129,6 +208,7 @@ export function registerGoalsTrackingRoutes(app: App) {
           dailyEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
           const lifeArea = goal.lifeAreaId ? lifeAreaMap.get(goal.lifeAreaId) : null;
+          const streak = calculateStreak(goal, reflections);
 
           return {
             id: goal.id,
@@ -143,6 +223,7 @@ export function registerGoalsTrackingRoutes(app: App) {
             todayStruggleCount,
             successCount: totalSuccessCount,
             struggleCount: totalStruggleCount,
+            streak,
             dailyEntries,
             rewardCurrencyId: goal.rewardCurrencyId || null,
             rewardAmount: goal.rewardAmount ?? null,

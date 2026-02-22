@@ -6,7 +6,7 @@ import * as schema from '../db/schema.js';
 export function registerPreferencesRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
-  // GET /api/user-preferences - Get user's notification preferences
+  // GET /api/user-preferences - Get user's preferences
   app.fastify.get('/api/user-preferences', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -36,6 +36,7 @@ export function registerPreferencesRoutes(app: App) {
             notificationDays: null,
             reflectionCategoriesEnabled: true,
             reflectionCategories: JSON.stringify(['Action', 'Speech', 'Thought']),
+            preferredHomeScreen: 'reflect',
           })
           .returning();
         preferences = newPreferences;
@@ -49,7 +50,7 @@ export function registerPreferencesRoutes(app: App) {
     }
   });
 
-  // PUT /api/user-preferences - Update user's notification preferences
+  // PUT /api/user-preferences - Update user's preferences
   app.fastify.put('/api/user-preferences', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -72,10 +73,11 @@ export function registerPreferencesRoutes(app: App) {
       }>;
       reflectionCategoriesEnabled?: boolean;
       reflectionCategories?: string[];
+      preferredHomeScreen?: 'reflect' | 'goals-detailed' | 'goals-concise';
     };
 
     app.logger.info(
-      { userId: session.user.id, notificationsEnabled: body.notificationsEnabled, alarmCount: body.notificationAlarms?.length },
+      { userId: session.user.id, notificationsEnabled: body.notificationsEnabled, preferredHomeScreen: body.preferredHomeScreen },
       'Updating user preferences'
     );
 
@@ -100,6 +102,7 @@ export function registerPreferencesRoutes(app: App) {
             notificationAlarms: body.notificationAlarms ? JSON.stringify(body.notificationAlarms) : null,
             reflectionCategoriesEnabled: body.reflectionCategoriesEnabled ?? true,
             reflectionCategories: body.reflectionCategories ? JSON.stringify(body.reflectionCategories) : JSON.stringify(['Action', 'Speech', 'Thought']),
+            preferredHomeScreen: body.preferredHomeScreen || 'reflect',
           })
           .returning();
         app.logger.info({ userId: session.user.id }, 'User preferences created successfully');
@@ -114,6 +117,7 @@ export function registerPreferencesRoutes(app: App) {
       if (body.notificationAlarms !== undefined) updateData.notificationAlarms = body.notificationAlarms ? JSON.stringify(body.notificationAlarms) : null;
       if (body.reflectionCategoriesEnabled !== undefined) updateData.reflectionCategoriesEnabled = body.reflectionCategoriesEnabled;
       if (body.reflectionCategories !== undefined) updateData.reflectionCategories = body.reflectionCategories ? JSON.stringify(body.reflectionCategories) : null;
+      if (body.preferredHomeScreen !== undefined) updateData.preferredHomeScreen = body.preferredHomeScreen;
       updateData.updatedAt = new Date();
 
       const updatedPreferences = await app.db

@@ -1,0 +1,1 @@
+ALTER TABLE "user_preferences" ADD COLUMN "preferred_home_screen" text DEFAULT 'reflect' NOT NULL;

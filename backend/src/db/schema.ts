@@ -98,6 +98,7 @@ export const userPreferences = pgTable('user_preferences', {
   notificationAlarms: jsonb('notification_alarms'),
   reflectionCategoriesEnabled: boolean('reflection_categories_enabled').default(true).notNull(),
   reflectionCategories: jsonb('reflection_categories'),
+  preferredHomeScreen: text('preferred_home_screen').default('reflect').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
