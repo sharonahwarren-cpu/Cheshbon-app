@@ -98,6 +98,9 @@ export default function CreateAlarmScreen() {
       
       console.log('User alternative calendar preference:', userAltCalendar);
       setAlternativeCalendar(userAltCalendar === 'gregorian' ? null : (userAltCalendar || null));
+      
+      // Always default to Gregorian calendar
+      setCalendarType('gregorian');
 
       // Check permissions
       await checkPermissions();
@@ -108,6 +111,12 @@ export default function CreateAlarmScreen() {
       } else {
         // For new alarms, set default trigger to time
         setTriggers([{ type: 'time', value: '09:00' }]);
+        
+        // Pre-fill title if coming from goal
+        if (params.goalTitle) {
+          setTitle(params.goalTitle as string);
+          console.log('Pre-filled alarm title from goal:', params.goalTitle);
+        }
       }
     } catch (err: any) {
       console.error('Error loading preferences or alarm:', err);
@@ -698,7 +707,11 @@ export default function CreateAlarmScreen() {
                 {newTrigger.type === 'astronomical' && (
                   <>
                     <Text style={styles.label}>Astronomical Event</Text>
-                    <ScrollView style={{ maxHeight: 300 }}>
+                    <ScrollView 
+                      style={{ maxHeight: 300 }} 
+                      nestedScrollEnabled={true}
+                      showsVerticalScrollIndicator={true}
+                    >
                       {ASTRONOMICAL_EVENTS.map(event => (
                         <TouchableOpacity
                           key={event.value}

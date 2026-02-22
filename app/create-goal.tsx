@@ -2,7 +2,8 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DateTime } from 'luxon';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { colors } from '@/styles/commonStyles';
 import { LoadingButton } from '@/components/LoadingButton';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -118,6 +119,10 @@ export default function CreateGoalScreen() {
   const [quickAlarmTime, setQuickAlarmTime] = useState('09:00');
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
   const [goalAlarms, setGoalAlarms] = useState<Alarm[]>([]);
+  
+  // Confirm modal state
+  const [showDeleteAlarmConfirm, setShowDeleteAlarmConfirm] = useState(false);
+  const [alarmToDelete, setAlarmToDelete] = useState<{ id: string; title: string } | null>(null);
   
   // Reward state
   const [rewardCurrencyId, setRewardCurrencyId] = useState<string | undefined>();
@@ -402,6 +407,50 @@ export default function CreateGoalScreen() {
   const handleEditAlarm = (alarmId: string) => {
     console.log('User tapped Edit Alarm:', alarmId);
     router.push(`/alarms/create?id=${alarmId}`);
+  };
+
+  const handleToggleAlarm = async (alarmId: string, currentEnabled: boolean) => {
+    console.log('User tapped Toggle Alarm:', alarmId, 'Current state:', currentEnabled);
+    try {
+      await authenticatedPut(`/api/alarms/${alarmId}`, { enabled: !currentEnabled });
+      
+      // Update local state
+      setGoalAlarms(goalAlarms.map(alarm => 
+        alarm.id === alarmId ? { ...alarm, enabled: !currentEnabled } : alarm
+      ));
+      
+      const newState = !currentEnabled ? 'activated' : 'deactivated';
+      showSuccess(`Alarm ${newState} successfully!`);
+    } catch (error: any) {
+      console.error('[API] Error toggling alarm:', error);
+      showError(error.message || 'Failed to toggle alarm');
+    }
+  };
+
+  const handleDeleteAlarm = (alarmId: string, alarmTitle: string) => {
+    console.log('User tapped Delete Alarm:', alarmId);
+    setAlarmToDelete({ id: alarmId, title: alarmTitle });
+    setShowDeleteAlarmConfirm(true);
+  };
+
+  const confirmDeleteAlarm = async () => {
+    if (!alarmToDelete) return;
+    
+    console.log('User confirmed Delete Alarm:', alarmToDelete.id);
+    try {
+      await authenticatedDelete(`/api/alarms/${alarmToDelete.id}`);
+      
+      // Update local state
+      setGoalAlarms(goalAlarms.filter(alarm => alarm.id !== alarmToDelete.id));
+      
+      showSuccess('Alarm deleted successfully!');
+    } catch (error: any) {
+      console.error('[API] Error deleting alarm:', error);
+      showError(error.message || 'Failed to delete alarm');
+    } finally {
+      setShowDeleteAlarmConfirm(false);
+      setAlarmToDelete(null);
+    }
   };
 
   const getSelectedParentGoalName = () => {
@@ -722,18 +771,28 @@ export default function CreateGoalScreen() {
               {/* Quick Time Input */}
               <View style={styles.quickTimeSection}>
                 <Text style={styles.quickTimeLabel}>Alarm Time:</Text>
-                <TouchableOpacity
-                  style={styles.quickTimeButton}
-                  onPress={() => setShowQuickTimePicker(true)}
-                >
-                  <IconSymbol
-                    ios_icon_name="clock"
-                    android_material_icon_name="schedule"
-                    size={18}
-                    color={colors.primary}
+                {Platform.OS === 'web' ? (
+                  <TextInput
+                    style={styles.quickTimeInput}
+                    value={quickAlarmTime}
+                    onChangeText={setQuickAlarmTime}
+                    placeholder="09:00"
+                    placeholderTextColor={colors.textSecondary}
                   />
-                  <Text style={styles.quickTimeText}>{quickAlarmTime}</Text>
-                </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.quickTimeButton}
+                    onPress={() => setShowQuickTimePicker(true)}
+                  >
+                    <IconSymbol
+                      ios_icon_name="clock"
+                      android_material_icon_name="schedule"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.quickTimeText}>{quickAlarmTime}</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               {/* Advanced Button */}
@@ -754,24 +813,45 @@ export default function CreateGoalScreen() {
               {goalAlarms.length > 0 && (
                 <View style={styles.alarmsList}>
                   <Text style={styles.alarmsListTitle}>Alarms for this Goal:</Text>
-                  {goalAlarms.map((alarm) => (
-                    <View key={alarm.id} style={styles.alarmItem}>
-                      <View style={styles.alarmItemInfo}>
-                        <Text style={styles.alarmItemTitle}>{alarm.title}</Text>
-                        <Text style={styles.alarmItemStatus}>
-                          {alarm.enabled ? 'Active' : 'Inactive'}
-                        </Text>
+                  {goalAlarms.map((alarm) => {
+                    const alarmEnabled = alarm.enabled;
+                    return (
+                      <View key={alarm.id} style={styles.alarmItem}>
+                        <View style={styles.alarmItemInfo}>
+                          <Text style={styles.alarmItemTitle}>{alarm.title}</Text>
+                          <Text style={[styles.alarmItemStatus, alarmEnabled && styles.alarmItemStatusActive]}>
+                            {alarmEnabled ? 'Active' : 'Inactive'}
+                          </Text>
+                        </View>
+                        <View style={styles.alarmItemActions}>
+                          <TouchableOpacity onPress={() => handleToggleAlarm(alarm.id, alarmEnabled)}>
+                            <IconSymbol
+                              ios_icon_name={alarmEnabled ? 'bell.slash' : 'bell'}
+                              android_material_icon_name={alarmEnabled ? 'notifications-off' : 'notifications'}
+                              size={20}
+                              color={alarmEnabled ? colors.textSecondary : colors.primary}
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => handleEditAlarm(alarm.id)}>
+                            <IconSymbol
+                              ios_icon_name="pencil"
+                              android_material_icon_name="edit"
+                              size={20}
+                              color={colors.primary}
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => handleDeleteAlarm(alarm.id, alarm.title)}>
+                            <IconSymbol
+                              ios_icon_name="trash"
+                              android_material_icon_name="delete"
+                              size={20}
+                              color={colors.error}
+                            />
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                      <TouchableOpacity onPress={() => handleEditAlarm(alarm.id)}>
-                        <IconSymbol
-                          ios_icon_name="pencil"
-                          android_material_icon_name="edit"
-                          size={20}
-                          color={colors.primary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -1295,6 +1375,20 @@ export default function CreateGoalScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Delete Alarm Confirmation Modal */}
+      <ConfirmModal
+        visible={showDeleteAlarmConfirm}
+        title="Delete Alarm?"
+        message={`Are you sure you want to delete "${alarmToDelete?.title}"? This action cannot be undone.`}
+        onConfirm={confirmDeleteAlarm}
+        onCancel={() => {
+          setShowDeleteAlarmConfirm(false);
+          setAlarmToDelete(null);
+        }}
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
+      />
     </SafeAreaView>
   );
 }
@@ -1505,6 +1599,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
+  quickTimeInput: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    minWidth: 100,
+  },
   advancedAlarmsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1556,6 +1661,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  alarmItemStatusActive: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  alarmItemActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   buttonContainer: {
     marginTop: 20,
