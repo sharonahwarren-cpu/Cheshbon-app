@@ -22,6 +22,8 @@ import {
 import { IconSymbol } from '@/components/IconSymbol';
 import { DateTime } from 'luxon';
 import { getLocalTimezone } from '@/utils/dateUtils';
+import { GoalSchedulePreview } from '@/components/GoalSchedulePreview';
+import type { GoalSchedule } from '@/utils/scheduleCalculations';
 
 interface Goal {
   id: string;
@@ -291,12 +293,22 @@ export default function CreateGoalScreen() {
   
   // Advanced schedule state
   const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]); // 0=Sun, 6=Sat
+  const [weekendsOnly, setWeekendsOnly] = useState(false);
+  const [weekdaysOnly, setWeekdaysOnly] = useState(false);
   const [selectedFortnightDays, setSelectedFortnightDays] = useState<number[]>([]); // 0-13 for 2 weeks
+  const [fortnightEvenOdd, setFortnightEvenOdd] = useState<'even' | 'odd' | ''>('');
   const [monthlyType, setMonthlyType] = useState<'date' | 'weekday'>('date');
   const [monthlyDates, setMonthlyDates] = useState<number[]>([]);
   const [monthlyWeekdayRules, setMonthlyWeekdayRules] = useState<Array<{position: string; weekday: string}>>([]);
+  const [monthlyRandomCount, setMonthlyRandomCount] = useState<string>('');
+  const [monthlyRangeStart, setMonthlyRangeStart] = useState<string>('');
+  const [monthlyRangeEnd, setMonthlyRangeEnd] = useState<string>('');
   const [yearlyDates, setYearlyDates] = useState<YearlyDateRange[]>([]);
   const [calendarType, setCalendarType] = useState<CalendarType>('Gregorian');
+  const [exclusionDates, setExclusionDates] = useState<Date[]>([]);
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  // Specific times per day details (for daily schedule)
+  const [specificTimes, setSpecificTimes] = useState<Array<{hour: number; minute: number; conditions?: string}>>([]);
   
   // Yearly date picker state
   const [yearlyPickerStep, setYearlyPickerStep] = useState<'month' | 'startDay' | 'endMonth' | 'endDay'>('month');
@@ -356,6 +368,8 @@ export default function CreateGoalScreen() {
   const [showMonthlyWeekdayPicker, setShowMonthlyWeekdayPicker] = useState(false);
   const [showYearlyDatePicker, setShowYearlyDatePicker] = useState(false);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [showExclusionDatePicker, setShowExclusionDatePicker] = useState(false);
+  const [tempExclusionDate, setTempExclusionDate] = useState<Date>(new Date());
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -452,7 +466,18 @@ export default function CreateGoalScreen() {
         setBehaviorCategories(goalDetails.behaviorCategories || goalDetails.behavior_categories || []);
         setType(goalDetails.type || 'Proactive');
         setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
-        setScheduleType(goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active');
+        
+        // scheduleType: prefer scheduleType, fall back to scheduleRecurrenceType (capitalize first letter)
+        const rawScheduleType = goalDetails.scheduleType || goalDetails.schedule_type;
+        const rawRecurrenceType = goalDetails.scheduleRecurrenceType || goalDetails.schedule_recurrence_type;
+        let resolvedScheduleType: ScheduleType = 'Always Active';
+        if (rawScheduleType) {
+          resolvedScheduleType = rawScheduleType as ScheduleType;
+        } else if (rawRecurrenceType) {
+          // Convert 'daily' -> 'Daily', 'weekly' -> 'Weekly', etc.
+          resolvedScheduleType = (rawRecurrenceType.charAt(0).toUpperCase() + rawRecurrenceType.slice(1)) as ScheduleType;
+        }
+        setScheduleType(resolvedScheduleType);
         setScheduleTimesPerDay((goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day)?.toString() || '');
         
         // Load advanced schedule data - backend stores in snake_case columns
@@ -472,6 +497,40 @@ export default function CreateGoalScreen() {
         }
         if (goalDetails.selectedFortnightDays && Array.isArray(goalDetails.selectedFortnightDays)) {
           setSelectedFortnightDays(goalDetails.selectedFortnightDays);
+        }
+        
+        // Load new schedule fields
+        // weekendsOnly / weekdaysOnly
+        if (goalDetails.scheduleWeekendsOnly !== undefined) {
+          setWeekendsOnly(!!goalDetails.scheduleWeekendsOnly);
+        }
+        if (goalDetails.scheduleWeekdaysOnly !== undefined) {
+          setWeekdaysOnly(!!goalDetails.scheduleWeekdaysOnly);
+        }
+        // fortnightEvenOdd
+        if (goalDetails.scheduleFortnightEvenOdd) {
+          setFortnightEvenOdd(goalDetails.scheduleFortnightEvenOdd as 'even' | 'odd');
+        }
+        // monthlyRange
+        const monthlyRange = goalDetails.scheduleMonthlyRange;
+        if (monthlyRange && typeof monthlyRange === 'object') {
+          setMonthlyRangeStart(monthlyRange.start?.toString() || '');
+          setMonthlyRangeEnd(monthlyRange.end?.toString() || '');
+        }
+        // monthlyRandomCount
+        if (goalDetails.scheduleMonthlyRandomCount) {
+          setMonthlyRandomCount(goalDetails.scheduleMonthlyRandomCount.toString());
+        }
+        // scheduleExclusions - array of ISO date strings
+        const exclusions = goalDetails.scheduleExclusions;
+        if (exclusions && Array.isArray(exclusions) && exclusions.length > 0) {
+          const parsedExclusions = exclusions.map((iso: string) => new Date(iso)).filter((d: Date) => !isNaN(d.getTime()));
+          setExclusionDates(parsedExclusions);
+        }
+        // scheduleTimesPerDayDetails - array of {hour, minute, conditions}
+        const timesPerDayDetails = goalDetails.scheduleTimesPerDayDetails;
+        if (timesPerDayDetails && Array.isArray(timesPerDayDetails) && timesPerDayDetails.length > 0) {
+          setSpecificTimes(timesPerDayDetails);
         }
         
         // monthlyType - derived from which monthly fields are set
@@ -758,6 +817,27 @@ export default function CreateGoalScreen() {
     try {
       // Map frontend fields to backend field names
       // Backend uses: scheduleDaysOfWeek, scheduleDatesOfMonth, scheduleNthDayOfMonth, scheduleDatesOfYear, calendarType, endDate
+      // New fields: scheduleRecurrenceType, scheduleTimesPerDayDetails, scheduleWeekendsOnly, scheduleWeekdaysOnly,
+      //             scheduleFortnightEvenOdd, scheduleMonthlyRange, scheduleMonthlyRandomCount, scheduleExclusions
+      
+      // Build scheduleMonthlyRange if both start and end are set
+      const monthlyRange = (scheduleType === 'Monthly' && monthlyRangeStart && monthlyRangeEnd)
+        ? { start: parseInt(monthlyRangeStart), end: parseInt(monthlyRangeEnd) }
+        : undefined;
+      
+      // Build scheduleExclusions as array of UTC ISO strings
+      const exclusionsUtc = exclusionDates.length > 0
+        ? exclusionDates.map(d => {
+            const localZone = getLocalTimezone();
+            return DateTime.fromJSDate(d, { zone: localZone }).toUTC().toISO();
+          }).filter(Boolean)
+        : undefined;
+      
+      // Build scheduleTimesPerDayDetails for daily schedules
+      const timesPerDayDetails = (scheduleType === 'Daily' && specificTimes.length > 0)
+        ? specificTimes
+        : undefined;
+      
       const goalData: any = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -768,6 +848,10 @@ export default function CreateGoalScreen() {
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
         scheduleType,
         scheduleTimesPerDay: scheduleType === 'Daily' && scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
+        // New: scheduleRecurrenceType maps to the lowercase schedule type
+        scheduleRecurrenceType: scheduleType !== 'Always Active' ? scheduleType.toLowerCase() : undefined,
+        // New: specific times per day details
+        scheduleTimesPerDayDetails: timesPerDayDetails,
         // Weekly: store selectedWeekdays in scheduleDaysOfWeek
         scheduleDaysOfWeek: scheduleType === 'Weekly' && selectedWeekdays.length > 0 
           ? selectedWeekdays 
@@ -777,6 +861,11 @@ export default function CreateGoalScreen() {
         // Also send the explicit fields for backward compatibility
         selectedWeekdays: scheduleType === 'Weekly' && selectedWeekdays.length > 0 ? selectedWeekdays : undefined,
         selectedFortnightDays: scheduleType === 'Fortnightly' && selectedFortnightDays.length > 0 ? selectedFortnightDays : undefined,
+        // New: weekends/weekdays only toggles
+        scheduleWeekendsOnly: scheduleType === 'Weekly' ? weekendsOnly : undefined,
+        scheduleWeekdaysOnly: scheduleType === 'Weekly' ? weekdaysOnly : undefined,
+        // New: fortnight even/odd
+        scheduleFortnightEvenOdd: scheduleType === 'Fortnightly' && fortnightEvenOdd ? fortnightEvenOdd : undefined,
         monthlyType: scheduleType === 'Monthly' ? monthlyType : undefined,
         // Monthly dates: store in scheduleDatesOfMonth
         scheduleDatesOfMonth: scheduleType === 'Monthly' && monthlyType === 'date' && monthlyDates.length > 0 ? monthlyDates : undefined,
@@ -784,11 +873,17 @@ export default function CreateGoalScreen() {
         // Monthly weekday rules: store in scheduleNthDayOfMonth
         scheduleNthDayOfMonth: scheduleType === 'Monthly' && monthlyType === 'weekday' && monthlyWeekdayRules.length > 0 ? monthlyWeekdayRules : undefined,
         monthlyWeekdayRules: scheduleType === 'Monthly' && monthlyType === 'weekday' && monthlyWeekdayRules.length > 0 ? monthlyWeekdayRules : undefined,
+        // New: monthly range
+        scheduleMonthlyRange: monthlyRange,
+        // New: monthly random count
+        scheduleMonthlyRandomCount: scheduleType === 'Monthly' && monthlyRandomCount ? parseInt(monthlyRandomCount) : undefined,
         // Yearly dates: store as jsonb array in scheduleDatesOfYear
         scheduleDatesOfYear: scheduleType === 'Yearly' && yearlyDates.length > 0 ? yearlyDates : undefined,
         yearlyDates: scheduleType === 'Yearly' && yearlyDates.length > 0 ? yearlyDates : undefined,
         // Calendar type: store in calendarType column
         calendarType: (scheduleType === 'Monthly' || scheduleType === 'Yearly') ? calendarType : undefined,
+        // New: exclusion dates as UTC ISO strings
+        scheduleExclusions: exclusionsUtc,
         alarms: alarms.length > 0 ? alarms : undefined,
         // End date: store in endDate (maps to end_date column) as UTC ISO 8601 string
         // The endDate is already in local timezone (from DateTimePicker), convert to UTC
@@ -805,10 +900,18 @@ export default function CreateGoalScreen() {
       
       console.log('[API] Submitting goal data:', JSON.stringify({
         scheduleType: goalData.scheduleType,
+        scheduleRecurrenceType: goalData.scheduleRecurrenceType,
         scheduleDaysOfWeek: goalData.scheduleDaysOfWeek,
+        scheduleWeekendsOnly: goalData.scheduleWeekendsOnly,
+        scheduleWeekdaysOnly: goalData.scheduleWeekdaysOnly,
+        scheduleFortnightEvenOdd: goalData.scheduleFortnightEvenOdd,
         scheduleDatesOfMonth: goalData.scheduleDatesOfMonth,
+        scheduleMonthlyRange: goalData.scheduleMonthlyRange,
+        scheduleMonthlyRandomCount: goalData.scheduleMonthlyRandomCount,
         scheduleNthDayOfMonth: goalData.scheduleNthDayOfMonth,
         scheduleDatesOfYear: goalData.scheduleDatesOfYear,
+        scheduleTimesPerDayDetails: goalData.scheduleTimesPerDayDetails,
+        scheduleExclusions: goalData.scheduleExclusions,
         calendarType: goalData.calendarType,
         endDate: goalData.endDate,
         yearlyDates: goalData.yearlyDates,
@@ -1237,6 +1340,99 @@ export default function CreateGoalScreen() {
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="number-pad"
               />
+              
+              {/* Specific times with conditions */}
+              <Text style={[styles.subLabel, { marginTop: 12 }]}>Specific times (optional)</Text>
+              <Text style={styles.helperText}>Add specific times with optional conditions (e.g., "after dawn")</Text>
+              {specificTimes.length > 0 && (
+                <View style={{ gap: 8, marginBottom: 8 }}>
+                  {specificTimes.map((t, idx) => {
+                    const hour = t.hour;
+                    const ampm = hour >= 12 ? 'PM' : 'AM';
+                    const displayHour = hour % 12 || 12;
+                    const timeStr = `${displayHour}:${t.minute.toString().padStart(2, '0')} ${ampm}`;
+                    return (
+                      <View key={idx} style={styles.ruleItem}>
+                        <Text style={styles.ruleText}>
+                          {timeStr}{t.conditions ? ` (${t.conditions})` : ''}
+                        </Text>
+                        <TouchableOpacity onPress={() => {
+                          setSpecificTimes(specificTimes.filter((_, i) => i !== idx));
+                        }}>
+                          <IconSymbol
+                            ios_icon_name="trash"
+                            android_material_icon_name="delete"
+                            size={20}
+                            color="#ff4444"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => {
+                  // Add a default time entry (9:00 AM)
+                  setSpecificTimes([...specificTimes, { hour: 9, minute: 0, conditions: '' }]);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="plus"
+                  android_material_icon_name="add"
+                  size={20}
+                  color="#fff"
+                />
+                <Text style={styles.addButtonText}>Add Specific Time</Text>
+              </TouchableOpacity>
+              
+              {/* Edit specific times inline */}
+              {specificTimes.length > 0 && specificTimes.map((t, idx) => (
+                <View key={`edit-${idx}`} style={[styles.advancedSection, { marginTop: 8 }]}>
+                  <Text style={styles.subLabel}>Time {idx + 1}</Text>
+                  <View style={styles.rewardInputGroup}>
+                    <TextInput
+                      style={[styles.smallInput, { width: 60 }]}
+                      value={t.hour.toString()}
+                      onChangeText={(val) => {
+                        const h = parseInt(val) || 0;
+                        const updated = [...specificTimes];
+                        updated[idx] = { ...updated[idx], hour: Math.min(23, Math.max(0, h)) };
+                        setSpecificTimes(updated);
+                      }}
+                      placeholder="H"
+                      placeholderTextColor={colors.textSecondary}
+                      keyboardType="number-pad"
+                    />
+                    <Text style={styles.subLabel}>:</Text>
+                    <TextInput
+                      style={[styles.smallInput, { width: 60 }]}
+                      value={t.minute.toString().padStart(2, '0')}
+                      onChangeText={(val) => {
+                        const m = parseInt(val) || 0;
+                        const updated = [...specificTimes];
+                        updated[idx] = { ...updated[idx], minute: Math.min(59, Math.max(0, m)) };
+                        setSpecificTimes(updated);
+                      }}
+                      placeholder="MM"
+                      placeholderTextColor={colors.textSecondary}
+                      keyboardType="number-pad"
+                    />
+                    <TextInput
+                      style={[styles.input, { flex: 1 }]}
+                      value={t.conditions || ''}
+                      onChangeText={(val) => {
+                        const updated = [...specificTimes];
+                        updated[idx] = { ...updated[idx], conditions: val };
+                        setSpecificTimes(updated);
+                      }}
+                      placeholder="Condition (e.g., after dawn)"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+                </View>
+              ))}
             </View>
           )}
           
@@ -1262,6 +1458,40 @@ export default function CreateGoalScreen() {
                     );
                   })}
                 </View>
+                
+                {/* Weekends/Weekdays only toggles */}
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    style={[styles.toggleButton, weekendsOnly && styles.toggleButtonActive]}
+                    onPress={() => {
+                      const newVal = !weekendsOnly;
+                      setWeekendsOnly(newVal);
+                      if (newVal) {
+                        setWeekdaysOnly(false);
+                        setSelectedWeekdays([0, 6]); // Sun, Sat
+                      }
+                    }}
+                  >
+                    <Text style={[styles.toggleButtonText, weekendsOnly && styles.toggleButtonTextActive]}>
+                      Weekends Only
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleButton, weekdaysOnly && styles.toggleButtonActive]}
+                    onPress={() => {
+                      const newVal = !weekdaysOnly;
+                      setWeekdaysOnly(newVal);
+                      if (newVal) {
+                        setWeekendsOnly(false);
+                        setSelectedWeekdays([1, 2, 3, 4, 5]); // Mon-Fri
+                      }
+                    }}
+                  >
+                    <Text style={[styles.toggleButtonText, weekdaysOnly && styles.toggleButtonTextActive]}>
+                      Weekdays Only
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           )}
@@ -1272,6 +1502,27 @@ export default function CreateGoalScreen() {
               <Text style={styles.subLabel}>Select days (2 weeks)</Text>
               <View style={{ padding: 16 }}>
                 <Text style={styles.helperText}>Select multiple days across 2 weeks</Text>
+                
+                {/* Even/Odd week selector */}
+                <Text style={[styles.subLabel, { marginBottom: 8 }]}>Fortnight cycle (optional)</Text>
+                <View style={styles.toggleRow}>
+                  <TouchableOpacity
+                    style={[styles.toggleButton, fortnightEvenOdd === 'even' && styles.toggleButtonActive]}
+                    onPress={() => setFortnightEvenOdd(fortnightEvenOdd === 'even' ? '' : 'even')}
+                  >
+                    <Text style={[styles.toggleButtonText, fortnightEvenOdd === 'even' && styles.toggleButtonTextActive]}>
+                      Even Weeks
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.toggleButton, fortnightEvenOdd === 'odd' && styles.toggleButtonActive]}
+                    onPress={() => setFortnightEvenOdd(fortnightEvenOdd === 'odd' ? '' : 'odd')}
+                  >
+                    <Text style={[styles.toggleButtonText, fortnightEvenOdd === 'odd' && styles.toggleButtonTextActive]}>
+                      Odd Weeks
+                    </Text>
+                  </TouchableOpacity>
+                </View>
                 
                 {/* Week 1 */}
                 <Text style={styles.weekLabel}>Week 1</Text>
@@ -1408,6 +1659,62 @@ export default function CreateGoalScreen() {
                   </TouchableOpacity>
                 </View>
               )}
+              
+              {/* Advanced: Random Selection */}
+              <TouchableOpacity
+                style={styles.advancedToggle}
+                onPress={() => setShowAdvancedOptions(!showAdvancedOptions)}
+              >
+                <Text style={styles.advancedToggleText}>Advanced Options</Text>
+                <IconSymbol
+                  ios_icon_name={showAdvancedOptions ? 'chevron.up' : 'chevron.down'}
+                  android_material_icon_name={showAdvancedOptions ? 'expand-less' : 'expand-more'}
+                  size={20}
+                  color={colors.primary}
+                />
+              </TouchableOpacity>
+              
+              {showAdvancedOptions && (
+                <View style={styles.advancedSection}>
+                  <Text style={styles.subLabel}>Random Selection (Optional)</Text>
+                  <Text style={styles.helperText}>
+                    Select N random days each month (e.g., 3 random days)
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={monthlyRandomCount}
+                    onChangeText={setMonthlyRandomCount}
+                    placeholder="e.g., 3"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="number-pad"
+                  />
+                  
+                  <Text style={[styles.subLabel, { marginTop: 16 }]}>Date Range (Optional)</Text>
+                  <Text style={styles.helperText}>
+                    Activate on a range of dates each month (e.g., days 1–5)
+                  </Text>
+                  <View style={styles.rewardInputGroup}>
+                    <Text style={styles.subLabel}>Day</Text>
+                    <TextInput
+                      style={styles.smallInput}
+                      value={monthlyRangeStart}
+                      onChangeText={setMonthlyRangeStart}
+                      placeholder="1"
+                      placeholderTextColor={colors.textSecondary}
+                      keyboardType="number-pad"
+                    />
+                    <Text style={styles.subLabel}>to</Text>
+                    <TextInput
+                      style={styles.smallInput}
+                      value={monthlyRangeEnd}
+                      onChangeText={setMonthlyRangeEnd}
+                      placeholder="5"
+                      placeholderTextColor={colors.textSecondary}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                </View>
+              )}
             </View>
           )}
           
@@ -1496,6 +1803,52 @@ export default function CreateGoalScreen() {
                   </Text>
                 </>
               )}
+            </View>
+          )}
+          
+          {/* Exclusion Dates (Advanced) */}
+          {scheduleType !== 'Always Active' && showAdvancedOptions && (
+            <View style={styles.subSection}>
+              <Text style={styles.subLabel}>Exclusion Dates (Optional)</Text>
+              <Text style={styles.helperText}>
+                Dates to skip (e.g., holidays, vacations)
+              </Text>
+              {exclusionDates.length > 0 && (
+                <View style={styles.exclusionsList}>
+                  {exclusionDates.map((date, index) => (
+                    <View key={index} style={styles.exclusionItem}>
+                      <Text style={styles.exclusionText}>
+                        {formatDateByCalendar(date, calendarType)}
+                      </Text>
+                      <TouchableOpacity onPress={() => {
+                        setExclusionDates(exclusionDates.filter((_, i) => i !== index));
+                      }}>
+                        <IconSymbol
+                          ios_icon_name="xmark.circle.fill"
+                          android_material_icon_name="cancel"
+                          size={20}
+                          color="#ff4444"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.addButton}
+                onPress={() => {
+                  setTempExclusionDate(new Date());
+                  setShowExclusionDatePicker(true);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="plus"
+                  android_material_icon_name="add"
+                  size={20}
+                  color="#fff"
+                />
+                <Text style={styles.addButtonText}>Add Exclusion Date</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -1676,6 +2029,60 @@ export default function CreateGoalScreen() {
           )}
         </View>
 
+        {/* Schedule Preview - Show upcoming activations */}
+        {scheduleType !== 'Always Active' && (
+          <View style={styles.section}>
+            <GoalSchedulePreview
+              schedule={{
+                calendarType,
+                recurrenceType: scheduleType.toLowerCase() as any,
+                details: {
+                  startDate: hasEndDate && endDate ? new Date().toISOString() : undefined,
+                  endDate: hasEndDate && endDate ? (() => {
+                    const localZone = getLocalTimezone();
+                    return DateTime.fromJSDate(endDate, { zone: localZone }).toUTC().toISO() || undefined;
+                  })() : undefined,
+                  timesPerDay: scheduleType === 'Daily' && scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
+                  specificTimes: scheduleType === 'Daily' && specificTimes.length > 0 ? specificTimes : undefined,
+                  daysOfWeek: scheduleType === 'Weekly' ? (weekendsOnly ? [0, 6] : weekdaysOnly ? [1, 2, 3, 4, 5] : selectedWeekdays) : undefined,
+                  weekendsOnly: scheduleType === 'Weekly' ? weekendsOnly : undefined,
+                  weekdaysOnly: scheduleType === 'Weekly' ? weekdaysOnly : undefined,
+                  fortnightDays: scheduleType === 'Fortnightly' ? selectedFortnightDays : undefined,
+                  evenOddWeeks: scheduleType === 'Fortnightly' && fortnightEvenOdd ? fortnightEvenOdd as 'even' | 'odd' : undefined,
+                  dates: scheduleType === 'Monthly' && monthlyType === 'date' ? monthlyDates : undefined,
+                  nthDay: scheduleType === 'Monthly' && monthlyType === 'weekday' ? monthlyWeekdayRules.map(r => ({
+                    day: r.weekday,
+                    nth: WEEK_POSITIONS.indexOf(r.position) + 1,
+                  })) : undefined,
+                  range: scheduleType === 'Monthly' && monthlyRangeStart && monthlyRangeEnd
+                    ? { start: parseInt(monthlyRangeStart), end: parseInt(monthlyRangeEnd) }
+                    : undefined,
+                  randomCount: scheduleType === 'Monthly' && monthlyRandomCount ? parseInt(monthlyRandomCount) : undefined,
+                  datesOrRanges: scheduleType === 'Yearly' ? yearlyDates.map(d => ({
+                    month: d.startMonth,
+                    days: d.endMonth ? undefined : [d.startDay],
+                    start: d.endMonth ? d.startDay : undefined,
+                    end: d.endDay,
+                  })) : undefined,
+                  exclusions: exclusionDates.length > 0 ? exclusionDates.map(d => {
+                    const localZone = getLocalTimezone();
+                    return DateTime.fromJSDate(d, { zone: localZone }).toUTC().toISO() || '';
+                  }).filter(Boolean) : undefined,
+                },
+              }}
+              alarms={alarms.map(a => ({
+                id: a.id,
+                triggers: [{
+                  type: 'time',
+                  value: a.time,
+                  offsetMinutes: a.offsetDays * 24 * 60,
+                }],
+              }))}
+              count={10}
+            />
+          </View>
+        )}
+
         {/* Submit Button */}
         <View style={styles.buttonContainer}>
           <LoadingButton
@@ -1731,6 +2138,62 @@ export default function CreateGoalScreen() {
                     onPress={() => setShowEndDatePicker(false)}
                   >
                     <Text style={styles.addButtonText}>Done</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* Exclusion Date Picker Modal */}
+      {showExclusionDatePicker && Platform.OS !== 'web' && (
+        <Modal
+          visible={showExclusionDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowExclusionDatePicker(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { maxHeight: 400 }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add Exclusion Date</Text>
+                <TouchableOpacity onPress={() => setShowExclusionDatePicker(false)}>
+                  <IconSymbol
+                    ios_icon_name="xmark"
+                    android_material_icon_name="close"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
+              <View style={{ padding: 16, alignItems: 'center' }}>
+                <DateTimePicker
+                  value={tempExclusionDate}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    if (event.type === 'set' && selectedDate) {
+                      setTempExclusionDate(selectedDate);
+                    }
+                    if (Platform.OS === 'android') {
+                      if (event.type === 'set' && selectedDate) {
+                        setExclusionDates([...exclusionDates, selectedDate]);
+                      }
+                      setShowExclusionDatePicker(false);
+                    }
+                  }}
+                  minimumDate={new Date()}
+                />
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={[styles.addButton, { marginTop: 16, width: '100%' }]}
+                    onPress={() => {
+                      setExclusionDates([...exclusionDates, tempExclusionDate]);
+                      setShowExclusionDatePicker(false);
+                    }}
+                  >
+                    <Text style={styles.addButtonText}>Add Date</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -2507,12 +2970,20 @@ export default function CreateGoalScreen() {
                   setScheduleType('Always Active');
                   setScheduleTimesPerDay('');
                   setSelectedWeekdays([]);
+                  setWeekendsOnly(false);
+                  setWeekdaysOnly(false);
                   setSelectedFortnightDays([]);
+                  setFortnightEvenOdd('');
                   setMonthlyType('date');
                   setMonthlyDates([]);
                   setMonthlyWeekdayRules([]);
+                  setMonthlyRandomCount('');
+                  setMonthlyRangeStart('');
+                  setMonthlyRangeEnd('');
                   setYearlyDates([]);
                   setCalendarType('Gregorian');
+                  setExclusionDates([]);
+                  setSpecificTimes([]);
                   setRewardCurrencyId(undefined);
                   setRewardSuccesses('');
                   setRewardAmount('');
@@ -3013,5 +3484,76 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+  },
+  advancedToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  advancedToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  advancedSection: {
+    marginTop: 12,
+    padding: 16,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  exclusionsList: {
+    gap: 8,
+    marginVertical: 12,
+  },
+  exclusionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  exclusionText: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  toggleButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  toggleButtonTextActive: {
+    color: '#fff',
   },
 });

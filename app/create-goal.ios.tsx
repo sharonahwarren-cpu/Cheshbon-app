@@ -246,17 +246,28 @@ export default function CreateGoalScreen() {
         if (goalDetails.monthlyType) {
           setMonthlyType(goalDetails.monthlyType);
         }
-        if (goalDetails.monthlyDates) {
-          setMonthlyDates(goalDetails.monthlyDates);
+        if (goalDetails.monthlyDates || goalDetails.scheduleDatesOfMonth || goalDetails.schedule_dates_of_month) {
+          setMonthlyDates(goalDetails.monthlyDates || goalDetails.scheduleDatesOfMonth || goalDetails.schedule_dates_of_month || []);
         }
-        if (goalDetails.monthlyWeekdayRules) {
-          setMonthlyWeekdayRules(goalDetails.monthlyWeekdayRules);
+        if (goalDetails.monthlyWeekdayRules || goalDetails.scheduleNthDayOfMonth || goalDetails.schedule_nth_day_of_month) {
+          const rules = goalDetails.monthlyWeekdayRules || goalDetails.scheduleNthDayOfMonth || goalDetails.schedule_nth_day_of_month;
+          if (rules) {
+            const parsedRules = Array.isArray(rules) ? rules : (typeof rules === 'string' ? JSON.parse(rules) : [rules]);
+            setMonthlyWeekdayRules(parsedRules);
+          }
         }
-        if (goalDetails.yearlyDates) {
-          setYearlyDates(goalDetails.yearlyDates);
+        if (goalDetails.yearlyDates || goalDetails.scheduleDatesOfYear || goalDetails.schedule_dates_of_year) {
+          setYearlyDates(goalDetails.yearlyDates || goalDetails.scheduleDatesOfYear || goalDetails.schedule_dates_of_year || []);
         }
-        if (goalDetails.calendarType) {
-          setCalendarType(goalDetails.calendarType);
+        const calendarTypeData = goalDetails.calendarType || goalDetails.calendar_type;
+        if (calendarTypeData) {
+          const calendarMap: Record<string, CalendarType> = {
+            'gregorian': 'Gregorian', 'hebrew': 'Hebrew', 'chinese': 'Chinese',
+            'islamic': 'Islamic', 'persian': 'Persian',
+            'Gregorian': 'Gregorian', 'Hebrew': 'Hebrew', 'Chinese': 'Chinese',
+            'Islamic': 'Islamic', 'Persian': 'Persian',
+          };
+          setCalendarType(calendarMap[calendarTypeData] || 'Gregorian');
         }
         
         // Load reward data
@@ -415,12 +426,14 @@ export default function CreateGoalScreen() {
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
         scheduleType,
         scheduleTimesPerDay: scheduleType === 'Daily' && scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
+        // New: scheduleRecurrenceType maps to the lowercase schedule type
+        scheduleRecurrenceType: scheduleType !== 'Always Active' ? scheduleType.toLowerCase() : undefined,
         selectedWeekdays: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') && selectedWeekdays.length > 0 ? selectedWeekdays : undefined,
         monthlyType: scheduleType === 'Monthly' ? monthlyType : undefined,
         monthlyDates: scheduleType === 'Monthly' && monthlyType === 'date' && monthlyDates.length > 0 ? monthlyDates : undefined,
         monthlyWeekdayRules: scheduleType === 'Monthly' && monthlyType === 'weekday' && monthlyWeekdayRules.length > 0 ? monthlyWeekdayRules : undefined,
         yearlyDates: scheduleType === 'Yearly' && yearlyDates.length > 0 ? yearlyDates : undefined,
-        calendarType: scheduleType === 'Yearly' ? calendarType : undefined,
+        calendarType: (scheduleType === 'Monthly' || scheduleType === 'Yearly') ? calendarType : undefined,
         // Alarm fields
         alarmEnabled,
         alarmTime: alarmEnabled ? alarmTime : null,
