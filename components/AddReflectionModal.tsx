@@ -19,6 +19,7 @@ import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { authenticatedPost, authenticatedPut } from '@/utils/api';
 import { useRouter } from 'expo-router';
+import { getLocalTimezone } from '@/utils/dateUtils';
 
 interface GainLoss {
   id: string;
@@ -491,7 +492,17 @@ export function AddReflectionModal({
     console.log('Saving reflection from shared AddReflectionModal, sourceScreen:', sourceScreen);
     setLoading(true);
     try {
-      const dateString = selectedDate.toISOString().split('T')[0];
+      // Use local timezone to get the correct date string (YYYY-MM-DD)
+      // This ensures the reflection is stored for the correct local date, not UTC date
+      const localZone = getLocalTimezone();
+      const localDate = new Intl.DateTimeFormat('en-CA', { 
+        timeZone: localZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(selectedDate);
+      const dateString = localDate; // Already in YYYY-MM-DD format from en-CA locale
+      console.log(`[AddReflectionModal] Date string (local ${localZone}): ${dateString} (from UTC: ${selectedDate.toISOString()})`);
       
       // Filter out strategies with null worked value before saving
       const validStrategyEffectiveness = strategyEffectiveness.filter(se => se.worked !== null);

@@ -21,6 +21,7 @@ import { colors } from '@/styles/commonStyles';
 import { AddReflectionModal } from '@/components/AddReflectionModal';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { getLocalTimezone } from '@/utils/dateUtils';
 
 interface JournalEntry {
   id: string;
@@ -102,11 +103,26 @@ interface UserPreferences {
 }
 
 // Helper function to format date as YYYY-MM-DD in local timezone
+// Uses Intl.DateTimeFormat to ensure correct local date regardless of UTC offset
 function formatDateLocal(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  try {
+    const localZone = getLocalTimezone();
+    // Use en-CA locale which formats as YYYY-MM-DD
+    const formatted = new Intl.DateTimeFormat('en-CA', {
+      timeZone: localZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+    console.log(`[Reflect] formatDateLocal: ${date.toISOString()} -> ${formatted} (${localZone})`);
+    return formatted;
+  } catch (error) {
+    // Fallback to simple extraction
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 }
 
 export default function ReflectScreen() {

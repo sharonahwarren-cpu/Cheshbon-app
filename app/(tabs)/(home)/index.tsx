@@ -12,7 +12,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from "react-native";
-import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from "@/utils/api";
 import React, { useState, useEffect, useRef } from "react";
 import { colors } from "@/styles/commonStyles";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
@@ -21,6 +21,8 @@ import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { DateTime } from 'luxon';
+import { getLocalTimezone } from '@/utils/dateUtils';
 
 interface DailyEntry {
   id: string;
@@ -130,11 +132,26 @@ interface JournalEntry {
   updatedAt: string;
 }
 
+// Helper function to format date as YYYY-MM-DD in local timezone
+// Uses Intl.DateTimeFormat to ensure correct local date regardless of UTC offset
 function formatDateLocal(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  try {
+    const localZone = getLocalTimezone();
+    // Use en-CA locale which formats as YYYY-MM-DD
+    const formatted = new Intl.DateTimeFormat('en-CA', {
+      timeZone: localZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+    return formatted;
+  } catch (error) {
+    // Fallback to simple extraction
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 }
 
 export default function HomeScreen() {
@@ -247,6 +264,27 @@ export default function HomeScreen() {
       setJournalEntry(journalData);
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
+      
+      // Log timezone info for debugging and auto-update if changed
+      const deviceTimezone = getLocalTimezone();
+      const storedTimezone = prefsData.timezone;
+      console.log('[Home] Timezone info:', {
+        device: deviceTimezone,
+        stored: storedTimezone,
+        calendar: prefsData.alternativeCalendar,
+      });
+      
+      // Auto-update timezone if device timezone has changed (e.g., user traveled)
+      if (!storedTimezone || storedTimezone !== deviceTimezone) {
+        console.log('[Home] Updating timezone to device timezone:', deviceTimezone);
+        try {
+          await authenticatedPut('/api/user-preferences', { timezone: deviceTimezone });
+          console.log('[Home] Timezone updated successfully to:', deviceTimezone);
+        } catch (tzError) {
+          // Non-critical - just log the error
+          console.warn('[Home] Failed to update timezone:', tzError);
+        }
+      }
 
       // Set initial view based on user's preferred home screen (only on first load)
       if (!homeScreenInitialized) {
@@ -277,10 +315,19 @@ export default function HomeScreen() {
   const handleGoalSuccess = async (goalId: string) => {
     console.log("Recording success for goal:", goalId);
     
+    // Create UTC timestamp for the selected date at current time in local timezone
+    const localZone = getLocalTimezone();
+    const now = DateTime.now().setZone(localZone);
+    // Use selected date but current time, converted to UTC ISO 8601
+    const selectedDt = DateTime.fromJSDate(selectedDate, { zone: localZone })
+      .set({ hour: now.hour, minute: now.minute, second: now.second });
+    const utcTimestamp = selectedDt.toUTC().toISO();
+    console.log(`[Home] Success timestamp: local=${selectedDt.toISO()} -> UTC=${utcTimestamp}`);
+    
     const newEntry: DailyEntry = {
       id: `temp-${Date.now()}`,
       type: 'success',
-      timestamp: new Date(selectedDate).toISOString(),
+      timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
     setActivatedGoals(prevGoals => 
@@ -298,7 +345,7 @@ export default function HomeScreen() {
     );
     
     try {
-      const timestamp = new Date(selectedDate).toISOString();
+      const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
       const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
       
       setActivatedGoals(prevGoals => 
@@ -340,10 +387,18 @@ export default function HomeScreen() {
   const handleGoalStruggle = async (goalId: string) => {
     console.log("Recording struggle for goal:", goalId);
     
+    // Create UTC timestamp for the selected date at current time in local timezone
+    const localZone = getLocalTimezone();
+    const now = DateTime.now().setZone(localZone);
+    const selectedDt = DateTime.fromJSDate(selectedDate, { zone: localZone })
+      .set({ hour: now.hour, minute: now.minute, second: now.second });
+    const utcTimestamp = selectedDt.toUTC().toISO();
+    console.log(`[Home] Struggle timestamp: local=${selectedDt.toISO()} -> UTC=${utcTimestamp}`);
+    
     const newEntry: DailyEntry = {
       id: `temp-${Date.now()}`,
       type: 'struggle',
-      timestamp: new Date(selectedDate).toISOString(),
+      timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
     setActivatedGoals(prevGoals => 
@@ -361,8 +416,8 @@ export default function HomeScreen() {
     );
     
     try {
-      const timestamp = new Date(selectedDate).toISOString();
-      const response = authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
+      const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
+      const response: any = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
       
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
@@ -370,11 +425,11 @@ export default function HomeScreen() {
             return {
               ...goal,
               dailyEntries: goal.dailyEntries?.map(e => 
-                e.id === newEntry.id ? { ...e, id: response.entryId || e.id } : e
+                e.id === newEntry.id ? { ...e, id: response?.entryId || e.id } : e
               ),
-              todayStruggleCount: response.todayStruggleCount || goal.todayStruggleCount,
-              struggleCount: response.struggleCount || goal.struggleCount,
-              streak: response.streak !== undefined ? response.streak : goal.streak,
+              todayStruggleCount: response?.todayStruggleCount || goal.todayStruggleCount,
+              struggleCount: response?.struggleCount || goal.struggleCount,
+              streak: response?.streak !== undefined ? response.streak : goal.streak,
             };
           }
           return goal;

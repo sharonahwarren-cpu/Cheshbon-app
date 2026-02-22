@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { authenticatedGet, authenticatedPut } from '@/utils/api';
+import { getLocalTimezone } from '@/utils/dateUtils';
 
 export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 
@@ -119,6 +120,7 @@ export default function AlternativeCalendarsScreen() {
   const [errorMessage, setErrorMessage] = useState('');
 
   const today = new Date();
+  const deviceTimezone = getLocalTimezone();
 
   useEffect(() => {
     loadPreferences();
@@ -132,6 +134,26 @@ export default function AlternativeCalendarsScreen() {
       console.log('[AlternativeCalendars] Preferences loaded:', data);
       const prefs = (data as any)?.data || data;
       setSelectedCalendar((prefs.alternativeCalendar as CalendarType) ?? 'gregorian');
+      
+      // Log the stored timezone vs device timezone for debugging
+      const storedTimezone = prefs.timezone;
+      const currentDeviceTimezone = getLocalTimezone();
+      console.log('[AlternativeCalendars] Timezone info:', {
+        stored: storedTimezone,
+        device: currentDeviceTimezone,
+        match: storedTimezone === currentDeviceTimezone,
+      });
+      
+      // If timezone has changed (e.g., user traveled), auto-update it
+      if (storedTimezone && storedTimezone !== currentDeviceTimezone) {
+        console.log('[AlternativeCalendars] Timezone changed, updating to:', currentDeviceTimezone);
+        try {
+          await authenticatedPut('/api/user-preferences', { timezone: currentDeviceTimezone });
+          console.log('[AlternativeCalendars] Timezone updated to:', currentDeviceTimezone);
+        } catch (tzError) {
+          console.warn('[AlternativeCalendars] Failed to update timezone:', tzError);
+        }
+      }
     } catch (error) {
       console.error('[AlternativeCalendars] Error loading preferences:', error);
       setErrorMessage('Failed to load preferences');
@@ -145,10 +167,18 @@ export default function AlternativeCalendarsScreen() {
     console.log('[AlternativeCalendars] Saving calendar preference:', calendar);
     setSaving(true);
     try {
-      await authenticatedPut('/api/user-preferences', { alternativeCalendar: calendar });
-      console.log('[AlternativeCalendars] Calendar preference saved successfully');
-      setSuccessMessage('Calendar preference saved');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      // Detect device timezone and save alongside calendar preference
+      const deviceTimezone = getLocalTimezone();
+      console.log('[AlternativeCalendars] Device timezone detected:', deviceTimezone);
+      
+      // Save both the calendar preference and the device timezone to the backend
+      await authenticatedPut('/api/user-preferences', { 
+        alternativeCalendar: calendar,
+        timezone: deviceTimezone,
+      });
+      console.log('[AlternativeCalendars] Calendar preference and timezone saved successfully:', { calendar, timezone: deviceTimezone });
+      setSuccessMessage(`Calendar preference saved (Timezone: ${deviceTimezone})`);
+      setTimeout(() => setSuccessMessage(''), 4000);
     } catch (error) {
       console.error('[AlternativeCalendars] Error saving preferences:', error);
       setErrorMessage('Failed to save preferences');
@@ -261,6 +291,16 @@ export default function AlternativeCalendarsScreen() {
           <Text style={styles.infoItem}>• All date fields show both Gregorian and alternative dates</Text>
           <Text style={styles.infoItem}>• Goal scheduling and alarms can be set using either calendar</Text>
           <Text style={styles.infoItem}>• The Gregorian calendar remains the primary system calendar</Text>
+          <Text style={styles.infoItem}>• All dates are stored as UTC timestamps for accuracy across timezones</Text>
+          <View style={styles.timezoneRow}>
+            <IconSymbol
+              ios_icon_name="clock.fill"
+              android_material_icon_name="schedule"
+              size={16}
+              color={colors.accent}
+            />
+            <Text style={styles.timezoneText}>Device timezone: {deviceTimezone}</Text>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -413,5 +453,19 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 2,
+  },
+  timezoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: `${colors.accent}20`,
+  },
+  timezoneText: {
+    fontSize: 13,
+    color: colors.accent,
+    fontWeight: '600',
   },
 });

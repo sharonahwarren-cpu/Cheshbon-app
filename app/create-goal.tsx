@@ -20,6 +20,8 @@ import {
   Switch,
 } from 'react-native';
 import { IconSymbol } from '@/components/IconSymbol';
+import { DateTime } from 'luxon';
+import { getLocalTimezone } from '@/utils/dateUtils';
 
 interface Goal {
   id: string;
@@ -190,44 +192,58 @@ const getMaxDaysInMonth = (month: number, calendarType: CalendarType): number =>
 };
 
 // Helper function to format date based on calendar type
+// Uses luxon for timezone-aware conversion from UTC
 const formatDateByCalendar = (date: Date, calendarType: CalendarType): string => {
-  if (calendarType === 'Gregorian') {
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  }
-  
-  if (calendarType === 'Hebrew') {
-    try {
-      const hdate = new HDate(date);
-      const monthName = hdate.getMonthName();
-      const day = hdate.getDate();
-      const year = hdate.getFullYear();
-      return `${day} ${monthName} ${year}`;
-    } catch (error) {
-      console.error('Error formatting Hebrew date:', error);
-      return date.toLocaleDateString();
-    }
-  }
-  
-  // For alternative calendars, use Intl.DateTimeFormat
-  const calendarMap: Record<CalendarType, string> = {
-    'Gregorian': 'gregory',
-    'Hebrew': 'hebrew',
-    'Chinese': 'chinese',
-    'Islamic': 'islamic',
-  };
-  
-  const calendarId = calendarMap[calendarType];
-  
   try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      calendar: calendarId,
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-    return formatter.format(date);
+    // Convert the Date (which may be UTC) to local timezone using luxon
+    const localZone = getLocalTimezone();
+    const dt = DateTime.fromJSDate(date, { zone: 'UTC' }).setZone(localZone);
+    const localDate = dt.toJSDate();
+    
+    console.log(`[CreateGoal] formatDateByCalendar: UTC=${date.toISOString()} -> Local(${localZone})=${dt.toISO()}`);
+    
+    if (calendarType === 'Gregorian') {
+      return dt.toFormat('MMMM d, yyyy');
+    }
+    
+    if (calendarType === 'Hebrew') {
+      try {
+        const hdate = new HDate(localDate);
+        const monthName = hdate.getMonthName();
+        const day = hdate.getDate();
+        const year = hdate.getFullYear();
+        return `${day} ${monthName} ${year}`;
+      } catch (error) {
+        console.error('Error formatting Hebrew date:', error);
+        return dt.toFormat('MMMM d, yyyy');
+      }
+    }
+    
+    // For alternative calendars, use Intl.DateTimeFormat
+    const calendarMap: Record<CalendarType, string> = {
+      'Gregorian': 'gregory',
+      'Hebrew': 'hebrew',
+      'Chinese': 'chinese',
+      'Islamic': 'islamic',
+    };
+    
+    const calendarId = calendarMap[calendarType];
+    
+    try {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        calendar: calendarId,
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: localZone,
+      });
+      return formatter.format(date);
+    } catch (error) {
+      console.error('Error formatting date with calendar:', calendarType, error);
+      return dt.toFormat('MMMM d, yyyy');
+    }
   } catch (error) {
-    console.error('Error formatting date with calendar:', calendarType, error);
+    console.error('Error in formatDateByCalendar:', error);
     return date.toLocaleDateString();
   }
 };
@@ -409,6 +425,15 @@ export default function CreateGoalScreen() {
         };
         setCalendarType(calendarMap[preferences.alternativeCalendar] || 'Gregorian');
       }
+      
+      // Log timezone info for debugging
+      const deviceTimezone = getLocalTimezone();
+      const storedTimezone = preferences.timezone;
+      console.log('[CreateGoal] Timezone info:', {
+        device: deviceTimezone,
+        stored: storedTimezone,
+        calendar: preferences.alternativeCalendar,
+      });
 
       if (preselectedLifeAreaId && !editingGoalId) {
         console.log('[CreateGoal] Pre-selecting life area:', preselectedLifeAreaId);
@@ -504,12 +529,17 @@ export default function CreateGoalScreen() {
           setCalendarType(calendarMap[calendarTypeData] || 'Gregorian');
         }
         
-        // Load end date - backend stores in end_date column
+        // Load end date - backend stores in end_date column as ISO 8601 UTC string
         const endDateData = goalDetails.endDate || goalDetails.end_date;
         if (endDateData) {
           setHasEndDate(true);
-          setEndDate(new Date(endDateData));
-          console.log('[API] Loaded end date:', endDateData, '->', new Date(endDateData));
+          // Parse ISO 8601 UTC string and convert to local timezone for display
+          const localZone = getLocalTimezone();
+          const utcDt = DateTime.fromISO(endDateData, { zone: 'UTC' });
+          const localDt = utcDt.setZone(localZone);
+          const localDate = localDt.toJSDate();
+          setEndDate(localDate);
+          console.log('[API] Loaded end date (UTC):', endDateData, '-> Local:', localDt.toISO(), '-> JS Date:', localDate);
         }
         
         if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {
@@ -760,8 +790,17 @@ export default function CreateGoalScreen() {
         // Calendar type: store in calendarType column
         calendarType: (scheduleType === 'Monthly' || scheduleType === 'Yearly') ? calendarType : undefined,
         alarms: alarms.length > 0 ? alarms : undefined,
-        // End date: store in endDate (maps to end_date column)
-        endDate: hasEndDate && endDate ? endDate.toISOString() : null,
+        // End date: store in endDate (maps to end_date column) as UTC ISO 8601 string
+        // The endDate is already in local timezone (from DateTimePicker), convert to UTC
+        endDate: hasEndDate && endDate ? (() => {
+          const localZone = getLocalTimezone();
+          // DateTimePicker returns a JS Date in local time, but JS Date is always UTC internally
+          // We need to interpret the date components as local time and convert to UTC
+          const dt = DateTime.fromJSDate(endDate, { zone: localZone });
+          const utcIso = dt.toUTC().toISO();
+          console.log('[CreateGoal] Converting endDate to UTC:', endDate.toISOString(), '-> Local zone:', localZone, '-> UTC:', utcIso);
+          return utcIso;
+        })() : null,
       };
       
       console.log('[API] Submitting goal data:', JSON.stringify({
