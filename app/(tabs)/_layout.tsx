@@ -80,15 +80,9 @@ export default function TabLayout() {
 
   const tabs: TabBarItem[] = [
     {
-      name: 'reflect',
-      route: '/(tabs)/reflect',
-      icon: 'edit',
-      label: 'Reflect',
-    },
-    {
       name: '(home)',
       route: '/(tabs)/(home)/',
-      icon: 'flash-on',
+      icon: 'edit',
       label: 'Home',
     },
     {
@@ -113,7 +107,6 @@ export default function TabLayout() {
           animation: 'none',
         }}
       >
-        <Stack.Screen key="reflect" name="reflect" />
         <Stack.Screen key="home" name="(home)" />
         <Stack.Screen key="reports" name="reports" />
         <Stack.Screen key="profile" name="profile" />

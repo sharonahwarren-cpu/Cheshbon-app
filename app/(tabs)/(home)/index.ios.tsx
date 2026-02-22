@@ -1117,16 +1117,6 @@ export default function HomeScreen() {
             <Text style={styles.dateDisplay}>{dateDisplay}</Text>
           </TouchableOpacity>
           
-          <View style={styles.lifetimeCounterContainer}>
-            <IconSymbol
-              ios_icon_name="checkmark"
-              android_material_icon_name="check"
-              size={10}
-              color={colors.success}
-            />
-            <Text style={styles.lifetimeCounterText}>{lifetimeSuccessCount}</Text>
-          </View>
-          
           <TouchableOpacity 
             style={styles.dateNavButton}
             onPress={handleNextDay}
@@ -1138,6 +1128,16 @@ export default function HomeScreen() {
               color={colors.textSecondary}
             />
           </TouchableOpacity>
+          
+          <View style={styles.lifetimeCounterContainer}>
+            <IconSymbol
+              ios_icon_name="checkmark"
+              android_material_icon_name="check"
+              size={10}
+              color={colors.success}
+            />
+            <Text style={styles.lifetimeCounterText}>{lifetimeSuccessCount}</Text>
+          </View>
         </View>
 
         {showDatePicker && (
