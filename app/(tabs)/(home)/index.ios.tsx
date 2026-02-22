@@ -136,6 +136,38 @@ function formatDateLocal(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// Helper function to format alternative calendar dates
+function formatAlternativeDate(date: Date, calendarType: string): string {
+  try {
+    if (calendarType === 'hebrew') {
+      const formatter = new Intl.DateTimeFormat('he-IL-u-ca-hebrew', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      return formatter.format(date);
+    } else if (calendarType === 'chinese') {
+      const formatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      return formatter.format(date);
+    } else if (calendarType === 'islamic') {
+      const formatter = new Intl.DateTimeFormat('en-US-u-ca-islamic', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+      return formatter.format(date);
+    }
+    return '';
+  } catch (error) {
+    console.error('Error formatting alternative date:', error);
+    return 'Date unavailable';
+  }
+}
+
 export default function HomeScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -1165,6 +1197,7 @@ export default function HomeScreen() {
                     <Text style={styles.datePickerDone}>Done</Text>
                   </TouchableOpacity>
                 </View>
+                
                 <DateTimePicker
                   value={selectedDate}
                   mode="date"
@@ -1172,6 +1205,19 @@ export default function HomeScreen() {
                   onChange={handleDateChange}
                   style={{ backgroundColor: colors.background }}
                 />
+                
+                {userPreferences.alternativeCalendar && userPreferences.alternativeCalendar !== 'gregorian' && (
+                  <View style={styles.alternativeCalendarInfo}>
+                    <Text style={styles.alternativeCalendarLabel}>
+                      {userPreferences.alternativeCalendar === 'hebrew' && '✡️ Hebrew Calendar'}
+                      {userPreferences.alternativeCalendar === 'chinese' && '🏮 Chinese Calendar'}
+                      {userPreferences.alternativeCalendar === 'islamic' && '☪️ Islamic Calendar'}
+                    </Text>
+                    <Text style={styles.alternativeCalendarDate}>
+                      {formatAlternativeDate(selectedDate, userPreferences.alternativeCalendar)}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </Modal>
@@ -2232,5 +2278,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
+  },
+  alternativeCalendarInfo: {
+    padding: 16,
+    backgroundColor: colors.backgroundAlt,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  alternativeCalendarLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+    marginBottom: 6,
+  },
+  alternativeCalendarDate: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
   },
 });
