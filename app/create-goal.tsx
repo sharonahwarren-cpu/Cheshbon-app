@@ -2,7 +2,6 @@
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { LoadingButton } from '@/components/LoadingButton';
 import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
-import { HDate, months } from '@hebcal/core';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useState, useEffect } from 'react';
 import { colors } from '@/styles/commonStyles';
@@ -22,8 +21,7 @@ import {
 import { IconSymbol } from '@/components/IconSymbol';
 import { DateTime } from 'luxon';
 import { getLocalTimezone } from '@/utils/dateUtils';
-import { GoalSchedulePreview } from '@/components/GoalSchedulePreview';
-import type { GoalSchedule } from '@/utils/scheduleCalculations';
+import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
 
 interface Goal {
   id: string;
@@ -61,194 +59,8 @@ interface UserPreferences {
   alternativeCalendar?: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 }
 
-interface AlarmConfig {
-  id: string;
-  time: string; // "HH:mm"
-  offsetDays: number; // 0 = day of goal, negative = days before, positive = days after
-}
-
-interface YearlyDateRange {
-  startMonth: number;
-  startDay: number;
-  endMonth?: number;
-  endDay?: number;
-}
-
 type BehaviorCategory = 'Action' | 'Speech' | 'Thought' | 'Feeling';
 type GoalType = 'Restraining' | 'Proactive';
-type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
-type CalendarType = 'Gregorian' | 'Hebrew' | 'Chinese' | 'Islamic';
-
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const WEEK_POSITIONS = ['First', 'Second', 'Third', 'Fourth', 'Last'];
-
-// Helper function to check if a Hebrew year is a leap year
-const isHebrewLeapYear = (hebrewYear: number): boolean => {
-  // Hebrew leap year calculation: years 3, 6, 8, 11, 14, 17, 19 in a 19-year cycle
-  const yearInCycle = hebrewYear % 19;
-  return [3, 6, 8, 11, 14, 17, 0].includes(yearInCycle);
-};
-
-// Helper function to get month names based on calendar type
-const getMonthNames = (calendarType: CalendarType, year?: number): string[] => {
-  if (calendarType === 'Hebrew') {
-    // Use Hebcal to get proper Hebrew month names
-    // Check if it's a leap year (has Adar I and Adar II)
-    const hebrewYear = year || new HDate().getFullYear();
-    const isLeapYear = isHebrewLeapYear(hebrewYear);
-    
-    if (isLeapYear) {
-      return [
-        'Tishrei (תִּשְׁרֵי)',
-        'Cheshvan (חֶשְׁוָן)',
-        'Kislev (כִּסְלֵו)',
-        'Tevet (טֵבֵת)',
-        'Shevat (שְׁבָט)',
-        'Adar I (אֲדָר א׳)',
-        'Adar II (אֲדָר ב׳)',
-        'Nisan (נִיסָן)',
-        'Iyar (אִיָּר)',
-        'Sivan (סִיוָן)',
-        'Tammuz (תַּמּוּז)',
-        'Av (אָב)',
-        'Elul (אֱלוּל)',
-      ];
-    } else {
-      return [
-        'Tishrei (תִּשְׁרֵי)',
-        'Cheshvan (חֶשְׁוָן)',
-        'Kislev (כִּסְלֵו)',
-        'Tevet (טֵבֵת)',
-        'Shevat (שְׁבָט)',
-        'Adar (אֲדָר)',
-        'Nisan (נִיסָן)',
-        'Iyar (אִיָּר)',
-        'Sivan (סִיוָן)',
-        'Tammuz (תַּמּוּז)',
-        'Av (אָב)',
-        'Elul (אֱלוּל)',
-      ];
-    }
-  } else if (calendarType === 'Chinese') {
-    return [
-      '正月 (Zhēngyuè)',
-      '二月 (Èryuè)',
-      '三月 (Sānyuè)',
-      '四月 (Sìyuè)',
-      '五月 (Wǔyuè)',
-      '六月 (Liùyuè)',
-      '七月 (Qīyuè)',
-      '八月 (Bāyuè)',
-      '九月 (Jiǔyuè)',
-      '十月 (Shíyuè)',
-      '十一月 (Shíyīyuè)',
-      '十二月 (Shí\'èryuè)',
-    ];
-  } else if (calendarType === 'Islamic') {
-    return [
-      'Muharram (مُحَرَّم)',
-      'Safar (صَفَر)',
-      'Rabi\' al-Awwal (رَبِيع ٱلْأَوَّل)',
-      'Rabi\' al-Thani (رَبِيع ٱلثَّانِي)',
-      'Jumada al-Awwal (جُمَادَىٰ ٱلْأُولَىٰ)',
-      'Jumada al-Thani (جُمَادَىٰ ٱلثَّانِيَة)',
-      'Rajab (رَجَب)',
-      'Sha\'ban (شَعْبَان)',
-      'Ramadan (رَمَضَان)',
-      'Shawwal (شَوَّال)',
-      'Dhu al-Qi\'dah (ذُو ٱلْقَعْدَة)',
-      'Dhu al-Hijjah (ذُو ٱلْحِجَّة)',
-    ];
-  }
-  // Gregorian (default)
-  return ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-};
-
-// Helper function to get max days in a month based on calendar type
-const getMaxDaysInMonth = (month: number, calendarType: CalendarType): number => {
-  if (calendarType === 'Hebrew') {
-    // Hebrew months have either 29 or 30 days
-    // Use current Hebrew year to determine
-    const hebrewYear = new HDate().getFullYear();
-    const isLeapYear = isHebrewLeapYear(hebrewYear);
-    
-    // Month numbers in Hebrew calendar
-    const daysInHebrewMonth = [30, 29, 30, 29, 30, 30, 29, 30, 29, 30, 29, 30, 29]; // 13 months for leap year
-    if (isLeapYear) {
-      return daysInHebrewMonth[month - 1] || 30;
-    } else {
-      // Non-leap year (12 months)
-      const nonLeapDays = [30, 29, 30, 29, 30, 29, 30, 29, 30, 29, 30, 29];
-      return nonLeapDays[month - 1] || 30;
-    }
-  } else if (calendarType === 'Islamic') {
-    // Islamic months alternate between 29 and 30 days
-    return month % 2 === 1 ? 30 : 29;
-  } else if (calendarType === 'Chinese') {
-    // Chinese lunar months have 29 or 30 days
-    return 30;
-  }
-  // Gregorian
-  const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return daysInMonth[month - 1] || 31;
-};
-
-// Helper function to format date based on calendar type
-// Uses luxon for timezone-aware conversion from UTC
-const formatDateByCalendar = (date: Date, calendarType: CalendarType): string => {
-  try {
-    // Convert the Date (which may be UTC) to local timezone using luxon
-    const localZone = getLocalTimezone();
-    const dt = DateTime.fromJSDate(date, { zone: 'UTC' }).setZone(localZone);
-    const localDate = dt.toJSDate();
-    
-    console.log(`[CreateGoal] formatDateByCalendar: UTC=${date.toISOString()} -> Local(${localZone})=${dt.toISO()}`);
-    
-    if (calendarType === 'Gregorian') {
-      return dt.toFormat('MMMM d, yyyy');
-    }
-    
-    if (calendarType === 'Hebrew') {
-      try {
-        const hdate = new HDate(localDate);
-        const monthName = hdate.getMonthName();
-        const day = hdate.getDate();
-        const year = hdate.getFullYear();
-        return `${day} ${monthName} ${year}`;
-      } catch (error) {
-        console.error('Error formatting Hebrew date:', error);
-        return dt.toFormat('MMMM d, yyyy');
-      }
-    }
-    
-    // For alternative calendars, use Intl.DateTimeFormat
-    const calendarMap: Record<CalendarType, string> = {
-      'Gregorian': 'gregory',
-      'Hebrew': 'hebrew',
-      'Chinese': 'chinese',
-      'Islamic': 'islamic',
-    };
-    
-    const calendarId = calendarMap[calendarType];
-    
-    try {
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        calendar: calendarId,
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        timeZone: localZone,
-      });
-      return formatter.format(date);
-    } catch (error) {
-      console.error('Error formatting date with calendar:', calendarType, error);
-      return dt.toFormat('MMMM d, yyyy');
-    }
-  } catch (error) {
-    console.error('Error in formatDateByCalendar:', error);
-    return date.toLocaleDateString();
-  }
-};
 
 export default function CreateGoalScreen() {
   const router = useRouter();
@@ -288,10 +100,11 @@ export default function CreateGoalScreen() {
   const [behaviorCategories, setBehaviorCategories] = useState<BehaviorCategory[]>([]);
   const [type, setType] = useState<GoalType>('Proactive');
   const [strategyIds, setStrategyIds] = useState<string[]>([]);
-  const [scheduleType, setScheduleType] = useState<ScheduleType>('Always Active');
-  const [scheduleTimesPerDay, setScheduleTimesPerDay] = useState<string>('');
   
-  // Removed old scheduling state - preparing for new Goal Scheduler format
+  // New Goal Scheduler state
+  const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({
+    scheduleType: 'Always Active',
+  });
   
   // Reward state
   const [rewardCurrencyId, setRewardCurrencyId] = useState<string | undefined>();
@@ -302,8 +115,6 @@ export default function CreateGoalScreen() {
   const [consequenceCurrencyId, setConsequenceCurrencyId] = useState<string | undefined>();
   const [consequenceFailures, setConsequenceFailures] = useState<string>('');
   const [consequenceAmount, setConsequenceAmount] = useState<string>('');
-
-  // Removed alarm state - preparing for new Goal Scheduler format
 
   // Data from backend
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -322,18 +133,15 @@ export default function CreateGoalScreen() {
   const [showParentGoalPicker, setShowParentGoalPicker] = useState(false);
   const [showLifeAreaPicker, setShowLifeAreaPicker] = useState(false);
   const [showStrategyPicker, setShowStrategyPicker] = useState(false);
-  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [showRewardCurrencyPicker, setShowRewardCurrencyPicker] = useState(false);
   const [showConsequenceCurrencyPicker, setShowConsequenceCurrencyPicker] = useState(false);
-  // Removed scheduling picker state - preparing for new Goal Scheduler format
+  const [showScheduleWizard, setShowScheduleWizard] = useState(false);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
   const [modalType, setModalType] = useState<'success' | 'error'>('success');
-
-  // Removed monthly weekday picker state - preparing for new Goal Scheduler format
 
   useEffect(() => {
     loadData();
@@ -383,26 +191,6 @@ export default function CreateGoalScreen() {
       setCurrencies(currencies);
       setUserPreferences(preferences);
 
-      // Set calendar type based on user preferences
-      if (preferences.alternativeCalendar) {
-        const calendarMap: Record<string, CalendarType> = {
-          'gregorian': 'Gregorian',
-          'hebrew': 'Hebrew',
-          'chinese': 'Chinese',
-          'islamic': 'Islamic',
-        };
-        setCalendarType(calendarMap[preferences.alternativeCalendar] || 'Gregorian');
-      }
-      
-      // Log timezone info for debugging
-      const deviceTimezone = getLocalTimezone();
-      const storedTimezone = preferences.timezone;
-      console.log('[CreateGoal] Timezone info:', {
-        device: deviceTimezone,
-        stored: storedTimezone,
-        calendar: preferences.alternativeCalendar,
-      });
-
       if (preselectedLifeAreaId && !editingGoalId) {
         console.log('[CreateGoal] Pre-selecting life area:', preselectedLifeAreaId);
         setLifeAreaId(preselectedLifeAreaId);
@@ -414,27 +202,20 @@ export default function CreateGoalScreen() {
         
         setTitle(goalDetails.title || '');
         setDescription(goalDetails.description || '');
-        // Backend uses camelCase for these fields
         setParentGoalId(goalDetails.parentGoalId || goalDetails.parent_goal_id);
         setLifeAreaId(goalDetails.lifeAreaId || goalDetails.life_area_id);
         setBehaviorCategories(goalDetails.behaviorCategories || goalDetails.behavior_categories || []);
         setType(goalDetails.type || 'Proactive');
         setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
         
-        // scheduleType: prefer scheduleType, fall back to scheduleRecurrenceType (capitalize first letter)
-        const rawScheduleType = goalDetails.scheduleType || goalDetails.schedule_type;
-        const rawRecurrenceType = goalDetails.scheduleRecurrenceType || goalDetails.schedule_recurrence_type;
-        let resolvedScheduleType: ScheduleType = 'Always Active';
-        if (rawScheduleType) {
-          resolvedScheduleType = rawScheduleType as ScheduleType;
-        } else if (rawRecurrenceType) {
-          // Convert 'daily' -> 'Daily', 'weekly' -> 'Weekly', etc.
-          resolvedScheduleType = (rawRecurrenceType.charAt(0).toUpperCase() + rawRecurrenceType.slice(1)) as ScheduleType;
-        }
-        setScheduleType(resolvedScheduleType);
-        setScheduleTimesPerDay((goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day)?.toString() || '');
-        
-        // Removed old scheduling data loading - preparing for new Goal Scheduler format
+        // Load schedule config from goal details
+        const rawScheduleType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+        setScheduleConfig({
+          scheduleType: rawScheduleType,
+          timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
+          weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week,
+          // Add more schedule fields as needed
+        });
         
         if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {
           setRewardCurrencyId(goalDetails.rewardCurrencyId || goalDetails.reward_currency_id);
@@ -447,8 +228,6 @@ export default function CreateGoalScreen() {
           setConsequenceFailures((goalDetails.consequenceFailures || goalDetails.consequence_failures)?.toString() || '');
           setConsequenceAmount((goalDetails.consequenceAmount || goalDetails.consequence_amount)?.toString() || '');
         }
-        
-        // Removed alarm loading - preparing for new Goal Scheduler format
       }
     } catch (error: any) {
       console.error('[API] Error loading form data:', error);
@@ -486,8 +265,6 @@ export default function CreateGoalScreen() {
     setStrategyIds(newStrategies);
   };
 
-  // Removed old scheduling helper functions - preparing for new Goal Scheduler format
-
   const handleSubmit = async () => {
     console.log(editingGoalId ? 'Submitting goal update form' : 'Submitting goal creation form');
     
@@ -512,9 +289,10 @@ export default function CreateGoalScreen() {
         behaviorCategories: behaviorCategories.length > 0 ? behaviorCategories : undefined,
         type,
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
-        scheduleType,
-        scheduleTimesPerDay: scheduleType === 'Daily' && scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
-        // Removed old scheduling fields - preparing for new Goal Scheduler format
+        scheduleType: scheduleConfig.scheduleType,
+        scheduleTimesPerDay: scheduleConfig.timesPerDay,
+        scheduleDaysOfWeek: scheduleConfig.weekdays,
+        // Add more schedule fields as needed
       };
       
       console.log('[API] Submitting goal data:', JSON.stringify(goalData, null, 2));
@@ -671,23 +449,10 @@ export default function CreateGoalScreen() {
     });
   };
 
-  const scheduleTypes: ScheduleType[] = [
-    'Always Active',
-    'Daily',
-    'Weekly',
-    'Fortnightly',
-    'Monthly',
-    'Yearly',
-  ];
-
-  // Removed getAvailableCalendarTypes - preparing for new Goal Scheduler format
-
   const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
   const submitButtonTitle = editingGoalId ? 'Update Goal' : 'Create Goal';
   const rewardActionText = getRewardActionText();
   const consequenceActionText = getConsequenceActionText();
-
-  // Removed getScheduleSummary - preparing for new Goal Scheduler format
 
   if (loading) {
     return (
@@ -865,36 +630,31 @@ export default function CreateGoalScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Goal Schedule - Simplified for new scheduler */}
+        {/* Goal Schedule - NEW WIZARD */}
         <View style={styles.section}>
           <Text style={styles.label}>Goal Schedule</Text>
           <TouchableOpacity
             style={styles.picker}
-            onPress={() => setShowSchedulePicker(true)}
+            onPress={() => setShowScheduleWizard(true)}
           >
-            <Text style={styles.pickerText}>{scheduleType}</Text>
-            <IconSymbol
-              ios_icon_name="chevron.down"
-              android_material_icon_name="arrow-drop-down"
-              size={24}
-              color={colors.text}
-            />
-          </TouchableOpacity>
-          
-          {/* Daily: Times per day */}
-          {scheduleType === 'Daily' && (
-            <View style={styles.subSection}>
-              <Text style={styles.subLabel}>Times per day (optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={scheduleTimesPerDay}
-                onChangeText={setScheduleTimesPerDay}
-                placeholder="e.g., 3"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="number-pad"
+            <View style={styles.schedulePickerContent}>
+              <View>
+                <Text style={styles.pickerText}>{scheduleConfig.scheduleType}</Text>
+                {scheduleConfig.scheduleType !== 'Always Active' && (
+                  <Text style={styles.scheduleSubtext}>
+                    {scheduleConfig.timesPerDay ? `${scheduleConfig.timesPerDay}x per day` : ''}
+                    {scheduleConfig.weekdays && scheduleConfig.weekdays.length > 0 ? `${scheduleConfig.weekdays.length} days selected` : ''}
+                  </Text>
+                )}
+              </View>
+              <IconSymbol
+                ios_icon_name="chevron.right"
+                android_material_icon_name="chevron-right"
+                size={24}
+                color={colors.text}
               />
             </View>
-          )}
+          </TouchableOpacity>
         </View>
 
         {/* Rewards */}
@@ -987,8 +747,6 @@ export default function CreateGoalScreen() {
           )}
         </View>
 
-        {/* Removed Schedule Preview - preparing for new Goal Scheduler format */}
-
         {/* Submit Button */}
         <View style={styles.buttonContainer}>
           <LoadingButton
@@ -1000,7 +758,43 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Removed old scheduling modals - preparing for new Goal Scheduler format */}
+      {/* Goal Schedule Wizard Modal */}
+      <Modal
+        visible={showScheduleWizard}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowScheduleWizard(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.wizardModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Goal Schedule</Text>
+              <TouchableOpacity onPress={() => setShowScheduleWizard(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.wizardScroll} contentContainerStyle={styles.wizardContent}>
+              <GoalScheduler
+                config={scheduleConfig}
+                onChange={setScheduleConfig}
+              />
+            </ScrollView>
+            <View style={styles.wizardFooter}>
+              <TouchableOpacity
+                style={styles.wizardDoneButton}
+                onPress={() => setShowScheduleWizard(false)}
+              >
+                <Text style={styles.wizardDoneButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Parent Goal Picker Modal */}
       <Modal
@@ -1157,57 +951,6 @@ export default function CreateGoalScreen() {
         </View>
       </Modal>
 
-      {/* Schedule Picker Modal */}
-      <Modal
-        visible={showSchedulePicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowSchedulePicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Schedule</Text>
-              <TouchableOpacity onPress={() => setShowSchedulePicker(false)}>
-                <IconSymbol
-                  ios_icon_name="xmark"
-                  android_material_icon_name="close"
-                  size={24}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalScroll}>
-              {scheduleTypes.map((schedule) => {
-                const isSelected = schedule === scheduleType;
-                return (
-                  <TouchableOpacity
-                    key={schedule}
-                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                    onPress={() => {
-                      setScheduleType(schedule);
-                      setShowSchedulePicker(false);
-                    }}
-                  >
-                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
-                      {schedule}
-                    </Text>
-                    {isSelected && (
-                      <IconSymbol
-                        ios_icon_name="checkmark"
-                        android_material_icon_name="check"
-                        size={20}
-                        color={colors.primary}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       {/* Reward Currency Picker Modal */}
       <Modal
         visible={showRewardCurrencyPicker}
@@ -1338,8 +1081,6 @@ export default function CreateGoalScreen() {
         </View>
       </Modal>
 
-      {/* Removed Alarm Modal - preparing for new Goal Scheduler format */}
-
       {/* Success/Error Modal */}
       <Modal
         visible={modalVisible}
@@ -1394,32 +1135,13 @@ export default function CreateGoalScreen() {
                   setBehaviorCategories([]);
                   setType('Proactive');
                   setStrategyIds([]);
-                  setScheduleType('Always Active');
-                  setScheduleTimesPerDay('');
-                  setSelectedWeekdays([]);
-                  setWeekendsOnly(false);
-                  setWeekdaysOnly(false);
-                  setSelectedFortnightDays([]);
-                  setFortnightEvenOdd('');
-                  setMonthlyType('date');
-                  setMonthlyDates([]);
-                  setMonthlyWeekdayRules([]);
-                  setMonthlyRandomCount('');
-                  setMonthlyRangeStart('');
-                  setMonthlyRangeEnd('');
-                  setYearlyDates([]);
-                  setCalendarType('Gregorian');
-                  setExclusionDates([]);
-                  setSpecificTimes([]);
+                  setScheduleConfig({ scheduleType: 'Always Active' });
                   setRewardCurrencyId(undefined);
                   setRewardSuccesses('');
                   setRewardAmount('');
                   setConsequenceCurrencyId(undefined);
                   setConsequenceFailures('');
                   setConsequenceAmount('');
-                  setAlarms([]);
-                  setHasEndDate(false);
-                  setEndDate(undefined);
                 }}
               >
                 <Text style={styles.alertButtonText}>Yes, Create Another</Text>
@@ -1494,6 +1216,17 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
   },
+  schedulePickerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flex: 1,
+  },
+  scheduleSubtext: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
   checkboxGroup: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1557,18 +1290,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  subSection: {
-    marginTop: 12,
-  },
   subLabel: {
     fontSize: 14,
     color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  endDateHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 8,
   },
   rewardInputs: {
@@ -1599,84 +1323,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
-  alarmHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  alarmTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  addAlarmButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-  },
-  addAlarmButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  alarmsContainer: {
-    gap: 8,
-  },
-  alarmCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  alarmCardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  alarmCardText: {
-    flex: 1,
-  },
-  alarmCardTime: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  alarmCardOffset: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  alarmCardActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  alarmCardButton: {
-    padding: 8,
-  },
-  timePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  timePickerText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1687,6 +1333,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
+  },
+  wizardModal: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    height: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1703,6 +1356,28 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     maxHeight: 400,
+  },
+  wizardScroll: {
+    flex: 1,
+  },
+  wizardContent: {
+    padding: 20,
+  },
+  wizardFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  wizardDoneButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  wizardDoneButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
   pickerItem: {
     flexDirection: 'row',
@@ -1733,136 +1408,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 4,
-  },
-  weekLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  fortnightGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  fortnightDayButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fortnightDayButtonSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  fortnightDayText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  fortnightDayTextSelected: {
-    color: '#fff',
-  },
-  dateGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 16,
-    gap: 8,
-  },
-  dateButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dateButtonSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  dateButtonText: {
-    fontSize: 16,
-    color: colors.text,
-    fontWeight: '600',
-  },
-  dateButtonTextSelected: {
-    color: '#fff',
-  },
-  ruleItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  ruleText: {
-    fontSize: 16,
-    color: colors.text,
-  },
-  positionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  weekdayButtonGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  weekdayButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-  },
-  weekdayButtonText: {
-    fontSize: 13,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-    marginTop: 12,
-  },
-  addButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  monthGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 8,
-  },
-  monthButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    backgroundColor: colors.primary,
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  monthButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
   },
   alertModal: {
     backgroundColor: colors.background,
@@ -1911,76 +1456,5 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
-  },
-  advancedToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  advancedToggleText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  advancedSection: {
-    marginTop: 12,
-    padding: 16,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  exclusionsList: {
-    gap: 8,
-    marginVertical: 12,
-  },
-  exclusionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  exclusionText: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  toggleButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  toggleButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  toggleButtonTextActive: {
-    color: '#fff',
   },
 });
