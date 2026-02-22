@@ -85,6 +85,8 @@ export const goals = pgTable('goals', {
   consequenceFailures: integer('consequence_failures'),
   consequenceAmount: integer('consequence_amount'),
   alarms: jsonb('alarms'),
+  endDate: timestamp('end_date', { withTimezone: true }),
+  calendarType: text('calendar_type'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
