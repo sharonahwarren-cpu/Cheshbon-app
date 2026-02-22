@@ -89,7 +89,7 @@ export default function TabLayout() {
       name: '(home)',
       route: '/(tabs)/(home)/',
       icon: 'flash-on',
-      label: 'Goals',
+      label: 'Home',
     },
     {
       name: 'reports',

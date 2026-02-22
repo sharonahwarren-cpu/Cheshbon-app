@@ -403,6 +403,28 @@ export default function HomeScreen() {
   const handleDeleteEntry = async (goalId: string, entryId: string) => {
     console.log("Deleting entry:", entryId, "for goal:", goalId);
     
+    // If this is a temp ID (optimistic entry not yet confirmed by server), just remove it locally
+    if (entryId.startsWith('temp-')) {
+      console.log("Removing temp entry locally (not yet persisted):", entryId);
+      setActivatedGoals(prevGoals => 
+        prevGoals.map(goal => {
+          if (goal.id === goalId) {
+            const entryToDelete = goal.dailyEntries?.find(e => e.id === entryId);
+            const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== entryId);
+            return {
+              ...goal,
+              dailyEntries: filteredEntries,
+              todaySuccessCount: entryToDelete?.type === 'success' ? Math.max(0, goal.todaySuccessCount - 1) : goal.todaySuccessCount,
+              todayStruggleCount: entryToDelete?.type === 'struggle' ? Math.max(0, goal.todayStruggleCount - 1) : goal.todayStruggleCount,
+            };
+          }
+          return goal;
+        })
+      );
+      return;
+    }
+    
+    // Optimistically remove the entry from UI
     setActivatedGoals(prevGoals => 
       prevGoals.map(goal => {
         if (goal.id === goalId) {
@@ -420,10 +442,13 @@ export default function HomeScreen() {
     );
     
     try {
+      console.log(`[API] Deleting entry ${entryId} for goal ${goalId}`);
       await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
+      console.log(`[API] Entry deleted successfully`);
     } catch (error: any) {
       console.error("Error deleting entry:", error);
       showError(error.message || "Failed to delete entry");
+      // Reload to restore correct state
       await loadData();
     }
   };

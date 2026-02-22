@@ -10,6 +10,7 @@ import {
   Modal,
   ActivityIndicator,
   Platform,
+  Switch,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { LoadingButton } from '@/components/LoadingButton';
 import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface Goal {
   id: string;
@@ -107,6 +109,14 @@ export default function CreateGoalScreen() {
   const [consequenceCurrencyId, setConsequenceCurrencyId] = useState<string | undefined>();
   const [consequenceFailures, setConsequenceFailures] = useState<string>('');
   const [consequenceAmount, setConsequenceAmount] = useState<string>('');
+
+  // Alarm state
+  const [alarmEnabled, setAlarmEnabled] = useState(false);
+  const [alarmTime, setAlarmTime] = useState('09:00');
+  const [alarmOffsetType, setAlarmOffsetType] = useState<'at' | 'before' | 'after'>('at');
+  const [alarmOffsetMinutes, setAlarmOffsetMinutes] = useState<string>('');
+  const [showAlarmTimePicker, setShowAlarmTimePicker] = useState(false);
+  const [alarmTimeDate, setAlarmTimeDate] = useState(new Date());
 
   // Data from backend
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -225,6 +235,25 @@ export default function CreateGoalScreen() {
           setConsequenceFailures(goalDetails.consequenceFailures?.toString() || '');
           setConsequenceAmount(goalDetails.consequenceAmount?.toString() || '');
         }
+        
+        // Load alarm data
+        if (goalDetails.alarmEnabled !== undefined) {
+          setAlarmEnabled(goalDetails.alarmEnabled || false);
+        }
+        if (goalDetails.alarmTime) {
+          setAlarmTime(goalDetails.alarmTime);
+          // Parse time string to Date for picker
+          const [hours, minutes] = goalDetails.alarmTime.split(':');
+          const timeDate = new Date();
+          timeDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+          setAlarmTimeDate(timeDate);
+        }
+        if (goalDetails.alarmOffsetType) {
+          setAlarmOffsetType(goalDetails.alarmOffsetType as 'at' | 'before' | 'after');
+        }
+        if (goalDetails.alarmOffsetMinutes !== null && goalDetails.alarmOffsetMinutes !== undefined) {
+          setAlarmOffsetMinutes(Math.abs(goalDetails.alarmOffsetMinutes).toString());
+        }
       }
     } catch (error: any) {
       console.error('[API] Error loading form data:', error);
@@ -291,6 +320,13 @@ export default function CreateGoalScreen() {
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
         scheduleType,
         scheduleTimesPerDay: scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
+        // Alarm fields
+        alarmEnabled,
+        alarmTime: alarmEnabled ? alarmTime : null,
+        alarmOffsetType: alarmEnabled ? alarmOffsetType : null,
+        alarmOffsetMinutes: alarmEnabled && alarmOffsetType !== 'at' && alarmOffsetMinutes
+          ? (alarmOffsetType === 'before' ? -Math.abs(parseInt(alarmOffsetMinutes)) : Math.abs(parseInt(alarmOffsetMinutes)))
+          : null,
       };
 
       // Handle rewards - send as nested object or null to clear
@@ -693,7 +729,140 @@ export default function CreateGoalScreen() {
           )}
         </View>
 
-        {/* 9. Rewards (Optional) */}
+        {/* 9. Alarm (Optional) */}
+        <View style={styles.section}>
+          <View style={styles.alarmHeader}>
+            <View style={styles.alarmTitleRow}>
+              <IconSymbol
+                ios_icon_name="bell.fill"
+                android_material_icon_name="notifications"
+                size={20}
+                color={alarmEnabled ? colors.primary : colors.textSecondary}
+              />
+              <Text style={styles.label}>Alarm</Text>
+            </View>
+            <Switch
+              value={alarmEnabled}
+              onValueChange={(value) => {
+                console.log('Alarm enabled:', value);
+                setAlarmEnabled(value);
+              }}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.background}
+            />
+          </View>
+          
+          {alarmEnabled && (
+            <View style={styles.alarmSettings}>
+              {/* Alarm Time */}
+              <View style={styles.alarmRow}>
+                <Text style={styles.subLabel}>Alarm Time</Text>
+                <TouchableOpacity
+                  style={styles.timePickerButton}
+                  onPress={() => setShowAlarmTimePicker(true)}
+                >
+                  <IconSymbol
+                    ios_icon_name="clock"
+                    android_material_icon_name="access-time"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.timePickerText}>
+                    {(() => {
+                      const [h, m] = alarmTime.split(':');
+                      const hour = parseInt(h);
+                      const ampm = hour >= 12 ? 'PM' : 'AM';
+                      const displayHour = hour % 12 || 12;
+                      return `${displayHour}:${m} ${ampm}`;
+                    })()}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              {showAlarmTimePicker && (
+                <DateTimePicker
+                  value={alarmTimeDate}
+                  mode="time"
+                  is24Hour={false}
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    setShowAlarmTimePicker(Platform.OS === 'ios');
+                    if (selectedDate) {
+                      setAlarmTimeDate(selectedDate);
+                      const hours = selectedDate.getHours().toString().padStart(2, '0');
+                      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+                      setAlarmTime(`${hours}:${minutes}`);
+                    }
+                  }}
+                />
+              )}
+              
+              {/* Alarm Offset Type */}
+              <View style={styles.alarmRow}>
+                <Text style={styles.subLabel}>When to alarm</Text>
+                <View style={styles.offsetTypeGroup}>
+                  {(['at', 'before', 'after'] as const).map((offsetType) => {
+                    const isSelected = alarmOffsetType === offsetType;
+                    const label = offsetType === 'at' ? 'At time' : offsetType === 'before' ? 'Before' : 'After';
+                    return (
+                      <TouchableOpacity
+                        key={offsetType}
+                        style={[styles.offsetTypeButton, isSelected && styles.offsetTypeButtonSelected]}
+                        onPress={() => {
+                          setAlarmOffsetType(offsetType);
+                          if (offsetType === 'at') {
+                            setAlarmOffsetMinutes('');
+                          }
+                        }}
+                      >
+                        <Text style={[styles.offsetTypeText, isSelected && styles.offsetTypeTextSelected]}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              
+              {/* Offset Minutes (only shown when before/after is selected) */}
+              {alarmOffsetType !== 'at' && (
+                <View style={styles.alarmRow}>
+                  <Text style={styles.subLabel}>
+                    Minutes {alarmOffsetType === 'before' ? 'before' : 'after'} scheduled time
+                  </Text>
+                  <TextInput
+                    style={[styles.input, styles.offsetInput]}
+                    value={alarmOffsetMinutes}
+                    onChangeText={setAlarmOffsetMinutes}
+                    placeholder="e.g., 30"
+                    placeholderTextColor={colors.textSecondary}
+                    keyboardType="number-pad"
+                  />
+                  {alarmOffsetMinutes ? (
+                    <Text style={styles.alarmPreviewText}>
+                      {(() => {
+                        const [h, m] = alarmTime.split(':');
+                        const baseMinutes = parseInt(h) * 60 + parseInt(m);
+                        const offsetMins = parseInt(alarmOffsetMinutes) || 0;
+                        const totalMinutes = alarmOffsetType === 'before'
+                          ? baseMinutes - offsetMins
+                          : baseMinutes + offsetMins;
+                        const adjustedMinutes = ((totalMinutes % 1440) + 1440) % 1440;
+                        const displayHour = Math.floor(adjustedMinutes / 60);
+                        const displayMin = adjustedMinutes % 60;
+                        const ampm = displayHour >= 12 ? 'PM' : 'AM';
+                        const hour12 = displayHour % 12 || 12;
+                        return `Alarm will ring at ${hour12}:${String(displayMin).padStart(2, '0')} ${ampm}`;
+                      })()}
+                    </Text>
+                  ) : null}
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+
+        {/* 10. Rewards (Optional) */}
         <View style={styles.section}>
           <Text style={styles.label}>Rewards</Text>
           <TouchableOpacity
@@ -1201,6 +1370,10 @@ export default function CreateGoalScreen() {
                   setConsequenceCurrencyId(undefined);
                   setConsequenceFailures('');
                   setConsequenceAmount('');
+                  setAlarmEnabled(false);
+                  setAlarmTime('09:00');
+                  setAlarmOffsetType('at');
+                  setAlarmOffsetMinutes('');
                 }}
               >
                 <Text style={styles.alertButtonText}>Yes, Create Another</Text>
@@ -1372,6 +1545,78 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 12,
     padding: 16,
+  },
+  alarmHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  alarmTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  alarmSettings: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 16,
+  },
+  alarmRow: {
+    gap: 8,
+  },
+  timePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  timePickerText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  offsetTypeGroup: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  offsetTypeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  offsetTypeButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  offsetTypeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  offsetTypeTextSelected: {
+    color: '#fff',
+  },
+  offsetInput: {
+    width: '100%',
+  },
+  alarmPreviewText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '600',
+    marginTop: 4,
   },
   modalOverlay: {
     flex: 1,

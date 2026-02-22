@@ -76,8 +76,8 @@ export default function TabLayout() {
         <Label>Reflect</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger key="home" name="(home)">
-        <Icon sf="bolt.fill" />
-        <Label>Goals</Label>
+        <Icon sf="house.fill" />
+        <Label>Home</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger key="reports" name="reports">
         <Icon sf="chart.bar.fill" />

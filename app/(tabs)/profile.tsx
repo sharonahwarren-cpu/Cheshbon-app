@@ -168,7 +168,7 @@ export default function ProfileScreen() {
 
         {/* Preferences Button */}
         <TouchableOpacity
-          style={styles.preferencesButton}
+          style={styles.menuButton}
           onPress={() => {
             console.log('Navigating to Preferences');
             router.push('/preferences');
@@ -180,7 +180,30 @@ export default function ProfileScreen() {
             size={20}
             color={colors.primary}
           />
-          <Text style={styles.preferencesButtonText}>Preferences</Text>
+          <Text style={styles.menuButtonText}>Preferences</Text>
+          <IconSymbol
+            ios_icon_name="chevron.right"
+            android_material_icon_name="chevron-right"
+            size={20}
+            color={colors.textSecondary}
+          />
+        </TouchableOpacity>
+
+        {/* Settings Button */}
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => {
+            console.log('Navigating to Settings');
+            router.push('/settings-menu');
+          }}
+        >
+          <IconSymbol
+            ios_icon_name="wrench.and.screwdriver"
+            android_material_icon_name="build"
+            size={20}
+            color={colors.primary}
+          />
+          <Text style={styles.menuButtonText}>Settings</Text>
           <IconSymbol
             ios_icon_name="chevron.right"
             android_material_icon_name="chevron-right"
@@ -373,7 +396,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 12,
   },
-  preferencesButton: {
+  menuButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -384,7 +407,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  preferencesButtonText: {
+  menuButtonText: {
     flex: 1,
     fontSize: 16,
     fontWeight: '600',
