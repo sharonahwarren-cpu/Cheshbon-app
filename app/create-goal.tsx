@@ -19,6 +19,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { LoadingButton } from '@/components/LoadingButton';
 import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { HDate, HebrewCalendar, months } from '@hebcal/core';
 
 interface Goal {
   id: string;
@@ -80,23 +81,43 @@ const WEEK_POSITIONS = ['First', 'Second', 'Third', 'Fourth', 'Last'];
 // Helper function to get month names based on calendar type
 const getMonthNames = (calendarType: CalendarType, year?: number): string[] => {
   if (calendarType === 'Hebrew') {
-    // Hebrew calendar months (some years have Adar I and Adar II)
-    // For simplicity, we'll show both Adar months
-    return [
-      'Tishrei (תִּשְׁרֵי)',
-      'Cheshvan (חֶשְׁוָן)',
-      'Kislev (כִּסְלֵו)',
-      'Tevet (טֵבֵת)',
-      'Shevat (שְׁבָט)',
-      'Adar I (אֲדָר א׳)',
-      'Adar II (אֲדָר ב׳)',
-      'Nisan (נִיסָן)',
-      'Iyar (אִיָּר)',
-      'Sivan (סִיוָן)',
-      'Tammuz (תַּמּוּז)',
-      'Av (אָב)',
-      'Elul (אֱלוּל)',
-    ];
+    // Use Hebcal to get proper Hebrew month names
+    // Check if it's a leap year (has Adar I and Adar II)
+    const hebrewYear = year || new HDate().getFullYear();
+    const isLeapYear = HebrewCalendar.isLeapYear(hebrewYear);
+    
+    if (isLeapYear) {
+      return [
+        'Tishrei (תִּשְׁרֵי)',
+        'Cheshvan (חֶשְׁוָן)',
+        'Kislev (כִּסְלֵו)',
+        'Tevet (טֵבֵת)',
+        'Shevat (שְׁבָט)',
+        'Adar I (אֲדָר א׳)',
+        'Adar II (אֲדָר ב׳)',
+        'Nisan (נִיסָן)',
+        'Iyar (אִיָּר)',
+        'Sivan (סִיוָן)',
+        'Tammuz (תַּמּוּז)',
+        'Av (אָב)',
+        'Elul (אֱלוּל)',
+      ];
+    } else {
+      return [
+        'Tishrei (תִּשְׁרֵי)',
+        'Cheshvan (חֶשְׁוָן)',
+        'Kislev (כִּסְלֵו)',
+        'Tevet (טֵבֵת)',
+        'Shevat (שְׁבָט)',
+        'Adar (אֲדָר)',
+        'Nisan (נִיסָן)',
+        'Iyar (אִיָּר)',
+        'Sivan (סִיוָן)',
+        'Tammuz (תַּמּוּז)',
+        'Av (אָב)',
+        'Elul (אֱלוּל)',
+      ];
+    }
   } else if (calendarType === 'Chinese') {
     return [
       '正月 (Zhēngyuè)',
@@ -136,9 +157,19 @@ const getMonthNames = (calendarType: CalendarType, year?: number): string[] => {
 const getMaxDaysInMonth = (month: number, calendarType: CalendarType): number => {
   if (calendarType === 'Hebrew') {
     // Hebrew months have either 29 or 30 days
-    // Simplified: most months have 29 or 30 days
-    const daysInHebrewMonth = [30, 29, 30, 29, 30, 30, 29, 30, 29, 30, 29, 30, 29]; // 13 months
-    return daysInHebrewMonth[month - 1] || 30;
+    // Use current Hebrew year to determine
+    const hebrewYear = new HDate().getFullYear();
+    const isLeapYear = HebrewCalendar.isLeapYear(hebrewYear);
+    
+    // Month numbers in Hebrew calendar
+    const daysInHebrewMonth = [30, 29, 30, 29, 30, 30, 29, 30, 29, 30, 29, 30, 29]; // 13 months for leap year
+    if (isLeapYear) {
+      return daysInHebrewMonth[month - 1] || 30;
+    } else {
+      // Non-leap year (12 months)
+      const nonLeapDays = [30, 29, 30, 29, 30, 29, 30, 29, 30, 29, 30, 29];
+      return nonLeapDays[month - 1] || 30;
+    }
   } else if (calendarType === 'Islamic') {
     // Islamic months alternate between 29 and 30 days
     return month % 2 === 1 ? 30 : 29;
@@ -154,7 +185,20 @@ const getMaxDaysInMonth = (month: number, calendarType: CalendarType): number =>
 // Helper function to format date based on calendar type
 const formatDateByCalendar = (date: Date, calendarType: CalendarType): string => {
   if (calendarType === 'Gregorian') {
-    return date.toLocaleDateString();
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  
+  if (calendarType === 'Hebrew') {
+    try {
+      const hdate = new HDate(date);
+      const monthName = hdate.getMonthName();
+      const day = hdate.getDate();
+      const year = hdate.getFullYear();
+      return `${day} ${monthName} ${year}`;
+    } catch (error) {
+      console.error('Error formatting Hebrew date:', error);
+      return date.toLocaleDateString();
+    }
   }
   
   // For alternative calendars, use Intl.DateTimeFormat
@@ -503,11 +547,13 @@ export default function CreateGoalScreen() {
   };
 
   const handleYearlyMonthSelect = (month: number) => {
+    console.log('Selected yearly month:', month);
     setTempYearlyStartMonth(month);
     setYearlyPickerStep('startDay');
   };
 
   const handleYearlyStartDaySelect = (day: number) => {
+    console.log('Selected yearly start day:', day);
     setTempYearlyStartDay(day);
     // Ask if user wants to add a range or single date
     setYearlyPickerStep('endMonth');
@@ -520,10 +566,12 @@ export default function CreateGoalScreen() {
         startMonth: tempYearlyStartMonth,
         startDay: tempYearlyStartDay,
       };
+      console.log('Adding single yearly date:', newDate);
       setYearlyDates([...yearlyDates, newDate]);
       setShowYearlyDatePicker(false);
     } else {
       // Range mode
+      console.log('Selected yearly end month:', month);
       setTempYearlyEndMonth(month);
       setYearlyPickerStep('endDay');
     }
@@ -536,6 +584,7 @@ export default function CreateGoalScreen() {
       endMonth: tempYearlyEndMonth,
       endDay: day,
     };
+    console.log('Adding yearly date range:', newDate);
     setYearlyDates([...yearlyDates, newDate]);
     setShowYearlyDatePicker(false);
   };
@@ -1269,9 +1318,15 @@ export default function CreateGoalScreen() {
                 <Switch
                   value={hasEndDate}
                   onValueChange={(value) => {
+                    console.log('End date toggle:', value);
                     setHasEndDate(value);
                     if (!value) {
                       setEndDate(undefined);
+                    } else if (!endDate) {
+                      // Set default end date to 1 year from now
+                      const defaultEndDate = new Date();
+                      defaultEndDate.setFullYear(defaultEndDate.getFullYear() + 1);
+                      setEndDate(defaultEndDate);
                     }
                   }}
                   trackColor={{ false: colors.border, true: colors.primary }}
@@ -1282,7 +1337,10 @@ export default function CreateGoalScreen() {
                 <>
                   <TouchableOpacity
                     style={styles.picker}
-                    onPress={() => setShowEndDatePicker(true)}
+                    onPress={() => {
+                      console.log('Opening end date picker');
+                      setShowEndDatePicker(true);
+                    }}
                   >
                     <Text style={styles.pickerText}>
                       {endDate ? formatDateByCalendar(endDate, calendarType) : 'Select end date'}
@@ -1298,20 +1356,6 @@ export default function CreateGoalScreen() {
                     Using {calendarType} calendar
                   </Text>
                 </>
-              )}
-              {showEndDatePicker && (
-                <DateTimePicker
-                  value={endDate || new Date()}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, selectedDate) => {
-                    setShowEndDatePicker(Platform.OS === 'ios');
-                    if (selectedDate) {
-                      setEndDate(selectedDate);
-                    }
-                  }}
-                  minimumDate={new Date()}
-                />
               )}
             </View>
           )}
@@ -1504,9 +1548,22 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* All modals remain the same as before - I'm keeping them for completeness but not repeating the entire code */}
-      {/* Monthly Weekday Picker Modal, Monthly Date Picker Modal, Yearly Date Picker Modal, etc. */}
-      {/* (The rest of the modals remain unchanged from the original file) */}
+      {/* End Date Picker Modal */}
+      {showEndDatePicker && (
+        <DateTimePicker
+          value={endDate || new Date()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event, selectedDate) => {
+            console.log('End date picker changed:', event.type, selectedDate);
+            setShowEndDatePicker(Platform.OS === 'ios');
+            if (event.type === 'set' && selectedDate) {
+              setEndDate(selectedDate);
+            }
+          }}
+          minimumDate={new Date()}
+        />
+      )}
 
       {/* Monthly Weekday Picker Modal - FIXED */}
       <Modal
@@ -1744,10 +1801,6 @@ export default function CreateGoalScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* All other existing modals remain the same... */}
-      {/* (Parent Goal, Life Area, Strategy, Schedule, Currency, Calendar, Alarm, Success/Error, Create Another modals) */}
-      {/* I'll include the essential ones below for completeness */}
 
       {/* Calendar Type Picker Modal - Only show enabled calendars */}
       <Modal
