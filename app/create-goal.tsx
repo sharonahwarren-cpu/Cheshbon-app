@@ -151,6 +151,36 @@ const getMaxDaysInMonth = (month: number, calendarType: CalendarType): number =>
   return daysInMonth[month - 1] || 31;
 };
 
+// Helper function to format date based on calendar type
+const formatDateByCalendar = (date: Date, calendarType: CalendarType): string => {
+  if (calendarType === 'Gregorian') {
+    return date.toLocaleDateString();
+  }
+  
+  // For alternative calendars, use Intl.DateTimeFormat
+  const calendarMap: Record<CalendarType, string> = {
+    'Gregorian': 'gregory',
+    'Hebrew': 'hebrew',
+    'Chinese': 'chinese',
+    'Islamic': 'islamic',
+  };
+  
+  const calendarId = calendarMap[calendarType];
+  
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      calendar: calendarId,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    return formatter.format(date);
+  } catch (error) {
+    console.error('Error formatting date with calendar:', calendarType, error);
+    return date.toLocaleDateString();
+  }
+};
+
 export default function CreateGoalScreen() {
   const router = useRouter();
   const { 
@@ -1231,7 +1261,7 @@ export default function CreateGoalScreen() {
             </View>
           )}
           
-          {/* End Date (Optional) */}
+          {/* End Date (Optional) - Now respects calendar type */}
           {scheduleType !== 'Always Active' && (
             <View style={styles.subSection}>
               <View style={styles.endDateHeader}>
@@ -1249,20 +1279,25 @@ export default function CreateGoalScreen() {
                 />
               </View>
               {hasEndDate && (
-                <TouchableOpacity
-                  style={styles.picker}
-                  onPress={() => setShowEndDatePicker(true)}
-                >
-                  <Text style={styles.pickerText}>
-                    {endDate ? endDate.toLocaleDateString() : 'Select end date'}
+                <>
+                  <TouchableOpacity
+                    style={styles.picker}
+                    onPress={() => setShowEndDatePicker(true)}
+                  >
+                    <Text style={styles.pickerText}>
+                      {endDate ? formatDateByCalendar(endDate, calendarType) : 'Select end date'}
+                    </Text>
+                    <IconSymbol
+                      ios_icon_name="calendar"
+                      android_material_icon_name="calendar-today"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+                  <Text style={styles.helperText}>
+                    Using {calendarType} calendar
                   </Text>
-                  <IconSymbol
-                    ios_icon_name="calendar"
-                    android_material_icon_name="calendar-today"
-                    size={24}
-                    color={colors.text}
-                  />
-                </TouchableOpacity>
+                </>
               )}
               {showEndDatePicker && (
                 <DateTimePicker
@@ -1468,6 +1503,10 @@ export default function CreateGoalScreen() {
           />
         </View>
       </ScrollView>
+
+      {/* All modals remain the same as before - I'm keeping them for completeness but not repeating the entire code */}
+      {/* Monthly Weekday Picker Modal, Monthly Date Picker Modal, Yearly Date Picker Modal, etc. */}
+      {/* (The rest of the modals remain unchanged from the original file) */}
 
       {/* Monthly Weekday Picker Modal - FIXED */}
       <Modal
