@@ -58,6 +58,10 @@ interface UserPreferences {
 type BehaviorCategory = 'Action' | 'Speech' | 'Thought' | 'Feeling';
 type GoalType = 'Restraining' | 'Proactive';
 type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
+type CalendarType = 'Gregorian' | 'Hebrew' | 'Chinese' | 'Islamic' | 'Persian';
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const WEEK_POSITIONS = ['First', 'Second', 'Third', 'Fourth', 'Last'];
 
 export default function CreateGoalScreen() {
   const router = useRouter();
@@ -100,6 +104,14 @@ export default function CreateGoalScreen() {
   const [scheduleType, setScheduleType] = useState<ScheduleType>('Always Active');
   const [scheduleTimesPerDay, setScheduleTimesPerDay] = useState<string>('');
   
+  // Advanced schedule state
+  const [selectedWeekdays, setSelectedWeekdays] = useState<string[]>([]);
+  const [monthlyType, setMonthlyType] = useState<'date' | 'weekday'>('date');
+  const [monthlyDates, setMonthlyDates] = useState<number[]>([]);
+  const [monthlyWeekdayRules, setMonthlyWeekdayRules] = useState<Array<{position: string; weekday: string}>>([]);
+  const [yearlyDates, setYearlyDates] = useState<Array<{month: number; day: number}>>([]);
+  const [calendarType, setCalendarType] = useState<CalendarType>('Gregorian');
+  
   // Reward state
   const [rewardCurrencyId, setRewardCurrencyId] = useState<string | undefined>();
   const [rewardSuccesses, setRewardSuccesses] = useState<string>('');
@@ -137,6 +149,11 @@ export default function CreateGoalScreen() {
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [showRewardCurrencyPicker, setShowRewardCurrencyPicker] = useState(false);
   const [showConsequenceCurrencyPicker, setShowConsequenceCurrencyPicker] = useState(false);
+  const [showWeekdayPicker, setShowWeekdayPicker] = useState(false);
+  const [showMonthlyDatePicker, setShowMonthlyDatePicker] = useState(false);
+  const [showMonthlyWeekdayPicker, setShowMonthlyWeekdayPicker] = useState(false);
+  const [showYearlyDatePicker, setShowYearlyDatePicker] = useState(false);
+  const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -222,6 +239,26 @@ export default function CreateGoalScreen() {
         setScheduleType(goalDetails.scheduleType || 'Always Active');
         setScheduleTimesPerDay(goalDetails.scheduleTimesPerDay?.toString() || '');
         
+        // Load advanced schedule data
+        if (goalDetails.selectedWeekdays) {
+          setSelectedWeekdays(goalDetails.selectedWeekdays);
+        }
+        if (goalDetails.monthlyType) {
+          setMonthlyType(goalDetails.monthlyType);
+        }
+        if (goalDetails.monthlyDates) {
+          setMonthlyDates(goalDetails.monthlyDates);
+        }
+        if (goalDetails.monthlyWeekdayRules) {
+          setMonthlyWeekdayRules(goalDetails.monthlyWeekdayRules);
+        }
+        if (goalDetails.yearlyDates) {
+          setYearlyDates(goalDetails.yearlyDates);
+        }
+        if (goalDetails.calendarType) {
+          setCalendarType(goalDetails.calendarType);
+        }
+        
         // Load reward data
         if (goalDetails.rewardCurrencyId) {
           setRewardCurrencyId(goalDetails.rewardCurrencyId);
@@ -292,6 +329,65 @@ export default function CreateGoalScreen() {
     setStrategyIds(newStrategies);
   };
 
+  const toggleWeekday = (weekday: string) => {
+    const newWeekdays = selectedWeekdays.includes(weekday)
+      ? selectedWeekdays.filter(d => d !== weekday)
+      : [...selectedWeekdays, weekday];
+    setSelectedWeekdays(newWeekdays);
+  };
+
+  const toggleMonthlyDate = (date: number) => {
+    const newDates = monthlyDates.includes(date)
+      ? monthlyDates.filter(d => d !== date)
+      : [...monthlyDates, date].sort((a, b) => a - b);
+    setMonthlyDates(newDates);
+  };
+
+  const addMonthlyWeekdayRule = (position: string, weekday: string) => {
+    const newRules = [...monthlyWeekdayRules, { position, weekday }];
+    setMonthlyWeekdayRules(newRules);
+  };
+
+  const removeMonthlyWeekdayRule = (index: number) => {
+    const newRules = monthlyWeekdayRules.filter((_, i) => i !== index);
+    setMonthlyWeekdayRules(newRules);
+  };
+
+  const addYearlyDate = (month: number, day: number) => {
+    const newDates = [...yearlyDates, { month, day }];
+    setYearlyDates(newDates);
+  };
+
+  const removeYearlyDate = (index: number) => {
+    const newDates = yearlyDates.filter((_, i) => i !== index);
+    setYearlyDates(newDates);
+  };
+
+  const getScheduleSummary = () => {
+    if (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') {
+      if (selectedWeekdays.length === 0) return 'No days selected';
+      return selectedWeekdays.join(', ');
+    }
+    if (scheduleType === 'Monthly') {
+      if (monthlyType === 'date') {
+        if (monthlyDates.length === 0) return 'No dates selected';
+        const dateText = monthlyDates.map(d => `${d}${d === 1 ? 'st' : d === 2 ? 'nd' : d === 3 ? 'rd' : 'th'}`).join(', ');
+        return dateText;
+      } else {
+        if (monthlyWeekdayRules.length === 0) return 'No rules selected';
+        const ruleText = monthlyWeekdayRules.map(r => `${r.position} ${r.weekday}`).join(', ');
+        return ruleText;
+      }
+    }
+    if (scheduleType === 'Yearly') {
+      if (yearlyDates.length === 0) return 'No dates selected';
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const dateText = yearlyDates.map(d => `${monthNames[d.month - 1]} ${d.day}`).join(', ');
+      return `${dateText} (${calendarType})`;
+    }
+    return '';
+  };
+
   const handleSubmit = async () => {
     console.log(editingGoalId ? 'Submitting goal update form' : 'Submitting goal creation form');
     
@@ -318,7 +414,13 @@ export default function CreateGoalScreen() {
         type,
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
         scheduleType,
-        scheduleTimesPerDay: scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
+        scheduleTimesPerDay: scheduleType === 'Daily' && scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
+        selectedWeekdays: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') && selectedWeekdays.length > 0 ? selectedWeekdays : undefined,
+        monthlyType: scheduleType === 'Monthly' ? monthlyType : undefined,
+        monthlyDates: scheduleType === 'Monthly' && monthlyType === 'date' && monthlyDates.length > 0 ? monthlyDates : undefined,
+        monthlyWeekdayRules: scheduleType === 'Monthly' && monthlyType === 'weekday' && monthlyWeekdayRules.length > 0 ? monthlyWeekdayRules : undefined,
+        yearlyDates: scheduleType === 'Yearly' && yearlyDates.length > 0 ? yearlyDates : undefined,
+        calendarType: scheduleType === 'Yearly' ? calendarType : undefined,
         // Alarm fields
         alarmEnabled,
         alarmTime: alarmEnabled ? alarmTime : null,
@@ -713,7 +815,8 @@ export default function CreateGoalScreen() {
             />
           </TouchableOpacity>
           
-          {scheduleType !== 'Always Active' && (
+          {/* Daily: Times per day */}
+          {scheduleType === 'Daily' && (
             <View style={styles.subSection}>
               <Text style={styles.subLabel}>Times per day (optional)</Text>
               <TextInput
@@ -724,6 +827,117 @@ export default function CreateGoalScreen() {
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="number-pad"
               />
+            </View>
+          )}
+          
+          {/* Weekly/Fortnightly: Day selection */}
+          {(scheduleType === 'Weekly' || scheduleType === 'Fortnightly') && (
+            <View style={styles.subSection}>
+              <Text style={styles.subLabel}>Select days</Text>
+              <TouchableOpacity
+                style={styles.picker}
+                onPress={() => setShowWeekdayPicker(true)}
+              >
+                <Text style={styles.pickerText}>{getScheduleSummary()}</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.down"
+                  android_material_icon_name="arrow-drop-down"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* Monthly: Date or weekday selection */}
+          {scheduleType === 'Monthly' && (
+            <View style={styles.subSection}>
+              <Text style={styles.subLabel}>Monthly schedule type</Text>
+              <View style={styles.radioGroup}>
+                <TouchableOpacity
+                  style={[styles.radio, monthlyType === 'date' && styles.radioSelected]}
+                  onPress={() => setMonthlyType('date')}
+                >
+                  <View style={styles.radioCircle}>
+                    {monthlyType === 'date' && <View style={styles.radioCircleInner} />}
+                  </View>
+                  <Text style={styles.radioText}>Specific date(s)</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.radio, monthlyType === 'weekday' && styles.radioSelected]}
+                  onPress={() => setMonthlyType('weekday')}
+                >
+                  <View style={styles.radioCircle}>
+                    {monthlyType === 'weekday' && <View style={styles.radioCircleInner} />}
+                  </View>
+                  <Text style={styles.radioText}>Weekday rule(s)</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {monthlyType === 'date' && (
+                <TouchableOpacity
+                  style={[styles.picker, { marginTop: 12 }]}
+                  onPress={() => setShowMonthlyDatePicker(true)}
+                >
+                  <Text style={styles.pickerText}>{getScheduleSummary()}</Text>
+                  <IconSymbol
+                    ios_icon_name="chevron.down"
+                    android_material_icon_name="arrow-drop-down"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+              )}
+              
+              {monthlyType === 'weekday' && (
+                <View style={{ marginTop: 12 }}>
+                  <TouchableOpacity
+                    style={styles.picker}
+                    onPress={() => setShowMonthlyWeekdayPicker(true)}
+                  >
+                    <Text style={styles.pickerText}>{getScheduleSummary()}</Text>
+                    <IconSymbol
+                      ios_icon_name="chevron.down"
+                      android_material_icon_name="arrow-drop-down"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
+          
+          {/* Yearly: Date selection with calendar type */}
+          {scheduleType === 'Yearly' && (
+            <View style={styles.subSection}>
+              <Text style={styles.subLabel}>Calendar type</Text>
+              <TouchableOpacity
+                style={styles.picker}
+                onPress={() => setShowCalendarPicker(true)}
+              >
+                <Text style={styles.pickerText}>{calendarType}</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.down"
+                  android_material_icon_name="arrow-drop-down"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              
+              <Text style={[styles.subLabel, { marginTop: 12 }]}>Select dates</Text>
+              <TouchableOpacity
+                style={styles.picker}
+                onPress={() => setShowYearlyDatePicker(true)}
+              >
+                <Text style={styles.pickerText}>{getScheduleSummary()}</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.down"
+                  android_material_icon_name="arrow-drop-down"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -961,6 +1175,200 @@ export default function CreateGoalScreen() {
           />
         </View>
       </ScrollView>
+
+      {/* Weekday Picker Modal */}
+      <Modal
+        visible={showWeekdayPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowWeekdayPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Days</Text>
+              <TouchableOpacity onPress={() => setShowWeekdayPicker(false)}>
+                <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {WEEKDAYS.map((weekday) => {
+                const isSelected = selectedWeekdays.includes(weekday);
+                return (
+                  <TouchableOpacity
+                    key={weekday}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => toggleWeekday(weekday)}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>{weekday}</Text>
+                    {isSelected && <IconSymbol ios_icon_name="checkmark" android_material_icon_name="check" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Monthly Date Picker Modal */}
+      <Modal
+        visible={showMonthlyDatePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMonthlyDatePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Dates</Text>
+              <TouchableOpacity onPress={() => setShowMonthlyDatePicker(false)}>
+                <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={styles.dateGrid}>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map((date) => {
+                  const isSelected = monthlyDates.includes(date);
+                  return (
+                    <TouchableOpacity
+                      key={date}
+                      style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                      onPress={() => toggleMonthlyDate(date)}
+                    >
+                      <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>{date}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Monthly Weekday Picker Modal */}
+      <Modal
+        visible={showMonthlyWeekdayPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMonthlyWeekdayPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Weekday Rules</Text>
+              <TouchableOpacity onPress={() => setShowMonthlyWeekdayPicker(false)}>
+                <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={{ padding: 16 }}>
+                <Text style={styles.helperText}>Add rules like "First Tuesday" or "Last Wednesday"</Text>
+                {monthlyWeekdayRules.map((rule, index) => (
+                  <View key={index} style={styles.ruleItem}>
+                    <Text style={styles.ruleText}>{rule.position} {rule.weekday}</Text>
+                    <TouchableOpacity onPress={() => removeMonthlyWeekdayRule(index)}>
+                      <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={20} color="#ff4444" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <Text style={[styles.subLabel, { marginTop: 16 }]}>Add new rule</Text>
+                {WEEK_POSITIONS.map((position) => (
+                  <View key={position} style={{ marginBottom: 12 }}>
+                    <Text style={styles.positionLabel}>{position}</Text>
+                    <View style={styles.weekdayButtonGroup}>
+                      {WEEKDAYS.map((weekday) => (
+                        <TouchableOpacity
+                          key={weekday}
+                          style={styles.weekdayButton}
+                          onPress={() => addMonthlyWeekdayRule(position, weekday)}
+                        >
+                          <Text style={styles.weekdayButtonText}>{weekday.substring(0, 3)}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Yearly Date Picker Modal */}
+      <Modal
+        visible={showYearlyDatePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowYearlyDatePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Yearly Dates</Text>
+              <TouchableOpacity onPress={() => setShowYearlyDatePicker(false)}>
+                <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={{ padding: 16 }}>
+                <Text style={styles.helperText}>Add dates like "Dec 1" or "Apr 3"</Text>
+                {yearlyDates.map((date, index) => {
+                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                  return (
+                    <View key={index} style={styles.ruleItem}>
+                      <Text style={styles.ruleText}>{monthNames[date.month - 1]} {date.day}</Text>
+                      <TouchableOpacity onPress={() => removeYearlyDate(index)}>
+                        <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={20} color="#ff4444" />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => addYearlyDate(12, 1)}
+                >
+                  <IconSymbol ios_icon_name="plus" android_material_icon_name="add" size={20} color="#fff" />
+                  <Text style={styles.addButtonText}>Add Date (Example: Dec 1)</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Calendar Type Picker Modal */}
+      <Modal
+        visible={showCalendarPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCalendarPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Calendar Type</Text>
+              <TouchableOpacity onPress={() => setShowCalendarPicker(false)}>
+                <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {(['Gregorian', 'Hebrew', 'Chinese', 'Islamic', 'Persian'] as CalendarType[]).map((calendar) => {
+                const isSelected = calendar === calendarType;
+                return (
+                  <TouchableOpacity
+                    key={calendar}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => { setCalendarType(calendar); setShowCalendarPicker(false); }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>{calendar}</Text>
+                    {isSelected && <IconSymbol ios_icon_name="checkmark" android_material_icon_name="check" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Parent Goal Picker Modal */}
       <Modal
@@ -1363,6 +1771,12 @@ export default function CreateGoalScreen() {
                   setStrategyIds([]);
                   setScheduleType('Always Active');
                   setScheduleTimesPerDay('');
+                  setSelectedWeekdays([]);
+                  setMonthlyType('date');
+                  setMonthlyDates([]);
+                  setMonthlyWeekdayRules([]);
+                  setYearlyDates([]);
+                  setCalendarType('Gregorian');
                   setRewardCurrencyId(undefined);
                   setRewardSuccesses('');
                   setRewardAmount('');
@@ -1721,5 +2135,83 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
+  },
+  dateGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 16,
+    gap: 8,
+  },
+  dateButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  dateButtonText: {
+    fontSize: 16,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  dateButtonTextSelected: {
+    color: '#fff',
+  },
+  ruleItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  ruleText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  positionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  weekdayButtonGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  weekdayButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+  },
+  weekdayButtonText: {
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+    marginTop: 12,
+  },
+  addButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

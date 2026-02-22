@@ -6,61 +6,49 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Switch,
-  Modal,
-  TextInput,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { authenticatedGet, authenticatedPut } from '@/utils/api';
 
-interface NotificationAlarm {
-  id: string;
-  name: string;
-  time: string;
-  frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly';
-  dayOfWeek?: string;
-  dayOfMonth?: number;
-}
-
-interface UserPreferences {
-  notificationsEnabled: boolean;
-  notificationAlarms?: NotificationAlarm[];
-  reflectionCategoriesEnabled?: boolean;
-  reflectionCategories?: string[];
-  preferredHomeScreen?: 'reflect' | 'goals-detailed' | 'goals-concise';
-}
-
-const BEHAVIOR_CATEGORIES = ['Action', 'Speech', 'Thought', 'Feeling'];
 const HOME_SCREEN_OPTIONS = [
-  { value: 'reflect', label: 'Reflect' },
-  { value: 'goals-detailed', label: 'Goals Detailed' },
-  { value: 'goals-concise', label: 'Goals Concise' },
+  { value: 'reflect', label: 'Reflect', description: 'Start with reflection screen' },
+  { value: 'goals-detailed', label: 'Goals Detailed', description: 'View goals in detailed mode' },
+  { value: 'goals-concise', label: 'Goals Concise', description: 'View goals in concise mode' },
+];
+
+const PREFERENCE_SECTIONS = [
+  {
+    route: '/preferences/reflection',
+    title: 'Reflection',
+    description: 'Configure behavior categories for reflections',
+    iosIcon: 'brain.head.profile',
+    androidIcon: 'psychology',
+  },
+  {
+    route: '/preferences/notification',
+    title: 'Notifications',
+    description: 'Set up notification alarms and reminders',
+    iosIcon: 'bell.fill',
+    androidIcon: 'notifications',
+  },
+  {
+    route: '/preferences/home-screen',
+    title: 'Alternative Calendars',
+    description: 'Use Hebrew or Chinese calendar alongside Gregorian',
+    iosIcon: 'calendar',
+    androidIcon: 'calendar-today',
+  },
 ];
 
 export default function PreferencesScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [preferences, setPreferences] = useState<UserPreferences>({
-    notificationsEnabled: false,
-    notificationAlarms: [],
-    reflectionCategoriesEnabled: true,
-    reflectionCategories: BEHAVIOR_CATEGORIES,
-    preferredHomeScreen: 'reflect',
-  });
-
-  const [alarmModalVisible, setAlarmModalVisible] = useState(false);
-  const [editingAlarm, setEditingAlarm] = useState<NotificationAlarm | null>(null);
-  const [alarmName, setAlarmName] = useState('');
-  const [alarmTime, setAlarmTime] = useState(new Date());
-  const [alarmFrequency, setAlarmFrequency] = useState<'daily' | 'weekly' | 'biweekly' | 'monthly'>('daily');
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [preferredHomeScreen, setPreferredHomeScreen] = useState<'reflect' | 'goals-detailed' | 'goals-concise'>('reflect');
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -69,168 +57,41 @@ export default function PreferencesScreen() {
   }, []);
 
   const loadPreferences = async () => {
-    console.log('Loading user preferences');
+    console.log('[Preferences] Loading home screen preference');
     setLoading(true);
     try {
-      const data = await authenticatedGet<UserPreferences>('/api/user-preferences');
-      console.log('Preferences loaded:', data);
-      // Handle both direct and nested response formats
+      const data = await authenticatedGet<any>('/api/user-preferences');
       const prefs = (data as any)?.data || data;
-      // Parse notificationAlarms if it's a JSON string
-      let alarms = prefs.notificationAlarms ?? [];
-      if (typeof alarms === 'string') {
-        try { alarms = JSON.parse(alarms); } catch { alarms = []; }
-      }
-      // Parse reflectionCategories if it's a JSON string
-      let categories = prefs.reflectionCategories ?? BEHAVIOR_CATEGORIES;
-      if (typeof categories === 'string') {
-        try { categories = JSON.parse(categories); } catch { categories = BEHAVIOR_CATEGORIES; }
-      }
-      setPreferences({
-        notificationsEnabled: prefs.notificationsEnabled ?? false,
-        notificationAlarms: Array.isArray(alarms) ? alarms : [],
-        reflectionCategoriesEnabled: prefs.reflectionCategoriesEnabled ?? true,
-        reflectionCategories: Array.isArray(categories) ? categories : BEHAVIOR_CATEGORIES,
-        preferredHomeScreen: prefs.preferredHomeScreen ?? 'reflect',
-      });
+      setPreferredHomeScreen(prefs.preferredHomeScreen ?? 'reflect');
     } catch (error) {
-      console.error('Error loading preferences:', error);
-      showError('Failed to load preferences');
+      console.error('[Preferences] Error loading preferences:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const savePreferences = async (updatedPreferences: UserPreferences) => {
-    console.log('Saving preferences:', updatedPreferences);
+  const selectHomeScreen = async (value: 'reflect' | 'goals-detailed' | 'goals-concise') => {
+    setPreferredHomeScreen(value);
     setSaving(true);
     try {
-      await authenticatedPut('/api/user-preferences', updatedPreferences);
-      console.log('Preferences saved successfully');
-      showSuccess('Preferences saved');
+      await authenticatedPut('/api/user-preferences', { preferredHomeScreen: value });
+      console.log('[Preferences] Home screen preference saved:', value);
+      setSuccessMessage('Preferences saved');
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Error saving preferences:', error);
-      showError('Failed to save preferences');
+      console.error('[Preferences] Error saving preferences:', error);
+      setErrorMessage('Failed to save preferences');
+      setTimeout(() => setErrorMessage(''), 3000);
     } finally {
       setSaving(false);
     }
   };
 
-  const showSuccess = (message: string) => {
-    setSuccessMessage(message);
-    setTimeout(() => setSuccessMessage(''), 3000);
-  };
-
-  const showError = (message: string) => {
-    setErrorMessage(message);
-    setTimeout(() => setErrorMessage(''), 3000);
-  };
-
-  const toggleNotifications = async (value: boolean) => {
-    const updated = { ...preferences, notificationsEnabled: value };
-    setPreferences(updated);
-    await savePreferences(updated);
-  };
-
-  const toggleReflectionCategories = async (value: boolean) => {
-    const updated = { ...preferences, reflectionCategoriesEnabled: value };
-    setPreferences(updated);
-    await savePreferences(updated);
-  };
-
-  const toggleCategory = async (category: string) => {
-    const currentCategories = preferences.reflectionCategories || [];
-    const updatedCategories = currentCategories.includes(category)
-      ? currentCategories.filter(c => c !== category)
-      : [...currentCategories, category];
-    
-    const updated = { ...preferences, reflectionCategories: updatedCategories };
-    setPreferences(updated);
-    await savePreferences(updated);
-  };
-
-  const selectHomeScreen = async (value: 'reflect' | 'goals-detailed' | 'goals-concise') => {
-    const updated = { ...preferences, preferredHomeScreen: value };
-    setPreferences(updated);
-    await savePreferences(updated);
-  };
-
-  const openAddAlarmModal = () => {
-    setEditingAlarm(null);
-    setAlarmName('');
-    setAlarmTime(new Date());
-    setAlarmFrequency('daily');
-    setAlarmModalVisible(true);
-  };
-
-  const openEditAlarmModal = (alarm: NotificationAlarm) => {
-    setEditingAlarm(alarm);
-    setAlarmName(alarm.name);
-    const [hours, minutes] = alarm.time.split(':');
-    const time = new Date();
-    time.setHours(parseInt(hours), parseInt(minutes));
-    setAlarmTime(time);
-    setAlarmFrequency(alarm.frequency);
-    setAlarmModalVisible(true);
-  };
-
-  const handleSaveAlarm = async () => {
-    const timeString = formatTime(alarmTime);
-    const newAlarm: NotificationAlarm = {
-      id: editingAlarm?.id || Date.now().toString(),
-      name: alarmName,
-      time: timeString,
-      frequency: alarmFrequency,
-    };
-
-    const currentAlarms = preferences.notificationAlarms || [];
-    const updatedAlarms = editingAlarm
-      ? currentAlarms.map(a => a.id === editingAlarm.id ? newAlarm : a)
-      : [...currentAlarms, newAlarm];
-
-    const updated = { ...preferences, notificationAlarms: updatedAlarms };
-    setPreferences(updated);
-    await savePreferences(updated);
-    setAlarmModalVisible(false);
-  };
-
-  const handleDeleteAlarm = async (alarmId: string) => {
-    const updatedAlarms = (preferences.notificationAlarms || []).filter(a => a.id !== alarmId);
-    const updated = { ...preferences, notificationAlarms: updatedAlarms };
-    setPreferences(updated);
-    await savePreferences(updated);
-  };
-
-  const formatTime = (date: Date): string => {
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
-  };
-
-  const onTimeChange = (event: any, selectedDate?: Date) => {
-    setShowTimePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setAlarmTime(selectedDate);
-    }
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <Stack.Screen options={{ title: 'Preferences', headerShown: true }} />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Stack.Screen options={{ title: 'Preferences', headerShown: true }} />
-      
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Success/Error Messages */}
         {successMessage ? (
           <View style={styles.successBanner}>
             <Text style={styles.successText}>{successMessage}</Text>
@@ -242,65 +103,53 @@ export default function PreferencesScreen() {
           </View>
         ) : null}
 
-        {/* Home Screen Preference */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Home Screen</Text>
-          <Text style={styles.sectionDescription}>
+        {/* Home Screen Section - Inline */}
+        <View style={styles.inlineSection}>
+          <View style={styles.inlineSectionHeader}>
+            <View style={styles.iconContainer}>
+              <IconSymbol
+                ios_icon_name="house.fill"
+                android_material_icon_name="home"
+                size={22}
+                color={colors.primary}
+              />
+            </View>
+            <Text style={styles.inlineSectionTitle}>Home Screen</Text>
+          </View>
+          <Text style={styles.inlineSectionDescription}>
             Choose which screen to show first when you open the app
           </Text>
-          {HOME_SCREEN_OPTIONS.map((option) => {
-            const isSelected = preferences.preferredHomeScreen === option.value;
-            return (
-              <TouchableOpacity
-                key={option.value}
-                style={[styles.optionCard, isSelected && styles.optionCardSelected]}
-                onPress={() => selectHomeScreen(option.value as any)}
-              >
-                <View style={styles.optionContent}>
-                  <Text style={[styles.optionLabel, isSelected && styles.optionLabelSelected]}>
-                    {option.label}
-                  </Text>
-                  {isSelected && (
-                    <IconSymbol
-                      ios_icon_name="checkmark.circle.fill"
-                      android_material_icon_name="check-circle"
-                      size={24}
-                      color={colors.primary}
-                    />
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Reflection Preferences */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Reflection Preferences</Text>
-            <Switch
-              value={preferences.reflectionCategoriesEnabled}
-              onValueChange={toggleReflectionCategories}
-              trackColor={{ false: colors.cardBorder, true: colors.primary }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-          <Text style={styles.sectionDescription}>
-            Enable or disable specific behavior categories for reflections
-          </Text>
-          {preferences.reflectionCategoriesEnabled && (
-            <View style={styles.categoriesContainer}>
-              {BEHAVIOR_CATEGORIES.map((category) => {
-                const isEnabled = (preferences.reflectionCategories || []).includes(category);
+          {loading ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 8 }} />
+          ) : (
+            <View style={styles.homeScreenOptions}>
+              {HOME_SCREEN_OPTIONS.map((option) => {
+                const isSelected = preferredHomeScreen === option.value;
                 return (
                   <TouchableOpacity
-                    key={category}
-                    style={[styles.categoryChip, isEnabled && styles.categoryChipActive]}
-                    onPress={() => toggleCategory(category)}
+                    key={option.value}
+                    style={[styles.homeScreenOption, isSelected && styles.homeScreenOptionSelected]}
+                    onPress={() => selectHomeScreen(option.value as any)}
+                    disabled={saving}
                   >
-                    <Text style={[styles.categoryChipText, isEnabled && styles.categoryChipTextActive]}>
-                      {category}
-                    </Text>
+                    <View style={styles.homeScreenOptionContent}>
+                      <View style={styles.homeScreenOptionText}>
+                        <Text style={[styles.homeScreenOptionLabel, isSelected && styles.homeScreenOptionLabelSelected]}>
+                          {option.label}
+                        </Text>
+                        <Text style={[styles.homeScreenOptionDesc, isSelected && styles.homeScreenOptionDescSelected]}>
+                          {option.description}
+                        </Text>
+                      </View>
+                      {isSelected && (
+                        <IconSymbol
+                          ios_icon_name="checkmark.circle.fill"
+                          android_material_icon_name="check-circle"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      )}
+                    </View>
                   </TouchableOpacity>
                 );
               })}
@@ -308,146 +157,42 @@ export default function PreferencesScreen() {
           )}
         </View>
 
-        {/* Notifications */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Notifications</Text>
-            <Switch
-              value={preferences.notificationsEnabled}
-              onValueChange={toggleNotifications}
-              trackColor={{ false: colors.cardBorder, true: colors.primary }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-          <Text style={styles.sectionDescription}>
-            Set up notification alarms to remind you to reflect
-          </Text>
-          
-          {preferences.notificationsEnabled && (
-            <>
-              <TouchableOpacity style={styles.addButton} onPress={openAddAlarmModal}>
-                <IconSymbol
-                  ios_icon_name="plus.circle.fill"
-                  android_material_icon_name="add-circle"
-                  size={20}
-                  color={colors.primary}
-                />
-                <Text style={styles.addButtonText}>Add Alarm</Text>
-              </TouchableOpacity>
+        {/* Divider */}
+        <View style={styles.divider} />
 
-              {(preferences.notificationAlarms || []).map((alarm) => (
-                <View key={alarm.id} style={styles.alarmCard}>
-                  <View style={styles.alarmInfo}>
-                    <Text style={styles.alarmName}>{alarm.name}</Text>
-                    <Text style={styles.alarmDetails}>
-                      {alarm.time} • {alarm.frequency}
-                    </Text>
-                  </View>
-                  <View style={styles.alarmActions}>
-                    <TouchableOpacity onPress={() => openEditAlarmModal(alarm)}>
-                      <IconSymbol
-                        ios_icon_name="pencil"
-                        android_material_icon_name="edit"
-                        size={20}
-                        color={colors.primary}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => handleDeleteAlarm(alarm.id)}>
-                      <IconSymbol
-                        ios_icon_name="trash"
-                        android_material_icon_name="delete"
-                        size={20}
-                        color={colors.error}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </>
-          )}
-        </View>
-      </ScrollView>
+        {/* Other Preference Sections */}
+        <Text style={styles.sectionGroupTitle}>More Settings</Text>
 
-      {/* Alarm Modal */}
-      <Modal
-        visible={alarmModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setAlarmModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {editingAlarm ? 'Edit Alarm' : 'Add Alarm'}
-            </Text>
-
-            <Text style={styles.inputLabel}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={alarmName}
-              onChangeText={setAlarmName}
-              placeholder="e.g., Morning Reflection"
-              placeholderTextColor={colors.textSecondary}
-            />
-
-            <Text style={styles.inputLabel}>Time</Text>
-            <TouchableOpacity
-              style={styles.timeButton}
-              onPress={() => setShowTimePicker(true)}
-            >
-              <Text style={styles.timeButtonText}>{formatTime(alarmTime)}</Text>
-            </TouchableOpacity>
-
-            {showTimePicker && (
-              <DateTimePicker
-                value={alarmTime}
-                mode="time"
-                is24Hour={true}
-                display="default"
-                onChange={onTimeChange}
+        {PREFERENCE_SECTIONS.map((section) => (
+          <TouchableOpacity
+            key={section.route}
+            style={styles.sectionCard}
+            onPress={() => {
+              console.log(`Navigating to ${section.route}`);
+              router.push(section.route as any);
+            }}
+          >
+            <View style={styles.iconContainer}>
+              <IconSymbol
+                ios_icon_name={section.iosIcon}
+                android_material_icon_name={section.androidIcon}
+                size={24}
+                color={colors.primary}
               />
-            )}
-
-            <Text style={styles.inputLabel}>Frequency</Text>
-            <View style={styles.frequencyContainer}>
-              {['daily', 'weekly', 'biweekly', 'monthly'].map((freq) => (
-                <TouchableOpacity
-                  key={freq}
-                  style={[
-                    styles.frequencyChip,
-                    alarmFrequency === freq && styles.frequencyChipActive,
-                  ]}
-                  onPress={() => setAlarmFrequency(freq as any)}
-                >
-                  <Text
-                    style={[
-                      styles.frequencyChipText,
-                      alarmFrequency === freq && styles.frequencyChipTextActive,
-                    ]}
-                  >
-                    {freq.charAt(0).toUpperCase() + freq.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
             </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setAlarmModalVisible(false)}
-              >
-                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonSave]}
-                onPress={handleSaveAlarm}
-              >
-                <Text style={styles.modalButtonTextSave}>Save</Text>
-              </TouchableOpacity>
+            <View style={styles.sectionTextContainer}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              <Text style={styles.sectionDescription}>{section.description}</Text>
             </View>
-          </View>
-        </View>
-      </Modal>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={20}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -457,13 +202,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   scrollContent: {
     paddingHorizontal: 20,
+    paddingTop: 16,
     paddingBottom: 100,
   },
   successBanner: {
@@ -488,95 +229,81 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
   },
-  section: {
-    marginBottom: 32,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  inlineSection: {
     marginBottom: 8,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  inlineSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 10,
+  },
+  inlineSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: colors.text,
   },
-  sectionDescription: {
-    fontSize: 14,
+  inlineSectionDescription: {
+    fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: 16,
-  },
-  optionCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
     marginBottom: 12,
+    lineHeight: 18,
+  },
+  homeScreenOptions: {
+    gap: 8,
+  },
+  homeScreenOption: {
+    backgroundColor: colors.card,
+    borderRadius: 10,
+    padding: 12,
     borderWidth: 2,
     borderColor: colors.cardBorder,
   },
-  optionCardSelected: {
+  homeScreenOptionSelected: {
     borderColor: colors.primary,
     backgroundColor: `${colors.primary}10`,
   },
-  optionContent: {
+  homeScreenOptionContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  optionLabel: {
-    fontSize: 16,
+  homeScreenOptionText: {
+    flex: 1,
+    marginRight: 8,
+  },
+  homeScreenOptionLabel: {
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
+    marginBottom: 2,
   },
-  optionLabelSelected: {
+  homeScreenOptionLabelSelected: {
     color: colors.primary,
   },
-  categoriesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  homeScreenOptionDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
-  categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+  homeScreenOptionDescSelected: {
+    color: colors.primary,
+    opacity: 0.8,
   },
-  categoryChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+  divider: {
+    height: 1,
+    backgroundColor: colors.cardBorder,
+    marginVertical: 20,
   },
-  categoryChipText: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  categoryChipTextActive: {
-    color: '#FFFFFF',
+  sectionGroupTitle: {
+    fontSize: 13,
     fontWeight: '600',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 12,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    gap: 8,
   },
-  addButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  alarmCard: {
+  sectionCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -584,126 +311,34 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.cardBorder,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  alarmInfo: {
-    flex: 1,
-  },
-  alarmName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  alarmDetails: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  alarmActions: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  iconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: `${colors.primary}15`,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    marginRight: 14,
   },
-  modalContent: {
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 16,
-    padding: 24,
-    marginHorizontal: 20,
-    width: '90%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    marginBottom: 16,
-  },
-  timeButton: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    marginBottom: 16,
-  },
-  timeButtonText: {
-    fontSize: 16,
-    color: colors.text,
-    textAlign: 'center',
-  },
-  frequencyContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 24,
-  },
-  frequencyChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  frequencyChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  frequencyChipText: {
-    fontSize: 14,
-    color: colors.text,
-  },
-  frequencyChipTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modalButton: {
+  sectionTextContainer: {
     flex: 1,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
+    marginRight: 8,
   },
-  modalButtonCancel: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  modalButtonSave: {
-    backgroundColor: colors.primary,
-  },
-  modalButtonTextCancel: {
+  sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
+    marginBottom: 3,
   },
-  modalButtonTextSave: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
+  sectionDescription: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
   },
 });
