@@ -205,10 +205,16 @@ export function registerGoalRoutes(app: App) {
       progress?: number;
       reward?: { currencyId: string; successes: number; amount: number };
       consequence?: { currencyId: string; failures: number; amount: number };
+      alarms?: Array<{
+        time: string;
+        isRelative?: boolean;
+        offset?: number;
+        offsetUnit?: 'minutes' | 'hours' | 'days';
+      }>;
     };
 
     app.logger.info(
-      { userId: session.user.id, title: body.title, type: body.type },
+      { userId: session.user.id, title: body.title, type: body.type, alarmCount: body.alarms?.length },
       'Creating goal'
     );
 
@@ -234,6 +240,7 @@ export function registerGoalRoutes(app: App) {
           consequenceCurrencyId: body.consequence?.currencyId || null,
           consequenceFailures: body.consequence?.failures || null,
           consequenceAmount: body.consequence?.amount || null,
+          alarms: body.alarms ? JSON.stringify(body.alarms) : null,
         })
         .returning();
       const goal = goals[0];
@@ -273,6 +280,12 @@ export function registerGoalRoutes(app: App) {
       progress?: number;
       reward?: { currencyId: string; successes: number; amount: number };
       consequence?: { currencyId: string; failures: number; amount: number };
+      alarms?: Array<{
+        time: string;
+        isRelative?: boolean;
+        offset?: number;
+        offsetUnit?: 'minutes' | 'hours' | 'days';
+      }>;
     };
 
     app.logger.info({ userId: session.user.id, goalId: id }, 'Updating goal');
@@ -334,6 +347,9 @@ export function registerGoalRoutes(app: App) {
           updateData.consequenceFailures = null;
           updateData.consequenceAmount = null;
         }
+      }
+      if (body.alarms !== undefined) {
+        updateData.alarms = body.alarms ? JSON.stringify(body.alarms) : null;
       }
       updateData.updatedAt = new Date();
 

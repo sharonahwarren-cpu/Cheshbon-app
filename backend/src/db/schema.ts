@@ -84,6 +84,7 @@ export const goals = pgTable('goals', {
   consequenceCurrencyId: uuid('consequence_currency_id').references(() => currencies.id, { onDelete: 'set null' }),
   consequenceFailures: integer('consequence_failures'),
   consequenceAmount: integer('consequence_amount'),
+  alarms: jsonb('alarms'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
