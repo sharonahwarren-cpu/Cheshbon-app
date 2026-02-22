@@ -106,10 +106,20 @@ export function registerGoalRoutes(app: App) {
         }
       }
 
+      // Parse JSONB fields for proper return
+      const monthlyWeekdayRules = goal.scheduleNthDayOfMonth
+        ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth)
+        : null;
+
       const goalWithBalances = {
         ...goal,
         rewardCurrencyBalance,
         consequenceCurrencyBalance,
+        yearlyDates: goal.scheduleDatesOfYear || [],
+        monthlyDates: goal.scheduleDatesOfMonth || [],
+        monthlyWeekdayRules: monthlyWeekdayRules || [],
+        selectedWeekdays: goal.scheduleDaysOfWeek || [],
+        selectedFortnightDays: goal.scheduleDaysOfWeek || [],
       };
 
       app.logger.info({ userId: session.user.id, goalId: id }, 'Goal retrieved successfully');
@@ -202,6 +212,7 @@ export function registerGoalRoutes(app: App) {
       scheduleType?: string;
       scheduleTimesPerDay?: number;
       targetDate?: string;
+      endDate?: string;
       progress?: number;
       reward?: { currencyId: string; successes: number; amount: number };
       consequence?: { currencyId: string; failures: number; amount: number };
@@ -211,7 +222,14 @@ export function registerGoalRoutes(app: App) {
         offset?: number;
         offsetUnit?: 'minutes' | 'hours' | 'days';
       }>;
+      calendarType?: string;
+      selectedWeekdays?: number[];
+      selectedFortnightDays?: number[];
+      monthlyDates?: number[];
+      monthlyWeekdayRules?: Array<{ week: number; day: number }>;
+      yearlyDates?: string[];
     };
+
 
     app.logger.info(
       { userId: session.user.id, title: body.title, type: body.type, alarmCount: body.alarms?.length },
@@ -226,6 +244,7 @@ export function registerGoalRoutes(app: App) {
           title: body.title,
           description: body.description || null,
           targetDate: body.targetDate ? new Date(body.targetDate) : null,
+          endDate: body.endDate ? new Date(body.endDate) : null,
           progress: body.progress || 0,
           parentGoalId: body.parentGoalId || null,
           lifeAreaId: body.lifeAreaId || null,
@@ -234,6 +253,10 @@ export function registerGoalRoutes(app: App) {
           strategyIds: (body.strategyIds?.length ? body.strategyIds : null) as string[] | null,
           scheduleType: body.scheduleType || 'Always Active',
           scheduleTimesPerDay: body.scheduleTimesPerDay || null,
+          scheduleDaysOfWeek: (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null,
+          scheduleDatesOfMonth: (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null,
+          scheduleNthDayOfMonth: body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null,
+          scheduleDatesOfYear: (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null,
           rewardCurrencyId: body.reward?.currencyId || null,
           rewardSuccesses: body.reward?.successes || null,
           rewardAmount: body.reward?.amount || null,
@@ -241,6 +264,7 @@ export function registerGoalRoutes(app: App) {
           consequenceFailures: body.consequence?.failures || null,
           consequenceAmount: body.consequence?.amount || null,
           alarms: body.alarms ? JSON.stringify(body.alarms) : null,
+          calendarType: body.calendarType || null,
         })
         .returning();
       const goal = goals[0];
@@ -276,6 +300,7 @@ export function registerGoalRoutes(app: App) {
       scheduleType?: string;
       scheduleTimesPerDay?: number;
       targetDate?: string;
+      endDate?: string;
       completed?: boolean;
       progress?: number;
       reward?: { currencyId: string; successes: number; amount: number };
@@ -286,6 +311,12 @@ export function registerGoalRoutes(app: App) {
         offset?: number;
         offsetUnit?: 'minutes' | 'hours' | 'days';
       }>;
+      calendarType?: string;
+      selectedWeekdays?: number[];
+      selectedFortnightDays?: number[];
+      monthlyDates?: number[];
+      monthlyWeekdayRules?: Array<{ week: number; day: number }>;
+      yearlyDates?: string[];
     };
 
     app.logger.info({ userId: session.user.id, goalId: id }, 'Updating goal');
@@ -322,6 +353,14 @@ export function registerGoalRoutes(app: App) {
       if (body.scheduleType !== undefined) updateData.scheduleType = body.scheduleType;
       if (body.scheduleTimesPerDay !== undefined) updateData.scheduleTimesPerDay = body.scheduleTimesPerDay || null;
       if (body.targetDate !== undefined) updateData.targetDate = body.targetDate ? new Date(body.targetDate) : null;
+      if (body.endDate !== undefined) updateData.endDate = body.endDate ? new Date(body.endDate) : null;
+      if (body.selectedWeekdays !== undefined || body.selectedFortnightDays !== undefined) {
+        updateData.scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
+      }
+      if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
+      if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null;
+      if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null;
+      if (body.calendarType !== undefined) updateData.calendarType = body.calendarType || null;
       if (body.completed !== undefined) updateData.completed = body.completed;
       if (body.progress !== undefined) updateData.progress = body.progress;
       if (body.reward !== undefined) {
