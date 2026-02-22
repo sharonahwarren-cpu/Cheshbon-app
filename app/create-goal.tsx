@@ -53,14 +53,21 @@ interface Currency {
 interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
+  alternativeCalendar?: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
+}
+
+interface AlarmConfig {
+  id: string;
+  time: string; // "HH:mm"
+  offsetDays: number; // 0 = day of goal, negative = days before, positive = days after
 }
 
 type BehaviorCategory = 'Action' | 'Speech' | 'Thought' | 'Feeling';
 type GoalType = 'Restraining' | 'Proactive';
 type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
-type CalendarType = 'Gregorian' | 'Hebrew' | 'Chinese' | 'Islamic' | 'Persian';
+type CalendarType = 'Gregorian' | 'Hebrew' | 'Chinese' | 'Islamic';
 
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const WEEK_POSITIONS = ['First', 'Second', 'Third', 'Fourth', 'Last'];
 
 export default function CreateGoalScreen() {
@@ -105,7 +112,8 @@ export default function CreateGoalScreen() {
   const [scheduleTimesPerDay, setScheduleTimesPerDay] = useState<string>('');
   
   // Advanced schedule state
-  const [selectedWeekdays, setSelectedWeekdays] = useState<string[]>([]);
+  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]); // 0=Sun, 6=Sat
+  const [selectedFortnightDays, setSelectedFortnightDays] = useState<number[]>([]); // 0-13 for 2 weeks
   const [monthlyType, setMonthlyType] = useState<'date' | 'weekday'>('date');
   const [monthlyDates, setMonthlyDates] = useState<number[]>([]);
   const [monthlyWeekdayRules, setMonthlyWeekdayRules] = useState<Array<{position: string; weekday: string}>>([]);
@@ -122,11 +130,12 @@ export default function CreateGoalScreen() {
   const [consequenceFailures, setConsequenceFailures] = useState<string>('');
   const [consequenceAmount, setConsequenceAmount] = useState<string>('');
 
-  // Alarm state
-  const [alarmEnabled, setAlarmEnabled] = useState(false);
-  const [alarmTime, setAlarmTime] = useState('09:00');
-  const [alarmOffsetType, setAlarmOffsetType] = useState<'at' | 'before' | 'after'>('at');
-  const [alarmOffsetMinutes, setAlarmOffsetMinutes] = useState<string>('');
+  // Alarm state - support multiple alarms
+  const [alarms, setAlarms] = useState<AlarmConfig[]>([]);
+  const [showAlarmModal, setShowAlarmModal] = useState(false);
+  const [editingAlarmIndex, setEditingAlarmIndex] = useState<number | null>(null);
+  const [currentAlarmTime, setCurrentAlarmTime] = useState('09:00');
+  const [currentAlarmOffsetDays, setCurrentAlarmOffsetDays] = useState('0');
   const [showAlarmTimePicker, setShowAlarmTimePicker] = useState(false);
   const [alarmTimeDate, setAlarmTimeDate] = useState(new Date());
 
@@ -138,6 +147,7 @@ export default function CreateGoalScreen() {
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({
     reflectionCategoriesEnabled: true,
     reflectionCategories: ['Action', 'Speech', 'Thought'],
+    alternativeCalendar: 'gregorian',
   });
 
   // UI state
@@ -150,6 +160,7 @@ export default function CreateGoalScreen() {
   const [showRewardCurrencyPicker, setShowRewardCurrencyPicker] = useState(false);
   const [showConsequenceCurrencyPicker, setShowConsequenceCurrencyPicker] = useState(false);
   const [showWeekdayPicker, setShowWeekdayPicker] = useState(false);
+  const [showFortnightPicker, setShowFortnightPicker] = useState(false);
   const [showMonthlyDatePicker, setShowMonthlyDatePicker] = useState(false);
   const [showMonthlyWeekdayPicker, setShowMonthlyWeekdayPicker] = useState(false);
   const [showYearlyDatePicker, setShowYearlyDatePicker] = useState(false);
@@ -191,6 +202,7 @@ export default function CreateGoalScreen() {
       const preferences = preferencesData?.data || preferencesData || {
         reflectionCategoriesEnabled: true,
         reflectionCategories: ['Action', 'Speech', 'Thought'],
+        alternativeCalendar: 'gregorian',
       };
       
       if (preferences.reflectionCategories && typeof preferences.reflectionCategories === 'string') {
@@ -231,6 +243,9 @@ export default function CreateGoalScreen() {
         if (goalDetails.selectedWeekdays) {
           setSelectedWeekdays(goalDetails.selectedWeekdays);
         }
+        if (goalDetails.selectedFortnightDays) {
+          setSelectedFortnightDays(goalDetails.selectedFortnightDays);
+        }
         if (goalDetails.monthlyType) {
           setMonthlyType(goalDetails.monthlyType);
         }
@@ -259,21 +274,9 @@ export default function CreateGoalScreen() {
           setConsequenceAmount(goalDetails.consequenceAmount?.toString() || '');
         }
         
-        if (goalDetails.alarmEnabled !== undefined) {
-          setAlarmEnabled(goalDetails.alarmEnabled || false);
-        }
-        if (goalDetails.alarmTime) {
-          setAlarmTime(goalDetails.alarmTime);
-          const [hours, minutes] = goalDetails.alarmTime.split(':');
-          const timeDate = new Date();
-          timeDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-          setAlarmTimeDate(timeDate);
-        }
-        if (goalDetails.alarmOffsetType) {
-          setAlarmOffsetType(goalDetails.alarmOffsetType as 'at' | 'before' | 'after');
-        }
-        if (goalDetails.alarmOffsetMinutes !== null && goalDetails.alarmOffsetMinutes !== undefined) {
-          setAlarmOffsetMinutes(Math.abs(goalDetails.alarmOffsetMinutes).toString());
+        // Load alarms
+        if (goalDetails.alarms && Array.isArray(goalDetails.alarms)) {
+          setAlarms(goalDetails.alarms);
         }
       }
     } catch (error: any) {
@@ -312,11 +315,18 @@ export default function CreateGoalScreen() {
     setStrategyIds(newStrategies);
   };
 
-  const toggleWeekday = (weekday: string) => {
-    const newWeekdays = selectedWeekdays.includes(weekday)
-      ? selectedWeekdays.filter(d => d !== weekday)
-      : [...selectedWeekdays, weekday];
+  const toggleWeekday = (dayIndex: number) => {
+    const newWeekdays = selectedWeekdays.includes(dayIndex)
+      ? selectedWeekdays.filter(d => d !== dayIndex)
+      : [...selectedWeekdays, dayIndex].sort((a, b) => a - b);
     setSelectedWeekdays(newWeekdays);
+  };
+
+  const toggleFortnightDay = (dayIndex: number) => {
+    const newDays = selectedFortnightDays.includes(dayIndex)
+      ? selectedFortnightDays.filter(d => d !== dayIndex)
+      : [...selectedFortnightDays, dayIndex].sort((a, b) => a - b);
+    setSelectedFortnightDays(newDays);
   };
 
   const toggleMonthlyDate = (date: number) => {
@@ -346,6 +356,50 @@ export default function CreateGoalScreen() {
     setYearlyDates(newDates);
   };
 
+  const openAddAlarmModal = () => {
+    setEditingAlarmIndex(null);
+    setCurrentAlarmTime('09:00');
+    setCurrentAlarmOffsetDays('0');
+    const timeDate = new Date();
+    timeDate.setHours(9, 0, 0, 0);
+    setAlarmTimeDate(timeDate);
+    setShowAlarmModal(true);
+  };
+
+  const openEditAlarmModal = (index: number) => {
+    const alarm = alarms[index];
+    setEditingAlarmIndex(index);
+    setCurrentAlarmTime(alarm.time);
+    setCurrentAlarmOffsetDays(alarm.offsetDays.toString());
+    const [hours, minutes] = alarm.time.split(':');
+    const timeDate = new Date();
+    timeDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    setAlarmTimeDate(timeDate);
+    setShowAlarmModal(true);
+  };
+
+  const saveAlarm = () => {
+    const newAlarm: AlarmConfig = {
+      id: editingAlarmIndex !== null ? alarms[editingAlarmIndex].id : `alarm-${Date.now()}`,
+      time: currentAlarmTime,
+      offsetDays: parseInt(currentAlarmOffsetDays) || 0,
+    };
+
+    if (editingAlarmIndex !== null) {
+      const updatedAlarms = [...alarms];
+      updatedAlarms[editingAlarmIndex] = newAlarm;
+      setAlarms(updatedAlarms);
+    } else {
+      setAlarms([...alarms, newAlarm]);
+    }
+    setShowAlarmModal(false);
+  };
+
+  const deleteAlarm = (index: number) => {
+    const updatedAlarms = alarms.filter((_, i) => i !== index);
+    setAlarms(updatedAlarms);
+  };
+
   const handleSubmit = async () => {
     console.log(editingGoalId ? 'Submitting goal update form' : 'Submitting goal creation form');
     
@@ -372,18 +426,14 @@ export default function CreateGoalScreen() {
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
         scheduleType,
         scheduleTimesPerDay: scheduleType === 'Daily' && scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
-        selectedWeekdays: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') && selectedWeekdays.length > 0 ? selectedWeekdays : undefined,
+        selectedWeekdays: scheduleType === 'Weekly' && selectedWeekdays.length > 0 ? selectedWeekdays : undefined,
+        selectedFortnightDays: scheduleType === 'Fortnightly' && selectedFortnightDays.length > 0 ? selectedFortnightDays : undefined,
         monthlyType: scheduleType === 'Monthly' ? monthlyType : undefined,
         monthlyDates: scheduleType === 'Monthly' && monthlyType === 'date' && monthlyDates.length > 0 ? monthlyDates : undefined,
         monthlyWeekdayRules: scheduleType === 'Monthly' && monthlyType === 'weekday' && monthlyWeekdayRules.length > 0 ? monthlyWeekdayRules : undefined,
         yearlyDates: scheduleType === 'Yearly' && yearlyDates.length > 0 ? yearlyDates : undefined,
-        calendarType: scheduleType === 'Yearly' ? calendarType : undefined,
-        alarmEnabled,
-        alarmTime: alarmEnabled ? alarmTime : null,
-        alarmOffsetType: alarmEnabled ? alarmOffsetType : null,
-        alarmOffsetMinutes: alarmEnabled && alarmOffsetType !== 'at' && alarmOffsetMinutes
-          ? (alarmOffsetType === 'before' ? -Math.abs(parseInt(alarmOffsetMinutes)) : Math.abs(parseInt(alarmOffsetMinutes)))
-          : null,
+        calendarType: (scheduleType === 'Monthly' || scheduleType === 'Yearly') ? calendarType : undefined,
+        alarms: alarms.length > 0 ? alarms : undefined,
       };
 
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
@@ -547,7 +597,17 @@ export default function CreateGoalScreen() {
     'Yearly',
   ];
 
-  const calendarTypes: CalendarType[] = ['Gregorian', 'Hebrew', 'Chinese', 'Islamic', 'Persian'];
+  // Get available calendar types based on user preferences
+  const getAvailableCalendarTypes = (): CalendarType[] => {
+    const calendars: CalendarType[] = ['Gregorian'];
+    const altCalendar = userPreferences.alternativeCalendar;
+    
+    if (altCalendar === 'hebrew') calendars.push('Hebrew');
+    if (altCalendar === 'chinese') calendars.push('Chinese');
+    if (altCalendar === 'islamic') calendars.push('Islamic');
+    
+    return calendars;
+  };
 
   const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
   const submitButtonTitle = editingGoalId ? 'Update Goal' : 'Create Goal';
@@ -555,9 +615,18 @@ export default function CreateGoalScreen() {
   const consequenceActionText = getConsequenceActionText();
 
   const getScheduleSummary = () => {
-    if (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') {
+    if (scheduleType === 'Weekly') {
       if (selectedWeekdays.length === 0) return 'No days selected';
-      return selectedWeekdays.join(', ');
+      return selectedWeekdays.map(i => WEEKDAYS[i]).join(', ');
+    }
+    if (scheduleType === 'Fortnightly') {
+      if (selectedFortnightDays.length === 0) return 'No days selected';
+      const weekLabels = selectedFortnightDays.map(i => {
+        const weekNum = Math.floor(i / 7) + 1;
+        const dayName = WEEKDAYS[i % 7];
+        return `Week ${weekNum} ${dayName}`;
+      });
+      return weekLabels.join(', ');
     }
     if (scheduleType === 'Monthly') {
       if (monthlyType === 'date') {
@@ -786,8 +855,8 @@ export default function CreateGoalScreen() {
             </View>
           )}
           
-          {/* Weekly/Fortnightly: Day selection */}
-          {(scheduleType === 'Weekly' || scheduleType === 'Fortnightly') && (
+          {/* Weekly: Day selection */}
+          {scheduleType === 'Weekly' && (
             <View style={styles.subSection}>
               <Text style={styles.subLabel}>Select days</Text>
               <TouchableOpacity
@@ -805,10 +874,43 @@ export default function CreateGoalScreen() {
             </View>
           )}
           
-          {/* Monthly: Date or weekday selection */}
+          {/* Fortnightly: 2 weeks of day selection */}
+          {scheduleType === 'Fortnightly' && (
+            <View style={styles.subSection}>
+              <Text style={styles.subLabel}>Select days (2 weeks)</Text>
+              <TouchableOpacity
+                style={styles.picker}
+                onPress={() => setShowFortnightPicker(true)}
+              >
+                <Text style={styles.pickerText}>{getScheduleSummary()}</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.down"
+                  android_material_icon_name="arrow-drop-down"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {/* Monthly: Date or weekday selection with calendar type */}
           {scheduleType === 'Monthly' && (
             <View style={styles.subSection}>
-              <Text style={styles.subLabel}>Monthly schedule type</Text>
+              <Text style={styles.subLabel}>Calendar type</Text>
+              <TouchableOpacity
+                style={styles.picker}
+                onPress={() => setShowCalendarPicker(true)}
+              >
+                <Text style={styles.pickerText}>{calendarType}</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.down"
+                  android_material_icon_name="arrow-drop-down"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              
+              <Text style={[styles.subLabel, { marginTop: 12 }]}>Monthly schedule type</Text>
               <View style={styles.radioGroup}>
                 <TouchableOpacity
                   style={[styles.radio, monthlyType === 'date' && styles.radioSelected]}
@@ -898,7 +1000,7 @@ export default function CreateGoalScreen() {
           )}
         </View>
 
-        {/* Alarm */}
+        {/* Alarms - Multiple alarms support */}
         <View style={styles.section}>
           <View style={styles.alarmHeader}>
             <View style={styles.alarmTitleRow}>
@@ -906,121 +1008,80 @@ export default function CreateGoalScreen() {
                 ios_icon_name="bell.fill"
                 android_material_icon_name="notifications"
                 size={20}
-                color={alarmEnabled ? colors.primary : colors.textSecondary}
+                color={alarms.length > 0 ? colors.primary : colors.textSecondary}
               />
-              <Text style={styles.label}>Alarm</Text>
+              <Text style={styles.label}>Alarms</Text>
             </View>
-            <Switch
-              value={alarmEnabled}
-              onValueChange={setAlarmEnabled}
-              trackColor={{ false: colors.border, true: colors.primary }}
-              thumbColor={colors.background}
-            />
+            <TouchableOpacity
+              style={styles.addAlarmButton}
+              onPress={openAddAlarmModal}
+            >
+              <IconSymbol
+                ios_icon_name="plus"
+                android_material_icon_name="add"
+                size={20}
+                color="#fff"
+              />
+              <Text style={styles.addAlarmButtonText}>Add Alarm</Text>
+            </TouchableOpacity>
           </View>
           
-          {alarmEnabled && (
-            <View style={styles.alarmSettings}>
-              <View style={styles.alarmRow}>
-                <Text style={styles.subLabel}>Alarm Time</Text>
-                <TouchableOpacity
-                  style={styles.timePickerButton}
-                  onPress={() => setShowAlarmTimePicker(true)}
-                >
-                  <IconSymbol
-                    ios_icon_name="clock"
-                    android_material_icon_name="access-time"
-                    size={18}
-                    color={colors.primary}
-                  />
-                  <Text style={styles.timePickerText}>
-                    {(() => {
-                      const [h, m] = alarmTime.split(':');
-                      const hour = parseInt(h);
-                      const ampm = hour >= 12 ? 'PM' : 'AM';
-                      const displayHour = hour % 12 || 12;
-                      return `${displayHour}:${m} ${ampm}`;
-                    })()}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              
-              {showAlarmTimePicker && (
-                <DateTimePicker
-                  value={alarmTimeDate}
-                  mode="time"
-                  is24Hour={false}
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(event, selectedDate) => {
-                    setShowAlarmTimePicker(Platform.OS === 'ios');
-                    if (selectedDate) {
-                      setAlarmTimeDate(selectedDate);
-                      const hours = selectedDate.getHours().toString().padStart(2, '0');
-                      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
-                      setAlarmTime(`${hours}:${minutes}`);
-                    }
-                  }}
-                />
-              )}
-              
-              <View style={styles.alarmRow}>
-                <Text style={styles.subLabel}>When to alarm</Text>
-                <View style={styles.offsetTypeGroup}>
-                  {(['at', 'before', 'after'] as const).map((offsetType) => {
-                    const isSelected = alarmOffsetType === offsetType;
-                    const label = offsetType === 'at' ? 'At time' : offsetType === 'before' ? 'Before' : 'After';
-                    return (
+          {alarms.length > 0 && (
+            <View style={styles.alarmsContainer}>
+              {alarms.map((alarm, index) => {
+                const [h, m] = alarm.time.split(':');
+                const hour = parseInt(h);
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                const displayHour = hour % 12 || 12;
+                const timeText = `${displayHour}:${m} ${ampm}`;
+                
+                const offsetText = alarm.offsetDays === 0
+                  ? 'On the day'
+                  : alarm.offsetDays < 0
+                  ? `${Math.abs(alarm.offsetDays)} day${Math.abs(alarm.offsetDays) > 1 ? 's' : ''} before`
+                  : `${alarm.offsetDays} day${alarm.offsetDays > 1 ? 's' : ''} after`;
+                
+                return (
+                  <View key={alarm.id} style={styles.alarmCard}>
+                    <View style={styles.alarmCardContent}>
+                      <IconSymbol
+                        ios_icon_name="bell.fill"
+                        android_material_icon_name="notifications"
+                        size={18}
+                        color={colors.primary}
+                      />
+                      <View style={styles.alarmCardText}>
+                        <Text style={styles.alarmCardTime}>{timeText}</Text>
+                        <Text style={styles.alarmCardOffset}>{offsetText}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.alarmCardActions}>
                       <TouchableOpacity
-                        key={offsetType}
-                        style={[styles.offsetTypeButton, isSelected && styles.offsetTypeButtonSelected]}
-                        onPress={() => {
-                          setAlarmOffsetType(offsetType);
-                          if (offsetType === 'at') {
-                            setAlarmOffsetMinutes('');
-                          }
-                        }}
+                        style={styles.alarmCardButton}
+                        onPress={() => openEditAlarmModal(index)}
                       >
-                        <Text style={[styles.offsetTypeText, isSelected && styles.offsetTypeTextSelected]}>
-                          {label}
-                        </Text>
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={18}
+                          color={colors.primary}
+                        />
                       </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-              
-              {alarmOffsetType !== 'at' && (
-                <View style={styles.alarmRow}>
-                  <Text style={styles.subLabel}>
-                    Minutes {alarmOffsetType === 'before' ? 'before' : 'after'} scheduled time
-                  </Text>
-                  <TextInput
-                    style={[styles.input, styles.offsetInput]}
-                    value={alarmOffsetMinutes}
-                    onChangeText={setAlarmOffsetMinutes}
-                    placeholder="e.g., 30"
-                    placeholderTextColor={colors.textSecondary}
-                    keyboardType="number-pad"
-                  />
-                  {alarmOffsetMinutes ? (
-                    <Text style={styles.alarmPreviewText}>
-                      {(() => {
-                        const [h, m] = alarmTime.split(':');
-                        const baseMinutes = parseInt(h) * 60 + parseInt(m);
-                        const offsetMins = parseInt(alarmOffsetMinutes) || 0;
-                        const totalMinutes = alarmOffsetType === 'before'
-                          ? baseMinutes - offsetMins
-                          : baseMinutes + offsetMins;
-                        const adjustedMinutes = ((totalMinutes % 1440) + 1440) % 1440;
-                        const displayHour = Math.floor(adjustedMinutes / 60);
-                        const displayMin = adjustedMinutes % 60;
-                        const ampm = displayHour >= 12 ? 'PM' : 'AM';
-                        const hour12 = displayHour % 12 || 12;
-                        return `Alarm will ring at ${hour12}:${String(displayMin).padStart(2, '0')} ${ampm}`;
-                      })()}
-                    </Text>
-                  ) : null}
-                </View>
-              )}
+                      <TouchableOpacity
+                        style={styles.alarmCardButton}
+                        onPress={() => deleteAlarm(index)}
+                      >
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={18}
+                          color="#ff4444"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
@@ -1126,9 +1187,6 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Modals - Parent Goal, Life Area, Strategy, Schedule, Currency pickers remain the same */}
-      {/* I'll include the new modals for weekday, monthly, yearly selections */}
-
       {/* Weekday Picker Modal */}
       <Modal
         visible={showWeekdayPicker}
@@ -1150,13 +1208,13 @@ export default function CreateGoalScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll}>
-              {WEEKDAYS.map((weekday) => {
-                const isSelected = selectedWeekdays.includes(weekday);
+              {WEEKDAYS.map((weekday, index) => {
+                const isSelected = selectedWeekdays.includes(index);
                 return (
                   <TouchableOpacity
-                    key={weekday}
+                    key={index}
                     style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                    onPress={() => toggleWeekday(weekday)}
+                    onPress={() => toggleWeekday(index)}
                   >
                     <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
                       {weekday}
@@ -1172,6 +1230,75 @@ export default function CreateGoalScreen() {
                   </TouchableOpacity>
                 );
               })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Fortnight Picker Modal - 2 weeks of Sun-Sat */}
+      <Modal
+        visible={showFortnightPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFortnightPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Days (2 Weeks)</Text>
+              <TouchableOpacity onPress={() => setShowFortnightPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <View style={{ padding: 16 }}>
+                <Text style={styles.helperText}>Select multiple days across 2 weeks</Text>
+                
+                {/* Week 1 */}
+                <Text style={styles.weekLabel}>Week 1</Text>
+                <View style={styles.fortnightGrid}>
+                  {WEEKDAYS.map((weekday, index) => {
+                    const dayIndex = index;
+                    const isSelected = selectedFortnightDays.includes(dayIndex);
+                    return (
+                      <TouchableOpacity
+                        key={dayIndex}
+                        style={[styles.fortnightDayButton, isSelected && styles.fortnightDayButtonSelected]}
+                        onPress={() => toggleFortnightDay(dayIndex)}
+                      >
+                        <Text style={[styles.fortnightDayText, isSelected && styles.fortnightDayTextSelected]}>
+                          {weekday.substring(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                
+                {/* Week 2 */}
+                <Text style={[styles.weekLabel, { marginTop: 16 }]}>Week 2</Text>
+                <View style={styles.fortnightGrid}>
+                  {WEEKDAYS.map((weekday, index) => {
+                    const dayIndex = index + 7;
+                    const isSelected = selectedFortnightDays.includes(dayIndex);
+                    return (
+                      <TouchableOpacity
+                        key={dayIndex}
+                        style={[styles.fortnightDayButton, isSelected && styles.fortnightDayButtonSelected]}
+                        onPress={() => toggleFortnightDay(dayIndex)}
+                      >
+                        <Text style={[styles.fortnightDayText, isSelected && styles.fortnightDayTextSelected]}>
+                          {weekday.substring(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -1201,7 +1328,6 @@ export default function CreateGoalScreen() {
               <View style={styles.dateGrid}>
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((date) => {
                   const isSelected = monthlyDates.includes(date);
-                  const suffix = date === 1 ? 'st' : date === 2 ? 'nd' : date === 3 ? 'rd' : 'th';
                   return (
                     <TouchableOpacity
                       key={date}
@@ -1311,7 +1437,7 @@ export default function CreateGoalScreen() {
             <ScrollView style={styles.modalScroll}>
               <View style={{ padding: 16 }}>
                 <Text style={styles.helperText}>
-                  Add dates like "Dec 1" or "Apr 3-5"
+                  Add dates like "Dec 1" or "Apr 3"
                 </Text>
                 
                 {yearlyDates.map((date, index) => {
@@ -1336,11 +1462,9 @@ export default function CreateGoalScreen() {
                 <Text style={styles.helperText}>
                   Select month and day to add
                 </Text>
-                {/* Simplified date picker - in production, use a proper date picker */}
                 <TouchableOpacity
                   style={styles.addButton}
                   onPress={() => {
-                    // For now, add a sample date (Dec 1)
                     addYearlyDate(12, 1);
                   }}
                 >
@@ -1358,7 +1482,7 @@ export default function CreateGoalScreen() {
         </View>
       </Modal>
 
-      {/* Calendar Type Picker Modal */}
+      {/* Calendar Type Picker Modal - Only show enabled calendars */}
       <Modal
         visible={showCalendarPicker}
         transparent
@@ -1379,7 +1503,7 @@ export default function CreateGoalScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll}>
-              {calendarTypes.map((calendar) => {
+              {getAvailableCalendarTypes().map((calendar) => {
                 const isSelected = calendar === calendarType;
                 return (
                   <TouchableOpacity
@@ -1409,8 +1533,94 @@ export default function CreateGoalScreen() {
         </View>
       </Modal>
 
-      {/* All other existing modals (Parent Goal, Life Area, Strategy, Schedule, Currency, Alarm, Success/Error, Create Another) */}
-      {/* These remain unchanged from the original file */}
+      {/* Alarm Edit/Add Modal */}
+      <Modal
+        visible={showAlarmModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAlarmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingAlarmIndex !== null ? 'Edit Alarm' : 'Add Alarm'}</Text>
+              <TouchableOpacity onPress={() => setShowAlarmModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 20 }}>
+              <Text style={styles.subLabel}>Alarm Time</Text>
+              <TouchableOpacity
+                style={styles.timePickerButton}
+                onPress={() => setShowAlarmTimePicker(true)}
+              >
+                <IconSymbol
+                  ios_icon_name="clock"
+                  android_material_icon_name="access-time"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.timePickerText}>
+                  {(() => {
+                    const [h, m] = currentAlarmTime.split(':');
+                    const hour = parseInt(h);
+                    const ampm = hour >= 12 ? 'PM' : 'AM';
+                    const displayHour = hour % 12 || 12;
+                    return `${displayHour}:${m} ${ampm}`;
+                  })()}
+                </Text>
+              </TouchableOpacity>
+              
+              {showAlarmTimePicker && (
+                <DateTimePicker
+                  value={alarmTimeDate}
+                  mode="time"
+                  is24Hour={false}
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    setShowAlarmTimePicker(Platform.OS === 'ios');
+                    if (selectedDate) {
+                      setAlarmTimeDate(selectedDate);
+                      const hours = selectedDate.getHours().toString().padStart(2, '0');
+                      const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+                      setCurrentAlarmTime(`${hours}:${minutes}`);
+                    }
+                  }}
+                />
+              )}
+              
+              <Text style={[styles.subLabel, { marginTop: 16 }]}>Days offset from scheduled goal</Text>
+              <Text style={styles.helperText}>
+                0 = day of goal, negative = days before, positive = days after
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={currentAlarmOffsetDays}
+                onChangeText={setCurrentAlarmOffsetDays}
+                placeholder="e.g., 0, -2, 1"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="number-pad"
+              />
+              
+              <TouchableOpacity
+                style={[styles.addButton, { marginTop: 20 }]}
+                onPress={saveAlarm}
+              >
+                <Text style={styles.addButtonText}>
+                  {editingAlarmIndex !== null ? 'Update Alarm' : 'Add Alarm'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* All other existing modals (Parent Goal, Life Area, Strategy, Schedule, Currency, Success/Error, Create Another) */}
       
       {/* Parent Goal Picker Modal */}
       <Modal
@@ -1805,6 +2015,7 @@ export default function CreateGoalScreen() {
                   setScheduleType('Always Active');
                   setScheduleTimesPerDay('');
                   setSelectedWeekdays([]);
+                  setSelectedFortnightDays([]);
                   setMonthlyType('date');
                   setMonthlyDates([]);
                   setMonthlyWeekdayRules([]);
@@ -1816,10 +2027,7 @@ export default function CreateGoalScreen() {
                   setConsequenceCurrencyId(undefined);
                   setConsequenceFailures('');
                   setConsequenceAmount('');
-                  setAlarmEnabled(false);
-                  setAlarmTime('09:00');
-                  setAlarmOffsetType('at');
-                  setAlarmOffsetMinutes('');
+                  setAlarms([]);
                 }}
               >
                 <Text style={styles.alertButtonText}>Yes, Create Another</Text>
@@ -1997,23 +2205,64 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   alarmTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  alarmSettings: {
+  addAlarmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  addAlarmButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  alarmsContainer: {
+    gap: 8,
+  },
+  alarmCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: colors.card,
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 16,
   },
-  alarmRow: {
+  alarmCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  alarmCardText: {
+    flex: 1,
+  },
+  alarmCardTime: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  alarmCardOffset: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  alarmCardActions: {
+    flexDirection: 'row',
     gap: 8,
+  },
+  alarmCardButton: {
+    padding: 8,
   },
   timePickerButton: {
     flexDirection: 'row',
@@ -2029,41 +2278,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
-  },
-  offsetTypeGroup: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  offsetTypeButton: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-  },
-  offsetTypeButtonSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  offsetTypeText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  offsetTypeTextSelected: {
-    color: '#fff',
-  },
-  offsetInput: {
-    width: '100%',
-  },
-  alarmPreviewText: {
-    fontSize: 13,
-    color: colors.primary,
-    fontWeight: '600',
-    marginTop: 4,
   },
   modalOverlay: {
     flex: 1,
@@ -2121,6 +2335,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 4,
+  },
+  weekLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  fortnightGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  fortnightDayButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fortnightDayButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  fortnightDayText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  fortnightDayTextSelected: {
+    color: '#fff',
   },
   dateGrid: {
     flexDirection: 'row',

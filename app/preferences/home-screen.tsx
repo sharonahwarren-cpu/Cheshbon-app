@@ -14,7 +14,7 @@ import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { authenticatedGet, authenticatedPut } from '@/utils/api';
 
-export type CalendarType = 'gregorian' | 'hebrew' | 'chinese';
+export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 
 const CALENDAR_OPTIONS: { value: CalendarType; label: string; description: string; emoji: string }[] = [
   {
@@ -34,6 +34,12 @@ const CALENDAR_OPTIONS: { value: CalendarType; label: string; description: strin
     label: 'Chinese Calendar',
     description: 'Traditional lunisolar calendar. Dates will show both Gregorian and Chinese.',
     emoji: '🏮',
+  },
+  {
+    value: 'islamic',
+    label: 'Islamic Calendar',
+    description: 'Lunar calendar used in Islamic tradition. Dates will show both Gregorian and Islamic.',
+    emoji: '☪️',
   },
 ];
 
@@ -63,6 +69,19 @@ function toChineseDate(date: Date): string {
   }
 }
 
+function toIslamicDate(date: Date): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US-u-ca-islamic', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    return formatter.format(date);
+  } catch {
+    return 'Islamic date unavailable';
+  }
+}
+
 export function formatDualDate(date: Date, calendarType: CalendarType): string {
   const gregorian = date.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -82,6 +101,11 @@ export function formatDualDate(date: Date, calendarType: CalendarType): string {
   if (calendarType === 'chinese') {
     const chinese = toChineseDate(date);
     return `${gregorian} / ${chinese}`;
+  }
+
+  if (calendarType === 'islamic') {
+    const islamic = toIslamicDate(date);
+    return `${gregorian} / ${islamic}`;
   }
 
   return gregorian;
