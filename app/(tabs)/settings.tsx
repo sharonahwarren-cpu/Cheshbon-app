@@ -330,6 +330,8 @@ export default function SettingsScreen() {
   };
 
   const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
+    console.log('[Settings Web] openAddModal called with type:', type);
+    
     if (type === 'lifeArea') {
       // Navigate to the new Life Area wizard screen
       console.log('[Settings Web] Opening Life Area wizard');
@@ -373,10 +375,13 @@ export default function SettingsScreen() {
     } else {
       setFormData({});
     }
+    console.log('[Settings Web] Opening modal with type:', type);
     setShowModal(true);
   };
 
   const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', item: any) => {
+    console.log('[Settings Web] openEditModal called with type:', type, 'item:', item);
+    
     if (type === 'lifeArea') {
       // Navigate to the Life Area wizard screen with edit mode
       console.log('[Settings Web] Opening Life Area wizard for editing:', item.id);
@@ -387,6 +392,7 @@ export default function SettingsScreen() {
     setModalType(type);
     setEditingItem(item);
     setFormData(item);
+    console.log('[Settings Web] Opening edit modal with type:', type);
     setShowModal(true);
   };
 

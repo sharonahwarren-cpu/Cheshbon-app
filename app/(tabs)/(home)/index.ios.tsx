@@ -882,21 +882,63 @@ export default function HomeScreen() {
   };
 
   const renderConciseGoalCard = (goal: ActivatedGoal) => {
+    const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
+    const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
+    const successCount = dailySuccessEntries.length;
+    const struggleCount = dailyStruggleEntries.length;
+    
+    const currencyTallies = calculateDailyCurrencyTallies(goal);
+    
     return (
-      <View key={goal.id} style={styles.conciseGoalCard}>
+      <TouchableOpacity 
+        key={goal.id} 
+        style={styles.conciseGoalCard}
+        onPress={() => handleEditGoal(goal.id)}
+        activeOpacity={0.7}
+      >
         <Text style={styles.conciseGoalTitle} numberOfLines={1}>{goal.title}</Text>
+        <View style={styles.conciseCounters}>
+          <View style={styles.conciseCounter}>
+            <Text style={[styles.conciseCounterText, { color: colors.success }]}>{successCount}</Text>
+          </View>
+          <View style={styles.conciseCounter}>
+            <Text style={[styles.conciseCounterText, { color: colors.text }]}>{goal.successCount}</Text>
+          </View>
+          <View style={styles.conciseCounter}>
+            <Text style={[styles.conciseCounterText, { color: colors.textSecondary }]}>S</Text>
+          </View>
+          {currencyTallies.map((tally, index) => (
+            <View key={index} style={styles.conciseCounter}>
+              <Text style={[styles.conciseCounterText, { color: tally.currencyType === 'reward' ? colors.success : colors.error }]}>
+                {tally.currencySymbol}{Math.abs(tally.tally)}
+              </Text>
+            </View>
+          ))}
+          <View style={styles.conciseCounter}>
+            <Text style={[styles.conciseCounterText, { color: colors.error }]}>{struggleCount}</Text>
+            <IconSymbol
+              ios_icon_name="xmark"
+              android_material_icon_name="close"
+              size={10}
+              color={colors.error}
+            />
+          </View>
+        </View>
         <TouchableOpacity
           style={styles.conciseCheckButton}
-          onPress={() => handleGoalSuccess(goal.id)}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleGoalSuccess(goal.id);
+          }}
         >
           <IconSymbol
             ios_icon_name="checkmark.circle.fill"
             android_material_icon_name="check-circle"
-            size={24}
+            size={20}
             color={colors.success}
           />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -1290,7 +1332,7 @@ export default function HomeScreen() {
                   <IconSymbol
                     ios_icon_name={expressViewMode === 'detailed' ? 'list.bullet' : 'square.grid.2x2'}
                     android_material_icon_name={expressViewMode === 'detailed' ? 'view-list' : 'view-module'}
-                    size={24}
+                    size={18}
                     color={colors.primary}
                   />
                   <Text style={styles.viewModeToggleText}>
@@ -1559,22 +1601,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   expressHeader: {
-    marginBottom: 20,
+    marginBottom: 12,
+    alignItems: 'flex-end',
   },
   viewModeToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    gap: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
   },
   viewModeToggleText: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.primary,
   },
@@ -1790,31 +1833,31 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   lifeAreaSection: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   lifeAreaHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     backgroundColor: colors.card,
-    borderRadius: 8,
-    marginBottom: 6,
+    borderRadius: 6,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
   lifeAreaTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     flex: 1,
   },
   lifeAreaIcon: {
-    fontSize: 16,
+    fontSize: 14,
   },
   lifeAreaTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.text,
   },
@@ -1943,21 +1986,35 @@ const styles = StyleSheet.create({
   },
   conciseGoalCard: {
     backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 4,
+    borderRadius: 6,
+    padding: 6,
+    marginBottom: 2,
     borderWidth: 1,
     borderColor: colors.cardBorder,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 6,
   },
   conciseGoalTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     color: colors.text,
     flex: 1,
-    marginRight: 8,
+  },
+  conciseCounters: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  conciseCounter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
+  },
+  conciseCounterText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   conciseCheckButton: {
     padding: 2,

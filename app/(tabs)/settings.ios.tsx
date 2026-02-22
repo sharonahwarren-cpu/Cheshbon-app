@@ -327,6 +327,8 @@ export default function SettingsScreen() {
   };
 
   const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
+    console.log('[Settings iOS] openAddModal called with type:', type);
+    
     if (type === 'lifeArea') {
       // Navigate to the new Life Area wizard screen
       console.log('[Settings iOS] Opening Life Area wizard');
@@ -370,10 +372,13 @@ export default function SettingsScreen() {
     } else {
       setFormData({});
     }
+    console.log('[Settings iOS] Opening modal with type:', type);
     setShowModal(true);
   };
 
   const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', item: any) => {
+    console.log('[Settings iOS] openEditModal called with type:', type, 'item:', item);
+    
     if (type === 'lifeArea') {
       // Navigate to the Life Area wizard screen with edit mode
       console.log('[Settings iOS] Opening Life Area wizard for editing:', item.id);
@@ -384,6 +389,7 @@ export default function SettingsScreen() {
     setModalType(type);
     setEditingItem(item);
     setFormData(item);
+    console.log('[Settings iOS] Opening edit modal with type:', type);
     setShowModal(true);
   };
 
@@ -1849,6 +1855,184 @@ export default function SettingsScreen() {
         onConfirm={handleDeleteItem}
         onCancel={() => setShowConfirmDelete(false)}
       />
+
+      {/* Gain/Loss Add/Edit Modal */}
+      <Modal
+        visible={showModal && modalType === 'gainLoss'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Gain/Loss' : 'Add Gain/Loss'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name || ''}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholder="Gain/Loss name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Type *</Text>
+                <View style={styles.optionsGrid}>
+                  {['Gain', 'Loss'].map((t) => {
+                    const isSelected = formData.type === t;
+                    return (
+                      <TouchableOpacity
+                        key={t}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, type: t })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {t}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading || !formData.name}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Notification Alarm Add/Edit Modal */}
+      <Modal
+        visible={showModal && modalType === 'alarm'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Alarm' : 'Add Alarm'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name || ''}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholder="Alarm name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Time *</Text>
+                <TouchableOpacity
+                  style={styles.timePickerButton}
+                  onPress={() => {
+                    const [hours, minutes] = (formData.time || '09:00').split(':');
+                    const date = new Date();
+                    date.setHours(parseInt(hours), parseInt(minutes));
+                    setSelectedTime(date);
+                    setShowTimePicker(true);
+                  }}
+                >
+                  <Text style={styles.timePickerText}>{formatTime(formData.time || '09:00')}</Text>
+                  <IconSymbol
+                    ios_icon_name="clock"
+                    android_material_icon_name="access-time"
+                    size={24}
+                    color={colors.text}
+                  />
+                </TouchableOpacity>
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={selectedTime}
+                    mode="time"
+                    display="spinner"
+                    onChange={onTimeChange}
+                  />
+                )}
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Frequency *</Text>
+                <View style={styles.optionsGrid}>
+                  {['daily', 'weekly', 'biweekly', 'monthly'].map((freq) => {
+                    const isSelected = formData.frequency === freq;
+                    const displayText = freq.charAt(0).toUpperCase() + freq.slice(1);
+                    return (
+                      <TouchableOpacity
+                        key={freq}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, frequency: freq })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {displayText}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading || !formData.name}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Strategy Add/Edit Modal */}
       <Modal
