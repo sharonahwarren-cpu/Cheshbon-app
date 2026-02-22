@@ -11,6 +11,7 @@ export interface AlarmTrigger {
   min?: string; // e.g., "06:00" for "not before 6am"
   max?: string; // e.g., "22:00" for "not after 10pm"
   logic?: TriggerLogic; // For combining multiple triggers
+  radius?: number; // For location triggers, radius in km
 }
 
 export interface AlarmLocation {

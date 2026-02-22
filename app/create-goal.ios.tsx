@@ -115,7 +115,7 @@ export default function CreateGoalScreen() {
   
   // Alarms state
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
-  const [quickAlarmTime, setQuickAlarmTime] = useState('09:00');
+  const [quickAlarmTime, setQuickAlarmTime] = useState('');
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
   const [goalAlarms, setGoalAlarms] = useState<Alarm[]>([]);
   
@@ -474,6 +474,10 @@ export default function CreateGoalScreen() {
       goalTitle: alarmTitle,
       scheduleType: scheduleType,
     });
+    // Pass quick alarm time if set
+    if (quickAlarmTime) {
+      params.set('quickAlarmTime', quickAlarmTime);
+    }
     router.push(`/alarms/create?${params.toString()}`);
   };
 
@@ -884,7 +888,9 @@ export default function CreateGoalScreen() {
                     size={18}
                     color={colors.primary}
                   />
-                  <Text style={styles.quickTimeText}>{quickAlarmTime}</Text>
+                  <Text style={styles.quickTimeText}>
+                    {quickAlarmTime || 'Set time'}
+                  </Text>
                 </TouchableOpacity>
               </View>
 

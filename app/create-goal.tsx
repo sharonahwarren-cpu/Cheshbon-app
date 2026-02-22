@@ -117,7 +117,7 @@ export default function CreateGoalScreen() {
   
   // Alarms state - separate from scheduler
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
-  const [quickAlarmTime, setQuickAlarmTime] = useState('09:00');
+  const [quickAlarmTime, setQuickAlarmTime] = useState('');
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
   const [goalAlarms, setGoalAlarms] = useState<Alarm[]>([]);
   
@@ -482,6 +482,10 @@ export default function CreateGoalScreen() {
     });
     if (scheduleConfig.weekdays && scheduleConfig.weekdays.length > 0) {
       params.set('scheduleDays', scheduleConfig.weekdays.join(','));
+    }
+    // Pass quick alarm time if set
+    if (quickAlarmTime) {
+      params.set('quickAlarmTime', quickAlarmTime);
     }
     router.push(`/alarms/create?${params.toString()}`);
   };
@@ -869,28 +873,20 @@ export default function CreateGoalScreen() {
               {/* Quick Time Input */}
               <View style={styles.quickTimeSection}>
                 <Text style={styles.quickTimeLabel}>Alarm Time:</Text>
-                {Platform.OS === 'web' ? (
-                  <TextInput
-                    style={styles.quickTimeInput}
-                    value={quickAlarmTime}
-                    onChangeText={setQuickAlarmTime}
-                    placeholder="09:00"
-                    placeholderTextColor={colors.textSecondary}
+                <TouchableOpacity
+                  style={styles.quickTimeButton}
+                  onPress={() => setShowQuickTimePicker(true)}
+                >
+                  <IconSymbol
+                    ios_icon_name="clock"
+                    android_material_icon_name="schedule"
+                    size={18}
+                    color={colors.primary}
                   />
-                ) : (
-                  <TouchableOpacity
-                    style={styles.quickTimeButton}
-                    onPress={() => setShowQuickTimePicker(true)}
-                  >
-                    <IconSymbol
-                      ios_icon_name="clock"
-                      android_material_icon_name="schedule"
-                      size={18}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.quickTimeText}>{quickAlarmTime}</Text>
-                  </TouchableOpacity>
-                )}
+                  <Text style={styles.quickTimeText}>
+                    {quickAlarmTime || 'Set time'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {/* Advanced Button */}

@@ -50,6 +50,7 @@ export default function CreateAlarmScreen() {
   const isFromGoal = !!params.goalId;
   const goalScheduleType = params.scheduleType as string | undefined;
   const goalScheduleDays = params.scheduleDays ? (params.scheduleDays as string).split(',').map(Number) : [];
+  const quickAlarmTime = params.quickAlarmTime as string | undefined;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -113,8 +114,13 @@ export default function CreateAlarmScreen() {
       if (isEditing) {
         await loadAlarm();
       } else {
-        // For new alarms, set default trigger to time
-        setTriggers([{ type: 'time', value: '09:00' }]);
+        // For new alarms, NO default trigger - leave blank unless quick alarm time is provided
+        if (quickAlarmTime) {
+          setTriggers([{ type: 'time', value: quickAlarmTime }]);
+          console.log('Pre-filled alarm time from quick alarm:', quickAlarmTime);
+        } else {
+          setTriggers([]);
+        }
         
         // Pre-fill title if coming from goal
         if (params.goalTitle) {
@@ -215,6 +221,13 @@ export default function CreateAlarmScreen() {
 
   const saveTrigger = () => {
     console.log('User tapped Save Trigger');
+    
+    // Validate trigger has a value
+    if (!newTrigger.value) {
+      setError('Please set a value for this trigger');
+      return;
+    }
+    
     if (editingTriggerIndex !== null) {
       const updated = [...triggers];
       updated[editingTriggerIndex] = newTrigger;
@@ -225,6 +238,7 @@ export default function CreateAlarmScreen() {
       console.log('New trigger added');
     }
     setShowTriggerModal(false);
+    setError(''); // Clear any errors
   };
 
   const removeTrigger = (index: number) => {
@@ -272,11 +286,12 @@ export default function CreateAlarmScreen() {
       } else {
         console.log('[API] Requesting POST /api/alarms...');
         const createdAlarm = await authenticatedPost<any>('/api/alarms', alarmData);
-        console.log('Alarm created successfully:', createdAlarm?.id);
+        const alarmId = createdAlarm?.id || (createdAlarm as any)?.data?.id;
+        console.log('Alarm created successfully:', alarmId);
         
         // If creating from a goal, update the goal's alarms field to track this alarm
-        if (isFromGoal && params.goalId && createdAlarm?.id) {
-          console.log('[API] Updating goal alarms field with new alarm ID:', createdAlarm.id);
+        if (isFromGoal && params.goalId && alarmId) {
+          console.log('[API] Updating goal alarms field with new alarm ID:', alarmId);
           try {
             // Fetch current goal to get existing alarm IDs
             const goalData = await authenticatedGet<any>(`/api/goals/${params.goalId}`);
@@ -296,7 +311,7 @@ export default function CreateAlarmScreen() {
             }
             
             // Add new alarm ID
-            const updatedAlarmIds = [...existingAlarmIds, createdAlarm.id];
+            const updatedAlarmIds = [...existingAlarmIds, alarmId];
             console.log('[API] Updated goal alarm IDs:', updatedAlarmIds);
             
             await authenticatedPut(`/api/goals/${params.goalId}`, {
@@ -310,6 +325,8 @@ export default function CreateAlarmScreen() {
         }
       }
 
+      // Navigate back to Edit Goal screen
+      console.log('[Navigation] Returning to Edit Goal screen');
       router.back();
     } catch (err: any) {
       console.error('Error saving alarm:', err);
@@ -710,32 +727,6 @@ export default function CreateAlarmScreen() {
                   ))}
                 </View>
 
-                {/* AND/OR Logic - Show ALWAYS (not just when triggers.length > 0) */}
-                <Text style={styles.label}>Combine with other triggers using</Text>
-                <View style={styles.triggerTypeRow}>
-                  {(['AND', 'OR'] as const).map(logic => (
-                    <TouchableOpacity
-                      key={logic}
-                      style={[
-                        styles.triggerTypeButton,
-                        newTrigger.logic === logic && styles.triggerTypeButtonActive,
-                      ]}
-                      onPress={() =>
-                        setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.triggerTypeText,
-                          newTrigger.logic === logic && styles.triggerTypeTextActive,
-                        ]}
-                      >
-                        {logic}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
                 {/* Trigger Value */}
                 {newTrigger.type === 'time' && (
                   <>
@@ -754,20 +745,43 @@ export default function CreateAlarmScreen() {
                         color={colors.primary}
                       />
                       <Text style={styles.timePickerButtonText}>
-                        {formatTime12Hour(newTrigger.value || '09:00')}
+                        {newTrigger.value ? formatTime12Hour(newTrigger.value) : 'Set time'}
                       </Text>
                     </TouchableOpacity>
+                    
+                    {/* AND/OR Logic - Show AFTER time selection */}
+                    <Text style={styles.label}>Combine with other triggers using</Text>
+                    <View style={styles.triggerTypeRow}>
+                      {(['AND', 'OR'] as const).map(logic => (
+                        <TouchableOpacity
+                          key={logic}
+                          style={[
+                            styles.triggerTypeButton,
+                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
+                          ]}
+                          onPress={() =>
+                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.triggerTypeText,
+                              newTrigger.logic === logic && styles.triggerTypeTextActive,
+                            ]}
+                          >
+                            {logic}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </>
                 )}
 
                 {newTrigger.type === 'astronomical' && (
                   <>
                     <Text style={styles.label}>Astronomical Event</Text>
-                    <ScrollView 
-                      style={{ maxHeight: 250 }} 
-                      nestedScrollEnabled={true}
-                      showsVerticalScrollIndicator={true}
-                    >
+                    {/* Fixed: Non-scrollable event selection */}
+                    <View>
                       {ASTRONOMICAL_EVENTS.map(event => (
                         <TouchableOpacity
                           key={event.value}
@@ -787,7 +801,7 @@ export default function CreateAlarmScreen() {
                           </Text>
                         </TouchableOpacity>
                       ))}
-                    </ScrollView>
+                    </View>
 
                     <Text style={styles.label}>Not Before (optional)</Text>
                     <TouchableOpacity
@@ -826,6 +840,32 @@ export default function CreateAlarmScreen() {
                         {newTrigger.max ? formatTime12Hour(newTrigger.max) : 'Set maximum time'}
                       </Text>
                     </TouchableOpacity>
+                    
+                    {/* AND/OR Logic - Show AFTER astronomical event selection */}
+                    <Text style={styles.label}>Combine with other triggers using</Text>
+                    <View style={styles.triggerTypeRow}>
+                      {(['AND', 'OR'] as const).map(logic => (
+                        <TouchableOpacity
+                          key={logic}
+                          style={[
+                            styles.triggerTypeButton,
+                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
+                          ]}
+                          onPress={() =>
+                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.triggerTypeText,
+                              newTrigger.logic === logic && styles.triggerTypeTextActive,
+                            ]}
+                          >
+                            {logic}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </>
                 )}
 
@@ -886,18 +926,59 @@ export default function CreateAlarmScreen() {
                         </TouchableOpacity>
                         
                         {homeLocation && (
-                          <View style={styles.locationDisplay}>
-                            <Text style={styles.locationDisplayText}>
-                              Lat: {homeLocation.latitude.toFixed(4)}, Lon: {homeLocation.longitude.toFixed(4)}
-                            </Text>
-                          </View>
+                          <>
+                            <View style={styles.locationDisplay}>
+                              <Text style={styles.locationDisplayText}>
+                                Lat: {homeLocation.latitude.toFixed(4)}, Lon: {homeLocation.longitude.toFixed(4)}
+                              </Text>
+                            </View>
+                            
+                            <Text style={styles.label}>Radius (km)</Text>
+                            <TextInput
+                              style={styles.input}
+                              value={newTrigger.radius?.toString() || '5'}
+                              onChangeText={(text) => {
+                                const radius = parseFloat(text) || 5;
+                                setNewTrigger({ ...newTrigger, radius });
+                              }}
+                              placeholder="5"
+                              placeholderTextColor={colors.textSecondary}
+                              keyboardType="decimal-pad"
+                            />
+                          </>
                         )}
                         
                         <Text style={styles.helpText}>
-                          Alarm will trigger when you enter/exit a 5km radius of this location
+                          Alarm will trigger when you enter/exit the specified radius of this location
                         </Text>
                       </View>
                     )}
+                    
+                    {/* AND/OR Logic - Show AFTER location selection */}
+                    <Text style={styles.label}>Combine with other triggers using</Text>
+                    <View style={styles.triggerTypeRow}>
+                      {(['AND', 'OR'] as const).map(logic => (
+                        <TouchableOpacity
+                          key={logic}
+                          style={[
+                            styles.triggerTypeButton,
+                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
+                          ]}
+                          onPress={() =>
+                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.triggerTypeText,
+                              newTrigger.logic === logic && styles.triggerTypeTextActive,
+                            ]}
+                          >
+                            {logic}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </>
                 )}
               </ScrollView>
