@@ -1,11 +1,13 @@
 
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { LoadingButton } from '@/components/LoadingButton';
-import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import React, { useState, useEffect } from 'react';
-import { colors } from '@/styles/commonStyles';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DateTime } from 'luxon';
+import { IconSymbol } from '@/components/IconSymbol';
+import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
+import { colors } from '@/styles/commonStyles';
+import { LoadingButton } from '@/components/LoadingButton';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -18,10 +20,8 @@ import {
   Platform,
   Switch,
 } from 'react-native';
-import { IconSymbol } from '@/components/IconSymbol';
-import { DateTime } from 'luxon';
 import { getLocalTimezone } from '@/utils/dateUtils';
-import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 
 interface Goal {
   id: string;
@@ -57,6 +57,13 @@ interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
   alternativeCalendar?: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
+}
+
+interface Alarm {
+  id: string;
+  title: string;
+  goalId?: string;
+  enabled: boolean;
 }
 
 type BehaviorCategory = 'Action' | 'Speech' | 'Thought' | 'Feeling';
@@ -108,6 +115,9 @@ export default function CreateGoalScreen() {
   
   // Alarms state - separate from scheduler
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
+  const [quickAlarmTime, setQuickAlarmTime] = useState('09:00');
+  const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
+  const [goalAlarms, setGoalAlarms] = useState<Alarm[]>([]);
   
   // Reward state
   const [rewardCurrencyId, setRewardCurrencyId] = useState<string | undefined>();
@@ -164,10 +174,11 @@ export default function CreateGoalScreen() {
 
       if (editingGoalId) {
         promises.push(authenticatedGet<any>(`/api/goals/${editingGoalId}`));
+        promises.push(authenticatedGet<any>(`/api/alarms?goalId=${editingGoalId}`));
       }
 
       const results = await Promise.all(promises);
-      const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData] = results;
+      const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData, alarmsData] = results;
       
       const goals = Array.isArray(goalsData) ? goalsData : (goalsData?.data || []);
       const lifeAreas = Array.isArray(lifeAreasData) ? lifeAreasData : (lifeAreasData?.data || []);
@@ -217,7 +228,6 @@ export default function CreateGoalScreen() {
           scheduleType: rawScheduleType,
           timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
           weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week,
-          // Add more schedule fields as needed
         });
         
         if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {
@@ -230,6 +240,15 @@ export default function CreateGoalScreen() {
           setConsequenceCurrencyId(goalDetails.consequenceCurrencyId || goalDetails.consequence_currency_id);
           setConsequenceFailures((goalDetails.consequenceFailures || goalDetails.consequence_failures)?.toString() || '');
           setConsequenceAmount((goalDetails.consequenceAmount || goalDetails.consequence_amount)?.toString() || '');
+        }
+
+        // Load alarms for this goal
+        if (alarmsData) {
+          const alarms = Array.isArray(alarmsData) ? alarmsData : (alarmsData?.data || []);
+          setGoalAlarms(alarms);
+          if (alarms.length > 0) {
+            setAlarmsEnabled(true);
+          }
         }
       }
     } catch (error: any) {
@@ -295,7 +314,6 @@ export default function CreateGoalScreen() {
         scheduleType: scheduleConfig.scheduleType,
         scheduleTimesPerDay: scheduleConfig.timesPerDay,
         scheduleDaysOfWeek: scheduleConfig.weekdays,
-        // Add more schedule fields as needed
       };
       
       console.log('[API] Submitting goal data:', JSON.stringify(goalData, null, 2));
@@ -369,6 +387,21 @@ export default function CreateGoalScreen() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleAdvancedAlarms = () => {
+    console.log('User tapped Advanced Alarms button');
+    const alarmTitle = title.trim() ? `${title.trim()} Alarm` : 'Goal Alarm';
+    const params = new URLSearchParams({
+      goalId: editingGoalId || '',
+      goalTitle: alarmTitle,
+    });
+    router.push(`/alarms/create?${params.toString()}`);
+  };
+
+  const handleEditAlarm = (alarmId: string) => {
+    console.log('User tapped Edit Alarm:', alarmId);
+    router.push(`/alarms/create?id=${alarmId}`);
   };
 
   const getSelectedParentGoalName = () => {
@@ -646,7 +679,7 @@ export default function CreateGoalScreen() {
                 {scheduleConfig.scheduleType !== 'Always Active' && (
                   <Text style={styles.scheduleSubtext}>
                     {scheduleConfig.timesPerDay ? `${scheduleConfig.timesPerDay}x per day` : ''}
-                    {scheduleConfig.weekdays && scheduleConfig.weekdays.length > 0 ? `${scheduleConfig.weekdays.length} days selected` : ''}
+                    {scheduleConfig.weekdays && scheduleConfig.weekdays.length > 0 ? ` ${scheduleConfig.weekdays.length} days selected` : ''}
                   </Text>
                 )}
               </View>
@@ -683,20 +716,64 @@ export default function CreateGoalScreen() {
           {alarmsEnabled && (
             <View style={styles.alarmContent}>
               <Text style={styles.helperText}>
-                Set up powerful alarms with astronomical triggers (sunrise, sunset), location-based triggers, and custom conditions.
+                Quick alarm: Set a simple daily alarm time
               </Text>
+              
+              {/* Quick Time Input */}
+              <View style={styles.quickTimeSection}>
+                <Text style={styles.quickTimeLabel}>Alarm Time:</Text>
+                <TouchableOpacity
+                  style={styles.quickTimeButton}
+                  onPress={() => setShowQuickTimePicker(true)}
+                >
+                  <IconSymbol
+                    ios_icon_name="clock"
+                    android_material_icon_name="schedule"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.quickTimeText}>{quickAlarmTime}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Advanced Button */}
               <TouchableOpacity
-                style={styles.manageAlarmsButton}
-                onPress={() => router.push('/alarms/create')}
+                style={styles.advancedAlarmsButton}
+                onPress={handleAdvancedAlarms}
               >
                 <IconSymbol
-                  ios_icon_name="bell.badge.fill"
-                  android_material_icon_name="notifications-active"
+                  ios_icon_name="slider.horizontal.3"
+                  android_material_icon_name="tune"
                   size={18}
-                  color="#fff"
+                  color={colors.primary}
                 />
-                <Text style={styles.manageAlarmsButtonText}>Add/Manage Alarms</Text>
+                <Text style={styles.advancedAlarmsButtonText}>Advanced Alarms</Text>
               </TouchableOpacity>
+
+              {/* List of Alarms for this Goal */}
+              {goalAlarms.length > 0 && (
+                <View style={styles.alarmsList}>
+                  <Text style={styles.alarmsListTitle}>Alarms for this Goal:</Text>
+                  {goalAlarms.map((alarm) => (
+                    <View key={alarm.id} style={styles.alarmItem}>
+                      <View style={styles.alarmItemInfo}>
+                        <Text style={styles.alarmItemTitle}>{alarm.title}</Text>
+                        <Text style={styles.alarmItemStatus}>
+                          {alarm.enabled ? 'Active' : 'Inactive'}
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={() => handleEditAlarm(alarm.id)}>
+                        <IconSymbol
+                          ios_icon_name="pencil"
+                          android_material_icon_name="edit"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -801,6 +878,28 @@ export default function CreateGoalScreen() {
           />
         </View>
       </ScrollView>
+
+      {/* Quick Time Picker */}
+      {showQuickTimePicker && Platform.OS !== 'web' && (
+        <DateTimePicker
+          value={(() => {
+            const [hours, minutes] = quickAlarmTime.split(':').map(Number);
+            const date = new Date();
+            date.setHours(hours, minutes, 0, 0);
+            return date;
+          })()}
+          mode="time"
+          display="default"
+          onChange={(event, selectedDate) => {
+            if (event.type === 'set' && selectedDate) {
+              const hours = selectedDate.getHours().toString().padStart(2, '0');
+              const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
+              setQuickAlarmTime(`${hours}:${minutes}`);
+            }
+            setShowQuickTimePicker(false);
+          }}
+        />
+      )}
 
       {/* Goal Schedule Wizard Modal */}
       <Modal
@@ -1379,20 +1478,84 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginTop: 12,
   },
-  manageAlarmsButton: {
+  quickTimeSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  quickTimeLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  quickTimeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  quickTimeText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  advancedAlarmsButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.background,
     borderRadius: 8,
     padding: 14,
-    marginTop: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  manageAlarmsButtonText: {
+  advancedAlarmsButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#fff',
+    color: colors.primary,
+  },
+  alarmsList: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  alarmsListTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  alarmItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  alarmItemInfo: {
+    flex: 1,
+  },
+  alarmItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  alarmItemStatus: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   buttonContainer: {
     marginTop: 20,
