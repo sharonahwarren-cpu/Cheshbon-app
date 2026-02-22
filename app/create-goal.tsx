@@ -19,7 +19,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { LoadingButton } from '@/components/LoadingButton';
 import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { HDate, HebrewCalendar, months } from '@hebcal/core';
+import { HDate, months } from '@hebcal/core';
 
 interface Goal {
   id: string;
@@ -78,13 +78,20 @@ type CalendarType = 'Gregorian' | 'Hebrew' | 'Chinese' | 'Islamic';
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const WEEK_POSITIONS = ['First', 'Second', 'Third', 'Fourth', 'Last'];
 
+// Helper function to check if a Hebrew year is a leap year
+const isHebrewLeapYear = (hebrewYear: number): boolean => {
+  // Hebrew leap year calculation: years 3, 6, 8, 11, 14, 17, 19 in a 19-year cycle
+  const yearInCycle = hebrewYear % 19;
+  return [3, 6, 8, 11, 14, 17, 0].includes(yearInCycle);
+};
+
 // Helper function to get month names based on calendar type
 const getMonthNames = (calendarType: CalendarType, year?: number): string[] => {
   if (calendarType === 'Hebrew') {
     // Use Hebcal to get proper Hebrew month names
     // Check if it's a leap year (has Adar I and Adar II)
     const hebrewYear = year || new HDate().getFullYear();
-    const isLeapYear = HebrewCalendar.isLeapYear(hebrewYear);
+    const isLeapYear = isHebrewLeapYear(hebrewYear);
     
     if (isLeapYear) {
       return [
@@ -159,7 +166,7 @@ const getMaxDaysInMonth = (month: number, calendarType: CalendarType): number =>
     // Hebrew months have either 29 or 30 days
     // Use current Hebrew year to determine
     const hebrewYear = new HDate().getFullYear();
-    const isLeapYear = HebrewCalendar.isLeapYear(hebrewYear);
+    const isLeapYear = isHebrewLeapYear(hebrewYear);
     
     // Month numbers in Hebrew calendar
     const daysInHebrewMonth = [30, 29, 30, 29, 30, 30, 29, 30, 29, 30, 29, 30, 29]; // 13 months for leap year
