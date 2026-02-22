@@ -362,7 +362,7 @@ export default function HomeScreen() {
     
     try {
       const timestamp = new Date(selectedDate).toISOString();
-      const response = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
+      const response = authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
       
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
@@ -610,14 +610,15 @@ export default function HomeScreen() {
   };
 
   const handleDateChange = (event: any, date?: Date) => {
+    console.log('[Home] Date picker onChange called', { date });
     // On Android, the picker closes itself after selection
-    // On iOS, we keep the modal open until user taps Done
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
     if (date) {
       setSelectedDate(date);
       console.log('[Home] Date selected:', date.toISOString());
     }
-    // Don't close the modal here - let the Done button handle it
-    // (Android will close via the onChange wrapper in the Modal)
   };
 
   const formatDateDisplay = (date: Date) => {
@@ -1177,7 +1178,7 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {showDatePicker && Platform.OS !== 'web' && (
+        {showDatePicker && (
           <Modal
             visible={showDatePicker}
             transparent
@@ -1196,12 +1197,7 @@ export default function HomeScreen() {
                   value={selectedDate}
                   mode="date"
                   display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
-                  onChange={(event, date) => {
-                    if (Platform.OS === 'android') {
-                      setShowDatePicker(false);
-                    }
-                    handleDateChange(event, date);
-                  }}
+                  onChange={handleDateChange}
                   style={Platform.OS === 'ios' ? { backgroundColor: colors.background } : undefined}
                 />
                 {Platform.OS === 'ios' && (
