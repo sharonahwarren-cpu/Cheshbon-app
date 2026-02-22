@@ -100,7 +100,7 @@ export function getNextActivations(
 /**
  * Check if a specific date matches the schedule criteria
  */
-function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boolean {
+export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boolean {
   switch (config.recurrenceType) {
     case 'daily':
       return true;

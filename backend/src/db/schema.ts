@@ -184,8 +184,9 @@ export const currencyTransactions = pgTable('currency_transactions', {
 export const alarms = pgTable('alarms', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  goalId: uuid('goal_id').references(() => goals.id, { onDelete: 'cascade' }),
   title: text('title').notNull(),
-  calendarType: text('calendar_type'),
+  calendarType: text('calendar_type').default('gregorian'),
   eventType: text('event_type'),
   triggers: jsonb('triggers').notNull(),
   recurring: boolean('recurring').default(false).notNull(),
@@ -194,6 +195,18 @@ export const alarms = pgTable('alarms', {
   nextTriggerTimeUtc: integer('next_trigger_time_utc'),
   notificationId: text('notification_id'),
   enabled: boolean('enabled').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const userLocations = pgTable('user_locations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  locationType: text('location_type').notNull(), // 'home' or 'other'
+  name: text('name'), // e.g., "Home", "Work", "Gym"
+  latitude: integer('latitude').notNull(), // Store as integer (degrees * 1000000 for precision)
+  longitude: integer('longitude').notNull(),
+  radius: integer('radius').notNull(), // In meters
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });

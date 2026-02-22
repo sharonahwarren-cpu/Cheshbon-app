@@ -127,6 +127,13 @@
       "when": 1771751823466,
       "tag": "20260222091703_cooing_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1771801170224,
+      "tag": "20260222225930_right_jackal",
+      "breakpoints": true
     }
   ]
 }
