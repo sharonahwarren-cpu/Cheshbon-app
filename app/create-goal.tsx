@@ -1,5 +1,12 @@
 
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { LoadingButton } from '@/components/LoadingButton';
+import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
+import { HDate, months } from '@hebcal/core';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useState, useEffect } from 'react';
+import { colors } from '@/styles/commonStyles';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -12,14 +19,7 @@ import {
   Platform,
   Switch,
 } from 'react-native';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { LoadingButton } from '@/components/LoadingButton';
-import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/utils/api';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { HDate, months } from '@hebcal/core';
 
 interface Goal {
   id: string;
