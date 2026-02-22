@@ -2,6 +2,7 @@ import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, desc, asc, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import { getNextActivations, calculateAstronomicalTimes, applyTimeOffset, type ScheduleConfig } from '../utils/goal-scheduler.js';
 
 export function registerGoalRoutes(app: App) {
   const requireAuth = app.requireAuth();
@@ -111,6 +112,18 @@ export function registerGoalRoutes(app: App) {
         ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth)
         : null;
 
+      const scheduleMonthlyRange = goal.scheduleMonthlyRange
+        ? (typeof goal.scheduleMonthlyRange === 'string' ? JSON.parse(goal.scheduleMonthlyRange) : goal.scheduleMonthlyRange)
+        : null;
+
+      const scheduleTimesPerDayDetails = goal.scheduleTimesPerDayDetails
+        ? (typeof goal.scheduleTimesPerDayDetails === 'string' ? JSON.parse(goal.scheduleTimesPerDayDetails) : goal.scheduleTimesPerDayDetails)
+        : null;
+
+      const scheduleExclusions = goal.scheduleExclusions
+        ? (typeof goal.scheduleExclusions === 'string' ? JSON.parse(goal.scheduleExclusions) : goal.scheduleExclusions)
+        : null;
+
       // Convert dates to ISO 8601 UTC format
       const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
 
@@ -128,6 +141,14 @@ export function registerGoalRoutes(app: App) {
         monthlyWeekdayRules: monthlyWeekdayRules || [],
         selectedWeekdays: goal.scheduleDaysOfWeek || [],
         selectedFortnightDays: goal.scheduleDaysOfWeek || [],
+        scheduleRecurrenceType: goal.scheduleRecurrenceType,
+        scheduleTimesPerDayDetails,
+        scheduleWeekendsOnly: goal.scheduleWeekendsOnly,
+        scheduleWeekdaysOnly: goal.scheduleWeekdaysOnly,
+        scheduleFortnightEvenOdd: goal.scheduleFortnightEvenOdd,
+        scheduleMonthlyRange,
+        scheduleMonthlyRandomCount: goal.scheduleMonthlyRandomCount,
+        scheduleExclusions,
       };
 
       app.logger.info({ userId: session.user.id, goalId: id }, 'Goal retrieved successfully');
@@ -245,6 +266,14 @@ export function registerGoalRoutes(app: App) {
       monthlyDates?: number[];
       monthlyWeekdayRules?: Array<{ week: number; day: number }>;
       yearlyDates?: string[];
+      scheduleRecurrenceType?: string;
+      scheduleTimesPerDayDetails?: Array<{ hour: number; minute: number; conditions?: string }>;
+      scheduleWeekendsOnly?: boolean;
+      scheduleWeekdaysOnly?: boolean;
+      scheduleFortnightEvenOdd?: string;
+      scheduleMonthlyRange?: { start: number; end: number };
+      scheduleMonthlyRandomCount?: number;
+      scheduleExclusions?: string[];
     };
 
 
@@ -297,6 +326,15 @@ export function registerGoalRoutes(app: App) {
           consequenceAmount: body.consequence?.amount || null,
           alarms: body.alarms ? JSON.stringify(body.alarms) : null,
           calendarType: body.calendarType || null,
+          scheduleRecurrenceType: body.scheduleRecurrenceType || 'daily',
+          scheduleTimesPerDayDetails: body.scheduleTimesPerDayDetails ? JSON.stringify(body.scheduleTimesPerDayDetails) : null,
+          scheduleWeekendsOnly: body.scheduleWeekendsOnly || false,
+          scheduleWeekdaysOnly: body.scheduleWeekdaysOnly || false,
+          scheduleFortnightEvenOdd: body.scheduleFortnightEvenOdd || null,
+          scheduleMonthlyRange: body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null,
+          scheduleMonthlyRandomCount: body.scheduleMonthlyRandomCount || null,
+          scheduleExclusions: body.scheduleExclusions ? JSON.stringify(body.scheduleExclusions) : null,
+          scheduleDateOfYearMonths: (body.selectedWeekdays?.length ? body.selectedWeekdays : null) as number[] | null,
         })
         .returning();
       const goal = goals[0];
@@ -350,6 +388,14 @@ export function registerGoalRoutes(app: App) {
       monthlyDates?: number[];
       monthlyWeekdayRules?: Array<{ week: number; day: number }>;
       yearlyDates?: string[];
+      scheduleRecurrenceType?: string;
+      scheduleTimesPerDayDetails?: Array<{ hour: number; minute: number; conditions?: string }>;
+      scheduleWeekendsOnly?: boolean;
+      scheduleWeekdaysOnly?: boolean;
+      scheduleFortnightEvenOdd?: string;
+      scheduleMonthlyRange?: { start: number; end: number };
+      scheduleMonthlyRandomCount?: number;
+      scheduleExclusions?: string[];
     };
 
     app.logger.info({ userId: session.user.id, goalId: id }, 'Updating goal');
@@ -432,6 +478,14 @@ export function registerGoalRoutes(app: App) {
       if (body.alarms !== undefined) {
         updateData.alarms = body.alarms ? JSON.stringify(body.alarms) : null;
       }
+      if (body.scheduleRecurrenceType !== undefined) updateData.scheduleRecurrenceType = body.scheduleRecurrenceType;
+      if (body.scheduleTimesPerDayDetails !== undefined) updateData.scheduleTimesPerDayDetails = body.scheduleTimesPerDayDetails ? JSON.stringify(body.scheduleTimesPerDayDetails) : null;
+      if (body.scheduleWeekendsOnly !== undefined) updateData.scheduleWeekendsOnly = body.scheduleWeekendsOnly;
+      if (body.scheduleWeekdaysOnly !== undefined) updateData.scheduleWeekdaysOnly = body.scheduleWeekdaysOnly;
+      if (body.scheduleFortnightEvenOdd !== undefined) updateData.scheduleFortnightEvenOdd = body.scheduleFortnightEvenOdd || null;
+      if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null;
+      if (body.scheduleMonthlyRandomCount !== undefined) updateData.scheduleMonthlyRandomCount = body.scheduleMonthlyRandomCount || null;
+      if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = body.scheduleExclusions ? JSON.stringify(body.scheduleExclusions) : null;
       updateData.updatedAt = new Date();
 
       const updatedGoals = await app.db
@@ -607,6 +661,86 @@ export function registerGoalRoutes(app: App) {
         { err: error, userId: session.user.id, goalId: id },
         'Failed to toggle goal deactivation'
       );
+      throw error;
+    }
+  });
+
+  // GET /api/goals/:id/activations - Get upcoming activations for a goal
+  app.fastify.get('/api/goals/:id/activations', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { id } = request.params as { id: string };
+    const { count, startDate } = request.query as { count?: string; startDate?: string };
+
+    const activationCount = Math.min(parseInt(count || '10'), 30); // Max 30 activations
+    const fromDate = startDate ? new Date(startDate) : new Date();
+
+    app.logger.info({ userId: session.user.id, goalId: id, count: activationCount }, 'Fetching goal activations');
+
+    try {
+      // Get the goal
+      const goals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.id, id))
+        .limit(1);
+
+      if (!goals.length) {
+        app.logger.warn({ userId: session.user.id, goalId: id }, 'Goal not found');
+        return reply.status(404).send({ error: 'Goal not found' });
+      }
+
+      if (goals[0].userId !== session.user.id) {
+        app.logger.warn(
+          { userId: session.user.id, goalId: id, ownerId: goals[0].userId },
+          'Unauthorized access to goal'
+        );
+        return reply.status(403).send({ error: 'Unauthorized' });
+      }
+
+      const goal = goals[0];
+
+      // Get user preferences for timezone
+      const prefs = await app.db
+        .select()
+        .from(schema.userPreferences)
+        .where(eq(schema.userPreferences.userId, session.user.id))
+        .limit(1);
+
+      const timezone = prefs[0]?.timezone || 'UTC';
+
+      // Build schedule config from goal
+      const scheduleConfig: ScheduleConfig = {
+        calendarType: (goal.calendarType as any) || 'gregorian',
+        recurrenceType: (goal.scheduleRecurrenceType as any) || 'daily',
+        startDate: goal.startDate,
+        endDate: goal.endDate,
+        timezone: timezone,
+        timesPerDay: goal.scheduleTimesPerDayDetails ? (typeof goal.scheduleTimesPerDayDetails === 'string' ? JSON.parse(goal.scheduleTimesPerDayDetails) : goal.scheduleTimesPerDayDetails) : undefined,
+        daysOfWeek: goal.scheduleDaysOfWeek,
+        weekendsOnly: goal.scheduleWeekendsOnly,
+        weekdaysOnly: goal.scheduleWeekdaysOnly,
+        fortnightEvenOdd: (goal.scheduleFortnightEvenOdd as any),
+        monthlyDates: goal.scheduleDatesOfMonth,
+        monthlyRange: goal.scheduleMonthlyRange ? (typeof goal.scheduleMonthlyRange === 'string' ? JSON.parse(goal.scheduleMonthlyRange) : goal.scheduleMonthlyRange) : undefined,
+        monthlyRandomCount: goal.scheduleMonthlyRandomCount,
+        nthDayOfMonth: goal.scheduleNthDayOfMonth ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth) : undefined,
+        yearlyMonths: goal.scheduleDateOfYearMonths,
+        yearlyDatesOrRanges: goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear) : undefined,
+        exclusions: goal.scheduleExclusions ? (typeof goal.scheduleExclusions === 'string' ? JSON.parse(goal.scheduleExclusions) : goal.scheduleExclusions) : undefined,
+      };
+
+      // Get next activations
+      const activations = getNextActivations(scheduleConfig, fromDate, activationCount);
+
+      app.logger.info({ userId: session.user.id, goalId: id, count: activations.length }, 'Goal activations fetched successfully');
+      return { goalId: id, goalTitle: goal.title, activations };
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to fetch goal activations');
       throw error;
     }
   });
