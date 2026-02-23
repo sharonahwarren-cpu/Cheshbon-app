@@ -23,7 +23,7 @@ export function registerCheshbonRoutes(app: App) {
     try {
       if (!OPENAI_API_KEY) {
         app.logger.error({ userId: session.user.id }, 'OpenAI API key not configured');
-        return reply.status(500).send({ error: 'OpenAI API key not configured' });
+        return reply.status(503).send({ error: 'Transcription service is not configured. Please contact support.' });
       }
 
       const data = await request.file();
@@ -53,7 +53,7 @@ export function registerCheshbonRoutes(app: App) {
         if (!transcriptionResponse.ok) {
           const error = await transcriptionResponse.text();
           app.logger.error({ userId: session.user.id, error }, 'Whisper API error');
-          return reply.status(500).send({ error: 'Failed to transcribe audio' });
+          return reply.status(503).send({ error: 'Transcription service is not configured. Please contact support.' });
         }
 
         const transcriptionData = await transcriptionResponse.json() as { text: string };
@@ -147,7 +147,7 @@ Reflection: ${body.transcription}`;
       if (!response.ok) {
         const error = await response.text();
         app.logger.error({ userId: session.user.id, error }, 'GPT-4 API error');
-        return reply.status(500).send({ error: 'Failed to analyze reflection' });
+        return reply.status(503).send({ error: 'Transcription service is not configured. Please contact support.' });
       }
 
       const data = await response.json() as any;
@@ -338,7 +338,7 @@ Help them think deeply about their spiritual practice and growth areas.`,
       if (!response.ok) {
         const error = await response.text();
         app.logger.error({ userId: session.user.id, error }, 'GPT-4 API error');
-        return reply.status(500).send({ error: 'Failed to get AI response' });
+        return reply.status(503).send({ error: 'Transcription service is not configured. Please contact support.' });
       }
 
       const data = await response.json() as any;
