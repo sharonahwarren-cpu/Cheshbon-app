@@ -100,6 +100,29 @@ export function DatePickerModal({ visible, value, mode = 'date', onConfirm, onCa
   // Native implementation (iOS/Android)
   if (!visible) return null;
 
+  // On Android, DateTimePicker shows as a native dialog and auto-dismisses
+  // We need to handle this differently
+  if (Platform.OS === 'android') {
+    return (
+      <DateTimePicker
+        value={tempDate}
+        mode={mode}
+        display="default"
+        onChange={(event, selectedDate) => {
+          // Android auto-dismisses the picker
+          if (event.type === 'set' && selectedDate) {
+            // User confirmed the selection
+            onConfirm(selectedDate);
+          } else {
+            // User cancelled
+            onCancel();
+          }
+        }}
+      />
+    );
+  }
+
+  // iOS implementation with custom modal
   return (
     <Modal
       visible={visible}
@@ -126,7 +149,7 @@ export function DatePickerModal({ visible, value, mode = 'date', onConfirm, onCa
           <DateTimePicker
             value={tempDate}
             mode={mode}
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            display="spinner"
             onChange={(event, selectedDate) => {
               if (selectedDate) {
                 setTempDate(selectedDate);
