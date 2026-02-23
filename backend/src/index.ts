@@ -14,6 +14,9 @@ import { registerReportsRoutes } from './routes/reports.js';
 import { registerReflectionsRoutes } from './routes/reflections.js';
 import { registerGainsLossesRoutes } from './routes/gains-losses.js';
 import { registerAlarmsRoutes } from './routes/alarms.js';
+import { registerMitzvotCategoryRoutes } from './routes/mitzvot-categories.js';
+import { registerMitzvotRoutes } from './routes/mitzvot.js';
+import { registerCheshbonRoutes } from './routes/cheshbon.js';
 
 // Combine both schemas
 const schema = { ...appSchema, ...authSchema };
@@ -42,6 +45,9 @@ registerReportsRoutes(app);
 registerReflectionsRoutes(app);
 registerGainsLossesRoutes(app);
 registerAlarmsRoutes(app);
+registerMitzvotCategoryRoutes(app);
+registerMitzvotRoutes(app);
+registerCheshbonRoutes(app);
 
 await app.run();
 app.logger.info('Application running');

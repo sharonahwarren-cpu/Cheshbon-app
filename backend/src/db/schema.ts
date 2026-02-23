@@ -114,6 +114,7 @@ export const userPreferences = pgTable('user_preferences', {
   preferredHomeScreen: text('preferred_home_screen').default('reflect').notNull(),
   alternativeCalendar: text('alternative_calendar').default('gregorian').notNull(),
   timezone: text('timezone').default('UTC').notNull(),
+  useAiCheshbon: boolean('use_ai_cheshbon').default(false).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -209,4 +210,82 @@ export const userLocations = pgTable('user_locations', {
   radius: integer('radius').notNull(), // In meters
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const mitzvotCategories = pgTable('mitzvot_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  displayOrder: integer('display_order').default(0).notNull(),
+  isSystem: boolean('is_system').default(false).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const mitzvot = pgTable('mitzvot', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description'),
+  categoryId: uuid('category_id').references(() => mitzvotCategories.id, { onDelete: 'set null' }),
+  type: text('type').notNull(), // 'RESTRAINING' or 'PROACTIVE'
+  status: text('status').default('ACTIVE').notNull(), // 'ACTIVE' or 'DEACTIVATED'
+  isSystem: boolean('is_system').default(false).notNull(),
+  scheduleType: text('schedule_type').default('always_active').notNull(),
+  scheduleDaysOfWeek: integer('schedule_days_of_week').array(),
+  scheduleDatesOfMonth: integer('schedule_dates_of_month').array(),
+  scheduleNthDayOfMonth: jsonb('schedule_nth_day_of_month'),
+  scheduleTimesPerMonth: integer('schedule_times_per_month'),
+  schedulePeriodOfYear: jsonb('schedule_period_of_year'),
+  scheduleDatesOfYear: text('schedule_dates_of_year').array(),
+  scheduleRecurrenceType: text('schedule_recurrence_type'),
+  scheduleTimesPerDayDetails: jsonb('schedule_times_per_day_details'),
+  scheduleWeekendsOnly: boolean('schedule_weekends_only').default(false),
+  scheduleWeekdaysOnly: boolean('schedule_weekdays_only').default(false),
+  scheduleFortnightEvenOdd: text('schedule_fortnight_even_odd'),
+  scheduleMonthlyRange: jsonb('schedule_monthly_range'),
+  scheduleMonthlyRandomCount: integer('schedule_monthly_random_count'),
+  scheduleExclusions: jsonb('schedule_exclusions'),
+  scheduleDateOfYearMonths: text('schedule_date_of_year_months').array(),
+  calendarType: text('calendar_type'),
+  startDate: timestamp('start_date', { withTimezone: true }),
+  endDate: timestamp('end_date', { withTimezone: true }),
+  rewardCurrencyId: uuid('reward_currency_id').references(() => currencies.id, { onDelete: 'set null' }),
+  rewardSuccesses: integer('reward_successes'),
+  rewardAmount: integer('reward_amount'),
+  consequenceCurrencyId: uuid('consequence_currency_id').references(() => currencies.id, { onDelete: 'set null' }),
+  consequenceFailures: integer('consequence_failures'),
+  consequenceAmount: integer('consequence_amount'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const mitzvotCompletions = pgTable('mitzvot_completions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  mitzvahId: uuid('mitzvah_id').notNull().references(() => mitzvot.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  isSuccess: boolean('is_success').notNull(),
+  completedAt: timestamp('completed_at', { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const cheshbonSessions = pgTable('cheshbon_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  sessionDate: date('session_date').notNull(),
+  audioUrl: text('audio_url'),
+  transcription: text('transcription'),
+  aiSuggestions: jsonb('ai_suggestions'), // Array of { category, reason, status }
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+
+export const cheshbonMessages = pgTable('cheshbon_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => cheshbonSessions.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(), // 'user' or 'assistant'
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
