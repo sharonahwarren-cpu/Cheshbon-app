@@ -1,7 +1,11 @@
 
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+
+// Check if running in Expo Go
+const isExpoGo = Constants.appOwnership === 'expo';
 
 /**
  * Request foreground location permissions
@@ -54,6 +58,11 @@ export async function requestBackgroundLocationPermission(): Promise<boolean> {
  * Request notification permissions
  */
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (isExpoGo) {
+    console.warn('Notification permissions not available in Expo Go. Please use a development build.');
+    return false;
+  }
+
   console.log('Requesting notification permission');
   
   try {
@@ -90,16 +99,19 @@ export async function checkAllPermissions(): Promise<{
   console.log('Checking all alarm permissions');
   
   try {
-    const [foregroundLoc, backgroundLoc, notif] = await Promise.all([
-      Location.getForegroundPermissionsAsync(),
-      Location.getBackgroundPermissionsAsync(),
-      Notifications.getPermissionsAsync(),
-    ]);
+    const foregroundLoc = await Location.getForegroundPermissionsAsync();
+    const backgroundLoc = await Location.getBackgroundPermissionsAsync();
+    
+    let notifStatus = false;
+    if (!isExpoGo) {
+      const notif = await Notifications.getPermissionsAsync();
+      notifStatus = notif.status === 'granted';
+    }
     
     const permissions = {
       foregroundLocation: foregroundLoc.status === 'granted',
       backgroundLocation: backgroundLoc.status === 'granted',
-      notifications: notif.status === 'granted',
+      notifications: notifStatus,
     };
     
     console.log('Permission status:', permissions);
@@ -120,6 +132,10 @@ export async function checkAllPermissions(): Promise<{
 export async function requestAllAlarmPermissions(): Promise<boolean> {
   console.log('Requesting all alarm permissions');
   
+  if (isExpoGo) {
+    console.warn('Full alarm functionality requires a development build. Expo Go has limited notification support.');
+  }
+  
   try {
     // Request in order: foreground location -> notifications -> background location
     const foregroundGranted = await requestForegroundLocationPermission();
@@ -128,10 +144,13 @@ export async function requestAllAlarmPermissions(): Promise<boolean> {
       return false;
     }
     
-    const notificationsGranted = await requestNotificationPermission();
-    if (!notificationsGranted) {
-      console.warn('Notification permission denied');
-      return false;
+    // Only request notification permission if not in Expo Go
+    if (!isExpoGo) {
+      const notificationsGranted = await requestNotificationPermission();
+      if (!notificationsGranted) {
+        console.warn('Notification permission denied');
+        return false;
+      }
     }
     
     const backgroundGranted = await requestBackgroundLocationPermission();

@@ -22,7 +22,9 @@ import { getLocalTimezone } from '@/utils/dateUtils';
 import { DatePickerModal } from '@/components/DatePickerModal';
 import type { Alarm, AlarmTrigger, CalendarType, TriggerType } from '@/types/alarm';
 import { requestAllAlarmPermissions, checkAllPermissions } from '@/utils/alarmPermissions';
+import { areNotificationsSupported } from '@/utils/alarmNotifications';
 import { getCurrentLocation } from '@/utils/alarmGeofencing';
+import Constants from 'expo-constants';
 
 const HEBREW_EVENTS = [
   { value: 'roshChodesh', label: 'Rosh Chodesh' },
@@ -432,6 +434,9 @@ export default function CreateAlarmScreen() {
     calendarOptions.push(alternativeCalendar);
   }
 
+  const isExpoGo = Constants.appOwnership === 'expo';
+  const notificationsSupported = areNotificationsSupported();
+
   return (
     <SafeAreaView style={styles.container}>
       <Stack.Screen
@@ -446,6 +451,24 @@ export default function CreateAlarmScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView style={styles.scrollView}>
+          {/* Expo Go Warning Banner */}
+          {isExpoGo && !notificationsSupported && (
+            <View style={styles.expoGoWarningBanner}>
+              <IconSymbol
+                ios_icon_name="exclamationmark.triangle.fill"
+                android_material_icon_name="warning"
+                size={24}
+                color="#FF9500"
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.expoGoWarningTitle}>Limited Functionality in Expo Go</Text>
+                <Text style={styles.expoGoWarningText}>
+                  Push notifications are not supported in Expo Go on Android (SDK 53+). Alarms can be created but will not trigger notifications. For full functionality, please use a development build.
+                </Text>
+              </View>
+            </View>
+          )}
+
           {error ? (
             <View style={styles.errorBanner}>
               <Text style={styles.errorText}>{error}</Text>
@@ -1045,6 +1068,28 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.error,
     fontSize: 14,
+  },
+  expoGoWarningBanner: {
+    backgroundColor: '#FFF3CD',
+    padding: 16,
+    margin: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    borderWidth: 2,
+    borderColor: '#FF9500',
+  },
+  expoGoWarningTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#856404',
+    marginBottom: 6,
+  },
+  expoGoWarningText: {
+    fontSize: 14,
+    color: '#856404',
+    lineHeight: 20,
   },
   scheduleInfoBanner: {
     backgroundColor: `${colors.primary}15`,
