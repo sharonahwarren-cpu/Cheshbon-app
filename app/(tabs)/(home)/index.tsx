@@ -1158,6 +1158,10 @@ export default function HomeScreen() {
 
   const lifetimeSuccessCount = calculateLifetimeTotals();
 
+  const alternativeCalendarDate = userPreferences.alternativeCalendar && userPreferences.alternativeCalendar !== 'gregorian' 
+    ? formatAlternativeDate(selectedDate, userPreferences.alternativeCalendar) 
+    : null;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView 
@@ -1228,6 +1232,11 @@ export default function HomeScreen() {
             setShowDatePicker(true);
           }}>
             <Text style={styles.dateDisplay}>{dateDisplay}</Text>
+            {alternativeCalendarDate && (
+              <Text style={styles.alternativeCalendarDateSmall}>
+                {alternativeCalendarDate}
+              </Text>
+            )}
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -1263,19 +1272,6 @@ export default function HomeScreen() {
           }}
           onCancel={() => setShowDatePicker(false)}
         />
-
-        {userPreferences.alternativeCalendar && userPreferences.alternativeCalendar !== 'gregorian' && (
-          <View style={styles.alternativeCalendarInfo}>
-            <Text style={styles.alternativeCalendarLabel}>
-              {userPreferences.alternativeCalendar === 'hebrew' && '✡️ Hebrew Calendar'}
-              {userPreferences.alternativeCalendar === 'chinese' && '🏮 Chinese Calendar'}
-              {userPreferences.alternativeCalendar === 'islamic' && '☪️ Islamic Calendar'}
-            </Text>
-            <Text style={styles.alternativeCalendarDate}>
-              {formatAlternativeDate(selectedDate, userPreferences.alternativeCalendar)}
-            </Text>
-          </View>
-        )}
 
         {currentView === 'reflect' ? (
           <>
@@ -1728,6 +1724,13 @@ const styles = StyleSheet.create({
     minWidth: 120,
     textAlign: 'center',
   },
+  alternativeCalendarDateSmall: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
   lifetimeCounterContainer: {
     flexDirection: 'column',
     alignItems: 'center',
@@ -1737,23 +1740,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '600',
     color: colors.success,
-  },
-  alternativeCalendarInfo: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  alternativeCalendarLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
-    marginBottom: 4,
-  },
-  alternativeCalendarDate: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
   },
   content: {
     flex: 1,
