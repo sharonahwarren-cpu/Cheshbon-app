@@ -692,8 +692,6 @@ export default function CreateGoalScreen() {
     const scheduleType = scheduleConfig.scheduleType;
     if (scheduleType === 'Always Active') {
       return 'every day';
-    } else if (scheduleType === 'Daily') {
-      return 'daily';
     } else if (scheduleType === 'Weekly') {
       const dayCount = scheduleConfig.weekdays?.length || 0;
       return dayCount > 0 ? `${dayCount} days per week` : 'weekly';

@@ -20,7 +20,7 @@ import { getLocalTimezone, calendarDateToUTC, utcToCalendarDate } from './dateUt
  */
 
 export type CalendarType = 'Gregorian' | 'Hebrew' | 'Chinese' | 'Islamic';
-export type RecurrenceType = 'daily' | 'weekly' | 'fortnightly' | 'monthly' | 'yearly' | 'custom';
+export type RecurrenceType = 'always_active' | 'weekly' | 'fortnightly' | 'monthly' | 'yearly' | 'custom';
 
 export interface ScheduleDetails {
   // Common
@@ -113,8 +113,16 @@ export async function getNextActivations(
   const activations: ActivationPreview[] = [];
 
   try {
-    if (schedule.recurrenceType === 'daily') {
-      return generateDailyActivations(schedule, now, count, timezone, alarms, location);
+    if (schedule.recurrenceType === 'always_active') {
+      // Always active: generate next N days
+      const activations: ActivationPreview[] = [];
+      let currentDate = now.startOf('day').plus({ days: 1 });
+      for (let i = 0; i < count; i++) {
+        const activation = currentDate.set({ hour: 9, minute: 0 });
+        activations.push(createActivationPreview(activation, schedule, alarms, location));
+        currentDate = currentDate.plus({ days: 1 });
+      }
+      return activations;
     }
 
     if (schedule.recurrenceType === 'weekly') {
@@ -139,63 +147,6 @@ export async function getNextActivations(
     console.error('[ScheduleCalc] Error generating activations:', error);
     return [];
   }
-}
-
-/**
- * Generate daily activations
- */
-function generateDailyActivations(
-  schedule: GoalSchedule,
-  now: DateTime,
-  count: number,
-  timezone: string,
-  alarms?: GoalAlarm[],
-  location?: { latitude: number; longitude: number }
-): ActivationPreview[] {
-  const activations: ActivationPreview[] = [];
-  const { timesPerDay, specificTimes, startDate, endDate } = schedule.details;
-
-  const start = startDate ? DateTime.fromISO(startDate, { zone: 'UTC' }).setZone(timezone) : now;
-  const end = endDate ? DateTime.fromISO(endDate, { zone: 'UTC' }).setZone(timezone) : now.plus({ years: 1 });
-
-  let currentDate = start.startOf('day');
-  if (currentDate < now.startOf('day')) {
-    currentDate = now.startOf('day');
-  }
-
-  while (activations.length < count && currentDate <= end) {
-    if (specificTimes && specificTimes.length > 0) {
-      // Use specific times
-      for (const time of specificTimes) {
-        const activation = currentDate.set({ hour: time.hour, minute: time.minute });
-        if (activation > now) {
-          activations.push(createActivationPreview(activation, schedule, alarms, location));
-          if (activations.length >= count) break;
-        }
-      }
-    } else if (timesPerDay && timesPerDay > 0) {
-      // Distribute evenly throughout the day
-      const interval = 24 / timesPerDay;
-      for (let i = 0; i < timesPerDay; i++) {
-        const hour = Math.floor(i * interval);
-        const activation = currentDate.set({ hour, minute: 0 });
-        if (activation > now) {
-          activations.push(createActivationPreview(activation, schedule, alarms, location));
-          if (activations.length >= count) break;
-        }
-      }
-    } else {
-      // Default: once per day at 9 AM
-      const activation = currentDate.set({ hour: 9, minute: 0 });
-      if (activation > now) {
-        activations.push(createActivationPreview(activation, schedule, alarms, location));
-      }
-    }
-
-    currentDate = currentDate.plus({ days: 1 });
-  }
-
-  return activations;
 }
 
 /**
@@ -547,7 +498,7 @@ export function isGoalActiveOnDate(
   }
 
   // Check recurrence rules
-  if (schedule.recurrenceType === 'daily') {
+  if (schedule.recurrenceType === 'always_active') {
     return true; // Active every day within range
   }
 

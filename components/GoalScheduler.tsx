@@ -19,7 +19,7 @@ import { useRouter } from 'expo-router';
 import { generateScheduleSummary } from '@/utils/scheduleDescriptions';
 import { authenticatedGet } from '@/utils/api';
 
-export type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
+export type ScheduleType = 'Always Active' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
 export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 
 export interface WeekdayPosition {
@@ -297,7 +297,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   };
 
   const renderScheduleTypeSelector = () => {
-    const scheduleTypes: ScheduleType[] = ['Always Active', 'Daily', 'Weekly', 'Fortnightly', 'Monthly', 'Yearly'];
+    const scheduleTypes: ScheduleType[] = ['Always Active', 'Weekly', 'Fortnightly', 'Monthly', 'Yearly'];
     
     return (
       <View style={styles.section}>
@@ -419,95 +419,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     );
   };
 
-  const renderDailyOptions = () => {
-    if (config.scheduleType !== 'Daily') return null;
-
-    return (
-      <View style={styles.optionsContainer}>
-        <Text style={styles.subLabel}>Times per day (optional)</Text>
-        <TextInput
-          style={styles.input}
-          value={config.timesPerDay?.toString() || ''}
-          onChangeText={(text) => updateConfig({ timesPerDay: text ? parseInt(text) : undefined })}
-          placeholder="e.g., 3"
-          placeholderTextColor={colors.textSecondary}
-          keyboardType="number-pad"
-        />
-        
-        {/* End Date */}
-        <Text style={styles.subLabel}>End Date (optional)</Text>
-        <TouchableOpacity
-          style={styles.datePickerButton}
-          onPress={() => {
-            console.log('User tapped End Date button');
-            setTempDate(config.endDate || new Date());
-            setShowDatePicker('end');
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="calendar"
-            android_material_icon_name="calendar-today"
-            size={18}
-            color={colors.text}
-          />
-          <Text style={styles.datePickerText}>
-            {config.endDate ? DateTime.fromJSDate(config.endDate).toFormat('MMM d, yyyy') : 'No end date'}
-          </Text>
-        </TouchableOpacity>
-        {config.endDate && (
-          <TouchableOpacity
-            style={styles.clearButton}
-            onPress={() => updateConfig({ endDate: undefined })}
-          >
-            <Text style={styles.clearButtonText}>Clear End Date</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Exclusion Dates */}
-        <Text style={styles.subLabel}>Exclusion Dates</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            console.log('User tapped Add Exclusion Date button');
-            setTempDate(new Date());
-            setShowDatePicker('exclusion');
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="plus.circle.fill"
-            android_material_icon_name="add-circle"
-            size={18}
-            color={colors.primary}
-          />
-          <Text style={styles.addButtonText}>Add Exclusion Date</Text>
-        </TouchableOpacity>
-        {config.exclusionDates && config.exclusionDates.length > 0 && (
-          <View style={styles.exclusionsList}>
-            {config.exclusionDates.map((date, index) => (
-              <View key={index} style={styles.exclusionItem}>
-                <Text style={styles.exclusionText}>
-                  {DateTime.fromJSDate(date).toFormat('MMM d, yyyy')}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    const updated = config.exclusionDates?.filter((_, i) => i !== index);
-                    updateConfig({ exclusionDates: updated });
-                  }}
-                >
-                  <IconSymbol
-                    ios_icon_name="xmark.circle.fill"
-                    android_material_icon_name="cancel"
-                    size={20}
-                    color={colors.error}
-                  />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-    );
-  };
+  // Daily view removed per user request
 
   const renderWeeklyOptions = () => {
     if (config.scheduleType !== 'Weekly') return null;
@@ -1487,19 +1399,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                 <Text style={styles.sourceInfoLabel}>Details:</Text>
               </View>
               <Text style={styles.sourceInfoValue}>{selectedOccurrence.source.details}</Text>
-              
-              <TouchableOpacity
-                style={styles.navigateButton}
-                onPress={() => navigateToSection(selectedOccurrence.source.section)}
-              >
-                <IconSymbol
-                  ios_icon_name="arrow.right.circle.fill"
-                  android_material_icon_name="arrow-circle-right"
-                  size={20}
-                  color="#fff"
-                />
-                <Text style={styles.navigateButtonText}>Go to this section</Text>
-              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1511,7 +1410,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     <View style={styles.container}>
       {renderScheduleTypeSelector()}
       {renderScheduleSummary()}
-      {renderDailyOptions()}
       {renderWeeklyOptions()}
       {renderFortnightlyOptions()}
       {renderMonthlyOptions()}

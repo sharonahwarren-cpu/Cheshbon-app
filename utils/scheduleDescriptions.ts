@@ -21,27 +21,6 @@ export function generateScheduleSummary(config: ScheduleConfig): string {
     return 'Active every day';
   }
 
-  if (scheduleType === 'Daily') {
-    const parts: string[] = [];
-    
-    if (config.timesPerDay && config.timesPerDay > 1) {
-      parts.push(`${config.timesPerDay} times per day`);
-    } else {
-      parts.push('Every day');
-    }
-
-    if (config.endDate) {
-      const endDateStr = new Date(config.endDate).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-      parts.push(`until ${endDateStr}`);
-    }
-
-    return parts.join(' ');
-  }
-
   if (scheduleType === 'Weekly') {
     if (!config.weekdays || config.weekdays.length === 0) {
       return 'Weekly (no days selected)';
@@ -247,13 +226,6 @@ export function generateShortScheduleSummary(config: ScheduleConfig): string {
 
   if (scheduleType === 'Always Active') {
     return 'Every day';
-  }
-
-  if (scheduleType === 'Daily') {
-    if (config.timesPerDay && config.timesPerDay > 1) {
-      return `${config.timesPerDay}x daily`;
-    }
-    return 'Daily';
   }
 
   if (scheduleType === 'Weekly') {
