@@ -20,7 +20,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { LoadingButton } from '@/components/LoadingButton';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
 interface Goal {
   id: string;
@@ -113,11 +113,10 @@ export default function CreateGoalScreen() {
   const [scheduleType, setScheduleType] = useState<ScheduleType>('Always Active');
   const [scheduleTimesPerDay, setScheduleTimesPerDay] = useState<string>('');
   
-  // Alarms state - FIXED: Use Date object instead of string
+  // Alarms state - FIXED: Use Date object and react-native-modal-datetime-picker
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
   const [quickAlarmTime, setQuickAlarmTime] = useState<Date | undefined>(undefined);
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
-  const [tempQuickAlarmTime, setTempQuickAlarmTime] = useState<Date | undefined>(undefined);
   const [goalAlarms, setGoalAlarms] = useState<Alarm[]>([]);
   
   // Confirm modal state
@@ -637,27 +636,15 @@ export default function CreateGoalScreen() {
     return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
-  const handleQuickTimeChange = (event: any, selectedDate?: Date) => {
-    console.log('Quick time picker changed:', event.type, selectedDate);
-    // Update the temporary time as user scrolls through the picker
-    if (selectedDate) {
-      setTempQuickAlarmTime(selectedDate);
-    }
-  };
-
-  const handleQuickTimePickerDone = () => {
-    console.log('User tapped Done on time picker');
-    if (tempQuickAlarmTime) {
-      setQuickAlarmTime(tempQuickAlarmTime);
-    }
+  const handleQuickTimePickerConfirm = (date: Date) => {
+    console.log('User selected quick alarm time:', date);
+    setQuickAlarmTime(date);
     setShowQuickTimePicker(false);
-    setTempQuickAlarmTime(undefined);
   };
 
   const handleQuickTimePickerCancel = () => {
-    console.log('User cancelled time picker');
+    console.log('User cancelled quick alarm time picker');
     setShowQuickTimePicker(false);
-    setTempQuickAlarmTime(undefined);
   };
 
   const scheduleTypes: ScheduleType[] = [
@@ -884,7 +871,7 @@ export default function CreateGoalScreen() {
           )}
         </View>
 
-        {/* Alarms & Reminders */}
+        {/* Alarms & Reminders - FIXED: Now uses react-native-modal-datetime-picker */}
         <View style={styles.section}>
           <View style={styles.alarmHeader}>
             <View style={styles.alarmTitleRow}>
@@ -916,11 +903,6 @@ export default function CreateGoalScreen() {
                   style={styles.quickTimeButton}
                   onPress={() => {
                     console.log('User tapped Set time button');
-                    setTempQuickAlarmTime(quickAlarmTime || (() => {
-                      const now = new Date();
-                      now.setHours(9, 0, 0, 0);
-                      return now;
-                    })());
                     setShowQuickTimePicker(true);
                   }}
                 >
@@ -1106,41 +1088,19 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Quick Time Picker Modal - FIXED: Stays open until Done is tapped */}
-      {showQuickTimePicker && (
-        <Modal
-          visible={showQuickTimePicker}
-          transparent
-          animationType="slide"
-          onRequestClose={handleQuickTimePickerCancel}
-        >
-          <View style={styles.timePickerModalOverlay}>
-            <View style={styles.timePickerModal}>
-              <View style={styles.timePickerHeader}>
-                <TouchableOpacity onPress={handleQuickTimePickerCancel}>
-                  <Text style={styles.timePickerCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <Text style={styles.timePickerTitle}>Set Alarm Time</Text>
-                <TouchableOpacity onPress={handleQuickTimePickerDone}>
-                  <Text style={styles.timePickerDoneText}>Done</Text>
-                </TouchableOpacity>
-              </View>
-              <DateTimePicker
-                value={tempQuickAlarmTime || (() => {
-                  const now = new Date();
-                  now.setHours(9, 0, 0, 0);
-                  return now;
-                })()}
-                mode="time"
-                display="spinner"
-                onChange={handleQuickTimeChange}
-                textColor={colors.text}
-                style={styles.timePicker}
-              />
-            </View>
-          </View>
-        </Modal>
-      )}
+      {/* Quick Time Picker - FIXED: Now uses react-native-modal-datetime-picker */}
+      <DateTimePickerModal
+        isVisible={showQuickTimePicker}
+        mode="time"
+        onConfirm={handleQuickTimePickerConfirm}
+        onCancel={handleQuickTimePickerCancel}
+        date={quickAlarmTime || (() => {
+          const now = new Date();
+          now.setHours(9, 0, 0, 0);
+          return now;
+        })()}
+        display="spinner"
+      />
 
       {/* Schedule Picker Modal */}
       <Modal
@@ -1588,41 +1548,5 @@ const styles = StyleSheet.create({
   pickerItemTextSelected: {
     color: colors.primary,
     fontWeight: '600',
-  },
-  timePickerModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  timePickerModal: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 20,
-  },
-  timePickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  timePickerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  timePickerCancelText: {
-    fontSize: 17,
-    color: colors.textSecondary,
-  },
-  timePickerDoneText: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  timePicker: {
-    height: 200,
   },
 });

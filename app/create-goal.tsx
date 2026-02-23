@@ -6,7 +6,6 @@ import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDel
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { colors } from '@/styles/commonStyles';
 import { LoadingButton } from '@/components/LoadingButton';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
 import React, { useState, useEffect } from 'react';
