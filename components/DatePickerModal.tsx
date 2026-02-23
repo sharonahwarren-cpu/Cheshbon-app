@@ -55,14 +55,16 @@ export function DatePickerModal({ visible, value, mode = 'date', onConfirm, onCa
                     ? tempDate.toISOString().split('T')[0]
                     : `${String(tempDate.getHours()).padStart(2, '0')}:${String(tempDate.getMinutes()).padStart(2, '0')}`
                 }
-                onChange={(e) => {
+                onChange={(e: any) => {
                   if (mode === 'date') {
                     const newDate = new Date(e.target.value);
-                    setTempDate(newDate);
+                    if (!isNaN(newDate.getTime())) {
+                      setTempDate(newDate);
+                    }
                   } else {
                     const [hours, minutes] = e.target.value.split(':');
                     const newDate = new Date(tempDate);
-                    newDate.setHours(parseInt(hours), parseInt(minutes));
+                    newDate.setHours(parseInt(hours) || 0, parseInt(minutes) || 0);
                     setTempDate(newDate);
                   }
                 }}
