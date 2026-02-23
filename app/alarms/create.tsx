@@ -57,20 +57,12 @@ export default function CreateAlarmScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // User preferences
-  const [alternativeCalendar, setAlternativeCalendar] = useState<CalendarType | null>(null);
-
   // Alarm fields
   const [title, setTitle] = useState('');
-  const [calendarType, setCalendarType] = useState<CalendarType>('gregorian');
-  const [eventType, setEventType] = useState<string | undefined>();
   const [triggers, setTriggers] = useState<AlarmTrigger[]>([]);
-  const [recurring, setRecurring] = useState(false);
-  const [enabled, setEnabled] = useState(true);
+  const [secondaryAlarms, setSecondaryAlarms] = useState<Array<{ id?: string; title: string; offsetMinutes: number; enabled: boolean }>>([]);
 
   // UI state
-  const [showEventPicker, setShowEventPicker] = useState(false);
-  const [showCalendarTypePicker, setShowCalendarTypePicker] = useState(false);
   const [showTriggerModal, setShowTriggerModal] = useState(false);
   const [editingTriggerIndex, setEditingTriggerIndex] = useState<number | null>(null);
   const [newTrigger, setNewTrigger] = useState<AlarmTrigger>({
@@ -78,15 +70,24 @@ export default function CreateAlarmScreen() {
     value: '09:00',
   });
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [timePickerMode, setTimePickerMode] = useState<'value' | 'min' | 'max'>('value');
+  const [timePickerMode, setTimePickerMode] = useState<'value' | 'notBefore' | 'notAfter'>('value');
   const [permissions, setPermissions] = useState({
     foregroundLocation: false,
     backgroundLocation: false,
     notifications: false,
   });
 
-  // Location state - moved to trigger modal
+  // Secondary alarm modal
+  const [showSecondaryAlarmModal, setShowSecondaryAlarmModal] = useState(false);
+  const [editingSecondaryIndex, setEditingSecondaryIndex] = useState<number | null>(null);
+  const [newSecondaryAlarm, setNewSecondaryAlarm] = useState({ title: '', offsetMinutes: -5, enabled: true });
+
+  // Location state
   const [homeLocation, setHomeLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Snooze/Dismiss settings
+  const [allowSnooze, setAllowSnooze] = useState(true);
+  const [snoozeDuration, setSnoozeDuration] = useState(5);
 
   useEffect(() => {
     loadPreferencesAndAlarm();
@@ -97,17 +98,6 @@ export default function CreateAlarmScreen() {
     setLoading(true);
 
     try {
-      // Load user preferences to get alternative calendar setting
-      const prefsResponse = await authenticatedGet<any>('/api/user-preferences');
-      const prefs = (prefsResponse as any)?.data || prefsResponse;
-      const userAltCalendar = prefs.alternativeCalendar as CalendarType | undefined;
-      
-      console.log('User alternative calendar preference:', userAltCalendar);
-      setAlternativeCalendar(userAltCalendar === 'gregorian' ? null : (userAltCalendar || null));
-      
-      // Always default to Gregorian calendar
-      setCalendarType('gregorian');
-
       // Check permissions
       await checkPermissions();
 
@@ -181,11 +171,20 @@ export default function CreateAlarmScreen() {
       const alarm = (response as any)?.data || response;
 
       setTitle(alarm.title);
-      setCalendarType(alarm.calendarType || 'gregorian');
-      setEventType(alarm.eventType);
       setTriggers(alarm.triggers || []);
-      setRecurring(alarm.recurring ?? false);
-      setEnabled(alarm.enabled ?? true);
+      
+      // Load secondary alarms if they exist
+      if ((alarm as any).secondaryAlarms) {
+        setSecondaryAlarms((alarm as any).secondaryAlarms);
+      }
+      
+      // Load snooze settings if they exist
+      if ((alarm as any).allowSnooze !== undefined) {
+        setAllowSnooze((alarm as any).allowSnooze);
+      }
+      if ((alarm as any).snoozeDuration) {
+        setSnoozeDuration((alarm as any).snoozeDuration);
+      }
 
       console.log('Alarm loaded for editing');
     } catch (err: any) {
@@ -207,7 +206,7 @@ export default function CreateAlarmScreen() {
   };
 
   const addTrigger = () => {
-    console.log('User tapped Add Alternative Alarm Time');
+    console.log('User tapped Add Trigger');
     setNewTrigger({ type: 'time', value: '09:00' });
     setEditingTriggerIndex(null);
     setShowTriggerModal(true);
@@ -239,12 +238,52 @@ export default function CreateAlarmScreen() {
       console.log('New trigger added');
     }
     setShowTriggerModal(false);
-    setError(''); // Clear any errors
+    setError('');
   };
 
   const removeTrigger = (index: number) => {
     console.log('User tapped Remove Trigger at index:', index);
     setTriggers(triggers.filter((_, i) => i !== index));
+  };
+
+  const addSecondaryAlarm = () => {
+    console.log('User tapped Add Secondary Alarm');
+    setNewSecondaryAlarm({ title: '', offsetMinutes: -5, enabled: true });
+    setEditingSecondaryIndex(null);
+    setShowSecondaryAlarmModal(true);
+  };
+
+  const editSecondaryAlarm = (index: number) => {
+    console.log('User tapped Edit Secondary Alarm at index:', index);
+    setNewSecondaryAlarm({ ...secondaryAlarms[index] });
+    setEditingSecondaryIndex(index);
+    setShowSecondaryAlarmModal(true);
+  };
+
+  const saveSecondaryAlarm = () => {
+    console.log('User tapped Save Secondary Alarm');
+    
+    if (!newSecondaryAlarm.title.trim()) {
+      setError('Please enter a title for the secondary alarm');
+      return;
+    }
+    
+    if (editingSecondaryIndex !== null) {
+      const updated = [...secondaryAlarms];
+      updated[editingSecondaryIndex] = newSecondaryAlarm;
+      setSecondaryAlarms(updated);
+      console.log('Secondary alarm updated at index:', editingSecondaryIndex);
+    } else {
+      setSecondaryAlarms([...secondaryAlarms, newSecondaryAlarm]);
+      console.log('New secondary alarm added');
+    }
+    setShowSecondaryAlarmModal(false);
+    setError('');
+  };
+
+  const removeSecondaryAlarm = (index: number) => {
+    console.log('User tapped Remove Secondary Alarm at index:', index);
+    setSecondaryAlarms(secondaryAlarms.filter((_, i) => i !== index));
   };
 
   const handleSave = async () => {
@@ -267,12 +306,11 @@ export default function CreateAlarmScreen() {
       const timezone = getLocalTimezone();
       const alarmData: any = {
         title: title.trim(),
-        calendarType,
-        eventType,
         triggers,
-        recurring,
-        enabled,
         timezone,
+        secondaryAlarms,
+        allowSnooze,
+        snoozeDuration,
       };
 
       // Add goalId if creating from goal
@@ -344,10 +382,10 @@ export default function CreateAlarmScreen() {
 
     if (timePickerMode === 'value') {
       setNewTrigger({ ...newTrigger, value: timeString });
-    } else if (timePickerMode === 'min') {
-      setNewTrigger({ ...newTrigger, min: timeString });
-    } else if (timePickerMode === 'max') {
-      setNewTrigger({ ...newTrigger, max: timeString });
+    } else if (timePickerMode === 'notBefore') {
+      setNewTrigger({ ...newTrigger, notBefore: timeString });
+    } else if (timePickerMode === 'notAfter') {
+      setNewTrigger({ ...newTrigger, notAfter: timeString });
     }
 
     setShowTimePicker(false);
@@ -371,6 +409,22 @@ export default function CreateAlarmScreen() {
     return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
+  const formatOffsetMinutes = (minutes: number): string => {
+    const absMinutes = Math.abs(minutes);
+    const before = minutes < 0;
+    
+    if (absMinutes < 60) {
+      const minuteText = `${absMinutes} minute${absMinutes !== 1 ? 's' : ''}`;
+      return before ? `${minuteText} before` : `${minuteText} after`;
+    } else {
+      const hours = Math.floor(absMinutes / 60);
+      const mins = absMinutes % 60;
+      const hourText = `${hours} hour${hours !== 1 ? 's' : ''}`;
+      const minText = mins > 0 ? ` ${mins} min` : '';
+      return before ? `${hourText}${minText} before` : `${hourText}${minText} after`;
+    }
+  };
+
   const renderTriggerItem = (trigger: AlarmTrigger, index: number) => {
     let triggerText = '';
 
@@ -380,16 +434,14 @@ export default function CreateAlarmScreen() {
         break;
       case 'astronomical':
         triggerText = `Astronomical: ${trigger.value}`;
-        if (trigger.min) triggerText += ` (not before ${formatTime12Hour(trigger.min)})`;
-        if (trigger.max) triggerText += ` (not after ${formatTime12Hour(trigger.max)})`;
+        if (trigger.notBefore) triggerText += ` (not before ${formatTime12Hour(trigger.notBefore)})`;
+        if (trigger.notAfter) triggerText += ` (not after ${formatTime12Hour(trigger.notAfter)})`;
         break;
       case 'location':
         triggerText = `Location: ${trigger.value}`;
+        if (trigger.notBefore) triggerText += ` (not before ${formatTime12Hour(trigger.notBefore)})`;
+        if (trigger.notAfter) triggerText += ` (not after ${formatTime12Hour(trigger.notAfter)})`;
         break;
-    }
-
-    if (trigger.logic) {
-      triggerText += ` [${trigger.logic}]`;
     }
 
     return (
@@ -417,6 +469,37 @@ export default function CreateAlarmScreen() {
     );
   };
 
+  const renderSecondaryAlarmItem = (alarm: any, index: number) => {
+    const offsetText = formatOffsetMinutes(alarm.offsetMinutes);
+    
+    return (
+      <View key={index} style={styles.triggerItem}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.triggerText}>{alarm.title}</Text>
+          <Text style={styles.secondaryAlarmOffset}>{offsetText} 1st alarm</Text>
+        </View>
+        <View style={styles.triggerActions}>
+          <TouchableOpacity onPress={() => editSecondaryAlarm(index)}>
+            <IconSymbol
+              ios_icon_name="pencil"
+              android_material_icon_name="edit"
+              size={20}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => removeSecondaryAlarm(index)}>
+            <IconSymbol
+              ios_icon_name="trash"
+              android_material_icon_name="delete"
+              size={20}
+              color={colors.error}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -426,12 +509,6 @@ export default function CreateAlarmScreen() {
         </View>
       </SafeAreaView>
     );
-  }
-
-  const showCalendarTypeSelector = alternativeCalendar !== null;
-  const calendarOptions = ['gregorian'];
-  if (alternativeCalendar) {
-    calendarOptions.push(alternativeCalendar);
   }
 
   const isExpoGo = Constants.appOwnership === 'expo';
@@ -475,7 +552,7 @@ export default function CreateAlarmScreen() {
             </View>
           ) : null}
 
-          {/* Goal Schedule Info Banner - shown when creating alarm from a goal */}
+          {/* Goal Schedule Info Banner */}
           {isFromGoal && !isEditing && (
             <View style={styles.scheduleInfoBanner}>
               <IconSymbol
@@ -532,59 +609,12 @@ export default function CreateAlarmScreen() {
             />
           </View>
 
-          {/* Calendar Type - Only show if alternative calendar is active */}
-          {showCalendarTypeSelector && (
-            <View style={styles.section}>
-              <Text style={styles.label}>Calendar Type</Text>
-              <TouchableOpacity
-                style={styles.picker}
-                onPress={() => setShowCalendarTypePicker(true)}
-              >
-                <Text style={styles.pickerText}>
-                  {calendarType.charAt(0).toUpperCase() + calendarType.slice(1)}
-                </Text>
-                <IconSymbol
-                  ios_icon_name="chevron.down"
-                  android_material_icon_name="arrow-drop-down"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-              <Text style={styles.helpText}>
-                Choose between Gregorian and {alternativeCalendar} calendar
-              </Text>
-            </View>
-          )}
-
-          {/* Event Type (if Hebrew calendar selected) */}
-          {calendarType === 'hebrew' && (
-            <View style={styles.section}>
-              <Text style={styles.label}>Event Type (Optional)</Text>
-              <TouchableOpacity
-                style={styles.picker}
-                onPress={() => setShowEventPicker(true)}
-              >
-                <Text style={styles.pickerText}>
-                  {eventType
-                    ? HEBREW_EVENTS.find(e => e.value === eventType)?.label
-                    : 'Select Hebrew event'}
-                </Text>
-                <IconSymbol
-                  ios_icon_name="chevron.down"
-                  android_material_icon_name="arrow-drop-down"
-                  size={20}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Triggers */}
+          {/* Primary Triggers */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View>
-                <Text style={styles.label}>Time *</Text>
-                <Text style={styles.helpText}>Primary alarm time</Text>
+                <Text style={styles.label}>Primary Alarm *</Text>
+                <Text style={styles.helpText}>Set when the alarm should trigger</Text>
               </View>
             </View>
 
@@ -601,42 +631,67 @@ export default function CreateAlarmScreen() {
                 size={20}
                 color={colors.primary}
               />
-              <Text style={styles.addTriggerText}>Add Alternative Alarm Time</Text>
+              <Text style={styles.addTriggerText}>Add Trigger</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Recurring */}
+          {/* Secondary Alarms */}
           <View style={styles.section}>
-            <View style={styles.switchRow}>
-              <Text style={styles.label}>Recurring</Text>
-              <Switch
-                value={recurring}
-                onValueChange={setRecurring}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={recurring ? colors.background : colors.textSecondary}
-              />
+            <View style={styles.sectionHeader}>
+              <View>
+                <Text style={styles.label}>Secondary Alarms</Text>
+                <Text style={styles.helpText}>Additional reminders based on the primary alarm</Text>
+              </View>
             </View>
-            <Text style={styles.helpText}>
-              Automatically recalculate and reschedule this alarm
-            </Text>
+
+            {secondaryAlarms.length === 0 ? (
+              <Text style={styles.emptyText}>No secondary alarms added</Text>
+            ) : (
+              secondaryAlarms.map((alarm, index) => renderSecondaryAlarmItem(alarm, index))
+            )}
+
+            <TouchableOpacity style={styles.addTriggerButton} onPress={addSecondaryAlarm}>
+              <IconSymbol
+                ios_icon_name="plus.circle"
+                android_material_icon_name="add-circle"
+                size={20}
+                color={colors.primary}
+              />
+              <Text style={styles.addTriggerText}>Add Secondary Alarm</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Enabled */}
+          {/* Snooze Settings */}
           <View style={styles.section}>
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Enabled</Text>
-                <Text style={styles.helpText}>
-                  Toggle to activate or deactivate this alarm without deleting it
-                </Text>
+                <Text style={styles.label}>Allow Snooze</Text>
+                <Text style={styles.helpText}>Enable snooze option when alarm goes off</Text>
               </View>
               <Switch
-                value={enabled}
-                onValueChange={setEnabled}
+                value={allowSnooze}
+                onValueChange={setAllowSnooze}
                 trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={enabled ? colors.background : colors.textSecondary}
+                thumbColor={allowSnooze ? colors.background : colors.textSecondary}
               />
             </View>
+
+            {allowSnooze && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.label}>Snooze Duration (minutes)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={snoozeDuration.toString()}
+                  onChangeText={(text) => {
+                    const num = parseInt(text) || 5;
+                    setSnoozeDuration(Math.max(1, Math.min(60, num)));
+                  }}
+                  placeholder="5"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+              </View>
+            )}
           </View>
 
           {/* Save Button */}
@@ -655,66 +710,6 @@ export default function CreateAlarmScreen() {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Calendar Type Picker Modal */}
-      <Modal visible={showCalendarTypePicker} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Calendar Type</Text>
-            <ScrollView style={{ maxHeight: 300 }}>
-              {calendarOptions.map(cal => (
-                <TouchableOpacity
-                  key={cal}
-                  style={styles.modalOption}
-                  onPress={() => {
-                    setCalendarType(cal as CalendarType);
-                    setShowCalendarTypePicker(false);
-                  }}
-                >
-                  <Text style={styles.modalOptionText}>
-                    {cal.charAt(0).toUpperCase() + cal.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.modalCancel}
-              onPress={() => setShowCalendarTypePicker(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Event Type Picker Modal */}
-      <Modal visible={showEventPicker} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Hebrew Event</Text>
-            <ScrollView style={{ maxHeight: 400 }}>
-              {HEBREW_EVENTS.map(event => (
-                <TouchableOpacity
-                  key={event.value}
-                  style={styles.modalOption}
-                  onPress={() => {
-                    setEventType(event.value);
-                    setShowEventPicker(false);
-                  }}
-                >
-                  <Text style={styles.modalOptionText}>{event.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity
-              style={styles.modalCancel}
-              onPress={() => setShowEventPicker(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Trigger Modal */}
       <Modal visible={showTriggerModal} transparent animationType="slide">
@@ -775,38 +770,50 @@ export default function CreateAlarmScreen() {
                       </Text>
                     </TouchableOpacity>
                     
-                    {/* AND/OR Logic - Show AFTER time selection */}
-                    <Text style={styles.label}>Combine with other triggers using</Text>
-                    <View style={styles.triggerTypeRow}>
-                      {(['AND', 'OR'] as const).map(logic => (
-                        <TouchableOpacity
-                          key={logic}
-                          style={[
-                            styles.triggerTypeButton,
-                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
-                          ]}
-                          onPress={() =>
-                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.triggerTypeText,
-                              newTrigger.logic === logic && styles.triggerTypeTextActive,
-                            ]}
-                          >
-                            {logic}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                    {/* Not Before / Not After for Time triggers */}
+                    <Text style={styles.label}>Not Before (optional)</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        setTimePickerMode('notBefore');
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="schedule"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.timePickerButtonText}>
+                        {newTrigger.notBefore ? formatTime12Hour(newTrigger.notBefore) : 'Set minimum time'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.label}>Not After (optional)</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        setTimePickerMode('notAfter');
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="schedule"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.timePickerButtonText}>
+                        {newTrigger.notAfter ? formatTime12Hour(newTrigger.notAfter) : 'Set maximum time'}
+                      </Text>
+                    </TouchableOpacity>
                   </>
                 )}
 
                 {newTrigger.type === 'astronomical' && (
                   <>
                     <Text style={styles.label}>Astronomical Event</Text>
-                    {/* Fixed: Non-scrollable event selection */}
                     <View>
                       {ASTRONOMICAL_EVENTS.map(event => (
                         <TouchableOpacity
@@ -833,7 +840,7 @@ export default function CreateAlarmScreen() {
                     <TouchableOpacity
                       style={styles.timePickerButton}
                       onPress={() => {
-                        setTimePickerMode('min');
+                        setTimePickerMode('notBefore');
                         setShowTimePicker(true);
                       }}
                     >
@@ -844,7 +851,7 @@ export default function CreateAlarmScreen() {
                         color={colors.primary}
                       />
                       <Text style={styles.timePickerButtonText}>
-                        {newTrigger.min ? formatTime12Hour(newTrigger.min) : 'Set minimum time'}
+                        {newTrigger.notBefore ? formatTime12Hour(newTrigger.notBefore) : 'Set minimum time'}
                       </Text>
                     </TouchableOpacity>
 
@@ -852,7 +859,7 @@ export default function CreateAlarmScreen() {
                     <TouchableOpacity
                       style={styles.timePickerButton}
                       onPress={() => {
-                        setTimePickerMode('max');
+                        setTimePickerMode('notAfter');
                         setShowTimePicker(true);
                       }}
                     >
@@ -863,35 +870,9 @@ export default function CreateAlarmScreen() {
                         color={colors.primary}
                       />
                       <Text style={styles.timePickerButtonText}>
-                        {newTrigger.max ? formatTime12Hour(newTrigger.max) : 'Set maximum time'}
+                        {newTrigger.notAfter ? formatTime12Hour(newTrigger.notAfter) : 'Set maximum time'}
                       </Text>
                     </TouchableOpacity>
-                    
-                    {/* AND/OR Logic - Show AFTER astronomical event selection */}
-                    <Text style={styles.label}>Combine with other triggers using</Text>
-                    <View style={styles.triggerTypeRow}>
-                      {(['AND', 'OR'] as const).map(logic => (
-                        <TouchableOpacity
-                          key={logic}
-                          style={[
-                            styles.triggerTypeButton,
-                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
-                          ]}
-                          onPress={() =>
-                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.triggerTypeText,
-                              newTrigger.logic === logic && styles.triggerTypeTextActive,
-                            ]}
-                          >
-                            {logic}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
                   </>
                 )}
 
@@ -980,31 +961,44 @@ export default function CreateAlarmScreen() {
                       </View>
                     )}
                     
-                    {/* AND/OR Logic - Show AFTER location selection */}
-                    <Text style={styles.label}>Combine with other triggers using</Text>
-                    <View style={styles.triggerTypeRow}>
-                      {(['AND', 'OR'] as const).map(logic => (
-                        <TouchableOpacity
-                          key={logic}
-                          style={[
-                            styles.triggerTypeButton,
-                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
-                          ]}
-                          onPress={() =>
-                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.triggerTypeText,
-                              newTrigger.logic === logic && styles.triggerTypeTextActive,
-                            ]}
-                          >
-                            {logic}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                    {/* Not Before / Not After for Location triggers */}
+                    <Text style={styles.label}>Not Before (optional)</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        setTimePickerMode('notBefore');
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="schedule"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.timePickerButtonText}>
+                        {newTrigger.notBefore ? formatTime12Hour(newTrigger.notBefore) : 'Set minimum time'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.label}>Not After (optional)</Text>
+                    <TouchableOpacity
+                      style={styles.timePickerButton}
+                      onPress={() => {
+                        setTimePickerMode('notAfter');
+                        setShowTimePicker(true);
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="clock"
+                        android_material_icon_name="schedule"
+                        size={20}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.timePickerButtonText}>
+                        {newTrigger.notAfter ? formatTime12Hour(newTrigger.notAfter) : 'Set maximum time'}
+                      </Text>
+                    </TouchableOpacity>
                   </>
                 )}
               </ScrollView>
@@ -1030,14 +1024,79 @@ export default function CreateAlarmScreen() {
         </View>
       </Modal>
 
-      {/* Time Picker Modal - Using cross-platform DatePickerModal */}
+      {/* Secondary Alarm Modal */}
+      <Modal visible={showSecondaryAlarmModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ flex: 1, justifyContent: 'flex-end' }}
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>
+                {editingSecondaryIndex !== null ? 'Edit Secondary Alarm' : 'Add Secondary Alarm'}
+              </Text>
+
+              <ScrollView style={{ maxHeight: 400 }} nestedScrollEnabled={true}>
+                <Text style={styles.label}>Title *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newSecondaryAlarm.title}
+                  onChangeText={(text) => setNewSecondaryAlarm({ ...newSecondaryAlarm, title: text })}
+                  placeholder="e.g. 5 min reminder"
+                  placeholderTextColor={colors.textSecondary}
+                />
+
+                <Text style={styles.label}>Offset (minutes)</Text>
+                <Text style={styles.helpText}>Negative = before, Positive = after</Text>
+                <TextInput
+                  style={styles.input}
+                  value={newSecondaryAlarm.offsetMinutes.toString()}
+                  onChangeText={(text) => {
+                    const num = parseInt(text) || 0;
+                    setNewSecondaryAlarm({ ...newSecondaryAlarm, offsetMinutes: num });
+                  }}
+                  placeholder="-5"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+                
+                <View style={styles.offsetExamples}>
+                  <Text style={styles.offsetExampleTitle}>Examples:</Text>
+                  <Text style={styles.offsetExampleText}>• -5 = 5 minutes before 1st alarm</Text>
+                  <Text style={styles.offsetExampleText}>• -15 = 15 minutes before 1st alarm</Text>
+                  <Text style={styles.offsetExampleText}>• 10 = 10 minutes after 1st alarm</Text>
+                </View>
+              </ScrollView>
+
+              <View style={styles.triggerModalButtons}>
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => setShowSecondaryAlarmModal(false)}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.triggerSaveButton}
+                  onPress={saveSecondaryAlarm}
+                >
+                  <Text style={styles.triggerSaveButtonText}>
+                    {editingSecondaryIndex !== null ? 'Update' : 'Add'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Time Picker Modal */}
       <DatePickerModal
         visible={showTimePicker}
         mode="time"
         value={parseTimeString(
           timePickerMode === 'value' ? (newTrigger.value || '09:00') :
-          timePickerMode === 'min' ? (newTrigger.min || '06:00') :
-          (newTrigger.max || '22:00')
+          timePickerMode === 'notBefore' ? (newTrigger.notBefore || '06:00') :
+          (newTrigger.notAfter || '22:00')
         )}
         onConfirm={handleTimePickerConfirm}
         onCancel={handleTimePickerCancel}
@@ -1164,20 +1223,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
-  picker: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  pickerText: {
-    fontSize: 16,
-    color: colors.text,
-  },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1203,6 +1248,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     flex: 1,
+  },
+  secondaryAlarmOffset: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
   triggerActions: {
     flexDirection: 'row',
@@ -1396,5 +1446,22 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontSize: 16,
     fontWeight: '600',
+  },
+  offsetExamples: {
+    backgroundColor: `${colors.primary}10`,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  offsetExampleTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  offsetExampleText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 2,
   },
 });
