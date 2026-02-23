@@ -399,6 +399,12 @@ export default function CreateGoalScreen() {
         scheduleDaysOfWeek: scheduleConfig.weekdays,
       };
       
+      // FIXED: Include alarms field when editing a goal
+      if (editingGoalId && goalAlarms.length > 0) {
+        goalData.alarms = goalAlarms.map(alarm => ({ id: alarm.id }));
+        console.log('[API] Including alarms in goal update:', goalData.alarms);
+      }
+      
       console.log('[API] Submitting goal data:', JSON.stringify(goalData, null, 2));
 
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
