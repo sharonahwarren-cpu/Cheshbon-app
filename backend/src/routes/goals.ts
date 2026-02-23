@@ -284,23 +284,6 @@ export function registerGoalRoutes(app: App) {
     );
 
     try {
-      // Validate schedule type - reject "Daily"
-      const scheduleType = body.scheduleType || 'Always Active';
-      const validScheduleTypes = ['Always Active', 'Weekly', 'Fortnightly', 'Monthly', 'Yearly'];
-
-      if (!validScheduleTypes.includes(scheduleType)) {
-        app.logger.warn(
-          { userId: session.user.id, scheduleType, validTypes: validScheduleTypes },
-          'Invalid schedule type provided'
-        );
-        return reply.status(400).send({ error: `Invalid schedule type. Must be one of: ${validScheduleTypes.join(', ')}` });
-      }
-
-      if (scheduleType === 'Daily') {
-        app.logger.warn({ userId: session.user.id }, 'Daily schedule type is not allowed');
-        return reply.status(400).send({ error: 'Daily schedule type is not allowed. Please use Weekly, Monthly, Yearly, or Always Active.' });
-      }
-
       // Convert ISO 8601 strings to UTC timestamps
       const startDate = body.startDate ? new Date(body.startDate) : null;
       const endDate = body.endDate ? new Date(body.endDate) : null;
@@ -311,34 +294,9 @@ export function registerGoalRoutes(app: App) {
           userId: session.user.id,
           startDate: startDate?.toISOString(),
           endDate: endDate?.toISOString(),
-          scheduleType,
         },
-        'Converting goal dates to UTC and applying schedule type priority'
+        'Converting goal dates to UTC'
       );
-
-      // Apply schedule type priority - only keep relevant configuration for the selected type
-      let scheduleDaysOfWeek = null;
-      let scheduleDatesOfMonth = null;
-      let scheduleNthDayOfMonth = null;
-      let scheduleMonthlyRange = null;
-      let scheduleFortnightEvenOdd = null;
-      let scheduleDatesOfYear = null;
-      let scheduleWeekendsOnly = body.scheduleWeekendsOnly || false;
-      let scheduleWeekdaysOnly = body.scheduleWeekdaysOnly || false;
-
-      // Only populate configuration fields that match the selected schedule type
-      if (scheduleType === 'Weekly') {
-        scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
-      } else if (scheduleType === 'Fortnightly') {
-        scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
-        scheduleFortnightEvenOdd = body.scheduleFortnightEvenOdd || null;
-      } else if (scheduleType === 'Monthly') {
-        scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
-        scheduleNthDayOfMonth = body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null;
-        scheduleMonthlyRange = body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null;
-      } else if (scheduleType === 'Yearly') {
-        scheduleDatesOfYear = (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null;
-      }
 
       const goals = await app.db
         .insert(schema.goals)
@@ -355,12 +313,12 @@ export function registerGoalRoutes(app: App) {
           behaviorCategories: (body.behaviorCategories?.length ? body.behaviorCategories : null) as string[] | null,
           type: body.type || 'Proactive',
           strategyIds: (body.strategyIds?.length ? body.strategyIds : null) as string[] | null,
-          scheduleType,
+          scheduleType: body.scheduleType || 'Always Active',
           scheduleTimesPerDay: body.scheduleTimesPerDay || null,
-          scheduleDaysOfWeek,
-          scheduleDatesOfMonth,
-          scheduleNthDayOfMonth,
-          scheduleDatesOfYear,
+          scheduleDaysOfWeek: (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null,
+          scheduleDatesOfMonth: (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null,
+          scheduleNthDayOfMonth: body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null,
+          scheduleDatesOfYear: (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null,
           rewardCurrencyId: body.reward?.currencyId || null,
           rewardSuccesses: body.reward?.successes || null,
           rewardAmount: body.reward?.amount || null,
@@ -371,10 +329,10 @@ export function registerGoalRoutes(app: App) {
           calendarType: body.calendarType || null,
           scheduleRecurrenceType: body.scheduleRecurrenceType || 'daily',
           scheduleTimesPerDayDetails: body.scheduleTimesPerDayDetails ? JSON.stringify(body.scheduleTimesPerDayDetails) : null,
-          scheduleWeekendsOnly,
-          scheduleWeekdaysOnly,
-          scheduleFortnightEvenOdd,
-          scheduleMonthlyRange,
+          scheduleWeekendsOnly: body.scheduleWeekendsOnly || false,
+          scheduleWeekdaysOnly: body.scheduleWeekdaysOnly || false,
+          scheduleFortnightEvenOdd: body.scheduleFortnightEvenOdd || null,
+          scheduleMonthlyRange: body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null,
           scheduleMonthlyRandomCount: body.scheduleMonthlyRandomCount || null,
           scheduleExclusions: body.scheduleExclusions ? JSON.stringify(body.scheduleExclusions) : null,
           scheduleDateOfYearMonths: (body.selectedWeekdays?.length ? body.selectedWeekdays : null) as number[] | null,
@@ -464,22 +422,6 @@ export function registerGoalRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
-      // Validate schedule type if provided
-      if (body.scheduleType !== undefined) {
-        const validScheduleTypes = ['Always Active', 'Weekly', 'Fortnightly', 'Monthly', 'Yearly'];
-        if (!validScheduleTypes.includes(body.scheduleType)) {
-          app.logger.warn(
-            { userId: session.user.id, goalId: id, scheduleType: body.scheduleType, validTypes: validScheduleTypes },
-            'Invalid schedule type provided'
-          );
-          return reply.status(400).send({ error: `Invalid schedule type. Must be one of: ${validScheduleTypes.join(', ')}` });
-        }
-        if (body.scheduleType === 'Daily') {
-          app.logger.warn({ userId: session.user.id, goalId: id }, 'Daily schedule type is not allowed');
-          return reply.status(400).send({ error: 'Daily schedule type is not allowed. Please use Weekly, Monthly, Yearly, or Always Active.' });
-        }
-      }
-
       const updateData: Record<string, unknown> = {};
       if (body.title !== undefined) updateData.title = body.title;
       if (body.description !== undefined) updateData.description = body.description || null;
@@ -488,56 +430,7 @@ export function registerGoalRoutes(app: App) {
       if (body.behaviorCategories !== undefined) updateData.behaviorCategories = (body.behaviorCategories?.length ? body.behaviorCategories : null) as string[] | null;
       if (body.type !== undefined) updateData.type = body.type;
       if (body.strategyIds !== undefined) updateData.strategyIds = (body.strategyIds?.length ? body.strategyIds : null) as string[] | null;
-
-      // Handle schedule type with priority logic
-      if (body.scheduleType !== undefined) {
-        const scheduleType = body.scheduleType;
-        updateData.scheduleType = scheduleType;
-
-        // Clear all non-priority schedule fields based on the selected schedule type
-        if (scheduleType === 'Always Active') {
-          updateData.scheduleDaysOfWeek = null;
-          updateData.scheduleDatesOfMonth = null;
-          updateData.scheduleNthDayOfMonth = null;
-          updateData.scheduleMonthlyRange = null;
-          updateData.scheduleFortnightEvenOdd = null;
-          updateData.scheduleDatesOfYear = null;
-          updateData.scheduleWeekendsOnly = false;
-          updateData.scheduleWeekdaysOnly = false;
-          app.logger.info({ userId: session.user.id, goalId: id }, 'Clearing all schedule configuration for Always Active schedule type');
-        } else if (scheduleType === 'Weekly') {
-          updateData.scheduleDatesOfMonth = null;
-          updateData.scheduleNthDayOfMonth = null;
-          updateData.scheduleMonthlyRange = null;
-          updateData.scheduleFortnightEvenOdd = null;
-          updateData.scheduleDatesOfYear = null;
-          app.logger.info({ userId: session.user.id, goalId: id }, 'Applying Weekly schedule type priority - clearing non-weekly configs');
-        } else if (scheduleType === 'Fortnightly') {
-          updateData.scheduleDatesOfMonth = null;
-          updateData.scheduleNthDayOfMonth = null;
-          updateData.scheduleMonthlyRange = null;
-          updateData.scheduleDatesOfYear = null;
-          updateData.scheduleWeekendsOnly = false;
-          updateData.scheduleWeekdaysOnly = false;
-          app.logger.info({ userId: session.user.id, goalId: id }, 'Applying Fortnightly schedule type priority - clearing non-fortnightly configs');
-        } else if (scheduleType === 'Monthly') {
-          updateData.scheduleDaysOfWeek = null;
-          updateData.scheduleFortnightEvenOdd = null;
-          updateData.scheduleDatesOfYear = null;
-          updateData.scheduleWeekendsOnly = false;
-          updateData.scheduleWeekdaysOnly = false;
-          app.logger.info({ userId: session.user.id, goalId: id }, 'Applying Monthly schedule type priority - clearing non-monthly configs');
-        } else if (scheduleType === 'Yearly') {
-          updateData.scheduleDaysOfWeek = null;
-          updateData.scheduleDatesOfMonth = null;
-          updateData.scheduleNthDayOfMonth = null;
-          updateData.scheduleMonthlyRange = null;
-          updateData.scheduleFortnightEvenOdd = null;
-          updateData.scheduleWeekendsOnly = false;
-          updateData.scheduleWeekdaysOnly = false;
-          app.logger.info({ userId: session.user.id, goalId: id }, 'Applying Yearly schedule type priority - clearing non-yearly configs');
-        }
-      }
+      if (body.scheduleType !== undefined) updateData.scheduleType = body.scheduleType;
       if (body.scheduleTimesPerDay !== undefined) updateData.scheduleTimesPerDay = body.scheduleTimesPerDay || null;
       if (body.targetDate !== undefined) updateData.targetDate = body.targetDate ? new Date(body.targetDate) : null;
       if (body.startDate !== undefined) updateData.startDate = body.startDate ? new Date(body.startDate) : null;
@@ -550,36 +443,12 @@ export function registerGoalRoutes(app: App) {
           );
         }
       }
-      // Only apply weekday/date/range updates if not overridden by schedule type priority
-      if (body.scheduleType === undefined) {
-        if (body.selectedWeekdays !== undefined || body.selectedFortnightDays !== undefined) {
-          updateData.scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
-        }
-        if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
-        if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null;
-        if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null;
-      } else {
-        // If schedule type is being updated, apply configuration updates based on type
-        const scheduleType = body.scheduleType;
-        if (scheduleType === 'Weekly') {
-          if (body.selectedWeekdays !== undefined || body.selectedFortnightDays !== undefined) {
-            updateData.scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
-          }
-        } else if (scheduleType === 'Fortnightly') {
-          if (body.selectedWeekdays !== undefined || body.selectedFortnightDays !== undefined) {
-            updateData.scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
-          }
-          if (body.scheduleFortnightEvenOdd !== undefined) {
-            updateData.scheduleFortnightEvenOdd = body.scheduleFortnightEvenOdd || null;
-          }
-        } else if (scheduleType === 'Monthly') {
-          if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
-          if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null;
-          if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null;
-        } else if (scheduleType === 'Yearly') {
-          if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null;
-        }
+      if (body.selectedWeekdays !== undefined || body.selectedFortnightDays !== undefined) {
+        updateData.scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
       }
+      if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
+      if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null;
+      if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null;
       if (body.calendarType !== undefined) {
         const newCalendarType = body.calendarType || null;
         const oldCalendarType = existingGoal[0].calendarType;
@@ -639,8 +508,8 @@ export function registerGoalRoutes(app: App) {
       if (body.scheduleTimesPerDayDetails !== undefined) updateData.scheduleTimesPerDayDetails = body.scheduleTimesPerDayDetails ? JSON.stringify(body.scheduleTimesPerDayDetails) : null;
       if (body.scheduleWeekendsOnly !== undefined) updateData.scheduleWeekendsOnly = body.scheduleWeekendsOnly;
       if (body.scheduleWeekdaysOnly !== undefined) updateData.scheduleWeekdaysOnly = body.scheduleWeekdaysOnly;
-      if (body.scheduleFortnightEvenOdd !== undefined && body.scheduleType === undefined) updateData.scheduleFortnightEvenOdd = body.scheduleFortnightEvenOdd || null;
-      if (body.scheduleMonthlyRange !== undefined && body.scheduleType === undefined) updateData.scheduleMonthlyRange = body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null;
+      if (body.scheduleFortnightEvenOdd !== undefined) updateData.scheduleFortnightEvenOdd = body.scheduleFortnightEvenOdd || null;
+      if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null;
       if (body.scheduleMonthlyRandomCount !== undefined) updateData.scheduleMonthlyRandomCount = body.scheduleMonthlyRandomCount || null;
       if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = body.scheduleExclusions ? JSON.stringify(body.scheduleExclusions) : null;
       updateData.updatedAt = new Date();
@@ -874,7 +743,6 @@ export function registerGoalRoutes(app: App) {
       const scheduleConfig: ScheduleConfig = {
         calendarType: (goal.calendarType as any) || 'gregorian',
         recurrenceType: (goal.scheduleRecurrenceType as any) || 'daily',
-        scheduleType: (goal.scheduleType as any) || 'Always Active',
         startDate: goal.startDate,
         endDate: goal.endDate,
         timezone: timezone,
@@ -950,19 +818,19 @@ export function registerGoalRoutes(app: App) {
 
       const timezone = prefs[0]?.timezone || 'UTC';
 
-      // Build summary config from goal, respecting schedule type priority
+      // Build summary config from goal
       const summaryConfig = {
-        scheduleType: goal.scheduleType || 'Always Active',
+        scheduleType: goal.scheduleType,
         scheduleRecurrenceType: goal.scheduleRecurrenceType,
-        scheduleDaysOfWeek: goal.scheduleType === 'Weekly' || goal.scheduleType === 'Fortnightly' ? goal.scheduleDaysOfWeek : undefined,
-        scheduleDatesOfMonth: goal.scheduleType === 'Monthly' ? goal.scheduleDatesOfMonth : undefined,
-        scheduleNthDayOfMonth: goal.scheduleType === 'Monthly' ? (goal.scheduleNthDayOfMonth ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth) : undefined) : undefined,
-        scheduleMonthlyRange: goal.scheduleType === 'Monthly' ? (goal.scheduleMonthlyRange ? (typeof goal.scheduleMonthlyRange === 'string' ? JSON.parse(goal.scheduleMonthlyRange) : goal.scheduleMonthlyRange) : undefined) : undefined,
-        scheduleFortnightEvenOdd: goal.scheduleType === 'Fortnightly' ? goal.scheduleFortnightEvenOdd : undefined,
-        scheduleDatesOfYear: goal.scheduleType === 'Yearly' ? (goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear) : undefined) : undefined,
+        scheduleDaysOfWeek: goal.scheduleDaysOfWeek,
+        scheduleDatesOfMonth: goal.scheduleDatesOfMonth,
+        scheduleNthDayOfMonth: goal.scheduleNthDayOfMonth ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth) : undefined,
+        scheduleMonthlyRange: goal.scheduleMonthlyRange ? (typeof goal.scheduleMonthlyRange === 'string' ? JSON.parse(goal.scheduleMonthlyRange) : goal.scheduleMonthlyRange) : undefined,
+        scheduleFortnightEvenOdd: goal.scheduleFortnightEvenOdd,
+        scheduleDatesOfYear: goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear) : undefined,
         scheduleTimesPerDayDetails: goal.scheduleTimesPerDayDetails ? (typeof goal.scheduleTimesPerDayDetails === 'string' ? JSON.parse(goal.scheduleTimesPerDayDetails) : goal.scheduleTimesPerDayDetails) : undefined,
-        scheduleWeekendsOnly: (goal.scheduleType === 'Weekly' || goal.scheduleType === 'Fortnightly') ? goal.scheduleWeekendsOnly : false,
-        scheduleWeekdaysOnly: (goal.scheduleType === 'Weekly' || goal.scheduleType === 'Fortnightly') ? goal.scheduleWeekdaysOnly : false,
+        scheduleWeekendsOnly: goal.scheduleWeekendsOnly,
+        scheduleWeekdaysOnly: goal.scheduleWeekdaysOnly,
         calendarType: goal.calendarType,
         eventType: goal.eventType,
         timezone: timezone,

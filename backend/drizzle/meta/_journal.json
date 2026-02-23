@@ -134,20 +134,6 @@
       "when": 1771801170224,
       "tag": "20260222225930_right_jackal",
       "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1771838303534,
-      "tag": "20260223091823_tricky_the_liberteens",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "7",
-      "when": 1771846779858,
-      "tag": "20260223113939_married_thunderbolts",
-      "breakpoints": true
     }
   ]
 }

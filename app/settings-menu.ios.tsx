@@ -51,20 +51,6 @@ export default function SettingsMenuScreen() {
       iosIcon: 'dollarsign.circle',
       route: '/settings?section=currencies',
     },
-    {
-      id: 'mitzvot',
-      title: 'Mitzvot',
-      icon: 'star',
-      iosIcon: 'star.fill',
-      route: '/mitzvot',
-    },
-    {
-      id: 'mitzvot-categories',
-      title: 'Mitzvot Categories',
-      icon: 'label',
-      iosIcon: 'tag.fill',
-      route: '/mitzvot-categories',
-    },
   ];
 
   return (

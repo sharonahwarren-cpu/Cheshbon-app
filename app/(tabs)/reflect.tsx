@@ -100,8 +100,6 @@ interface Currency {
 interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
-  alternativeCalendar?: string;
-  useAiCheshbon?: boolean;
 }
 
 // Helper function to format date as YYYY-MM-DD in local timezone
@@ -513,22 +511,6 @@ export default function ReflectScreen() {
               </View>
             )}
           </TouchableOpacity>
-
-          {/* AI Cheshbon Button - only shown when Hebrew calendar + AI Cheshbon enabled */}
-          {userPreferences.alternativeCalendar === 'hebrew' && userPreferences.useAiCheshbon && (
-            <TouchableOpacity
-              style={styles.cheshbonButton}
-              onPress={() => router.push('/cheshbon' as any)}
-            >
-              <IconSymbol
-                ios_icon_name="mic.fill"
-                android_material_icon_name="mic"
-                size={22}
-                color="#FFFFFF"
-              />
-              <Text style={styles.cheshbonButtonText}>Do Cheshbon with AI</Text>
-            </TouchableOpacity>
-          )}
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -1019,26 +1001,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textSecondary,
     marginTop: 4,
-  },
-  cheshbonButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#7B5EA7',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#7B5EA7',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  cheshbonButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
   },
   section: {
     marginBottom: 20,

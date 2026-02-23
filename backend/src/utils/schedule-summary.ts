@@ -232,12 +232,11 @@ function summarizeAlwaysActive(): string {
  * Generate schedule summary based on configuration
  */
 export function generateScheduleSummary(config: ScheduleSummaryRequest): ScheduleSummaryResponse {
-  // Use scheduleType for priority-based system, with fallback to scheduleRecurrenceType for backward compatibility
-  const scheduleType = config.scheduleType || config.scheduleRecurrenceType || 'Always Active';
+  const recurrenceType = config.scheduleRecurrenceType || config.scheduleType || 'Always Active';
 
   let summary = '';
 
-  switch (scheduleType.toLowerCase()) {
+  switch (recurrenceType.toLowerCase()) {
     case 'daily':
       summary = summarizeDaily(config);
       break;
@@ -264,13 +263,13 @@ export function generateScheduleSummary(config: ScheduleSummaryRequest): Schedul
       break;
 
     default:
-      summary = `Scheduled with configuration: ${scheduleType}`;
+      summary = `Scheduled with configuration: ${recurrenceType}`;
   }
 
   return {
     summary,
     nextOccurrences: [],
-    recurrenceType: scheduleType,
+    recurrenceType,
     calendarType: config.calendarType,
   };
 }
@@ -309,12 +308,11 @@ function determineOccurrenceSource(
   date: Date,
   config: ScheduleSummaryRequest
 ): OccurrenceSource {
-  // Use scheduleType for priority-based system, with fallback for backward compatibility
-  const scheduleType = config.scheduleType || config.scheduleRecurrenceType || 'daily';
+  const recurrenceType = config.scheduleRecurrenceType || config.scheduleType || 'daily';
   const dayOfMonth = date.getDate();
   const dayOfWeek = date.getDay();
 
-  switch (scheduleType.toLowerCase()) {
+  switch (recurrenceType.toLowerCase()) {
     case 'daily':
       return {
         section: 'Daily',
@@ -451,7 +449,6 @@ export function getNextOccurrencesForDisplay(
     const scheduleConfig: ScheduleConfig = {
       calendarType: (config.calendarType || 'gregorian') as any,
       recurrenceType: (config.scheduleRecurrenceType || config.scheduleType || 'daily') as any,
-      scheduleType: (config.scheduleType || 'Always Active') as any,
       startDate: config.startDate,
       endDate: config.endDate,
       timezone: config.timezone || 'UTC',
