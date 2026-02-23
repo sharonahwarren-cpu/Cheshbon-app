@@ -13,6 +13,7 @@ import {
 export interface ScheduleConfig {
   calendarType: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
   recurrenceType: 'daily' | 'weekly' | 'fortnightly' | 'monthly' | 'yearly' | 'custom';
+  scheduleType?: 'Always Active' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly'; // Priority-based schedule type
   startDate?: Date;
   endDate?: Date;
   timezone: string;
@@ -101,6 +102,93 @@ export function getNextActivations(
  * Check if a specific date matches the schedule criteria
  */
 export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boolean {
+  // If scheduleType is set, use it to determine recurrence type and enforce priority
+  const scheduleType = config.scheduleType || 'Always Active';
+
+  if (scheduleType === 'Always Active') {
+    return true;
+  }
+
+  if (scheduleType === 'Weekly') {
+    const dayOfWeek = date.getDay();
+    if (config.weekendsOnly && ![0, 6].includes(dayOfWeek)) {
+      return false;
+    }
+    if (config.weekdaysOnly && [0, 6].includes(dayOfWeek)) {
+      return false;
+    }
+    if (config.daysOfWeek && !config.daysOfWeek.includes(dayOfWeek)) {
+      return false;
+    }
+    return true;
+  }
+
+  if (scheduleType === 'Fortnightly') {
+    if (!config.daysOfWeek) return false;
+    const dayOfWeek = date.getDay();
+    if (!config.daysOfWeek.includes(dayOfWeek)) {
+      return false;
+    }
+    // Check even/odd week
+    if (config.startDate) {
+      const weeksSinceStart = Math.floor((date.getTime() - config.startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) % 2;
+      if (config.fortnightEvenOdd === 'even' && weeksSinceStart !== 0) {
+        return false;
+      }
+      if (config.fortnightEvenOdd === 'odd' && weeksSinceStart !== 1) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (scheduleType === 'Monthly') {
+    const dateOfMonth = date.getDate();
+    if (config.monthlyDates && !config.monthlyDates.includes(dateOfMonth)) {
+      return false;
+    }
+    if (config.monthlyRange && (dateOfMonth < config.monthlyRange.start || dateOfMonth > config.monthlyRange.end)) {
+      return false;
+    }
+    if (config.nthDayOfMonth) {
+      return isNthDayOfMonth(date, config.nthDayOfMonth.day, config.nthDayOfMonth.nth);
+    }
+    // If no specific config but schedule type is Monthly, return true
+    return config.monthlyDates || config.monthlyRange || config.nthDayOfMonth ? false : true;
+  }
+
+  if (scheduleType === 'Yearly') {
+    const month = date.getMonth() + 1; // JavaScript months are 0-based
+    if (config.yearlyMonths && !config.yearlyMonths.includes(month)) {
+      return false;
+    }
+    if (config.calendarType === 'hebrew' && config.yearlyDatesOrRanges) {
+      return config.yearlyDatesOrRanges.some(range => {
+        if (range.days?.includes(date.getDate())) {
+          return isDateInHebrewRange(date, range.month, range.days[0], range.days[range.days.length - 1]);
+        }
+        if (range.start && range.end) {
+          return isDateInHebrewRange(date, range.month, range.start, range.end);
+        }
+        return false;
+      });
+    }
+    if (config.yearlyDatesOrRanges) {
+      return config.yearlyDatesOrRanges.some(range => {
+        if (range.month !== month) return false;
+        if (range.days) {
+          return range.days.includes(date.getDate());
+        }
+        if (range.start && range.end) {
+          return date.getDate() >= range.start && date.getDate() <= range.end;
+        }
+        return false;
+      });
+    }
+    return true;
+  }
+
+  // Fallback to original recurrence type logic for backward compatibility
   switch (config.recurrenceType) {
     case 'daily':
       return true;
