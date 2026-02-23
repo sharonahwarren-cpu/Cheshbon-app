@@ -666,4 +666,186 @@ export function registerMitzvotRoutes(app: App) {
       throw error;
     }
   });
+
+  // POST /api/mitzvot/import-csv - Import mitzvot from CSV file
+  app.fastify.post('/api/mitzvot/import-csv', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Importing mitzvot from CSV');
+
+    try {
+      const data = await request.file();
+      if (!data) {
+        return reply.status(400).send({ error: 'No file provided' });
+      }
+
+      // Validate file type
+      if (!data.mimetype.includes('csv') && !data.filename.endsWith('.csv')) {
+        app.logger.warn({ userId: session.user.id, filename: data.filename }, 'Invalid file type');
+        return reply.status(400).send({ error: 'File must be a CSV file' });
+      }
+
+      // Validate file size (max 5MB)
+      const buffer = await data.toBuffer();
+      if (buffer.length > 5 * 1024 * 1024) {
+        app.logger.warn({ userId: session.user.id, size: buffer.length }, 'File too large');
+        return reply.status(400).send({ error: 'File size exceeds 5MB limit' });
+      }
+
+      const csvContent = buffer.toString('utf-8');
+      const lines = csvContent.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+      if (lines.length < 2) {
+        return reply.status(400).send({ error: 'CSV must have header row and at least one data row' });
+      }
+
+      // Parse CSV headers (flexible matching)
+      const headerLine = lines[0];
+      const headers = headerLine.split(',').map(h => h.trim().toLowerCase());
+
+      // Map common column names
+      const columnMap = {
+        number: headers.findIndex(h => ['number', 'mitzvah number', 'mitzvah_number', 'num', 'id'].includes(h)),
+        title: headers.findIndex(h => ['title', 'name', 'mitzvah', 'mitzvah name', 'mitzvah_name'].includes(h)),
+        description: headers.findIndex(h => ['description', 'desc', 'details', 'detail'].includes(h)),
+        type: headers.findIndex(h => ['type', 'category type', 'category_type'].includes(h)),
+        category: headers.findIndex(h => ['category', 'category name', 'category_name'].includes(h)),
+        source: headers.findIndex(h => ['source', 'reference', 'source reference', 'source_reference'].includes(h)),
+        hebrew: headers.findIndex(h => ['hebrew', 'hebrew name', 'hebrew_name', 'hebrew text', 'hebrew_text'].includes(h)),
+        appliesTo: headers.findIndex(h => ['applies to', 'applies_to', 'who', 'applicable to', 'applicable_to'].includes(h)),
+        location: headers.findIndex(h => ['location', 'place', 'where', 'location type', 'location_type'].includes(h)),
+        timePeriod: headers.findIndex(h => ['time', 'time period', 'time_period', 'when', 'period'].includes(h)),
+      };
+
+      // Validate required columns
+      if (columnMap.title === -1) {
+        return reply.status(400).send({ error: 'CSV must have a "title" or "name" column' });
+      }
+
+      const errors: string[] = [];
+      let imported = 0;
+      let skipped = 0;
+
+      // Get all categories for the user
+      const categories = await app.db
+        .select()
+        .from(schema.mitzvotCategories)
+        .where(eq(schema.mitzvotCategories.userId, session.user.id));
+
+      const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]));
+
+      // Get existing mitzvah numbers to prevent duplicates
+      const existingMitzvot = await app.db
+        .select()
+        .from(schema.mitzvot)
+        .where(and(
+          eq(schema.mitzvot.userId, session.user.id),
+          eq(schema.mitzvot.isSystem, true)
+        ));
+
+      const existingNumbers = new Set(existingMitzvot.map(m => m.mitzvahNumber).filter(Boolean));
+
+      // Process each row
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const values = lines[i].split(',').map(v => v.trim());
+
+          if (values.length < columnMap.title + 1 || !values[columnMap.title]) {
+            skipped++;
+            continue;
+          }
+
+          const mitzvahNumber = columnMap.number !== -1 && values[columnMap.number] ? parseInt(values[columnMap.number]) : null;
+
+          // Skip if duplicate mitzvah number
+          if (mitzvahNumber && existingNumbers.has(mitzvahNumber)) {
+            skipped++;
+            continue;
+          }
+
+          const title = values[columnMap.title];
+          const description = columnMap.description !== -1 ? values[columnMap.description] || null : null;
+          const type = columnMap.type !== -1 ? values[columnMap.type] || 'PROACTIVE' : 'PROACTIVE';
+          const source = columnMap.source !== -1 ? values[columnMap.source] || null : null;
+          const hebrewName = columnMap.hebrew !== -1 ? values[columnMap.hebrew] || null : null;
+          const appliesToCat = columnMap.appliesTo !== -1 ? values[columnMap.appliesTo] || null : null;
+          const location = columnMap.location !== -1 ? values[columnMap.location] || null : null;
+          const timePeriod = columnMap.timePeriod !== -1 ? values[columnMap.timePeriod] || null : null;
+
+          // Find or use category
+          let categoryId = null;
+          if (columnMap.category !== -1 && values[columnMap.category]) {
+            const categoryName = values[columnMap.category];
+            categoryId = categoryMap.get(categoryName.toLowerCase()) || null;
+          }
+
+          const mitzvahValues = {
+            userId: session.user.id,
+            title,
+            description,
+            categoryId,
+            type,
+            status: 'ACTIVE',
+            isSystem: true,
+            scheduleType: 'always_active',
+            mitzvahNumber,
+            source,
+            hebrewName,
+            appliesToCat,
+            location,
+            timePeriod,
+          };
+
+          await app.db
+            .insert(schema.mitzvot)
+            .values(mitzvahValues as any);
+
+          imported++;
+        } catch (error) {
+          app.logger.warn({ userId: session.user.id, rowIndex: i, error }, 'Failed to import mitzvah row');
+          errors.push(`Row ${i + 1}: ${(error as Error).message}`);
+        }
+      }
+
+      app.logger.info({ userId: session.user.id, imported, skipped, errors: errors.length }, 'Mitzvot imported from CSV');
+      return { success: true, imported, skipped, errors };
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to import mitzvot from CSV');
+      throw error;
+    }
+  });
+
+  // GET /api/mitzvot/import-status - Get CSV import status
+  app.fastify.get('/api/mitzvot/import-status', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Fetching mitzvot import status');
+
+    try {
+      const systemMitzvot = await app.db
+        .select()
+        .from(schema.mitzvot)
+        .where(and(
+          eq(schema.mitzvot.userId, session.user.id),
+          eq(schema.mitzvot.isSystem, true)
+        ));
+
+      const totalSystemMitzvot = systemMitzvot.length;
+      const userHasImported = totalSystemMitzvot > 0;
+
+      app.logger.info({ userId: session.user.id, totalSystemMitzvot, userHasImported }, 'Import status fetched successfully');
+      return { totalSystemMitzvot, userHasImported };
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch import status');
+      throw error;
+    }
+  });
 }
