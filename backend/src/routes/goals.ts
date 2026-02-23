@@ -3,6 +3,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, desc, asc, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { getNextActivations, calculateAstronomicalTimes, applyTimeOffset, type ScheduleConfig } from '../utils/goal-scheduler.js';
+import { getScheduleSummaryWithOccurrences } from '../utils/schedule-summary.js';
 
 export function registerGoalRoutes(app: App) {
   const requireAuth = app.requireAuth();
@@ -741,6 +742,88 @@ export function registerGoalRoutes(app: App) {
       return { goalId: id, goalTitle: goal.title, activations };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to fetch goal activations');
+      throw error;
+    }
+  });
+
+  // GET /api/goals/:id/schedule-summary - Get human-readable schedule summary
+  app.fastify.get('/api/goals/:id/schedule-summary', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const { id } = request.params as { id: string };
+    const { occurrences } = request.query as { occurrences?: string };
+
+    const occurrenceCount = Math.min(parseInt(occurrences || '3'), 10);
+
+    app.logger.info({ userId: session.user.id, goalId: id }, 'Generating schedule summary');
+
+    try {
+      // Get the goal
+      const goals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.id, id))
+        .limit(1);
+
+      if (!goals.length) {
+        app.logger.warn({ userId: session.user.id, goalId: id }, 'Goal not found');
+        return reply.status(404).send({ error: 'Goal not found' });
+      }
+
+      if (goals[0].userId !== session.user.id) {
+        app.logger.warn(
+          { userId: session.user.id, goalId: id, ownerId: goals[0].userId },
+          'Unauthorized access to goal'
+        );
+        return reply.status(403).send({ error: 'Unauthorized' });
+      }
+
+      const goal = goals[0];
+
+      // Get user preferences for timezone
+      const prefs = await app.db
+        .select()
+        .from(schema.userPreferences)
+        .where(eq(schema.userPreferences.userId, session.user.id))
+        .limit(1);
+
+      const timezone = prefs[0]?.timezone || 'UTC';
+
+      // Build summary config from goal
+      const summaryConfig = {
+        scheduleType: goal.scheduleType,
+        scheduleRecurrenceType: goal.scheduleRecurrenceType,
+        scheduleDaysOfWeek: goal.scheduleDaysOfWeek,
+        scheduleDatesOfMonth: goal.scheduleDatesOfMonth,
+        scheduleNthDayOfMonth: goal.scheduleNthDayOfMonth ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth) : undefined,
+        scheduleMonthlyRange: goal.scheduleMonthlyRange ? (typeof goal.scheduleMonthlyRange === 'string' ? JSON.parse(goal.scheduleMonthlyRange) : goal.scheduleMonthlyRange) : undefined,
+        scheduleFortnightEvenOdd: goal.scheduleFortnightEvenOdd,
+        scheduleDatesOfYear: goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear) : undefined,
+        scheduleTimesPerDayDetails: goal.scheduleTimesPerDayDetails ? (typeof goal.scheduleTimesPerDayDetails === 'string' ? JSON.parse(goal.scheduleTimesPerDayDetails) : goal.scheduleTimesPerDayDetails) : undefined,
+        scheduleWeekendsOnly: goal.scheduleWeekendsOnly,
+        scheduleWeekdaysOnly: goal.scheduleWeekdaysOnly,
+        calendarType: goal.calendarType,
+        eventType: goal.eventType,
+        timezone: timezone,
+        startDate: goal.startDate,
+        endDate: goal.endDate,
+      };
+
+      // Generate summary
+      const summary = getScheduleSummaryWithOccurrences(summaryConfig, occurrenceCount);
+
+      app.logger.info({ userId: session.user.id, goalId: id }, 'Schedule summary generated successfully');
+      return {
+        goalId: id,
+        goalTitle: goal.title,
+        ...summary,
+      };
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to generate schedule summary');
       throw error;
     }
   });
