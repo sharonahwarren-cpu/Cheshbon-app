@@ -848,6 +848,9 @@ export default function HomeScreen() {
     const currencyTallies = calculateDailyCurrencyTallies(goal);
     const hasCurrencyTallies = currencyTallies.length > 0;
     
+    const successButtonText = 'Success';
+    const struggleButtonText = 'Struggle';
+    
     return (
       <View key={goal.id} style={styles.goalCard}>
         <View style={styles.goalCardHeader}>
@@ -972,7 +975,7 @@ export default function HomeScreen() {
               size={18}
               color="#FFFFFF"
             />
-            <Text style={styles.actionButtonText}>✓</Text>
+            <Text style={styles.actionButtonText}>{successButtonText}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -985,7 +988,7 @@ export default function HomeScreen() {
               size={18}
               color="#FFFFFF"
             />
-            <Text style={styles.actionButtonText}>✗</Text>
+            <Text style={styles.actionButtonText}>{struggleButtonText}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -2136,7 +2139,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   actionButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
   },
