@@ -19,6 +19,11 @@ import { useRouter } from 'expo-router';
 export type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
 export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 
+export interface WeekdayPosition {
+  weekday: number; // 0-6 (Sunday-Saturday)
+  position: number; // 1-4 for 1st-4th, 5 for last
+}
+
 export interface ScheduleConfig {
   scheduleType: ScheduleType;
   
@@ -38,6 +43,7 @@ export interface ScheduleConfig {
   // Monthly
   monthlyDates?: number[]; // [1, 15, 30]
   monthlyNthDay?: Array<{ day: string; nth: number }>; // "Second Tuesday"
+  monthlyWeekdayPositions?: WeekdayPosition[]; // NEW: e.g., [{weekday: 5, position: 1}, {weekday: 0, position: 5}] = 1st Friday and last Sunday
   monthlyRangeStart?: number;
   monthlyRangeEnd?: number;
   monthlyRandomCount?: number;
@@ -118,6 +124,11 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [showCalendarEventPicker, setShowCalendarEventPicker] = useState(false);
   const [calendarEventContext, setCalendarEventContext] = useState<'monthly' | 'yearly'>('monthly');
+  const [showWeekdayPositionPicker, setShowWeekdayPositionPicker] = useState(false);
+  
+  // State for weekday position picker
+  const [selectedWeekday, setSelectedWeekday] = useState<number>(0);
+  const [selectedPosition, setSelectedPosition] = useState<number>(1);
   
   // State for yearly date range inputs
   const [yearlyRangeStart, setYearlyRangeStart] = useState('');
@@ -548,6 +559,17 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
       updateConfig({ monthlyDates: updated });
     };
 
+    const removeWeekdayPosition = (index: number) => {
+      const current = config.monthlyWeekdayPositions || [];
+      updateConfig({ monthlyWeekdayPositions: current.filter((_, i) => i !== index) });
+    };
+
+    const formatWeekdayPosition = (wp: WeekdayPosition) => {
+      const positionText = wp.position === 5 ? 'Last' : WEEK_POSITIONS[wp.position - 1];
+      const weekdayText = WEEKDAY_FULL[wp.weekday];
+      return `${positionText} ${weekdayText}`;
+    };
+
     return (
       <View style={styles.optionsContainer}>
         {/* Use Alternative Calendar Toggle */}
@@ -571,7 +593,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         )}
 
-        {/* Calendar Type - HIDDEN if alternative calendar toggle is ON (auto-filled) */}
         {/* Calendar Event - Only show if Hebrew calendar is selected */}
         {useAlternativeCalendar && selectedCalendar === 'hebrew' && (
           <View style={styles.calendarSection}>
@@ -630,6 +651,50 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
                 );
               })}
             </View>
+
+            {/* NEW: Weekday Position Selection */}
+            <Text style={styles.subLabel}>Or Select by Week Position</Text>
+            <Text style={styles.helperText}>
+              Choose specific weekdays by their position in the month (e.g., 1st Friday, 2nd and last Sunday)
+            </Text>
+            
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => {
+                console.log('User tapped Add Weekday Position button');
+                setSelectedWeekday(0);
+                setSelectedPosition(1);
+                setShowWeekdayPositionPicker(true);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="plus.circle.fill"
+                android_material_icon_name="add-circle"
+                size={18}
+                color={colors.primary}
+              />
+              <Text style={styles.addButtonText}>Add Weekday Position</Text>
+            </TouchableOpacity>
+
+            {config.monthlyWeekdayPositions && config.monthlyWeekdayPositions.length > 0 && (
+              <View style={styles.weekdayPositionsList}>
+                {config.monthlyWeekdayPositions.map((wp, index) => (
+                  <View key={index} style={styles.weekdayPositionItem}>
+                    <Text style={styles.weekdayPositionText}>
+                      {formatWeekdayPosition(wp)}
+                    </Text>
+                    <TouchableOpacity onPress={() => removeWeekdayPosition(index)}>
+                      <IconSymbol
+                        ios_icon_name="xmark.circle.fill"
+                        android_material_icon_name="cancel"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
           </>
         )}
         
@@ -822,7 +887,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         )}
 
-        {/* Calendar Type - HIDDEN if alternative calendar toggle is ON (auto-filled) */}
         {/* Calendar Event - Only show if Hebrew calendar is selected */}
         {useAlternativeCalendar && selectedCalendar === 'hebrew' && (
           <View style={styles.calendarSection}>
@@ -1053,6 +1117,92 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
     );
   };
 
+  const renderWeekdayPositionPicker = () => {
+    return (
+      <Modal
+        visible={showWeekdayPositionPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowWeekdayPositionPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Weekday Position</Text>
+              <TouchableOpacity onPress={() => setShowWeekdayPositionPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalScroll}>
+              <View style={styles.pickerSection}>
+                <Text style={styles.pickerLabel}>Select Position</Text>
+                <View style={styles.positionGrid}>
+                  {WEEK_POSITIONS.map((position, index) => {
+                    const positionValue = index + 1;
+                    const isSelected = selectedPosition === positionValue;
+                    return (
+                      <TouchableOpacity
+                        key={positionValue}
+                        style={[styles.positionButton, isSelected && styles.positionButtonSelected]}
+                        onPress={() => setSelectedPosition(positionValue)}
+                      >
+                        <Text style={[styles.positionButtonText, isSelected && styles.positionButtonTextSelected]}>
+                          {position}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <View style={styles.pickerSection}>
+                <Text style={styles.pickerLabel}>Select Weekday</Text>
+                <View style={styles.weekdayPickerGrid}>
+                  {WEEKDAY_FULL.map((day, index) => {
+                    const isSelected = selectedWeekday === index;
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[styles.weekdayPickerButton, isSelected && styles.weekdayPickerButtonSelected]}
+                        onPress={() => setSelectedWeekday(index)}
+                      >
+                        <Text style={[styles.weekdayPickerButtonText, isSelected && styles.weekdayPickerButtonTextSelected]}>
+                          {day}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={() => {
+                  console.log('User confirmed weekday position:', { weekday: selectedWeekday, position: selectedPosition });
+                  const current = config.monthlyWeekdayPositions || [];
+                  const newPosition: WeekdayPosition = {
+                    weekday: selectedWeekday,
+                    position: selectedPosition,
+                  };
+                  updateConfig({ monthlyWeekdayPositions: [...current, newPosition] });
+                  setShowWeekdayPositionPicker(false);
+                }}
+              >
+                <Text style={styles.confirmButtonText}>Add</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {renderScheduleTypeSelector()}
@@ -1129,6 +1279,9 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         </View>
       </Modal>
+
+      {/* Weekday Position Picker Modal */}
+      {renderWeekdayPositionPicker()}
     </View>
   );
 }
@@ -1500,6 +1653,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
   },
+  weekdayPositionsList: {
+    gap: 8,
+    marginTop: 8,
+  },
+  weekdayPositionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  weekdayPositionText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1509,7 +1681,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '60%',
+    maxHeight: '70%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1545,5 +1717,74 @@ const styles = StyleSheet.create({
   pickerItemTextSelected: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  pickerSection: {
+    marginBottom: 24,
+  },
+  pickerLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  positionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  positionButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  positionButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  positionButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  positionButtonTextSelected: {
+    color: '#fff',
+  },
+  weekdayPickerGrid: {
+    gap: 8,
+  },
+  weekdayPickerButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  weekdayPickerButtonSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  weekdayPickerButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  weekdayPickerButtonTextSelected: {
+    color: '#fff',
+  },
+  confirmButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
 });
