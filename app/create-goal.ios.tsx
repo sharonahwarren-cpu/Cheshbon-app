@@ -117,6 +117,7 @@ export default function CreateGoalScreen() {
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
   const [quickAlarmTime, setQuickAlarmTime] = useState<Date | undefined>(undefined);
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
+  const [tempQuickAlarmTime, setTempQuickAlarmTime] = useState<Date | undefined>(undefined);
   const [goalAlarms, setGoalAlarms] = useState<Alarm[]>([]);
   
   // Confirm modal state
@@ -638,10 +639,25 @@ export default function CreateGoalScreen() {
 
   const handleQuickTimeChange = (event: any, selectedDate?: Date) => {
     console.log('Quick time picker changed:', event.type, selectedDate);
-    if (event.type === 'set' && selectedDate) {
-      setQuickAlarmTime(selectedDate);
+    // Update the temporary time as user scrolls through the picker
+    if (selectedDate) {
+      setTempQuickAlarmTime(selectedDate);
+    }
+  };
+
+  const handleQuickTimePickerDone = () => {
+    console.log('User tapped Done on time picker');
+    if (tempQuickAlarmTime) {
+      setQuickAlarmTime(tempQuickAlarmTime);
     }
     setShowQuickTimePicker(false);
+    setTempQuickAlarmTime(undefined);
+  };
+
+  const handleQuickTimePickerCancel = () => {
+    console.log('User cancelled time picker');
+    setShowQuickTimePicker(false);
+    setTempQuickAlarmTime(undefined);
   };
 
   const scheduleTypes: ScheduleType[] = [
@@ -900,6 +916,11 @@ export default function CreateGoalScreen() {
                   style={styles.quickTimeButton}
                   onPress={() => {
                     console.log('User tapped Set time button');
+                    setTempQuickAlarmTime(quickAlarmTime || (() => {
+                      const now = new Date();
+                      now.setHours(9, 0, 0, 0);
+                      return now;
+                    })());
                     setShowQuickTimePicker(true);
                   }}
                 >
@@ -936,7 +957,6 @@ export default function CreateGoalScreen() {
                     return (
                       <View key={alarm.id} style={styles.alarmItem}>
                         <View style={styles.alarmItemLeft}>
-                          {/* FIXED: Active = green bell, Inactive = greyed bell with slash */}
                           <IconSymbol
                             ios_icon_name={alarmEnabled ? 'bell.fill' : 'bell.slash'}
                             android_material_icon_name={alarmEnabled ? 'notifications' : 'notifications-off'}
@@ -1086,18 +1106,40 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Quick Time Picker - FIXED: Proper Date object handling */}
+      {/* Quick Time Picker Modal - FIXED: Stays open until Done is tapped */}
       {showQuickTimePicker && (
-        <DateTimePicker
-          value={quickAlarmTime || (() => {
-            const now = new Date();
-            now.setHours(9, 0, 0, 0);
-            return now;
-          })()}
-          mode="time"
-          display="default"
-          onChange={handleQuickTimeChange}
-        />
+        <Modal
+          visible={showQuickTimePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={handleQuickTimePickerCancel}
+        >
+          <View style={styles.timePickerModalOverlay}>
+            <View style={styles.timePickerModal}>
+              <View style={styles.timePickerHeader}>
+                <TouchableOpacity onPress={handleQuickTimePickerCancel}>
+                  <Text style={styles.timePickerCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <Text style={styles.timePickerTitle}>Set Alarm Time</Text>
+                <TouchableOpacity onPress={handleQuickTimePickerDone}>
+                  <Text style={styles.timePickerDoneText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={tempQuickAlarmTime || (() => {
+                  const now = new Date();
+                  now.setHours(9, 0, 0, 0);
+                  return now;
+                })()}
+                mode="time"
+                display="spinner"
+                onChange={handleQuickTimeChange}
+                textColor={colors.text}
+                style={styles.timePicker}
+              />
+            </View>
+          </View>
+        </Modal>
       )}
 
       {/* Schedule Picker Modal */}
@@ -1544,5 +1586,41 @@ const styles = StyleSheet.create({
   pickerItemTextSelected: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  timePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  timePickerModal: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+  },
+  timePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  timePickerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  timePickerCancelText: {
+    fontSize: 17,
+    color: colors.textSecondary,
+  },
+  timePickerDoneText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  timePicker: {
+    height: 200,
   },
 });
