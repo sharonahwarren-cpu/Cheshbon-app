@@ -111,7 +111,7 @@ const HEBREW_EVENTS = [
 
 export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSchedulerProps) {
   const router = useRouter();
-  const [showDatePicker, setShowDatePicker] = useState<'end' | 'exclusion' | 'monthlyDate' | 'yearlyDate' | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState<'end' | 'exclusion' | null>(null);
   const [tempDate, setTempDate] = useState(new Date());
   const [showMonthlyAdvanced, setShowMonthlyAdvanced] = useState(false);
   const [showYearlyAdvanced, setShowYearlyAdvanced] = useState(false);
@@ -516,6 +516,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
     const useAlternativeCalendar = config.monthlyUseAlternativeCalendar || false;
     const selectedCalendar = useAlternativeCalendar ? (config.monthlyCalendarType || alternativeCalendar || 'gregorian') : 'gregorian';
     const maxDays = CALENDAR_MAX_DAYS[selectedCalendar];
+    const hasCalendarEvent = config.monthlyCalendarEvent;
 
     const toggleDate = (date: number) => {
       const current = config.monthlyDates || [];
@@ -548,33 +549,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         )}
 
-        {/* Calendar Type - Only show if alternative calendar is enabled */}
-        {useAlternativeCalendar && (
-          <View style={styles.calendarSection}>
-            <Text style={styles.subLabel}>Calendar Type</Text>
-            <TouchableOpacity
-              style={styles.calendarButton}
-              onPress={() => {
-                setCalendarEventContext('monthly');
-                setShowCalendarPicker(true);
-              }}
-            >
-              <Text style={styles.calendarButtonText}>
-                {CALENDAR_LABELS[selectedCalendar]}
-              </Text>
-              <IconSymbol
-                ios_icon_name="chevron.down"
-                android_material_icon_name="arrow-drop-down"
-                size={20}
-                color={colors.text}
-              />
-            </TouchableOpacity>
-            <Text style={styles.helperText}>
-              {CALENDAR_LABELS[selectedCalendar]} calendar: Max {maxDays} days
-            </Text>
-          </View>
-        )}
-
+        {/* Calendar Type - HIDDEN if alternative calendar toggle is ON (auto-filled) */}
         {/* Calendar Event - Only show if Hebrew calendar is selected */}
         {useAlternativeCalendar && selectedCalendar === 'hebrew' && (
           <View style={styles.calendarSection}>
@@ -607,49 +582,36 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         )}
 
-        <Text style={styles.subLabel}>Select Dates</Text>
-        <Text style={styles.helperText}>
-          Choose specific dates of the month (e.g., 3rd, 15th, 28th) or use calendar popup
-        </Text>
+        {/* Selected Dates - HIDDEN if Calendar Event is chosen */}
+        {!hasCalendarEvent && (
+          <>
+            <Text style={styles.subLabel}>Select Dates</Text>
+            <Text style={styles.helperText}>
+              Choose specific dates of the month (e.g., 3rd, 15th, 28th)
+            </Text>
+            
+            {/* Display all dates 1-30/31 in a grid without scrolling */}
+            <View style={styles.dateGridContainer}>
+              {Array.from({ length: maxDays }, (_, i) => {
+                const date = i + 1;
+                const isSelected = config.monthlyDates?.includes(date) || false;
+                return (
+                  <TouchableOpacity
+                    key={date}
+                    style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                    onPress={() => toggleDate(date)}
+                  >
+                    <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                      {date}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
         
-        {/* Calendar Popup Button */}
-        <TouchableOpacity
-          style={styles.calendarPopupButton}
-          onPress={() => {
-            setTempDate(new Date());
-            setShowDatePicker('monthlyDate');
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="calendar"
-            android_material_icon_name="calendar-today"
-            size={18}
-            color={colors.primary}
-          />
-          <Text style={styles.calendarPopupButtonText}>Select Date from Calendar</Text>
-        </TouchableOpacity>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.dateGrid}>
-            {Array.from({ length: maxDays }, (_, i) => {
-              const date = i + 1;
-              const isSelected = config.monthlyDates?.includes(date) || false;
-              return (
-                <TouchableOpacity
-                  key={date}
-                  style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
-                  onPress={() => toggleDate(date)}
-                >
-                  <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
-                    {date}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
-        
-        {/* More Options */}
+        {/* More Options - Renamed to "Select a date range or # of days per month" */}
         <TouchableOpacity
           style={styles.advancedOptionButton}
           onPress={() => setShowMonthlyAdvanced(!showMonthlyAdvanced)}
@@ -660,7 +622,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
             size={16}
             color={colors.primary}
           />
-          <Text style={styles.advancedOptionText}>More Options</Text>
+          <Text style={styles.advancedOptionText}>Select a date range or # of days per month</Text>
         </TouchableOpacity>
         
         {showMonthlyAdvanced && (
@@ -836,30 +798,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         )}
 
-        {/* Calendar Type - Only show if alternative calendar is enabled */}
-        {useAlternativeCalendar && (
-          <View style={styles.calendarSection}>
-            <Text style={styles.subLabel}>Calendar Type</Text>
-            <TouchableOpacity
-              style={styles.calendarButton}
-              onPress={() => {
-                setCalendarEventContext('yearly');
-                setShowCalendarPicker(true);
-              }}
-            >
-              <Text style={styles.calendarButtonText}>
-                {CALENDAR_LABELS[selectedCalendar]}
-              </Text>
-              <IconSymbol
-                ios_icon_name="chevron.down"
-                android_material_icon_name="arrow-drop-down"
-                size={20}
-                color={colors.text}
-              />
-            </TouchableOpacity>
-          </View>
-        )}
-
+        {/* Calendar Type - HIDDEN if alternative calendar toggle is ON (auto-filled) */}
         {/* Calendar Event - Only show if Hebrew calendar is selected */}
         {useAlternativeCalendar && selectedCalendar === 'hebrew' && (
           <View style={styles.calendarSection}>
@@ -892,7 +831,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         )}
 
-        {/* Selected Months - Only show if NOT using calendar event */}
+        {/* Selected Months - HIDDEN if Calendar Event is chosen */}
         {!hasCalendarEvent && (
           <>
             <Text style={styles.subLabel}>Select Months</Text>
@@ -935,23 +874,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
             <Text style={styles.helperText}>
               Add specific dates (e.g., Feb 1st) or date ranges (e.g., Jan 31 - Feb 2)
             </Text>
-            
-            {/* Calendar Popup Button */}
-            <TouchableOpacity
-              style={styles.calendarPopupButton}
-              onPress={() => {
-                setTempDate(new Date());
-                setShowDatePicker('yearlyDate');
-              }}
-            >
-              <IconSymbol
-                ios_icon_name="calendar"
-                android_material_icon_name="calendar-today"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.calendarPopupButtonText}>Select Date from Calendar</Text>
-            </TouchableOpacity>
 
             {config.yearlyDates && config.yearlyDates.length > 0 && (
               <View style={styles.yearlyDatesList}>
@@ -1126,80 +1048,12 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
               } else if (showDatePicker === 'exclusion') {
                 const current = config.exclusionDates || [];
                 updateConfig({ exclusionDates: [...current, selectedDate] });
-              } else if (showDatePicker === 'monthlyDate') {
-                const dayOfMonth = selectedDate.getDate();
-                const current = config.monthlyDates || [];
-                if (!current.includes(dayOfMonth)) {
-                  updateConfig({ monthlyDates: [...current, dayOfMonth].sort((a, b) => a - b) });
-                }
-              } else if (showDatePicker === 'yearlyDate') {
-                const month = selectedDate.getMonth() + 1;
-                const day = selectedDate.getDate();
-                const current = config.yearlyDates || [];
-                updateConfig({ yearlyDates: [...current, { month, day }] });
               }
             }
             setShowDatePicker(null);
           }}
         />
       )}
-
-      {/* Calendar Type Picker Modal */}
-      <Modal
-        visible={showCalendarPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCalendarPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Calendar Type</Text>
-              <TouchableOpacity onPress={() => setShowCalendarPicker(false)}>
-                <IconSymbol
-                  ios_icon_name="xmark"
-                  android_material_icon_name="close"
-                  size={24}
-                  color={colors.text}
-                />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.modalScroll}>
-              {CALENDAR_TYPES.map((cal) => {
-                const isSelected = calendarEventContext === 'monthly' 
-                  ? config.monthlyCalendarType === cal 
-                  : config.yearlyCalendarType === cal;
-                return (
-                  <TouchableOpacity
-                    key={cal}
-                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
-                    onPress={() => {
-                      if (calendarEventContext === 'monthly') {
-                        updateConfig({ monthlyCalendarType: cal });
-                      } else {
-                        updateConfig({ yearlyCalendarType: cal });
-                      }
-                      setShowCalendarPicker(false);
-                    }}
-                  >
-                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
-                      {CALENDAR_LABELS[cal]}
-                    </Text>
-                    {isSelected && (
-                      <IconSymbol
-                        ios_icon_name="checkmark"
-                        android_material_icon_name="check"
-                        size={20}
-                        color={colors.primary}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Calendar Event Picker Modal */}
       <Modal
@@ -1379,23 +1233,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
-  calendarPopupButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 12,
-  },
-  calendarPopupButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
   weekdayGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1450,10 +1287,11 @@ const styles = StyleSheet.create({
   toggleButtonTextActive: {
     color: '#fff',
   },
-  dateGrid: {
+  dateGridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginBottom: 12,
   },
   dateButton: {
     width: 44,
