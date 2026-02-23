@@ -24,9 +24,19 @@ export interface ScheduleSummaryRequest {
   endDate?: Date;
 }
 
+export interface OccurrenceSource {
+  section: string;  // e.g., "Monthly - Selected Dates", "Weekly", "Daily"
+  details: string;  // e.g., "15th of month", "Tuesday", "1st Friday"
+}
+
+export interface NextOccurrence {
+  date: string;  // Formatted date string with optional calendar equivalent
+  source: OccurrenceSource;
+}
+
 export interface ScheduleSummaryResponse {
   summary: string;
-  nextOccurrences: string[];
+  nextOccurrences: NextOccurrence[];
   calendarType?: string;
   recurrenceType?: string;
 }
@@ -292,12 +302,149 @@ function formatDateWithCalendar(date: Date, includeHebrew: boolean = false, cale
 }
 
 /**
- * Generate next occurrences for display
+ * Determine the source section for a given date based on schedule configuration
+ */
+function determineOccurrenceSource(
+  date: Date,
+  config: ScheduleSummaryRequest
+): OccurrenceSource {
+  const recurrenceType = config.scheduleRecurrenceType || config.scheduleType || 'daily';
+  const dayOfMonth = date.getDate();
+  const dayOfWeek = date.getDay();
+
+  switch (recurrenceType.toLowerCase()) {
+    case 'daily':
+      return {
+        section: 'Daily',
+        details: 'Every day',
+      };
+
+    case 'weekly':
+      if (config.scheduleWeekendsOnly) {
+        return {
+          section: 'Weekly',
+          details: 'Weekends',
+        };
+      }
+      if (config.scheduleWeekdaysOnly) {
+        return {
+          section: 'Weekly',
+          details: 'Weekdays',
+        };
+      }
+      const dayName = getDayName(dayOfWeek);
+      return {
+        section: 'Weekly',
+        details: dayName,
+      };
+
+    case 'fortnightly':
+      const weekNumber = Math.ceil(dayOfMonth / 7);
+      const isEvenWeek = (Math.floor((date.getTime() - (config.startDate?.getTime() || 0)) / (7 * 24 * 60 * 60 * 1000)) % 2) === 1;
+      const weekLabel = isEvenWeek ? 'Week 2' : 'Week 1';
+      const fortDayName = getDayName(dayOfWeek);
+      return {
+        section: 'Fortnightly',
+        details: `${weekLabel} - ${fortDayName}`,
+      };
+
+    case 'monthly':
+      // Check if it's a selected date
+      if (config.scheduleDatesOfMonth?.includes(dayOfMonth)) {
+        return {
+          section: 'Monthly - Selected Dates',
+          details: `${formatOrdinal(dayOfMonth)} of month`,
+        };
+      }
+
+      // Check if it's a weekday position
+      if (config.scheduleNthDayOfMonth) {
+        const nthDay = config.scheduleNthDayOfMonth as any;
+        if (getDayName(dayOfWeek) === nthDay.day) {
+          return {
+            section: 'Monthly - Weekday Position',
+            details: `${formatOrdinal(nthDay.nth)} ${nthDay.day}`,
+          };
+        }
+      }
+
+      // Check if it's in a date range
+      if (config.scheduleMonthlyRange) {
+        const range = config.scheduleMonthlyRange as any;
+        if (dayOfMonth >= range.start && dayOfMonth <= range.end) {
+          return {
+            section: 'Monthly - Date Range',
+            details: `${formatOrdinal(range.start)}-${formatOrdinal(range.end)} of month`,
+          };
+        }
+      }
+
+      // Default monthly
+      return {
+        section: 'Monthly',
+        details: `${formatOrdinal(dayOfMonth)} of month`,
+      };
+
+    case 'yearly':
+      const month = date.getMonth() + 1;
+      let monthName = '';
+
+      if (config.calendarType === 'hebrew') {
+        monthName = HEBREW_MONTHS[month - 1] || `Month ${month}`;
+      } else if (config.calendarType === 'islamic') {
+        monthName = ISLAMIC_MONTHS[month - 1] || `Month ${month}`;
+      } else if (config.calendarType === 'chinese') {
+        monthName = CHINESE_MONTHS[month - 1] || `Month ${month}`;
+      } else {
+        monthName = GREGORIAN_MONTHS[month - 1] || `Month ${month}`;
+      }
+
+      // Check if it matches a specific date range
+      if (config.scheduleDatesOfYear) {
+        for (const dateRange of config.scheduleDatesOfYear as any[]) {
+          if (dateRange.month === month) {
+            if (dateRange.days?.includes(dayOfMonth)) {
+              return {
+                section: 'Yearly - Specific Dates',
+                details: `${monthName} ${formatOrdinal(dayOfMonth)}`,
+              };
+            }
+            if (dateRange.start && dateRange.end && dayOfMonth >= dateRange.start && dayOfMonth <= dateRange.end) {
+              return {
+                section: 'Yearly - Date Range',
+                details: `${monthName} ${formatOrdinal(dateRange.start)}-${formatOrdinal(dateRange.end)}`,
+              };
+            }
+          }
+        }
+      }
+
+      return {
+        section: 'Yearly',
+        details: `${monthName} ${formatOrdinal(dayOfMonth)}`,
+      };
+
+    case 'alwaysactive':
+      return {
+        section: 'Always Active',
+        details: 'Every day',
+      };
+
+    default:
+      return {
+        section: 'Custom',
+        details: 'Custom schedule',
+      };
+  }
+}
+
+/**
+ * Generate next occurrences for display with source metadata
  */
 export function getNextOccurrencesForDisplay(
   config: ScheduleSummaryRequest,
   count: number = 3
-): string[] {
+): NextOccurrence[] {
   try {
     const scheduleConfig: ScheduleConfig = {
       calendarType: (config.calendarType || 'gregorian') as any,
@@ -320,11 +467,25 @@ export function getNextOccurrencesForDisplay(
 
     return activations.map(activation => {
       const date = new Date(`${activation.date}T${activation.time}:00Z`);
-      return formatDateWithCalendar(date, false, config.calendarType);
+      const formattedDate = formatDateWithCalendar(date, false, config.calendarType);
+      const source = determineOccurrenceSource(date, config);
+
+      return {
+        date: formattedDate,
+        source,
+      };
     });
   } catch (error) {
     // Fallback if generation fails
-    return ['Next occurrence cannot be calculated'];
+    return [
+      {
+        date: 'Next occurrence cannot be calculated',
+        source: {
+          section: 'Error',
+          details: 'Calculation error',
+        },
+      },
+    ];
   }
 }
 
