@@ -385,9 +385,11 @@ export default function CreateAlarmScreen() {
         break;
       case 'location':
         triggerText = `Location: ${trigger.value}`;
-        if (trigger.min) triggerText += ` (not before ${formatTime12Hour(trigger.min)})`;
-        if (trigger.max) triggerText += ` (not after ${formatTime12Hour(trigger.max)})`;
         break;
+    }
+
+    if (trigger.logic) {
+      triggerText += ` [${trigger.logic}]`;
     }
 
     return (
@@ -603,20 +605,36 @@ export default function CreateAlarmScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Recurring - with explanation */}
+          {/* Recurring */}
           <View style={styles.section}>
             <View style={styles.switchRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.label}>Recurring</Text>
-                <Text style={styles.helpText}>
-                  When enabled, astronomical and location-based alarms will automatically recalculate their trigger times daily based on current conditions (e.g., sunrise time changes throughout the year). Time-based alarms will repeat at the same time each day.
-                </Text>
-              </View>
+              <Text style={styles.label}>Recurring</Text>
               <Switch
                 value={recurring}
                 onValueChange={setRecurring}
                 trackColor={{ false: colors.border, true: colors.primary }}
                 thumbColor={recurring ? colors.background : colors.textSecondary}
+              />
+            </View>
+            <Text style={styles.helpText}>
+              Automatically recalculate and reschedule this alarm
+            </Text>
+          </View>
+
+          {/* Enabled */}
+          <View style={styles.section}>
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Enabled</Text>
+                <Text style={styles.helpText}>
+                  Toggle to activate or deactivate this alarm without deleting it
+                </Text>
+              </View>
+              <Switch
+                value={enabled}
+                onValueChange={setEnabled}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={enabled ? colors.background : colors.textSecondary}
               />
             </View>
           </View>
@@ -756,12 +774,39 @@ export default function CreateAlarmScreen() {
                         {newTrigger.value ? formatTime12Hour(newTrigger.value) : 'Set time'}
                       </Text>
                     </TouchableOpacity>
+                    
+                    {/* AND/OR Logic - Show AFTER time selection */}
+                    <Text style={styles.label}>Combine with other triggers using</Text>
+                    <View style={styles.triggerTypeRow}>
+                      {(['AND', 'OR'] as const).map(logic => (
+                        <TouchableOpacity
+                          key={logic}
+                          style={[
+                            styles.triggerTypeButton,
+                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
+                          ]}
+                          onPress={() =>
+                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.triggerTypeText,
+                              newTrigger.logic === logic && styles.triggerTypeTextActive,
+                            ]}
+                          >
+                            {logic}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </>
                 )}
 
                 {newTrigger.type === 'astronomical' && (
                   <>
                     <Text style={styles.label}>Astronomical Event</Text>
+                    {/* Fixed: Non-scrollable event selection */}
                     <View>
                       {ASTRONOMICAL_EVENTS.map(event => (
                         <TouchableOpacity
@@ -821,6 +866,32 @@ export default function CreateAlarmScreen() {
                         {newTrigger.max ? formatTime12Hour(newTrigger.max) : 'Set maximum time'}
                       </Text>
                     </TouchableOpacity>
+                    
+                    {/* AND/OR Logic - Show AFTER astronomical event selection */}
+                    <Text style={styles.label}>Combine with other triggers using</Text>
+                    <View style={styles.triggerTypeRow}>
+                      {(['AND', 'OR'] as const).map(logic => (
+                        <TouchableOpacity
+                          key={logic}
+                          style={[
+                            styles.triggerTypeButton,
+                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
+                          ]}
+                          onPress={() =>
+                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.triggerTypeText,
+                              newTrigger.logic === logic && styles.triggerTypeTextActive,
+                            ]}
+                          >
+                            {logic}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </>
                 )}
 
@@ -908,45 +979,32 @@ export default function CreateAlarmScreen() {
                         </Text>
                       </View>
                     )}
-
-                    {/* Not Before / Not After for Location triggers */}
-                    <Text style={styles.label}>Not Before (optional)</Text>
-                    <TouchableOpacity
-                      style={styles.timePickerButton}
-                      onPress={() => {
-                        setTimePickerMode('min');
-                        setShowTimePicker(true);
-                      }}
-                    >
-                      <IconSymbol
-                        ios_icon_name="clock"
-                        android_material_icon_name="schedule"
-                        size={20}
-                        color={colors.primary}
-                      />
-                      <Text style={styles.timePickerButtonText}>
-                        {newTrigger.min ? formatTime12Hour(newTrigger.min) : 'Set minimum time'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <Text style={styles.label}>Not After (optional)</Text>
-                    <TouchableOpacity
-                      style={styles.timePickerButton}
-                      onPress={() => {
-                        setTimePickerMode('max');
-                        setShowTimePicker(true);
-                      }}
-                    >
-                      <IconSymbol
-                        ios_icon_name="clock"
-                        android_material_icon_name="schedule"
-                        size={20}
-                        color={colors.primary}
-                      />
-                      <Text style={styles.timePickerButtonText}>
-                        {newTrigger.max ? formatTime12Hour(newTrigger.max) : 'Set maximum time'}
-                      </Text>
-                    </TouchableOpacity>
+                    
+                    {/* AND/OR Logic - Show AFTER location selection */}
+                    <Text style={styles.label}>Combine with other triggers using</Text>
+                    <View style={styles.triggerTypeRow}>
+                      {(['AND', 'OR'] as const).map(logic => (
+                        <TouchableOpacity
+                          key={logic}
+                          style={[
+                            styles.triggerTypeButton,
+                            newTrigger.logic === logic && styles.triggerTypeButtonActive,
+                          ]}
+                          onPress={() =>
+                            setNewTrigger({ ...newTrigger, logic: newTrigger.logic === logic ? undefined : logic })
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.triggerTypeText,
+                              newTrigger.logic === logic && styles.triggerTypeTextActive,
+                            ]}
+                          >
+                            {logic}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </>
                 )}
               </ScrollView>
