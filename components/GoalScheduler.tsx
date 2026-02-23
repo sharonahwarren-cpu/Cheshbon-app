@@ -106,6 +106,7 @@ const HEBREW_EVENTS = [
   'Lag BaOmer',
   'Shavuot',
   'Tisha BAv',
+  'Rosh Chodesh', // NEW: Added Rosh Chodesh
 ];
 
 export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSchedulerProps) {
@@ -117,6 +118,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [showCalendarEventPicker, setShowCalendarEventPicker] = useState(false);
   const [calendarEventContext, setCalendarEventContext] = useState<'monthly' | 'yearly'>('monthly');
+  
+  // State for yearly date range inputs
+  const [yearlyRangeStart, setYearlyRangeStart] = useState('');
+  const [yearlyRangeEnd, setYearlyRangeEnd] = useState('');
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
     onChange({ ...config, ...updates });
@@ -806,6 +811,8 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
       updateConfig({ yearlyDates: updated });
     };
 
+    const hasCalendarEvent = useAlternativeCalendar && selectedCalendar === 'hebrew' && config.yearlyCalendarEvent;
+
     return (
       <View style={styles.optionsContainer}>
         {/* Use Alternative Calendar Toggle */}
@@ -885,24 +892,29 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           </View>
         )}
 
-        <Text style={styles.subLabel}>Select Months</Text>
-        <View style={styles.monthGrid}>
-          {monthNames.map((month, index) => {
-            const monthNum = index + 1;
-            const isSelected = config.yearlyMonths?.includes(monthNum) || false;
-            return (
-              <TouchableOpacity
-                key={monthNum}
-                style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
-                onPress={() => toggleMonth(monthNum)}
-              >
-                <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
-                  {month}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {/* Selected Months - Only show if NOT using calendar event */}
+        {!hasCalendarEvent && (
+          <>
+            <Text style={styles.subLabel}>Select Months</Text>
+            <View style={styles.monthGrid}>
+              {monthNames.map((month, index) => {
+                const monthNum = index + 1;
+                const isSelected = config.yearlyMonths?.includes(monthNum) || false;
+                return (
+                  <TouchableOpacity
+                    key={monthNum}
+                    style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                    onPress={() => toggleMonth(monthNum)}
+                  >
+                    <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                      {month}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        )}
 
         <TouchableOpacity
           style={styles.advancedOptionButton}
@@ -921,7 +933,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
           <View style={styles.advancedSection}>
             <Text style={styles.subLabel}>Specific Dates or Date Ranges</Text>
             <Text style={styles.helperText}>
-              e.g., 1st of Feb or Jan 31 - Feb 2. Use calendar popup to select dates.
+              Add specific dates (e.g., Feb 1st) or date ranges (e.g., Jan 31 - Feb 2)
             </Text>
             
             {/* Calendar Popup Button */}
@@ -943,70 +955,81 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
 
             {config.yearlyDates && config.yearlyDates.length > 0 && (
               <View style={styles.yearlyDatesList}>
-                {config.yearlyDates.map((dateRange, index) => (
-                  <View key={index} style={styles.yearlyDateItem}>
-                    <View style={styles.yearlyDateInputs}>
-                      <TextInput
-                        style={styles.smallInput}
-                        value={dateRange.month.toString()}
-                        onChangeText={(text) => updateYearlyDate(index, { month: parseInt(text) || 1 })}
-                        placeholder="Month"
-                        placeholderTextColor={colors.textSecondary}
-                        keyboardType="number-pad"
-                      />
-                      <Text style={styles.rangeText}>/</Text>
-                      <TextInput
-                        style={styles.smallInput}
-                        value={dateRange.day.toString()}
-                        onChangeText={(text) => updateYearlyDate(index, { day: parseInt(text) || 1 })}
-                        placeholder="Day"
-                        placeholderTextColor={colors.textSecondary}
-                        keyboardType="number-pad"
-                      />
-                      {dateRange.endMonth && dateRange.endDay && (
-                        <>
-                          <Text style={styles.rangeText}>to</Text>
-                          <TextInput
-                            style={styles.smallInput}
-                            value={dateRange.endMonth.toString()}
-                            onChangeText={(text) => updateYearlyDate(index, { endMonth: parseInt(text) || undefined })}
-                            placeholder="Month"
-                            placeholderTextColor={colors.textSecondary}
-                            keyboardType="number-pad"
-                          />
-                          <Text style={styles.rangeText}>/</Text>
-                          <TextInput
-                            style={styles.smallInput}
-                            value={dateRange.endDay.toString()}
-                            onChangeText={(text) => updateYearlyDate(index, { endDay: parseInt(text) || undefined })}
-                            placeholder="Day"
-                            placeholderTextColor={colors.textSecondary}
-                            keyboardType="number-pad"
-                          />
-                        </>
-                      )}
+                {config.yearlyDates.map((dateRange, index) => {
+                  const startMonthName = monthNames[dateRange.month - 1] || dateRange.month;
+                  const endMonthName = dateRange.endMonth ? (monthNames[dateRange.endMonth - 1] || dateRange.endMonth) : '';
+                  const displayText = dateRange.endMonth && dateRange.endDay
+                    ? `${startMonthName} ${dateRange.day} - ${endMonthName} ${dateRange.endDay}`
+                    : `${startMonthName} ${dateRange.day}`;
+                  
+                  return (
+                    <View key={index} style={styles.yearlyDateItem}>
+                      <Text style={styles.yearlyDateText}>{displayText}</Text>
+                      <TouchableOpacity onPress={() => removeYearlyDate(index)}>
+                        <IconSymbol
+                          ios_icon_name="xmark.circle.fill"
+                          android_material_icon_name="cancel"
+                          size={20}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity onPress={() => removeYearlyDate(index)}>
-                      <IconSymbol
-                        ios_icon_name="xmark.circle.fill"
-                        android_material_icon_name="cancel"
-                        size={20}
-                        color={colors.error}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             )}
-            <TouchableOpacity style={styles.addButton} onPress={addYearlyDate}>
-              <IconSymbol
-                ios_icon_name="plus.circle.fill"
-                android_material_icon_name="add-circle"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.addButtonText}>Add Date or Range</Text>
-            </TouchableOpacity>
+            
+            {/* Add Date or Range Input */}
+            <View style={styles.dateRangeInputSection}>
+              <Text style={styles.subLabel}>Add Date or Range</Text>
+              <Text style={styles.helperText}>
+                Enter start date (e.g., 1st) and optionally end date (e.g., 4th) for a range
+              </Text>
+              <View style={styles.dateRangeInputRow}>
+                <TextInput
+                  style={styles.dateRangeInput}
+                  value={yearlyRangeStart}
+                  onChangeText={setYearlyRangeStart}
+                  placeholder="1st"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+                <Text style={styles.rangeText}>-</Text>
+                <TextInput
+                  style={styles.dateRangeInput}
+                  value={yearlyRangeEnd}
+                  onChangeText={setYearlyRangeEnd}
+                  placeholder="4th (optional)"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+              </View>
+              <TouchableOpacity 
+                style={styles.addButton} 
+                onPress={() => {
+                  const startDay = parseInt(yearlyRangeStart);
+                  const endDay = yearlyRangeEnd ? parseInt(yearlyRangeEnd) : undefined;
+                  
+                  if (startDay && !isNaN(startDay)) {
+                    const current = config.yearlyDates || [];
+                    const newDate = endDay && !isNaN(endDay)
+                      ? { month: 1, day: startDay, endMonth: 1, endDay }
+                      : { month: 1, day: startDay };
+                    updateConfig({ yearlyDates: [...current, newDate] });
+                    setYearlyRangeStart('');
+                    setYearlyRangeEnd('');
+                  }
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.addButtonText}>Add Date or Range</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
         
@@ -1511,11 +1534,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  yearlyDateInputs: {
+  yearlyDateText: {
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+  dateRangeInputSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  dateRangeInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
+    marginBottom: 12,
+  },
+  dateRangeInput: {
     flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   rangeRow: {
     flexDirection: 'row',
