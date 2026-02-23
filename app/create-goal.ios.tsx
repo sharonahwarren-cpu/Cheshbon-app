@@ -182,7 +182,11 @@ export default function CreateGoalScreen() {
     console.log('[CreateGoal iOS] Fetching schedule summary for goal:', editingGoalId);
     setLoadingScheduleSummary(true);
     try {
-      const result = await authenticatedGet<{ summary: string; nextOccurrences: string[]; calendarType?: string }>(
+      const result = await authenticatedGet<{
+        summary: string;
+        nextOccurrences: Array<{ date: string; source: { section: string; details: string } } | string>;
+        calendarType?: string;
+      }>(
         `/api/goals/${editingGoalId}/schedule-summary`
       );
       console.log('[CreateGoal iOS] Schedule summary received:', result);

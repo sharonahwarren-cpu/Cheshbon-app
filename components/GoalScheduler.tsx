@@ -71,9 +71,17 @@ export interface ScheduleConfig {
   alarmsEnabled?: boolean;
 }
 
+interface OccurrenceWithSource {
+  date: string;
+  source: {
+    section: string;
+    details: string;
+  };
+}
+
 interface BackendScheduleSummary {
   summary: string;
-  nextOccurrences: string[];
+  nextOccurrences: OccurrenceWithSource[];
   calendarType?: string;
 }
 
@@ -135,6 +143,8 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   const [showCalendarEventPicker, setShowCalendarEventPicker] = useState(false);
   const [calendarEventContext, setCalendarEventContext] = useState<'monthly' | 'yearly'>('monthly');
   const [showWeekdayPositionPicker, setShowWeekdayPositionPicker] = useState(false);
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [selectedOccurrence, setSelectedOccurrence] = useState<OccurrenceWithSource | null>(null);
   
   // State for weekday position picker
   const [selectedWeekday, setSelectedWeekday] = useState<number>(0);
@@ -213,6 +223,79 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     setShowDatePicker(null);
   };
 
+  // NEW: Handle alternative calendar toggle with data cleanup
+  const handleAlternativeCalendarToggle = (context: 'monthly' | 'yearly', newValue: boolean) => {
+    console.log(`[GoalScheduler] Alternative calendar toggle: ${context}, newValue: ${newValue}`);
+    
+    if (context === 'monthly') {
+      if (newValue) {
+        // Turning ON alternative calendar - REMOVE Gregorian dates
+        console.log('[GoalScheduler] Clearing Gregorian monthly dates');
+        updateConfig({
+          monthlyUseAlternativeCalendar: true,
+          monthlyCalendarType: alternativeCalendar || 'hebrew',
+          monthlyDates: undefined, // Clear selected dates
+          monthlyWeekdayPositions: undefined, // Clear weekday positions
+          monthlyRangeStart: undefined, // Clear range
+          monthlyRangeEnd: undefined,
+          monthlyRandomCount: undefined, // Clear random count
+        });
+      } else {
+        // Turning OFF alternative calendar - NULLIFY alternative calendar dates
+        console.log('[GoalScheduler] Clearing alternative calendar monthly data');
+        updateConfig({
+          monthlyUseAlternativeCalendar: false,
+          monthlyCalendarType: 'gregorian',
+          monthlyCalendarEvent: undefined, // Clear calendar event
+        });
+      }
+    } else if (context === 'yearly') {
+      if (newValue) {
+        // Turning ON alternative calendar - REMOVE Gregorian dates
+        console.log('[GoalScheduler] Clearing Gregorian yearly dates');
+        updateConfig({
+          yearlyUseAlternativeCalendar: true,
+          yearlyCalendarType: alternativeCalendar || 'hebrew',
+          yearlyMonths: undefined, // Clear selected months
+          yearlyDates: undefined, // Clear specific dates
+        });
+      } else {
+        // Turning OFF alternative calendar - NULLIFY alternative calendar dates
+        console.log('[GoalScheduler] Clearing alternative calendar yearly data');
+        updateConfig({
+          yearlyUseAlternativeCalendar: false,
+          yearlyCalendarType: 'gregorian',
+          yearlyCalendarEvent: undefined, // Clear calendar event
+        });
+      }
+    }
+  };
+
+  // NEW: Navigate to the section that generated a specific occurrence
+  const handleOccurrencePress = (occurrence: OccurrenceWithSource) => {
+    console.log('[GoalScheduler] User tapped occurrence:', occurrence);
+    setSelectedOccurrence(occurrence);
+    setShowSourceModal(true);
+  };
+
+  // NEW: Scroll to and highlight the relevant section
+  const navigateToSection = (section: string) => {
+    console.log('[GoalScheduler] Navigating to section:', section);
+    setShowSourceModal(false);
+    
+    // Expand the relevant advanced section if needed
+    if (section.includes('Date Range') || section.includes('Random')) {
+      if (config.scheduleType === 'Monthly') {
+        setShowMonthlyAdvanced(true);
+      } else if (config.scheduleType === 'Yearly') {
+        setShowYearlyAdvanced(true);
+      }
+    }
+    
+    // TODO: Could add scroll-to-section logic here if needed
+    // For now, just expanding the section is sufficient
+  };
+
   const renderScheduleTypeSelector = () => {
     const scheduleTypes: ScheduleType[] = ['Always Active', 'Daily', 'Weekly', 'Fortnightly', 'Monthly', 'Yearly'];
     
@@ -289,22 +372,44 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
             {backendSummary?.nextOccurrences && backendSummary.nextOccurrences.length > 0 && (
               <View style={styles.nextOccurrencesContainer}>
                 <Text style={styles.nextOccurrencesTitle}>Next Occurrences:</Text>
-                {backendSummary.nextOccurrences.map((occurrence, index) => (
-                  <View key={index} style={styles.nextOccurrenceRow}>
-                    <IconSymbol
-                      ios_icon_name="circle.fill"
-                      android_material_icon_name="circle"
-                      size={6}
-                      color={index === 0 ? colors.primary : colors.textSecondary}
-                    />
-                    <Text style={[
-                      styles.nextOccurrenceText,
-                      index === 0 && styles.nextOccurrenceTextFirst,
-                    ]}>
-                      {occurrence}
-                    </Text>
-                  </View>
-                ))}
+                <Text style={styles.nextOccurrencesHint}>
+                  Tap any date to see which schedule section generated it
+                </Text>
+                {backendSummary.nextOccurrences.map((occurrence, index) => {
+                  const dateText = typeof occurrence === 'string' ? occurrence : occurrence.date;
+                  const hasSource = typeof occurrence !== 'string' && occurrence.source;
+                  
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.nextOccurrenceRow}
+                      onPress={() => hasSource && handleOccurrencePress(occurrence as OccurrenceWithSource)}
+                      disabled={!hasSource}
+                    >
+                      <IconSymbol
+                        ios_icon_name="circle.fill"
+                        android_material_icon_name="circle"
+                        size={6}
+                        color={index === 0 ? colors.primary : colors.textSecondary}
+                      />
+                      <Text style={[
+                        styles.nextOccurrenceText,
+                        index === 0 && styles.nextOccurrenceTextFirst,
+                        hasSource && styles.nextOccurrenceTextClickable,
+                      ]}>
+                        {dateText}
+                      </Text>
+                      {hasSource && (
+                        <IconSymbol
+                          ios_icon_name="info.circle"
+                          android_material_icon_name="info"
+                          size={16}
+                          color={colors.primary}
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             )}
           </>
@@ -701,17 +806,16 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               <Text style={styles.subLabel}>Use Alternative Calendar</Text>
               <TouchableOpacity
                 style={[styles.toggleSwitch, useAlternativeCalendar && styles.toggleSwitchActive]}
-                onPress={() => {
-                  const newValue = !useAlternativeCalendar;
-                  updateConfig({ 
-                    monthlyUseAlternativeCalendar: newValue,
-                    monthlyCalendarType: newValue ? alternativeCalendar : 'gregorian',
-                  });
-                }}
+                onPress={() => handleAlternativeCalendarToggle('monthly', !useAlternativeCalendar)}
               >
                 <View style={[styles.toggleSwitchThumb, useAlternativeCalendar && styles.toggleSwitchThumbActive]} />
               </TouchableOpacity>
             </View>
+            <Text style={styles.helperText}>
+              {useAlternativeCalendar 
+                ? 'Using alternative calendar. Gregorian dates have been cleared.' 
+                : 'Using Gregorian calendar. Toggle on to use alternative calendar events.'}
+            </Text>
           </View>
         )}
 
@@ -777,7 +881,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
             {/* NEW: Weekday Position Selection */}
             <Text style={styles.subLabel}>Or Select by Week Position</Text>
             <Text style={styles.helperText}>
-              Choose specific weekdays by their position in the month (e.g., 1st Friday, 2nd and last Sunday)
+              Choose specific weekdays by their position in the month (e.g., 1st Friday, 2nd and last Sunday). Tap the delete button next to each item to remove it.
             </Text>
             
             <TouchableOpacity
@@ -995,17 +1099,16 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               <Text style={styles.subLabel}>Use Alternative Calendar</Text>
               <TouchableOpacity
                 style={[styles.toggleSwitch, useAlternativeCalendar && styles.toggleSwitchActive]}
-                onPress={() => {
-                  const newValue = !useAlternativeCalendar;
-                  updateConfig({ 
-                    yearlyUseAlternativeCalendar: newValue,
-                    yearlyCalendarType: newValue ? alternativeCalendar : 'gregorian',
-                  });
-                }}
+                onPress={() => handleAlternativeCalendarToggle('yearly', !useAlternativeCalendar)}
               >
                 <View style={[styles.toggleSwitchThumb, useAlternativeCalendar && styles.toggleSwitchThumbActive]} />
               </TouchableOpacity>
             </View>
+            <Text style={styles.helperText}>
+              {useAlternativeCalendar 
+                ? 'Using alternative calendar. Gregorian dates have been cleared.' 
+                : 'Using Gregorian calendar. Toggle on to use alternative calendar events.'}
+            </Text>
           </View>
         )}
 
@@ -1325,6 +1428,84 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     );
   };
 
+  // NEW: Source Modal
+  const renderSourceModal = () => {
+    if (!selectedOccurrence) return null;
+
+    return (
+      <Modal
+        visible={showSourceModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSourceModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.sourceModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Schedule Source</Text>
+              <TouchableOpacity onPress={() => setShowSourceModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.sourceModalContent}>
+              <View style={styles.sourceInfoRow}>
+                <IconSymbol
+                  ios_icon_name="calendar"
+                  android_material_icon_name="event"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.sourceInfoLabel}>Date:</Text>
+              </View>
+              <Text style={styles.sourceInfoValue}>{selectedOccurrence.date}</Text>
+              
+              <View style={styles.sourceInfoRow}>
+                <IconSymbol
+                  ios_icon_name="list.bullet"
+                  android_material_icon_name="list"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.sourceInfoLabel}>Generated by:</Text>
+              </View>
+              <Text style={styles.sourceInfoValue}>{selectedOccurrence.source.section}</Text>
+              
+              <View style={styles.sourceInfoRow}>
+                <IconSymbol
+                  ios_icon_name="info.circle"
+                  android_material_icon_name="info"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.sourceInfoLabel}>Details:</Text>
+              </View>
+              <Text style={styles.sourceInfoValue}>{selectedOccurrence.source.details}</Text>
+              
+              <TouchableOpacity
+                style={styles.navigateButton}
+                onPress={() => navigateToSection(selectedOccurrence.source.section)}
+              >
+                <IconSymbol
+                  ios_icon_name="arrow.right.circle.fill"
+                  android_material_icon_name="arrow-circle-right"
+                  size={20}
+                  color="#fff"
+                />
+                <Text style={styles.navigateButtonText}>Go to this section</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {renderScheduleTypeSelector()}
@@ -1405,6 +1586,9 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
 
       {/* Weekday Position Picker Modal */}
       {renderWeekdayPositionPicker()}
+
+      {/* Source Modal */}
+      {renderSourceModal()}
     </View>
   );
 }
@@ -1497,11 +1681,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 4,
   },
+  nextOccurrencesHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
   nextOccurrenceRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 8,
-    paddingVertical: 2,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
   },
   nextOccurrenceText: {
     fontSize: 13,
@@ -1512,6 +1704,9 @@ const styles = StyleSheet.create({
   nextOccurrenceTextFirst: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  nextOccurrenceTextClickable: {
+    textDecorationLine: 'underline',
   },
   typeGrid: {
     flexDirection: 'row',
@@ -1564,6 +1759,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
   toggleSwitch: {
     width: 50,
@@ -1985,6 +2181,50 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  sourceModal: {
+    backgroundColor: colors.background,
+    borderRadius: 20,
+    margin: 20,
+    maxHeight: '60%',
+  },
+  sourceModalContent: {
+    padding: 20,
+  },
+  sourceInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  sourceInfoLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  sourceInfoValue: {
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 24,
+    marginBottom: 8,
+  },
+  navigateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+  },
+  navigateButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',

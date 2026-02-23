@@ -184,7 +184,11 @@ export default function CreateGoalScreen() {
     console.log('[CreateGoal] Fetching schedule summary for goal:', editingGoalId);
     setLoadingScheduleSummary(true);
     try {
-      const result = await authenticatedGet<{ summary: string; nextOccurrences: string[]; calendarType?: string }>(
+      const result = await authenticatedGet<{
+        summary: string;
+        nextOccurrences: Array<{ date: string; source: { section: string; details: string } } | string>;
+        calendarType?: string;
+      }>(
         `/api/goals/${editingGoalId}/schedule-summary`
       );
       console.log('[CreateGoal] Schedule summary received:', result);
