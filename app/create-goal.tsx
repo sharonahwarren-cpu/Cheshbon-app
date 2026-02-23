@@ -911,7 +911,7 @@ export default function CreateGoalScreen() {
                 Quick alarm: Set a simple alarm time based on your goal schedule ({getScheduleDescription()})
               </Text>
               
-              {/* Quick Time Input */}
+              {/* Quick Time Input - FIXED: Now visible and clickable */}
               <View style={styles.quickTimeSection}>
                 <Text style={styles.quickTimeLabel}>Alarm Time:</Text>
                 <TouchableOpacity
@@ -920,6 +920,7 @@ export default function CreateGoalScreen() {
                     console.log('User tapped Set time button');
                     setShowQuickTimePicker(true);
                   }}
+                  activeOpacity={0.7}
                 >
                   <IconSymbol
                     ios_icon_name="clock"
@@ -1106,7 +1107,7 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Quick Time Picker - FIXED: Now works on web/base */}
+      {/* Quick Time Picker - FIXED: Now properly configured for web/Android */}
       <DateTimePickerModal
         isVisible={showQuickTimePicker}
         mode="time"
@@ -1117,6 +1118,7 @@ export default function CreateGoalScreen() {
           now.setHours(9, 0, 0, 0);
           return now;
         })()}
+        display="spinner"
       />
 
       {/* Goal Schedule Wizard Modal */}
