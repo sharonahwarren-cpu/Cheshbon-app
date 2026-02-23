@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+import { colors } from '@/styles/commonStyles';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -12,15 +13,15 @@ import {
   Switch,
   Platform,
 } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { LoadingButton } from '@/components/LoadingButton';
+import { IconSymbol } from '@/components/IconSymbol';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@/styles/commonStyles';
-import { IconSymbol } from '@/components/IconSymbol';
-import { LoadingButton } from '@/components/LoadingButton';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
-import DateTimePickerModal from 'react-native-modal-datetime-picker';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
 
 interface Goal {
   id: string;
@@ -55,6 +56,7 @@ interface Currency {
 interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
+  alternativeCalendar?: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 }
 
 interface Alarm {
@@ -66,11 +68,6 @@ interface Alarm {
 
 type BehaviorCategory = 'Action' | 'Speech' | 'Thought' | 'Feeling';
 type GoalType = 'Restraining' | 'Proactive';
-type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
-type CalendarType = 'Gregorian' | 'Hebrew' | 'Chinese' | 'Islamic' | 'Persian';
-
-const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const WEEK_POSITIONS = ['First', 'Second', 'Third', 'Fourth', 'Last'];
 
 export default function CreateGoalScreen() {
   const router = useRouter();
@@ -110,10 +107,13 @@ export default function CreateGoalScreen() {
   const [behaviorCategories, setBehaviorCategories] = useState<BehaviorCategory[]>([]);
   const [type, setType] = useState<GoalType>('Proactive');
   const [strategyIds, setStrategyIds] = useState<string[]>([]);
-  const [scheduleType, setScheduleType] = useState<ScheduleType>('Always Active');
-  const [scheduleTimesPerDay, setScheduleTimesPerDay] = useState<string>('');
   
-  // Alarms state - FIXED: Use Date object and react-native-modal-datetime-picker
+  // NEW: Goal Scheduler state - DEFAULT TO "Always Active"
+  const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({
+    scheduleType: 'Always Active',
+  });
+  
+  // Alarms state
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
   const [quickAlarmTime, setQuickAlarmTime] = useState<Date | undefined>(undefined);
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
@@ -141,6 +141,7 @@ export default function CreateGoalScreen() {
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({
     reflectionCategoriesEnabled: true,
     reflectionCategories: ['Action', 'Speech', 'Thought'],
+    alternativeCalendar: 'gregorian',
   });
 
   // UI state
@@ -149,9 +150,9 @@ export default function CreateGoalScreen() {
   const [showParentGoalPicker, setShowParentGoalPicker] = useState(false);
   const [showLifeAreaPicker, setShowLifeAreaPicker] = useState(false);
   const [showStrategyPicker, setShowStrategyPicker] = useState(false);
-  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
   const [showRewardCurrencyPicker, setShowRewardCurrencyPicker] = useState(false);
   const [showConsequenceCurrencyPicker, setShowConsequenceCurrencyPicker] = useState(false);
+  const [showScheduleWizard, setShowScheduleWizard] = useState(false);
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -238,6 +239,7 @@ export default function CreateGoalScreen() {
       const preferences = preferencesData?.data || preferencesData || {
         reflectionCategoriesEnabled: true,
         reflectionCategories: ['Action', 'Speech', 'Thought'],
+        alternativeCalendar: 'gregorian',
       };
       
       if (preferences.reflectionCategories && typeof preferences.reflectionCategories === 'string') {
@@ -266,31 +268,36 @@ export default function CreateGoalScreen() {
         
         setTitle(goalDetails.title || '');
         setDescription(goalDetails.description || '');
-        setParentGoalId(goalDetails.parentGoalId);
-        setLifeAreaId(goalDetails.lifeAreaId);
-        setBehaviorCategories(goalDetails.behaviorCategories || []);
+        setParentGoalId(goalDetails.parentGoalId || goalDetails.parent_goal_id);
+        setLifeAreaId(goalDetails.lifeAreaId || goalDetails.life_area_id);
+        setBehaviorCategories(goalDetails.behaviorCategories || goalDetails.behavior_categories || []);
         setType(goalDetails.type || 'Proactive');
-        setStrategyIds(goalDetails.strategyIds || []);
-        setScheduleType(goalDetails.scheduleType || 'Always Active');
-        setScheduleTimesPerDay(goalDetails.scheduleTimesPerDay?.toString() || '');
+        setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
         
-        if (goalDetails.rewardCurrencyId) {
-          setRewardCurrencyId(goalDetails.rewardCurrencyId);
-          setRewardSuccesses(goalDetails.rewardSuccesses?.toString() || '');
-          setRewardAmount(goalDetails.rewardAmount?.toString() || '');
+        // Load schedule config from goal details
+        const rawScheduleType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+        setScheduleConfig({
+          scheduleType: rawScheduleType,
+          timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
+          weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week,
+        });
+        
+        if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {
+          setRewardCurrencyId(goalDetails.rewardCurrencyId || goalDetails.reward_currency_id);
+          setRewardSuccesses((goalDetails.rewardSuccesses || goalDetails.reward_successes)?.toString() || '');
+          setRewardAmount((goalDetails.rewardAmount || goalDetails.reward_amount)?.toString() || '');
         }
         
-        if (goalDetails.consequenceCurrencyId) {
-          setConsequenceCurrencyId(goalDetails.consequenceCurrencyId);
-          setConsequenceFailures(goalDetails.consequenceFailures?.toString() || '');
-          setConsequenceAmount(goalDetails.consequenceAmount?.toString() || '');
+        if (goalDetails.consequenceCurrencyId || goalDetails.consequence_currency_id) {
+          setConsequenceCurrencyId(goalDetails.consequenceCurrencyId || goalDetails.consequence_currency_id);
+          setConsequenceFailures((goalDetails.consequenceFailures || goalDetails.consequence_failures)?.toString() || '');
+          setConsequenceAmount((goalDetails.consequenceAmount || goalDetails.consequence_amount)?.toString() || '');
         }
 
         // Load alarms for this goal using the goal's alarms jsonb field to filter
         if (allAlarmsData) {
           const allAlarms = Array.isArray(allAlarmsData) ? allAlarmsData : (allAlarmsData?.data || []);
           
-          // Get the alarm IDs stored in the goal's alarms field
           const goalAlarmsField = goalDetails.alarms;
           let goalAlarmIds: string[] = [];
           
@@ -381,9 +388,16 @@ export default function CreateGoalScreen() {
         behaviorCategories: behaviorCategories.length > 0 ? behaviorCategories : undefined,
         type,
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
-        scheduleType,
-        scheduleTimesPerDay: scheduleType === 'Daily' && scheduleTimesPerDay ? parseInt(scheduleTimesPerDay) : undefined,
+        scheduleType: scheduleConfig.scheduleType,
+        scheduleTimesPerDay: scheduleConfig.timesPerDay,
+        scheduleDaysOfWeek: scheduleConfig.weekdays,
       };
+      
+      // Include alarms field when editing a goal
+      if (editingGoalId && goalAlarms.length > 0) {
+        goalData.alarms = goalAlarms.map(alarm => ({ id: alarm.id }));
+        console.log('[API] Including alarms in goal update:', goalData.alarms);
+      }
 
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
         goalData.reward = {
@@ -472,9 +486,11 @@ export default function CreateGoalScreen() {
     const params = new URLSearchParams({
       goalId: editingGoalId || '',
       goalTitle: alarmTitle,
-      scheduleType: scheduleType,
+      scheduleType: scheduleConfig.scheduleType,
     });
-    // Pass quick alarm time if set
+    if (scheduleConfig.weekdays && scheduleConfig.weekdays.length > 0) {
+      params.set('scheduleDays', scheduleConfig.weekdays.join(','));
+    }
     if (quickAlarmTime) {
       const hours = quickAlarmTime.getHours().toString().padStart(2, '0');
       const minutes = quickAlarmTime.getMinutes().toString().padStart(2, '0');
@@ -521,7 +537,6 @@ export default function CreateGoalScreen() {
       const updatedAlarms = goalAlarms.filter(alarm => alarm.id !== alarmToDelete.id);
       setGoalAlarms(updatedAlarms);
       
-      // Update the goal's alarms field to remove this alarm ID
       if (editingGoalId) {
         const remainingAlarmIds = updatedAlarms.map(a => a.id);
         console.log('[API] Updating goal alarms field after deletion:', remainingAlarmIds);
@@ -636,6 +651,25 @@ export default function CreateGoalScreen() {
     return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
+  const getScheduleDescription = () => {
+    const scheduleType = scheduleConfig.scheduleType;
+    if (scheduleType === 'Always Active') {
+      return 'every day';
+    } else if (scheduleType === 'Daily') {
+      return 'daily';
+    } else if (scheduleType === 'Weekly') {
+      const dayCount = scheduleConfig.weekdays?.length || 0;
+      return dayCount > 0 ? `${dayCount} days per week` : 'weekly';
+    } else if (scheduleType === 'Fortnightly') {
+      return 'fortnightly';
+    } else if (scheduleType === 'Monthly') {
+      return 'monthly';
+    } else if (scheduleType === 'Yearly') {
+      return 'yearly';
+    }
+    return scheduleType.toLowerCase();
+  };
+
   const handleQuickTimePickerConfirm = (date: Date) => {
     console.log('User selected quick alarm time:', date);
     setQuickAlarmTime(date);
@@ -646,15 +680,6 @@ export default function CreateGoalScreen() {
     console.log('User cancelled quick alarm time picker');
     setShowQuickTimePicker(false);
   };
-
-  const scheduleTypes: ScheduleType[] = [
-    'Always Active',
-    'Daily',
-    'Weekly',
-    'Fortnightly',
-    'Monthly',
-    'Yearly',
-  ];
 
   const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
   const submitButtonTitle = editingGoalId ? 'Update Goal' : 'Create Goal';
@@ -840,38 +865,34 @@ export default function CreateGoalScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Goal Schedule */}
+        {/* Goal Schedule - NEW WIZARD */}
         <View style={styles.section}>
           <Text style={styles.label}>Goal Schedule</Text>
           <TouchableOpacity
             style={styles.picker}
-            onPress={() => setShowSchedulePicker(true)}
+            onPress={() => setShowScheduleWizard(true)}
           >
-            <Text style={styles.pickerText}>{scheduleType}</Text>
-            <IconSymbol
-              ios_icon_name="chevron.down"
-              android_material_icon_name="arrow-drop-down"
-              size={24}
-              color={colors.text}
-            />
-          </TouchableOpacity>
-          
-          {scheduleType === 'Daily' && (
-            <View style={styles.subSection}>
-              <Text style={styles.subLabel}>Times per day (optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={scheduleTimesPerDay}
-                onChangeText={setScheduleTimesPerDay}
-                placeholder="e.g., 3"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="number-pad"
+            <View style={styles.schedulePickerContent}>
+              <View>
+                <Text style={styles.pickerText}>{scheduleConfig.scheduleType}</Text>
+                {scheduleConfig.scheduleType !== 'Always Active' && (
+                  <Text style={styles.scheduleSubtext}>
+                    {scheduleConfig.timesPerDay ? `${scheduleConfig.timesPerDay}x per day` : ''}
+                    {scheduleConfig.weekdays && scheduleConfig.weekdays.length > 0 ? ` ${scheduleConfig.weekdays.length} days selected` : ''}
+                  </Text>
+                )}
+              </View>
+              <IconSymbol
+                ios_icon_name="chevron.right"
+                android_material_icon_name="chevron-right"
+                size={24}
+                color={colors.text}
               />
             </View>
-          )}
+          </TouchableOpacity>
         </View>
 
-        {/* Alarms & Reminders - FIXED: Now uses react-native-modal-datetime-picker */}
+        {/* Alarms & Reminders */}
         <View style={styles.section}>
           <View style={styles.alarmHeader}>
             <View style={styles.alarmTitleRow}>
@@ -881,7 +902,7 @@ export default function CreateGoalScreen() {
                 size={20}
                 color={colors.primary}
               />
-              <Text style={styles.label}>Alarms & Reminders</Text>
+              <Text style={styles.label}>Alarms</Text>
             </View>
             <Switch
               value={alarmsEnabled}
@@ -894,7 +915,7 @@ export default function CreateGoalScreen() {
           {alarmsEnabled && (
             <View style={styles.alarmContent}>
               <Text style={styles.helperText}>
-                Quick alarm: Set a simple daily alarm time
+                Quick alarm: Set a simple alarm time based on your goal schedule ({getScheduleDescription()})
               </Text>
               
               <View style={styles.quickTimeSection}>
@@ -1088,7 +1109,7 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Quick Time Picker - FIXED: Now uses react-native-modal-datetime-picker */}
+      {/* Quick Time Picker */}
       <DateTimePickerModal
         isVisible={showQuickTimePicker}
         mode="time"
@@ -1102,18 +1123,57 @@ export default function CreateGoalScreen() {
         display="spinner"
       />
 
-      {/* Schedule Picker Modal */}
+      {/* Goal Schedule Wizard Modal */}
       <Modal
-        visible={showSchedulePicker}
+        visible={showScheduleWizard}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowSchedulePicker(false)}
+        onRequestClose={() => setShowScheduleWizard(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.wizardModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Goal Schedule</Text>
+              <TouchableOpacity onPress={() => setShowScheduleWizard(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.wizardScroll} contentContainerStyle={styles.wizardContent}>
+              <GoalScheduler
+                config={scheduleConfig}
+                onChange={setScheduleConfig}
+                alternativeCalendar={userPreferences.alternativeCalendar}
+              />
+            </ScrollView>
+            <View style={styles.wizardFooter}>
+              <TouchableOpacity
+                style={styles.wizardDoneButton}
+                onPress={() => setShowScheduleWizard(false)}
+              >
+                <Text style={styles.wizardDoneButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Parent Goal Picker Modal */}
+      <Modal
+        visible={showParentGoalPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowParentGoalPicker(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Schedule Type</Text>
-              <TouchableOpacity onPress={() => setShowSchedulePicker(false)}>
+              <Text style={styles.modalTitle}>Select Parent Goal</Text>
+              <TouchableOpacity onPress={() => setShowParentGoalPicker(false)}>
                 <IconSymbol
                   ios_icon_name="xmark"
                   android_material_icon_name="close"
@@ -1123,20 +1183,253 @@ export default function CreateGoalScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll}>
-              {scheduleTypes.map((type) => {
-                const isSelected = scheduleType === type;
+              <TouchableOpacity
+                style={[styles.pickerItem, !parentGoalId && styles.pickerItemSelected]}
+                onPress={() => {
+                  setParentGoalId(undefined);
+                  setShowParentGoalPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, !parentGoalId && styles.pickerItemTextSelected]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {goals.map((goal) => {
+                const isSelected = goal.id === parentGoalId;
                 return (
                   <TouchableOpacity
-                    key={type}
+                    key={goal.id}
                     style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
                     onPress={() => {
-                      console.log('Selected schedule type:', type);
-                      setScheduleType(type);
-                      setShowSchedulePicker(false);
+                      setParentGoalId(goal.id);
+                      setShowParentGoalPicker(false);
                     }}
                   >
                     <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
-                      {type}
+                      {goal.title}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Life Area Picker Modal */}
+      <Modal
+        visible={showLifeAreaPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLifeAreaPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Life Area</Text>
+              <TouchableOpacity onPress={() => setShowLifeAreaPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <TouchableOpacity
+                style={[styles.pickerItem, !lifeAreaId && styles.pickerItemSelected]}
+                onPress={() => {
+                  setLifeAreaId(undefined);
+                  setShowLifeAreaPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, !lifeAreaId && styles.pickerItemTextSelected]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {renderLifeAreaHierarchy(lifeAreas)}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Strategy Picker Modal */}
+      <Modal
+        visible={showStrategyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowStrategyPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Strategies</Text>
+              <TouchableOpacity onPress={() => setShowStrategyPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {strategies.map((strategy) => {
+                const isSelected = strategyIds.includes(strategy.id);
+                return (
+                  <TouchableOpacity
+                    key={strategy.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => toggleStrategy(strategy.id)}
+                  >
+                    <View style={styles.strategyItem}>
+                      <View>
+                        <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                          {strategy.name}
+                        </Text>
+                        {strategy.description && (
+                          <Text style={styles.strategyDescription}>{strategy.description}</Text>
+                        )}
+                      </View>
+                      {isSelected && (
+                        <IconSymbol
+                          ios_icon_name="checkmark"
+                          android_material_icon_name="check"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reward Currency Picker Modal */}
+      <Modal
+        visible={showRewardCurrencyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRewardCurrencyPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Reward Currency</Text>
+              <TouchableOpacity onPress={() => setShowRewardCurrencyPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <TouchableOpacity
+                style={[styles.pickerItem, !rewardCurrencyId && styles.pickerItemSelected]}
+                onPress={() => {
+                  setRewardCurrencyId(undefined);
+                  setRewardSuccesses('');
+                  setRewardAmount('');
+                  setShowRewardCurrencyPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, !rewardCurrencyId && styles.pickerItemTextSelected]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {currencies.map((currency) => {
+                const isSelected = currency.id === rewardCurrencyId;
+                const displayText = currency.symbol ? `${currency.name} (${currency.symbol})` : currency.name;
+                return (
+                  <TouchableOpacity
+                    key={currency.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      setRewardCurrencyId(currency.id);
+                      setShowRewardCurrencyPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                      {displayText}
+                    </Text>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Consequence Currency Picker Modal */}
+      <Modal
+        visible={showConsequenceCurrencyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowConsequenceCurrencyPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Consequence Currency</Text>
+              <TouchableOpacity onPress={() => setShowConsequenceCurrencyPicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              <TouchableOpacity
+                style={[styles.pickerItem, !consequenceCurrencyId && styles.pickerItemSelected]}
+                onPress={() => {
+                  setConsequenceCurrencyId(undefined);
+                  setConsequenceFailures('');
+                  setConsequenceAmount('');
+                  setShowConsequenceCurrencyPicker(false);
+                }}
+              >
+                <Text style={[styles.pickerItemText, !consequenceCurrencyId && styles.pickerItemTextSelected]}>
+                  None
+                </Text>
+              </TouchableOpacity>
+              {currencies.map((currency) => {
+                const isSelected = currency.id === consequenceCurrencyId;
+                const displayText = currency.symbol ? `${currency.name} (${currency.symbol})` : currency.name;
+                return (
+                  <TouchableOpacity
+                    key={currency.id}
+                    style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
+                    onPress={() => {
+                      setConsequenceCurrencyId(currency.id);
+                      setShowConsequenceCurrencyPicker(false);
+                    }}
+                  >
+                    <Text style={[styles.pickerItemText, isSelected && styles.pickerItemTextSelected]}>
+                      {displayText}
                     </Text>
                     {isSelected && (
                       <IconSymbol
@@ -1171,6 +1464,56 @@ export default function CreateGoalScreen() {
             >
               <Text style={styles.alertButtonText}>OK</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create Another Goal Prompt */}
+      <Modal
+        visible={showCreateAnotherPrompt}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateAnotherPrompt(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Create Another Goal?</Text>
+            <Text style={styles.alertMessage}>
+              Would you like to create another goal for this Life Area?
+            </Text>
+            <View style={styles.promptButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setShowCreateAnotherPrompt(false);
+                  router.push(`/life-area-wizard?id=${wizardLifeAreaId}&step=2&newGoalCreated=true`);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>No, Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={() => {
+                  setShowCreateAnotherPrompt(false);
+                  setTitle('');
+                  setDescription('');
+                  setParentGoalId(undefined);
+                  setBehaviorCategories([]);
+                  setType('Proactive');
+                  setStrategyIds([]);
+                  setScheduleConfig({ scheduleType: 'Always Active' });
+                  setRewardCurrencyId(undefined);
+                  setRewardSuccesses('');
+                  setRewardAmount('');
+                  setConsequenceCurrencyId(undefined);
+                  setConsequenceFailures('');
+                  setConsequenceAmount('');
+                  setAlarmsEnabled(false);
+                }}
+              >
+                <Text style={styles.alertButtonText}>Yes, Create Another</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1252,6 +1595,18 @@ const styles = StyleSheet.create({
   pickerText: {
     fontSize: 16,
     color: colors.text,
+    flex: 1,
+  },
+  schedulePickerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flex: 1,
+  },
+  scheduleSubtext: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
   checkboxGroup: {
     flexDirection: 'row',
@@ -1315,9 +1670,6 @@ const styles = StyleSheet.create({
   radioText: {
     fontSize: 16,
     color: colors.text,
-  },
-  subSection: {
-    marginTop: 12,
   },
   subLabel: {
     fontSize: 14,
@@ -1469,16 +1821,20 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: colors.background,
-    borderRadius: 20,
-    width: '100%',
-    maxWidth: 400,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     maxHeight: '80%',
+  },
+  wizardModal: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
+    height: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1496,12 +1852,33 @@ const styles = StyleSheet.create({
   modalScroll: {
     maxHeight: 400,
   },
+  wizardScroll: {
+    flex: 1,
+  },
+  wizardContent: {
+    padding: 20,
+  },
+  wizardFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  wizardDoneButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  wizardDoneButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
   alertModal: {
     backgroundColor: colors.background,
     borderRadius: 20,
     padding: 24,
-    width: '100%',
-    maxWidth: 400,
+    margin: 20,
     alignItems: 'center',
   },
   alertTitle: {
@@ -1530,6 +1907,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  promptButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  alertButtonSecondary: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  alertButtonSecondaryText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
   pickerItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1548,5 +1940,16 @@ const styles = StyleSheet.create({
   pickerItemTextSelected: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  strategyItem: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  strategyDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
   },
 });
