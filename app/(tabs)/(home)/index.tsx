@@ -20,7 +20,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { DatePickerModal } from "@/components/DatePickerModal";
 import { DateTime } from 'luxon';
 import { getLocalTimezone } from '@/utils/dateUtils';
 
@@ -696,18 +696,6 @@ export default function HomeScreen() {
     setSelectedDate(newDate);
   };
 
-  const handleDateChange = (event: any, date?: Date) => {
-    console.log('[Home] Date picker onChange called', { date });
-    // On Android, the picker closes itself after selection
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (date) {
-      setSelectedDate(date);
-      console.log('[Home] Date selected:', date.toISOString());
-    }
-  };
-
   const formatDateDisplay = (date: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1265,54 +1253,28 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {showDatePicker && (
-          <Modal
-            visible={showDatePicker}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowDatePicker(false)}
-          >
-            <View style={styles.datePickerOverlay}>
-              <View style={styles.datePickerContainer}>
-                <View style={styles.datePickerHeader}>
-                  <Text style={styles.datePickerTitle}>Select Date</Text>
-                  <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                    <Text style={styles.datePickerDone}>Done</Text>
-                  </TouchableOpacity>
-                </View>
-                
-                <DateTimePicker
-                  value={selectedDate}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
-                  onChange={handleDateChange}
-                  style={Platform.OS === 'ios' ? { backgroundColor: colors.background } : undefined}
-                />
-                
-                {userPreferences.alternativeCalendar && userPreferences.alternativeCalendar !== 'gregorian' && (
-                  <View style={styles.alternativeCalendarInfo}>
-                    <Text style={styles.alternativeCalendarLabel}>
-                      {userPreferences.alternativeCalendar === 'hebrew' && '✡️ Hebrew Calendar'}
-                      {userPreferences.alternativeCalendar === 'chinese' && '🏮 Chinese Calendar'}
-                      {userPreferences.alternativeCalendar === 'islamic' && '☪️ Islamic Calendar'}
-                    </Text>
-                    <Text style={styles.alternativeCalendarDate}>
-                      {formatAlternativeDate(selectedDate, userPreferences.alternativeCalendar)}
-                    </Text>
-                  </View>
-                )}
-                
-                {Platform.OS === 'ios' && (
-                  <TouchableOpacity
-                    style={styles.datePickerDoneButton}
-                    onPress={() => setShowDatePicker(false)}
-                  >
-                    <Text style={styles.datePickerDoneButtonText}>Done</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          </Modal>
+        <DatePickerModal
+          visible={showDatePicker}
+          value={selectedDate}
+          mode="date"
+          onConfirm={(date) => {
+            setSelectedDate(date);
+            setShowDatePicker(false);
+          }}
+          onCancel={() => setShowDatePicker(false)}
+        />
+
+        {userPreferences.alternativeCalendar && userPreferences.alternativeCalendar !== 'gregorian' && (
+          <View style={styles.alternativeCalendarInfo}>
+            <Text style={styles.alternativeCalendarLabel}>
+              {userPreferences.alternativeCalendar === 'hebrew' && '✡️ Hebrew Calendar'}
+              {userPreferences.alternativeCalendar === 'chinese' && '🏮 Chinese Calendar'}
+              {userPreferences.alternativeCalendar === 'islamic' && '☪️ Islamic Calendar'}
+            </Text>
+            <Text style={styles.alternativeCalendarDate}>
+              {formatAlternativeDate(selectedDate, userPreferences.alternativeCalendar)}
+            </Text>
+          </View>
         )}
 
         {currentView === 'reflect' ? (
@@ -1775,6 +1737,23 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '600',
     color: colors.success,
+  },
+  alternativeCalendarInfo: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  alternativeCalendarLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    marginBottom: 4,
+  },
+  alternativeCalendarDate: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
   },
   content: {
     flex: 1,
@@ -2337,66 +2316,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
-  },
-  datePickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  datePickerContainer: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    overflow: 'hidden',
-    width: '100%',
-    maxWidth: 400,
-  },
-  datePickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  datePickerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  datePickerDone: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  datePickerDoneButton: {
-    backgroundColor: colors.primary,
-    margin: 16,
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-  },
-  datePickerDoneButtonText: {
-    color: colors.background,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  alternativeCalendarInfo: {
-    padding: 16,
-    backgroundColor: colors.backgroundAlt,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  alternativeCalendarLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-    marginBottom: 6,
-  },
-  alternativeCalendarDate: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
   },
 });
