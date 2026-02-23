@@ -17,9 +17,27 @@ The `GET /api/goals/:id/schedule-summary` endpoint generates human-readable desc
   "goalTitle": "Morning Prayer",
   "summary": "Scheduled daily at 6:30 AM",
   "nextOccurrences": [
-    "Monday, February 24, 2025 (15 Adar, 5785)",
-    "Tuesday, February 25, 2025 (16 Adar, 5785)",
-    "Wednesday, February 26, 2025 (17 Adar, 5785)"
+    {
+      "date": "Monday, February 24, 2025 (15 Adar, 5785)",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    },
+    {
+      "date": "Tuesday, February 25, 2025 (16 Adar, 5785)",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    },
+    {
+      "date": "Wednesday, February 26, 2025 (17 Adar, 5785)",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    }
   ],
   "recurrenceType": "daily",
   "calendarType": "hebrew"
@@ -47,9 +65,27 @@ The `GET /api/goals/:id/schedule-summary` endpoint generates human-readable desc
 {
   "summary": "Scheduled daily at 6:30 AM, 12:00 PM, 6:00 PM",
   "nextOccurrences": [
-    "Monday, February 24, 2025",
-    "Tuesday, February 25, 2025",
-    "Wednesday, February 26, 2025"
+    {
+      "date": "Monday, February 24, 2025",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    },
+    {
+      "date": "Tuesday, February 25, 2025",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    },
+    {
+      "date": "Wednesday, February 26, 2025",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    }
   ]
 }
 ```
@@ -61,9 +97,27 @@ The `GET /api/goals/:id/schedule-summary` endpoint generates human-readable desc
 {
   "summary": "Scheduled every Monday, Wednesday, and Friday",
   "nextOccurrences": [
-    "Monday, February 24, 2025",
-    "Wednesday, February 26, 2025",
-    "Friday, February 28, 2025"
+    {
+      "date": "Monday, February 24, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Monday"
+      }
+    },
+    {
+      "date": "Wednesday, February 26, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Wednesday"
+      }
+    },
+    {
+      "date": "Friday, February 28, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Friday"
+      }
+    }
   ]
 }
 ```
@@ -73,9 +127,27 @@ The `GET /api/goals/:id/schedule-summary` endpoint generates human-readable desc
 {
   "summary": "Scheduled on weekends (Saturday and Sunday)",
   "nextOccurrences": [
-    "Saturday, February 22, 2025",
-    "Sunday, February 23, 2025",
-    "Saturday, March 1, 2025"
+    {
+      "date": "Saturday, February 22, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Weekends"
+      }
+    },
+    {
+      "date": "Sunday, February 23, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Weekends"
+      }
+    },
+    {
+      "date": "Saturday, March 1, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Weekends"
+      }
+    }
   ]
 }
 ```
@@ -85,9 +157,27 @@ The `GET /api/goals/:id/schedule-summary` endpoint generates human-readable desc
 {
   "summary": "Scheduled on weekdays (Monday through Friday)",
   "nextOccurrences": [
-    "Monday, February 24, 2025",
-    "Tuesday, February 25, 2025",
-    "Wednesday, February 26, 2025"
+    {
+      "date": "Monday, February 24, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Weekdays"
+      }
+    },
+    {
+      "date": "Tuesday, February 25, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Weekdays"
+      }
+    },
+    {
+      "date": "Wednesday, February 26, 2025",
+      "source": {
+        "section": "Weekly",
+        "details": "Weekdays"
+      }
+    }
   ]
 }
 ```
@@ -221,6 +311,46 @@ The `GET /api/goals/:id/schedule-summary` endpoint generates human-readable desc
 }
 ```
 
+## Source Metadata Reference
+
+Each occurrence includes source metadata indicating which schedule configuration generated it:
+
+### Daily Schedules
+- **Section:** "Daily"
+- **Details:** "Every day"
+
+### Weekly Schedules
+- **Section:** "Weekly"
+- **Details:** Day name (e.g., "Monday"), "Weekends", or "Weekdays"
+
+### Fortnightly Schedules
+- **Section:** "Fortnightly"
+- **Details:** Week number and day (e.g., "Week 1 - Monday", "Week 2 - Friday")
+
+### Monthly Schedules
+- **Section:** "Monthly - Selected Dates" (for specific dates like 15, 28)
+  - **Details:** "15th of month", "28th of month"
+- **Section:** "Monthly - Weekday Position" (for Nth weekday like 1st Friday)
+  - **Details:** "1st Friday", "Last Sunday"
+- **Section:** "Monthly - Date Range" (for ranges like 15-20)
+  - **Details:** "15th-20th of month"
+- **Section:** "Monthly" (fallback)
+  - **Details:** Day description
+
+### Yearly Schedules
+- **Section:** "Yearly - Specific Dates" (for specific dates like Feb 1)
+  - **Details:** "February 1st", "March 15th"
+- **Section:** "Yearly - Date Range" (for month ranges)
+  - **Details:** "January 1st-5th", "December 25th-31st"
+- **Section:** "Yearly" (fallback)
+  - **Details:** Month and day description
+
+### Special Cases
+- **Section:** "Always Active"
+  - **Details:** "Every day"
+- **Section:** "Error"
+  - **Details:** "Calculation error" (if generation fails)
+
 ## Implementation Details
 
 ### Summary Generation Logic
@@ -265,6 +395,34 @@ The summary is generated based on the following hierarchy:
 - "2nd Tuesday" = Second Tuesday of the month
 - "Last Sunday" = Last Sunday of the month
 
+### Calendar Type Toggle Behavior
+
+When updating a goal's `calendarType`:
+
+**Switching TO Alternative Calendar** (e.g., Gregorian → Hebrew):
+- All Gregorian-specific date selections are cleared:
+  - `scheduleDatesOfMonth` → null
+  - `scheduleMonthlyRange` → null
+  - `scheduleDatesOfYear` → null
+- This prevents conflicting schedule rules from coexisting
+- Example: User selects "15th of month" in Gregorian, then switches to Hebrew calendar
+  - The "15th of month" selection is cleared
+  - User must reconfigure with Hebrew calendar dates
+
+**Switching TO Gregorian Calendar**:
+- Alternative calendar date fields are cleared
+- `calendarType` is set to 'gregorian'
+- Allows user to reconfigure with Gregorian calendar dates
+
+### Empty Weekday Selection
+
+In Monthly "Select Weekday Position", it's possible to unselect all options:
+
+- **Empty Selection**: `scheduleNthDayOfMonth` → null
+- **Non-Empty Selection**: `scheduleNthDayOfMonth` → { day: "Monday", nth: 1 }
+- This allows flexible configuration where no Nth day is currently selected
+- Users can toggle weekday positions on/off without losing other schedule rules
+
 ## Error Handling
 
 The endpoint handles various error cases:
@@ -295,11 +453,41 @@ curl -X GET "https://api.example.com/api/goals/550e8400-e29b-41d4-a716-446655440
   "goalTitle": "Morning Prayer",
   "summary": "Scheduled daily at 6:30 AM",
   "nextOccurrences": [
-    "Monday, February 24, 2025",
-    "Tuesday, February 25, 2025",
-    "Wednesday, February 26, 2025",
-    "Thursday, February 27, 2025",
-    "Friday, February 28, 2025"
+    {
+      "date": "Monday, February 24, 2025",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    },
+    {
+      "date": "Tuesday, February 25, 2025",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    },
+    {
+      "date": "Wednesday, February 26, 2025",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    },
+    {
+      "date": "Thursday, February 27, 2025",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    },
+    {
+      "date": "Friday, February 28, 2025",
+      "source": {
+        "section": "Daily",
+        "details": "Every day"
+      }
+    }
   ],
   "recurrenceType": "daily",
   "calendarType": "gregorian"

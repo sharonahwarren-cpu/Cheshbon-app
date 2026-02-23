@@ -449,7 +449,32 @@ export function registerGoalRoutes(app: App) {
       if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
       if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null;
       if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null;
-      if (body.calendarType !== undefined) updateData.calendarType = body.calendarType || null;
+      if (body.calendarType !== undefined) {
+        const newCalendarType = body.calendarType || null;
+        const oldCalendarType = existingGoal[0].calendarType;
+
+        updateData.calendarType = newCalendarType;
+
+        // Handle calendar type toggle logic
+        if (newCalendarType && newCalendarType !== 'gregorian' && oldCalendarType === 'gregorian') {
+          // Switching TO alternative calendar: clear Gregorian calendar dates
+          updateData.scheduleDatesOfMonth = null;
+          updateData.scheduleMonthlyRange = null;
+          updateData.scheduleDatesOfYear = null;
+          app.logger.info(
+            { userId: session.user.id, goalId: id, newCalendarType },
+            'Calendar type changed to alternative; clearing Gregorian calendar dates'
+          );
+        } else if (newCalendarType === 'gregorian' || !newCalendarType) {
+          // Switching TO Gregorian or clearing calendar: clear alternative calendar dates
+          updateData.calendarType = 'gregorian';
+          // For now, we keep scheduleDatesOfYear as is since it can be used for both calendars
+          app.logger.info(
+            { userId: session.user.id, goalId: id },
+            'Calendar type set to Gregorian'
+          );
+        }
+      }
       if (body.completed !== undefined) updateData.completed = body.completed;
       if (body.progress !== undefined) updateData.progress = body.progress;
       if (body.reward !== undefined) {
