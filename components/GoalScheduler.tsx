@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { IconSymbol } from './IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { DatePickerModal } from './DatePickerModal';
 import { DateTime } from 'luxon';
 import { useRouter } from 'expo-router';
 
@@ -138,6 +138,22 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
     }
   }, [config.weekendsOnly, config.weekdaysOnly]);
 
+  const handleDatePickerConfirm = (selectedDate: Date) => {
+    console.log('User confirmed date selection:', selectedDate);
+    if (showDatePicker === 'end') {
+      updateConfig({ endDate: selectedDate });
+    } else if (showDatePicker === 'exclusion') {
+      const current = config.exclusionDates || [];
+      updateConfig({ exclusionDates: [...current, selectedDate] });
+    }
+    setShowDatePicker(null);
+  };
+
+  const handleDatePickerCancel = () => {
+    console.log('User cancelled date picker');
+    setShowDatePicker(null);
+  };
+
   const renderScheduleTypeSelector = () => {
     const scheduleTypes: ScheduleType[] = ['Always Active', 'Daily', 'Weekly', 'Fortnightly', 'Monthly', 'Yearly'];
     
@@ -184,6 +200,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.datePickerButton}
           onPress={() => {
+            console.log('User tapped End Date button');
             setTempDate(config.endDate || new Date());
             setShowDatePicker('end');
           }}
@@ -212,6 +229,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => {
+            console.log('User tapped Add Exclusion Date button');
             setTempDate(new Date());
             setShowDatePicker('exclusion');
           }}
@@ -307,6 +325,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.datePickerButton}
           onPress={() => {
+            console.log('User tapped End Date button');
             setTempDate(config.endDate || new Date());
             setShowDatePicker('end');
           }}
@@ -334,6 +353,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => {
+            console.log('User tapped Add Exclusion Date button');
             setTempDate(new Date());
             setShowDatePicker('exclusion');
           }}
@@ -443,6 +463,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.datePickerButton}
           onPress={() => {
+            console.log('User tapped End Date button');
             setTempDate(config.endDate || new Date());
             setShowDatePicker('end');
           }}
@@ -470,6 +491,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => {
+            console.log('User tapped Add Exclusion Date button');
             setTempDate(new Date());
             setShowDatePicker('exclusion');
           }}
@@ -671,6 +693,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.datePickerButton}
           onPress={() => {
+            console.log('User tapped End Date button');
             setTempDate(config.endDate || new Date());
             setShowDatePicker('end');
           }}
@@ -698,6 +721,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => {
+            console.log('User tapped Add Exclusion Date button');
             setTempDate(new Date());
             setShowDatePicker('exclusion');
           }}
@@ -960,6 +984,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.datePickerButton}
           onPress={() => {
+            console.log('User tapped End Date button');
             setTempDate(config.endDate || new Date());
             setShowDatePicker('end');
           }}
@@ -987,6 +1012,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => {
+            console.log('User tapped Add Exclusion Date button');
             setTempDate(new Date());
             setShowDatePicker('exclusion');
           }}
@@ -1036,22 +1062,14 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
       {renderMonthlyOptions()}
       {renderYearlyOptions()}
 
-      {showDatePicker && Platform.OS !== 'web' && (
-        <DateTimePicker
+      {/* Date Picker Modal - Using DatePickerModal component */}
+      {showDatePicker && (
+        <DatePickerModal
+          visible={true}
           value={tempDate}
           mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            if (event.type === 'set' && selectedDate) {
-              if (showDatePicker === 'end') {
-                updateConfig({ endDate: selectedDate });
-              } else if (showDatePicker === 'exclusion') {
-                const current = config.exclusionDates || [];
-                updateConfig({ exclusionDates: [...current, selectedDate] });
-              }
-            }
-            setShowDatePicker(null);
-          }}
+          onConfirm={handleDatePickerConfirm}
+          onCancel={handleDatePickerCancel}
         />
       )}
 
