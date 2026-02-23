@@ -9,13 +9,16 @@ import {
   StyleSheet,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete, getBearerToken, BACKEND_URL } from '@/utils/api';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 
 interface MitzvahCategory {
   id: string;
@@ -52,8 +55,11 @@ export default function MitzvotScreen() {
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'ACTIVE' | 'DEACTIVATED'>('ACTIVE');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importStatus, setImportStatus] = useState<{ totalSystemMitzvot: number; userHasImported: boolean } | null>(null);
+  const [importing, setImporting] = useState(false);
 
-  useFocusEffect(useCallback(() => { loadData(); }, []));
+  useFocusEffect(useCallback(() => { loadData(); loadImportStatus(); }, []));
 
   const loadData = async () => {
     console.log('[Mitzvot] Loading data...');
@@ -69,6 +75,16 @@ export default function MitzvotScreen() {
       showError('Failed to load mitzvot data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadImportStatus = async () => {
+    try {
+      console.log('[Mitzvot] Loading import status...');
+      const status = await authenticatedGet<{ totalSystemMitzvot: number; userHasImported: boolean }>('/api/mitzvot/import-status');
+      setImportStatus(status);
+    } catch (error) {
+      console.log('[Mitzvot] Failed to load import status:', error);
     }
   };
 
@@ -135,6 +151,105 @@ export default function MitzvotScreen() {
     }
   };
 
+  const handleImportCSV = async () => {
+    try {
+      console.log('[Mitzvot] Opening document picker...');
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'text/csv',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        console.log('[Mitzvot] User cancelled document picker');
+        return;
+      }
+
+      const file = result.assets[0];
+      console.log('[Mitzvot] Selected file:', file.name, file.size, 'bytes');
+
+      if (!file.uri) {
+        showError('Failed to read file');
+        return;
+      }
+
+      // Check file size (max 5MB)
+      if (file.size && file.size > 5 * 1024 * 1024) {
+        showError('File is too large. Maximum size is 5MB.');
+        return;
+      }
+
+      setImporting(true);
+      setShowImportModal(false);
+
+      // Read file content
+      const fileContent = await FileSystem.readAsStringAsync(file.uri);
+      console.log('[Mitzvot] File content length:', fileContent.length);
+
+      // Create FormData for multipart upload
+      const formData = new FormData();
+      
+      // For web, we need to create a Blob
+      if (Platform.OS === 'web') {
+        const blob = new Blob([fileContent], { type: 'text/csv' });
+        formData.append('file', blob, file.name);
+      } else {
+        // For native, use the file URI
+        formData.append('file', {
+          uri: file.uri,
+          type: 'text/csv',
+          name: file.name,
+        } as any);
+      }
+
+      console.log('[Mitzvot] Uploading CSV to /api/mitzvot/import-csv...');
+      const token = await getBearerToken();
+      if (!token) {
+        throw new Error('Authentication token not found. Please sign in.');
+      }
+
+      const response = await fetch(`${BACKEND_URL}/api/mitzvot/import-csv`, {
+        method: 'POST',
+        headers: {
+          // Note: Don't set Content-Type for FormData — browser/fetch sets it with boundary automatically
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Import failed' }));
+        throw new Error(errorData.message || `Import failed with status ${response.status}`);
+      }
+
+      const result_data = await response.json();
+      console.log('[Mitzvot] Import result:', result_data);
+
+      const importedCount = result_data.imported || 0;
+      const skippedCount = result_data.skipped || 0;
+      const errors = result_data.errors || [];
+
+      let message = `Successfully imported ${importedCount} mitzvot`;
+      if (skippedCount > 0) {
+        message += `, skipped ${skippedCount} duplicates`;
+      }
+      if (errors.length > 0) {
+        message += `\n\nWarnings:\n${errors.slice(0, 3).join('\n')}`;
+        if (errors.length > 3) {
+          message += `\n...and ${errors.length - 3} more`;
+        }
+      }
+
+      showSuccess(message);
+      await loadData();
+      await loadImportStatus();
+    } catch (error: any) {
+      console.error('[Mitzvot] Import error:', error);
+      showError(error.message || 'Failed to import CSV file');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const filteredMitzvot = mitzvot.filter(m => filterStatus === 'all' || m.status === filterStatus);
 
   const groupedByCategory: Record<string, Mitzvah[]> = {};
@@ -154,6 +269,9 @@ export default function MitzvotScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Mitzvot</Text>
           <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => setShowImportModal(true)} style={styles.headerButton}>
+              <IconSymbol ios_icon_name="arrow.down.doc.fill" android_material_icon_name="file-download" size={22} color={colors.accent} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/mitzvot-categories' as any)} style={styles.headerButton}>
               <IconSymbol ios_icon_name="tag.fill" android_material_icon_name="label" size={22} color={colors.primary} />
             </TouchableOpacity>
@@ -308,6 +426,57 @@ export default function MitzvotScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={showImportModal} transparent animationType="slide" onRequestClose={() => setShowImportModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.importModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Import Mitzvot from CSV</Text>
+              <TouchableOpacity onPress={() => setShowImportModal(false)}>
+                <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.importModalBody}>
+              <View style={styles.importInfoCard}>
+                <IconSymbol ios_icon_name="info.circle.fill" android_material_icon_name="info" size={32} color={colors.accent} />
+                <Text style={styles.importInfoTitle}>Import 613 Mitzvot</Text>
+                <Text style={styles.importInfoText}>
+                  Upload a CSV file containing the mitzvot data. The file should include columns for mitzvah details such as number, title, description, category, type, and more.
+                </Text>
+                {importStatus && importStatus.userHasImported && (
+                  <View style={styles.importWarning}>
+                    <IconSymbol ios_icon_name="exclamationmark.triangle.fill" android_material_icon_name="warning" size={20} color={colors.warning} />
+                    <Text style={styles.importWarningText}>
+                      You have already imported {importStatus.totalSystemMitzvot} system mitzvot. Importing again will skip duplicates.
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity style={styles.importButton} onPress={handleImportCSV} disabled={importing}>
+                {importing ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <>
+                    <IconSymbol ios_icon_name="doc.badge.plus" android_material_icon_name="note-add" size={24} color={colors.background} />
+                    <Text style={styles.importButtonText}>Select CSV File</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.importNote}>Maximum file size: 5MB</Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {importing && (
+        <View style={styles.importingOverlay}>
+          <View style={styles.importingCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.importingText}>Importing mitzvot...</Text>
+            <Text style={styles.importingSubtext}>This may take a moment</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -380,4 +549,18 @@ const styles = StyleSheet.create({
   alertButtonText: { color: colors.background, fontSize: 15, fontWeight: '600' },
   successModal: { backgroundColor: colors.background, borderRadius: 20, padding: 32, alignItems: 'center', gap: 16 },
   successModalText: { fontSize: 16, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  importModalContent: { backgroundColor: colors.background, borderRadius: 16, width: '100%', maxWidth: 500 },
+  importModalBody: { padding: 20 },
+  importInfoCard: { backgroundColor: colors.card, borderRadius: 12, padding: 20, alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: colors.border },
+  importInfoTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text, marginTop: 12, marginBottom: 8 },
+  importInfoText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+  importWarning: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.warning + '20', padding: 12, borderRadius: 8, marginTop: 12 },
+  importWarningText: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 18 },
+  importButton: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 16, borderRadius: 12, marginBottom: 8 },
+  importButtonText: { fontSize: 16, fontWeight: '600', color: colors.background },
+  importNote: { fontSize: 12, color: colors.textSecondary, textAlign: 'center' },
+  importingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  importingCard: { backgroundColor: colors.background, borderRadius: 16, padding: 32, alignItems: 'center', gap: 16, minWidth: 200 },
+  importingText: { fontSize: 18, fontWeight: '600', color: colors.text },
+  importingSubtext: { fontSize: 14, color: colors.textSecondary },
 });
