@@ -117,7 +117,11 @@ export default function CheshbonScreen() {
     }
   };
 
-  const showError = (msg: string) => { setErrorMessage(msg); setShowErrorModal(true); };
+  const showError = (msg: string) => { 
+    console.log('[Cheshbon] Showing error:', msg);
+    setErrorMessage(msg); 
+    setShowErrorModal(true); 
+  };
 
   const startRecording = async () => {
     try {
@@ -194,8 +198,25 @@ export default function CheshbonScreen() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Transcription failed: ${response.status}`);
+        let errorMessage = `Transcription failed with status ${response.status}`;
+        
+        try {
+          const errorData = await response.json();
+          console.log('[Cheshbon] Error response:', errorData);
+          
+          // Handle specific error cases
+          if (response.status === 503) {
+            errorMessage = errorData.error || 'The transcription service is temporarily unavailable. Please try again later or contact support.';
+          } else if (errorData.error) {
+            errorMessage = errorData.error;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch (parseError) {
+          console.error('[Cheshbon] Failed to parse error response:', parseError);
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -203,11 +224,16 @@ export default function CheshbonScreen() {
       setTranscription(data.transcription || '');
 
       if (data.sessionId) {
-        setActiveSession({ id: data.sessionId, sessionDate: new Date().toISOString(), transcription: data.transcription, createdAt: new Date().toISOString() });
+        setActiveSession({ 
+          id: data.sessionId, 
+          sessionDate: new Date().toISOString(), 
+          transcription: data.transcription, 
+          createdAt: new Date().toISOString() 
+        });
       }
     } catch (error: any) {
       console.error('[Cheshbon] Transcription error:', error);
-      showError(error.message || 'Failed to transcribe audio');
+      showError(error.message || 'Failed to transcribe audio. Please try again.');
     } finally {
       setTranscribing(false);
     }
@@ -582,6 +608,7 @@ export default function CheshbonScreen() {
       <Modal visible={showErrorModal} transparent animationType="fade" onRequestClose={() => setShowErrorModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.alertModal}>
+            <IconSymbol ios_icon_name="exclamationmark.triangle.fill" android_material_icon_name="warning" size={40} color={colors.error} />
             <Text style={styles.alertTitle}>Error</Text>
             <Text style={styles.alertMessage}>{errorMessage}</Text>
             <TouchableOpacity style={styles.alertButton} onPress={() => setShowErrorModal(false)}>
@@ -666,9 +693,9 @@ const styles = StyleSheet.create({
   sendButton: { padding: 4 },
   sendButtonDisabled: { opacity: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  alertModal: { backgroundColor: colors.background, borderRadius: 16, padding: 24, width: '80%', maxWidth: 400 },
-  alertTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: 12 },
-  alertMessage: { fontSize: 15, color: colors.textSecondary, marginBottom: 20 },
-  alertButton: { backgroundColor: colors.primary, padding: 14, borderRadius: 12, alignItems: 'center' },
+  alertModal: { backgroundColor: colors.background, borderRadius: 16, padding: 24, width: '80%', maxWidth: 400, alignItems: 'center', gap: 12 },
+  alertTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text },
+  alertMessage: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
+  alertButton: { backgroundColor: colors.primary, paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12, marginTop: 8 },
   alertButtonText: { color: colors.background, fontSize: 15, fontWeight: '600' },
 });
