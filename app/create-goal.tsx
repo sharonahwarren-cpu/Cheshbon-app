@@ -146,6 +146,10 @@ export default function CreateGoalScreen() {
     alternativeCalendar: 'gregorian',
   });
 
+  // Schedule summary from backend
+  const [scheduleSummaryText, setScheduleSummaryText] = useState<string>('');
+  const [loadingScheduleSummary, setLoadingScheduleSummary] = useState(false);
+
   // UI state
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -165,6 +169,36 @@ export default function CreateGoalScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Fetch backend schedule summary when editing a goal and schedule type changes
+  useEffect(() => {
+    if (editingGoalId && scheduleConfig.scheduleType !== 'Always Active') {
+      fetchScheduleSummary();
+    } else {
+      setScheduleSummaryText('');
+    }
+  }, [editingGoalId, scheduleConfig.scheduleType]);
+
+  const fetchScheduleSummary = async () => {
+    if (!editingGoalId) return;
+    console.log('[CreateGoal] Fetching schedule summary for goal:', editingGoalId);
+    setLoadingScheduleSummary(true);
+    try {
+      const result = await authenticatedGet<{ summary: string; nextOccurrences: string[]; calendarType?: string }>(
+        `/api/goals/${editingGoalId}/schedule-summary`
+      );
+      console.log('[CreateGoal] Schedule summary received:', result);
+      if (result?.summary) {
+        setScheduleSummaryText(result.summary);
+      }
+    } catch (error: any) {
+      console.error('[CreateGoal] Error fetching schedule summary:', error);
+      // Non-critical - just don't show the backend summary
+      setScheduleSummaryText('');
+    } finally {
+      setLoadingScheduleSummary(false);
+    }
+  };
 
   // Reload alarms when returning from create alarm screen
   const reloadGoalAlarms = React.useCallback(async () => {
@@ -872,9 +906,13 @@ export default function CreateGoalScreen() {
             onPress={() => setShowScheduleWizard(true)}
           >
             <View style={styles.schedulePickerContent}>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.pickerText}>{scheduleConfig.scheduleType}</Text>
-                {scheduleConfig.scheduleType !== 'Always Active' && (
+                {scheduleConfig.scheduleType !== 'Always Active' && scheduleSummaryText ? (
+                  <Text style={styles.scheduleSubtext} numberOfLines={2}>
+                    {scheduleSummaryText}
+                  </Text>
+                ) : scheduleConfig.scheduleType !== 'Always Active' && (
                   <Text style={styles.scheduleSubtext}>
                     {scheduleConfig.timesPerDay ? `${scheduleConfig.timesPerDay}x per day` : ''}
                     {scheduleConfig.weekdays && scheduleConfig.weekdays.length > 0 ? ` ${scheduleConfig.weekdays.length} days selected` : ''}
@@ -1150,6 +1188,7 @@ export default function CreateGoalScreen() {
                 config={scheduleConfig}
                 onChange={setScheduleConfig}
                 alternativeCalendar={userPreferences.alternativeCalendar}
+                goalId={editingGoalId}
               />
             </ScrollView>
             <View style={styles.wizardFooter}>

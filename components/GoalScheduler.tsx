@@ -9,12 +9,15 @@ import {
   ScrollView,
   Modal,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { IconSymbol } from './IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { DatePickerModal } from './DatePickerModal';
 import { DateTime } from 'luxon';
 import { useRouter } from 'expo-router';
+import { generateScheduleSummary } from '@/utils/scheduleDescriptions';
+import { authenticatedGet } from '@/utils/api';
 
 export type ScheduleType = 'Always Active' | 'Daily' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
 export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
@@ -68,10 +71,17 @@ export interface ScheduleConfig {
   alarmsEnabled?: boolean;
 }
 
+interface BackendScheduleSummary {
+  summary: string;
+  nextOccurrences: string[];
+  calendarType?: string;
+}
+
 interface GoalSchedulerProps {
   config: ScheduleConfig;
   onChange: (config: ScheduleConfig) => void;
   alternativeCalendar?: CalendarType;
+  goalId?: string; // When editing an existing goal, pass the goal ID to fetch backend summary
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -115,7 +125,7 @@ const HEBREW_EVENTS = [
   'Rosh Chodesh', // NEW: Added Rosh Chodesh
 ];
 
-export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSchedulerProps) {
+export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }: GoalSchedulerProps) {
   const router = useRouter();
   const [showDatePicker, setShowDatePicker] = useState<'end' | 'exclusion' | null>(null);
   const [tempDate, setTempDate] = useState(new Date());
@@ -133,6 +143,44 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
   // State for yearly date range inputs
   const [yearlyRangeStart, setYearlyRangeStart] = useState('');
   const [yearlyRangeEnd, setYearlyRangeEnd] = useState('');
+
+  // Backend schedule summary state
+  const [backendSummary, setBackendSummary] = useState<BackendScheduleSummary | null>(null);
+  const [loadingBackendSummary, setLoadingBackendSummary] = useState(false);
+  const [backendSummaryError, setBackendSummaryError] = useState<string | null>(null);
+
+  // Generate local schedule summary (used as fallback)
+  const localScheduleSummary = generateScheduleSummary(config);
+
+  // Fetch backend schedule summary when goalId is available
+  useEffect(() => {
+    if (goalId && config.scheduleType !== 'Always Active') {
+      fetchBackendScheduleSummary();
+    } else {
+      setBackendSummary(null);
+    }
+  }, [goalId, config.scheduleType]);
+
+  const fetchBackendScheduleSummary = async () => {
+    if (!goalId) return;
+    console.log('[GoalScheduler] Fetching backend schedule summary for goal:', goalId);
+    setLoadingBackendSummary(true);
+    setBackendSummaryError(null);
+    try {
+      const result = await authenticatedGet<BackendScheduleSummary>(`/api/goals/${goalId}/schedule-summary`);
+      console.log('[GoalScheduler] Backend schedule summary received:', result);
+      setBackendSummary(result);
+    } catch (error: any) {
+      console.error('[GoalScheduler] Error fetching backend schedule summary:', error);
+      setBackendSummaryError(error.message || 'Failed to load schedule summary');
+      setBackendSummary(null);
+    } finally {
+      setLoadingBackendSummary(false);
+    }
+  };
+
+  // Use backend summary if available, otherwise fall back to local
+  const scheduleSummary = backendSummary?.summary || localScheduleSummary;
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
     onChange({ ...config, ...updates });
@@ -187,6 +235,80 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
             );
           })}
         </View>
+      </View>
+    );
+  };
+
+  const renderScheduleSummary = () => {
+    if (config.scheduleType === 'Always Active') {
+      return null; // No summary needed for "Always Active"
+    }
+
+    return (
+      <View style={styles.summaryContainer}>
+        <View style={styles.summaryHeader}>
+          <IconSymbol
+            ios_icon_name="calendar"
+            android_material_icon_name="event"
+            size={18}
+            color={colors.primary}
+          />
+          <Text style={styles.summaryTitle}>Schedule Summary</Text>
+          {goalId && (
+            <TouchableOpacity
+              onPress={fetchBackendScheduleSummary}
+              disabled={loadingBackendSummary}
+              style={styles.refreshButton}
+            >
+              {loadingBackendSummary ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <IconSymbol
+                  ios_icon_name="arrow.clockwise"
+                  android_material_icon_name="refresh"
+                  size={16}
+                  color={colors.primary}
+                />
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+        {loadingBackendSummary ? (
+          <View style={styles.summaryLoadingRow}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.summaryLoadingText}>Loading schedule summary...</Text>
+          </View>
+        ) : (
+          <>
+            <Text style={styles.summaryText}>{scheduleSummary}</Text>
+            {backendSummaryError && !backendSummary && (
+              <Text style={styles.summaryFallbackNote}>
+                (Showing local summary — tap refresh to retry)
+              </Text>
+            )}
+            {backendSummary?.nextOccurrences && backendSummary.nextOccurrences.length > 0 && (
+              <View style={styles.nextOccurrencesContainer}>
+                <Text style={styles.nextOccurrencesTitle}>Next Occurrences:</Text>
+                {backendSummary.nextOccurrences.map((occurrence, index) => (
+                  <View key={index} style={styles.nextOccurrenceRow}>
+                    <IconSymbol
+                      ios_icon_name="circle.fill"
+                      android_material_icon_name="circle"
+                      size={6}
+                      color={index === 0 ? colors.primary : colors.textSecondary}
+                    />
+                    <Text style={[
+                      styles.nextOccurrenceText,
+                      index === 0 && styles.nextOccurrenceTextFirst,
+                    ]}>
+                      {occurrence}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        )}
       </View>
     );
   };
@@ -1206,6 +1328,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar }: GoalSch
   return (
     <View style={styles.container}>
       {renderScheduleTypeSelector()}
+      {renderScheduleSummary()}
       {renderDailyOptions()}
       {renderWeeklyOptions()}
       {renderFortnightlyOptions()}
@@ -1310,6 +1433,85 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 18,
     marginBottom: 8,
+  },
+  summaryContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderLeftWidth: 4,
+  },
+  summaryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  summaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    flex: 1,
+  },
+  refreshButton: {
+    padding: 4,
+  },
+  summaryLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  summaryLoadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+  },
+  summaryText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.text,
+    lineHeight: 24,
+  },
+  summaryFallbackNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  nextOccurrencesContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 6,
+  },
+  nextOccurrencesTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  nextOccurrenceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  nextOccurrenceText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    flex: 1,
+    lineHeight: 18,
+  },
+  nextOccurrenceTextFirst: {
+    color: colors.primary,
+    fontWeight: '600',
   },
   typeGrid: {
     flexDirection: 'row',
