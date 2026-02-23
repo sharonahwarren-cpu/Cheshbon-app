@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -53,11 +54,53 @@ const PREFERENCE_SECTIONS = [
 
 export default function PreferencesScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [userPreferences, setUserPreferences] = useState<any>({});
+  const [useAiCheshbon, setUseAiCheshbon] = useState(false);
 
   useEffect(() => {
-    console.log('[Preferences] Screen loaded - showing list view');
+    console.log('[Preferences] Screen loaded - loading user preferences');
+    loadPreferences();
   }, []);
+
+  const loadPreferences = async () => {
+    try {
+      setLoading(true);
+      const response = await authenticatedGet('/api/user-preferences');
+      const prefs = response?.data || response || {};
+      console.log('[Preferences] Loaded preferences:', prefs);
+      setUserPreferences(prefs);
+      setUseAiCheshbon(prefs.useAiCheshbon || false);
+    } catch (error) {
+      console.error('[Preferences] Error loading preferences:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleAiCheshbon = async (value: boolean) => {
+    console.log('[Preferences] Toggling AI Cheshbon:', value);
+    setUseAiCheshbon(value);
+    
+    try {
+      await authenticatedPut('/api/user-preferences', { useAiCheshbon: value });
+      console.log('[Preferences] AI Cheshbon preference saved');
+    } catch (error) {
+      console.error('[Preferences] Error saving AI Cheshbon preference:', error);
+      // Revert on error
+      setUseAiCheshbon(!value);
+    }
+  };
+
+  const isHebrewCalendar = userPreferences.alternativeCalendar === 'hebrew';
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -95,6 +138,35 @@ export default function PreferencesScreen() {
             />
           </TouchableOpacity>
         ))}
+
+        {isHebrewCalendar && (
+          <>
+            <Text style={[styles.sectionGroupTitle, { marginTop: 24 }]}>Hebrew Calendar Features</Text>
+            
+            <View style={styles.sectionCard}>
+              <View style={styles.iconContainer}>
+                <IconSymbol
+                  ios_icon_name="mic.fill"
+                  android_material_icon_name="mic"
+                  size={24}
+                  color={colors.primary}
+                />
+              </View>
+              <View style={styles.sectionTextContainer}>
+                <Text style={styles.sectionTitle}>Use AI to do Cheshbon on Mitzvot</Text>
+                <Text style={styles.sectionDescription}>
+                  Enable AI-powered voice reflection and mitzvot tracking
+                </Text>
+              </View>
+              <Switch
+                value={useAiCheshbon}
+                onValueChange={handleToggleAiCheshbon}
+                trackColor={{ false: colors.border, true: colors.primary + '80' }}
+                thumbColor={useAiCheshbon ? colors.primary : colors.textSecondary}
+              />
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -103,6 +175,12 @@ export default function PreferencesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: colors.background,
   },
   scrollContent: {

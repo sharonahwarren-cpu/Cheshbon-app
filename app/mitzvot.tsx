@@ -1,0 +1,383 @@
+
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  Modal,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, useRouter, useFocusEffect } from 'expo-router';
+import { IconSymbol } from '@/components/IconSymbol';
+import { colors } from '@/styles/commonStyles';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { ConfirmModal } from '@/components/ConfirmModal';
+
+interface MitzvahCategory {
+  id: string;
+  name: string;
+  description?: string;
+  displayOrder: number;
+  isSystem: boolean;
+}
+
+interface Mitzvah {
+  id: string;
+  title: string;
+  description?: string;
+  categoryId?: string;
+  categoryName?: string;
+  type: 'RESTRAINING' | 'PROACTIVE';
+  status: 'ACTIVE' | 'DEACTIVATED';
+  isSystem: boolean;
+}
+
+export default function MitzvotScreen() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [mitzvot, setMitzvot] = useState<Mitzvah[]>([]);
+  const [categories, setCategories] = useState<MitzvahCategory[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<Mitzvah | null>(null);
+  const [formData, setFormData] = useState<any>({});
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [deleteItemId, setDeleteItemId] = useState('');
+  const [deleteItemName, setDeleteItemName] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'ACTIVE' | 'DEACTIVATED'>('ACTIVE');
+
+  useFocusEffect(useCallback(() => { loadData(); }, []));
+
+  const loadData = async () => {
+    console.log('[Mitzvot] Loading data...');
+    setLoading(true);
+    try {
+      const [mitzvotRes, categoriesRes] = await Promise.all([
+        authenticatedGet('/api/mitzvot'),
+        authenticatedGet('/api/mitzvot-categories'),
+      ]);
+      setMitzvot(Array.isArray(mitzvotRes) ? mitzvotRes : (mitzvotRes?.data || []));
+      setCategories(Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes?.data || []));
+    } catch (error) {
+      showError('Failed to load mitzvot data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const showError = (msg: string) => { setErrorMessage(msg); setShowErrorModal(true); };
+  const showSuccess = (msg: string) => { setSuccessMessage(msg); setShowSuccessModal(true); setTimeout(() => setShowSuccessModal(false), 2000); };
+
+  const openAddModal = () => {
+    setEditingItem(null);
+    setFormData({ title: '', description: '', categoryId: '', type: 'PROACTIVE', status: 'ACTIVE' });
+    setShowModal(true);
+  };
+
+  const openEditModal = (item: Mitzvah) => {
+    setEditingItem(item);
+    setFormData({ title: item.title, description: item.description || '', categoryId: item.categoryId || '', type: item.type, status: item.status });
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.title?.trim()) { showError('Title is required'); return; }
+    try {
+      setLoading(true);
+      const payload = { title: formData.title.trim(), description: formData.description?.trim() || undefined, categoryId: formData.categoryId || undefined, type: formData.type || 'PROACTIVE', status: formData.status || 'ACTIVE' };
+      if (editingItem) {
+        await authenticatedPut(`/api/mitzvot/${editingItem.id}`, payload);
+        showSuccess('Mitzvah updated');
+      } else {
+        await authenticatedPost('/api/mitzvot', payload);
+        showSuccess('Mitzvah created');
+      }
+      setShowModal(false);
+      await loadData();
+    } catch (error: any) {
+      showError(error.message || 'Failed to save');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmDelete = (id: string, name: string) => { setDeleteItemId(id); setDeleteItemName(name); setShowConfirmDelete(true); };
+
+  const handleDelete = async () => {
+    try {
+      setLoading(true);
+      setShowConfirmDelete(false);
+      await authenticatedDelete(`/api/mitzvot/${deleteItemId}`);
+      showSuccess('Mitzvah deleted');
+      await loadData();
+    } catch (error: any) {
+      showError(error.message || 'Failed to delete');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleStatus = async (item: Mitzvah) => {
+    try {
+      const newStatus = item.status === 'ACTIVE' ? 'DEACTIVATED' : 'ACTIVE';
+      await authenticatedPut(`/api/mitzvot/${item.id}`, { status: newStatus });
+      showSuccess(`Mitzvah ${newStatus === 'ACTIVE' ? 'activated' : 'deactivated'}`);
+      await loadData();
+    } catch (error: any) {
+      showError(error.message || 'Failed to update status');
+    }
+  };
+
+  const filteredMitzvot = mitzvot.filter(m => filterStatus === 'all' || m.status === filterStatus);
+
+  const groupedByCategory: Record<string, Mitzvah[]> = {};
+  filteredMitzvot.forEach(m => {
+    const catName = m.categoryName || 'Uncategorized';
+    if (!groupedByCategory[catName]) groupedByCategory[catName] = [];
+    groupedByCategory[catName].push(m);
+  });
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <IconSymbol ios_icon_name="chevron.left" android_material_icon_name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Mitzvot</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => router.push('/mitzvot-categories' as any)} style={styles.headerButton}>
+              <IconSymbol ios_icon_name="tag.fill" android_material_icon_name="label" size={22} color={colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={openAddModal} style={styles.headerButton}>
+              <IconSymbol ios_icon_name="plus" android_material_icon_name="add" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.filterBar}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+            {(['ACTIVE', 'DEACTIVATED', 'all'] as const).map((status) => (
+              <TouchableOpacity key={status} style={[styles.filterChip, filterStatus === status && styles.filterChipActive]} onPress={() => setFilterStatus(status)}>
+                <Text style={[styles.filterChipText, filterStatus === status && styles.filterChipTextActive]}>
+                  {status === 'all' ? 'All' : status === 'ACTIVE' ? 'Active' : 'Deactivated'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {loading && mitzvot.length === 0 ? (
+          <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>
+        ) : (
+          <ScrollView style={styles.listContainer} contentContainerStyle={styles.listContent}>
+            {filteredMitzvot.length === 0 ? (
+              <View style={styles.emptyState}>
+                <IconSymbol ios_icon_name="star.fill" android_material_icon_name="star" size={48} color={colors.textSecondary} />
+                <Text style={styles.emptyStateTitle}>No Mitzvot Yet</Text>
+                <Text style={styles.emptyStateText}>Tap + to add mitzvot or manage categories with the tag icon.</Text>
+              </View>
+            ) : (
+              Object.entries(groupedByCategory).map(([categoryName, items]) => (
+                <View key={categoryName} style={styles.categorySection}>
+                  <Text style={styles.categoryTitle}>{categoryName}</Text>
+                  {items.map((item) => (
+                    <View key={item.id} style={[styles.mitzvahCard, item.status === 'DEACTIVATED' && styles.mitzvahCardDeactivated]}>
+                      <View style={styles.mitzvahHeader}>
+                        <View style={styles.mitzvahTitleRow}>
+                          <IconSymbol
+                            ios_icon_name={item.type === 'PROACTIVE' ? 'checkmark.circle.fill' : 'xmark.circle.fill'}
+                            android_material_icon_name={item.type === 'PROACTIVE' ? 'check-circle' : 'cancel'}
+                            size={18}
+                            color={item.type === 'PROACTIVE' ? colors.success : colors.error}
+                          />
+                          <Text style={styles.mitzvahTitle}>{item.title}</Text>
+                          {item.isSystem && <View style={styles.systemBadge}><Text style={styles.systemBadgeText}>System</Text></View>}
+                        </View>
+                        <View style={styles.mitzvahActions}>
+                          <TouchableOpacity onPress={() => handleToggleStatus(item)} style={styles.iconButton}>
+                            <IconSymbol ios_icon_name="power" android_material_icon_name="power-settings-new" size={18} color={item.status === 'ACTIVE' ? colors.primary : colors.textSecondary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => openEditModal(item)} style={styles.iconButton}>
+                            <IconSymbol ios_icon_name="pencil" android_material_icon_name="edit" size={18} color={colors.primary} />
+                          </TouchableOpacity>
+                          {!item.isSystem && (
+                            <TouchableOpacity onPress={() => confirmDelete(item.id, item.title)} style={styles.iconButton}>
+                              <IconSymbol ios_icon_name="trash" android_material_icon_name="delete" size={18} color={colors.error} />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                      {item.description ? <Text style={styles.mitzvahDescription}>{item.description}</Text> : null}
+                      <View style={styles.mitzvahMeta}>
+                        <View style={[styles.typeBadge, item.type === 'PROACTIVE' ? styles.typeBadgeProactive : styles.typeBadgeRestraining]}>
+                          <Text style={styles.typeBadgeText}>{item.type === 'PROACTIVE' ? 'Proactive' : 'Restraining'}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ))
+            )}
+          </ScrollView>
+        )}
+      </View>
+
+      <Modal visible={showModal} transparent animationType="slide" onRequestClose={() => setShowModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Mitzvah' : 'Add Mitzvah'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol ios_icon_name="xmark" android_material_icon_name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Title *</Text>
+                <TextInput style={styles.input} value={formData.title || ''} onChangeText={(t) => setFormData({ ...formData, title: t })} placeholder="Mitzvah title" placeholderTextColor={colors.textSecondary} />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Description</Text>
+                <TextInput style={[styles.input, styles.textArea]} value={formData.description || ''} onChangeText={(t) => setFormData({ ...formData, description: t })} placeholder="Describe this mitzvah..." placeholderTextColor={colors.textSecondary} multiline numberOfLines={3} />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Category</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <TouchableOpacity style={[styles.catChip, !formData.categoryId && styles.catChipSelected]} onPress={() => setFormData({ ...formData, categoryId: '' })}>
+                    <Text style={[styles.catChipText, !formData.categoryId && styles.catChipTextSelected]}>None</Text>
+                  </TouchableOpacity>
+                  {categories.map((cat) => (
+                    <TouchableOpacity key={cat.id} style={[styles.catChip, formData.categoryId === cat.id && styles.catChipSelected]} onPress={() => setFormData({ ...formData, categoryId: cat.id })}>
+                      <Text style={[styles.catChipText, formData.categoryId === cat.id && styles.catChipTextSelected]}>{cat.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Type *</Text>
+                <View style={styles.typeSelector}>
+                  <TouchableOpacity style={[styles.typeButton, formData.type === 'PROACTIVE' && styles.typeButtonProactive]} onPress={() => setFormData({ ...formData, type: 'PROACTIVE' })}>
+                    <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={18} color={formData.type === 'PROACTIVE' ? colors.background : colors.success} />
+                    <Text style={[styles.typeButtonText, formData.type === 'PROACTIVE' && styles.typeButtonTextSelected]}>Proactive</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.typeButton, formData.type === 'RESTRAINING' && styles.typeButtonRestraining]} onPress={() => setFormData({ ...formData, type: 'RESTRAINING' })}>
+                    <IconSymbol ios_icon_name="xmark.circle.fill" android_material_icon_name="cancel" size={18} color={formData.type === 'RESTRAINING' ? colors.background : colors.error} />
+                    <Text style={[styles.typeButtonText, formData.type === 'RESTRAINING' && styles.typeButtonTextSelected]}>Restraining</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={[styles.button, styles.buttonSecondary]} onPress={() => setShowModal(false)}>
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.button, styles.buttonPrimary]} onPress={handleSave} disabled={loading}>
+                {loading ? <ActivityIndicator color={colors.background} /> : <Text style={styles.buttonPrimaryText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ConfirmModal visible={showConfirmDelete} title="Delete Mitzvah" message={`Delete "${deleteItemName}"? This cannot be undone.`} onConfirm={handleDelete} onCancel={() => setShowConfirmDelete(false)} />
+
+      <Modal visible={showErrorModal} transparent animationType="fade" onRequestClose={() => setShowErrorModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertModal}>
+            <Text style={styles.alertTitle}>Error</Text>
+            <Text style={styles.alertMessage}>{errorMessage}</Text>
+            <TouchableOpacity style={styles.alertButton} onPress={() => setShowErrorModal(false)}><Text style={styles.alertButtonText}>OK</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showSuccessModal} transparent animationType="fade" onRequestClose={() => setShowSuccessModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModal}>
+            <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={48} color={colors.success} />
+            <Text style={styles.successModalText}>{successMessage}</Text>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: colors.text },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  headerButton: { padding: 4 },
+  filterBar: { paddingHorizontal: 20, marginBottom: 8 },
+  filterScroll: { gap: 8, paddingVertical: 4 },
+  filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  filterChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  filterChipText: { fontSize: 13, color: colors.text, fontWeight: '500' },
+  filterChipTextActive: { color: colors.background, fontWeight: '600' },
+  listContainer: { flex: 1 },
+  listContent: { paddingHorizontal: 20, paddingBottom: 100 },
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12 },
+  emptyStateTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text },
+  emptyStateText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
+  categorySection: { marginBottom: 20 },
+  categoryTitle: { fontSize: 13, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  mitzvahCard: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
+  mitzvahCardDeactivated: { opacity: 0.5 },
+  mitzvahHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 },
+  mitzvahTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  mitzvahTitle: { fontSize: 15, fontWeight: '600', color: colors.text, flex: 1 },
+  systemBadge: { backgroundColor: colors.accent + '30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  systemBadgeText: { fontSize: 10, color: colors.accent, fontWeight: '600' },
+  mitzvahActions: { flexDirection: 'row', gap: 4 },
+  iconButton: { padding: 6 },
+  mitzvahDescription: { fontSize: 13, color: colors.textSecondary, marginBottom: 8, lineHeight: 18 },
+  mitzvahMeta: { flexDirection: 'row', gap: 6 },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  typeBadgeProactive: { backgroundColor: colors.success + '20' },
+  typeBadgeRestraining: { backgroundColor: colors.error + '20' },
+  typeBadgeText: { fontSize: 11, fontWeight: '600', color: colors.text },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: colors.background, borderRadius: 16, width: '100%', maxHeight: '85%' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text },
+  modalBody: { padding: 20 },
+  modalFooter: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1, borderTopColor: colors.border },
+  formGroup: { marginBottom: 20 },
+  label: { fontSize: 15, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  input: { backgroundColor: colors.card, borderRadius: 10, padding: 14, fontSize: 15, color: colors.text, borderWidth: 1, borderColor: colors.border },
+  textArea: { minHeight: 80, textAlignVertical: 'top' },
+  catChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, marginRight: 8 },
+  catChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  catChipText: { fontSize: 13, color: colors.text },
+  catChipTextSelected: { color: colors.background, fontWeight: '600' },
+  typeSelector: { flexDirection: 'row', gap: 12 },
+  typeButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  typeButtonProactive: { backgroundColor: colors.success, borderColor: colors.success },
+  typeButtonRestraining: { backgroundColor: colors.error, borderColor: colors.error },
+  typeButtonText: { fontSize: 14, fontWeight: '600', color: colors.text },
+  typeButtonTextSelected: { color: colors.background },
+  button: { flex: 1, padding: 16, borderRadius: 12, alignItems: 'center' },
+  buttonPrimary: { backgroundColor: colors.primary },
+  buttonSecondary: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  buttonPrimaryText: { color: colors.background, fontSize: 16, fontWeight: '600' },
+  buttonSecondaryText: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  alertModal: { backgroundColor: colors.background, borderRadius: 16, padding: 24, width: '80%', maxWidth: 400 },
+  alertTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text, marginBottom: 12 },
+  alertMessage: { fontSize: 15, color: colors.textSecondary, marginBottom: 20 },
+  alertButton: { backgroundColor: colors.primary, padding: 14, borderRadius: 12, alignItems: 'center' },
+  alertButtonText: { color: colors.background, fontSize: 15, fontWeight: '600' },
+  successModal: { backgroundColor: colors.background, borderRadius: 20, padding: 32, alignItems: 'center', gap: 16 },
+  successModalText: { fontSize: 16, fontWeight: '600', color: colors.text, textAlign: 'center' },
+});

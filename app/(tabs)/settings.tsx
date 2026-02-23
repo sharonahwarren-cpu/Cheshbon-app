@@ -118,7 +118,7 @@ interface ReflectionWorthItTallies {
   total: number;
 }
 
-type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'reflectionPrefs' | 'notifications' | 'reports';
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'reflectionPrefs' | 'notifications' | 'reports' | 'mitzvot' | 'mitzvotCategories';
 
 const ICON_OPTIONS = [
   'favorite', 'work', 'school', 'fitness-center', 'restaurant', 'home',
@@ -134,7 +134,7 @@ export default function SettingsScreen() {
   const getInitialSection = (): SettingsSection => {
     const section = params.section;
     if (!section) return 'main';
-    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'reflectionPrefs', 'notifications', 'reports'];
+    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'reflectionPrefs', 'notifications', 'reports', 'mitzvot', 'mitzvotCategories'];
     if (validSections.includes(section as SettingsSection)) {
       return section as SettingsSection;
     }
@@ -207,7 +207,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     const section = params.section;
     if (section) {
-      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'reflectionPrefs', 'notifications', 'reports'];
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'reflectionPrefs', 'notifications', 'reports', 'mitzvot', 'mitzvotCategories'];
       if (validSections.includes(section as SettingsSection)) {
         console.log('[Settings] Setting section from URL param:', section);
         setCurrentSection(section as SettingsSection);
@@ -731,6 +731,8 @@ export default function SettingsScreen() {
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
+      { title: 'Mitzvot', icon: 'star', section: 'mitzvot' as SettingsSection },
+      { title: 'Mitzvot Categories', icon: 'label', section: 'mitzvotCategories' as SettingsSection },
     ];
 
     return (
@@ -1944,6 +1946,40 @@ export default function SettingsScreen() {
           {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
           {currentSection === 'notifications' && renderNotifications()}
           {currentSection === 'reports' && renderReports()}
+          {currentSection === 'mitzvot' && (
+            <View style={styles.container}>
+              <View style={styles.header}>
+                <TouchableOpacity onPress={() => setCurrentSection('main')}>
+                  <IconSymbol ios_icon_name="chevron.left" android_material_icon_name="arrow-back" size={24} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Mitzvot</Text>
+                <View style={{ width: 24 }} />
+              </View>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>Tap below to manage your Mitzvot</Text>
+                <TouchableOpacity style={[styles.alertButton, { marginTop: 16, paddingHorizontal: 24 }]} onPress={() => router.push('/mitzvot' as any)}>
+                  <Text style={styles.alertButtonText}>Open Mitzvot Manager</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+          {currentSection === 'mitzvotCategories' && (
+            <View style={styles.container}>
+              <View style={styles.header}>
+                <TouchableOpacity onPress={() => setCurrentSection('main')}>
+                  <IconSymbol ios_icon_name="chevron.left" android_material_icon_name="arrow-back" size={24} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Mitzvot Categories</Text>
+                <View style={{ width: 24 }} />
+              </View>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>Tap below to manage Mitzvot Categories</Text>
+                <TouchableOpacity style={[styles.alertButton, { marginTop: 16, paddingHorizontal: 24 }]} onPress={() => router.push('/mitzvot-categories' as any)}>
+                  <Text style={styles.alertButtonText}>Open Categories Manager</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </>
       )}
 
