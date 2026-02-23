@@ -376,14 +376,15 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                   Tap any date to see which schedule section generated it
                 </Text>
                 {backendSummary.nextOccurrences.map((occurrence, index) => {
-                  const dateText = typeof occurrence === 'string' ? occurrence : occurrence.date;
-                  const hasSource = typeof occurrence !== 'string' && occurrence.source;
+                  // CRITICAL FIX: Always extract the date string, never render the object
+                  const dateText = occurrence.date;
+                  const hasSource = occurrence.source && occurrence.source.section;
                   
                   return (
                     <TouchableOpacity
                       key={index}
                       style={styles.nextOccurrenceRow}
-                      onPress={() => hasSource && handleOccurrencePress(occurrence as OccurrenceWithSource)}
+                      onPress={() => hasSource ? handleOccurrencePress(occurrence) : undefined}
                       disabled={!hasSource}
                     >
                       <IconSymbol
