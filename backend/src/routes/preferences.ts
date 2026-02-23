@@ -78,6 +78,7 @@ export function registerPreferencesRoutes(app: App) {
       preferredHomeScreen?: 'reflect' | 'goals-detailed' | 'goals-concise';
       alternativeCalendar?: 'gregorian' | 'hebrew' | 'chinese';
       timezone?: string;
+      useAiCheshbon?: boolean;
     };
 
     app.logger.info(
@@ -109,6 +110,7 @@ export function registerPreferencesRoutes(app: App) {
             preferredHomeScreen: body.preferredHomeScreen || 'reflect',
             alternativeCalendar: body.alternativeCalendar || 'gregorian',
             timezone: body.timezone || 'UTC',
+            useAiCheshbon: body.useAiCheshbon ?? false,
           })
           .returning();
         app.logger.info({ userId: session.user.id }, 'User preferences created successfully');
@@ -126,6 +128,7 @@ export function registerPreferencesRoutes(app: App) {
       if (body.preferredHomeScreen !== undefined) updateData.preferredHomeScreen = body.preferredHomeScreen;
       if (body.alternativeCalendar !== undefined) updateData.alternativeCalendar = body.alternativeCalendar;
       if (body.timezone !== undefined) updateData.timezone = body.timezone;
+      if (body.useAiCheshbon !== undefined) updateData.useAiCheshbon = body.useAiCheshbon;
       updateData.updatedAt = new Date();
 
       const updatedPreferences = await app.db
