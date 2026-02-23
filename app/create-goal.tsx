@@ -1106,7 +1106,7 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Quick Time Picker */}
+      {/* Quick Time Picker - FIXED: Now works on web/base */}
       <DateTimePickerModal
         isVisible={showQuickTimePicker}
         mode="time"
@@ -1728,12 +1728,14 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: colors.background,
     borderRadius: 8,
-    padding: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: colors.border,
+    minWidth: 130,
   },
   quickTimeText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.text,
   },
