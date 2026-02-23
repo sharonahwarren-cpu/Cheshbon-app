@@ -6,7 +6,7 @@ import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDel
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { colors } from '@/styles/commonStyles';
 import { LoadingButton } from '@/components/LoadingButton';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
 import React, { useState, useEffect } from 'react';
 import {
@@ -115,7 +115,7 @@ export default function CreateGoalScreen() {
     scheduleType: 'Always Active',
   });
   
-  // Alarms state - FIXED: Use Date object and native DateTimePicker with showPicker state
+  // Alarms state - FIXED: Use Date object and react-native-modal-datetime-picker for cross-platform consistency
   const [alarmsEnabled, setAlarmsEnabled] = useState(false);
   const [quickAlarmTime, setQuickAlarmTime] = useState<Date | undefined>(undefined);
   const [showQuickTimePicker, setShowQuickTimePicker] = useState(false);
@@ -665,22 +665,16 @@ export default function CreateGoalScreen() {
     return scheduleType.toLowerCase();
   };
 
-  // FIXED: Handler for native DateTimePicker onChange event
-  const handleQuickTimeChange = (event: any, selectedDate?: Date) => {
-    console.log('Time picker onChange event:', event.type, selectedDate);
-    
-    // On Android, hide picker after selection
-    if (Platform.OS === 'android') {
-      setShowQuickTimePicker(false);
-    }
-    
-    // Update time if user confirmed (not cancelled)
-    if (event.type === 'set' && selectedDate) {
-      console.log('User selected quick alarm time:', selectedDate);
-      setQuickAlarmTime(selectedDate);
-    } else if (event.type === 'dismissed') {
-      console.log('User cancelled time picker');
-    }
+  // FIXED: Handler for react-native-modal-datetime-picker
+  const handleQuickTimePickerConfirm = (date: Date) => {
+    console.log('User selected quick alarm time:', date);
+    setQuickAlarmTime(date);
+    setShowQuickTimePicker(false);
+  };
+
+  const handleQuickTimePickerCancel = () => {
+    console.log('User cancelled quick alarm time picker');
+    setShowQuickTimePicker(false);
   };
 
   const screenTitle = editingGoalId ? 'Edit Goal' : 'Create Goal';
@@ -891,7 +885,7 @@ export default function CreateGoalScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Alarms & Reminders - FIXED: Now uses native DateTimePicker with showPicker state */}
+        {/* Alarms & Reminders - FIXED: Now uses react-native-modal-datetime-picker for cross-platform consistency */}
         <View style={styles.section}>
           <View style={styles.alarmHeader}>
             <View style={styles.alarmTitleRow}>
@@ -917,13 +911,13 @@ export default function CreateGoalScreen() {
                 Quick alarm: Set a simple alarm time based on your goal schedule ({getScheduleDescription()})
               </Text>
               
-              {/* Quick Time Input - FIXED: Now properly shows native time picker on Android */}
+              {/* Quick Time Input - FIXED: Now uses react-native-modal-datetime-picker */}
               <View style={styles.quickTimeSection}>
                 <Text style={styles.quickTimeLabel}>Alarm Time:</Text>
                 <TouchableOpacity
                   style={styles.quickTimeButton}
                   onPress={() => {
-                    console.log('User tapped Set time button - showing native time picker');
+                    console.log('User tapped Set time button - showing time picker modal');
                     setShowQuickTimePicker(true);
                   }}
                   activeOpacity={0.7}
@@ -1112,19 +1106,19 @@ export default function CreateGoalScreen() {
         </View>
       </ScrollView>
 
-      {/* Quick Time Picker - FIXED: Native DateTimePicker with mode='time' and display='clock' for Android */}
-      {showQuickTimePicker && (
-        <DateTimePicker
-          value={quickAlarmTime || (() => {
-            const now = new Date();
-            now.setHours(9, 0, 0, 0);
-            return now;
-          })()}
-          mode="time"
-          display={Platform.OS === 'android' ? 'clock' : 'spinner'}
-          onChange={handleQuickTimeChange}
-        />
-      )}
+      {/* Quick Time Picker - FIXED: Uses react-native-modal-datetime-picker for cross-platform consistency */}
+      <DateTimePickerModal
+        isVisible={showQuickTimePicker}
+        mode="time"
+        onConfirm={handleQuickTimePickerConfirm}
+        onCancel={handleQuickTimePickerCancel}
+        date={quickAlarmTime || (() => {
+          const now = new Date();
+          now.setHours(9, 0, 0, 0);
+          return now;
+        })()}
+        display={Platform.OS === 'android' ? 'default' : 'spinner'}
+      />
 
       {/* Goal Schedule Wizard Modal */}
       <Modal
