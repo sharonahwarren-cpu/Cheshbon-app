@@ -15,12 +15,11 @@ import {
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import { getLocalTimezone } from '@/utils/dateUtils';
+import { DatePickerModal } from '@/components/DatePickerModal';
 import type { Alarm, AlarmTrigger, CalendarType, TriggerType } from '@/types/alarm';
 import { requestAllAlarmPermissions, checkAllPermissions } from '@/utils/alarmPermissions';
 import { getCurrentLocation } from '@/utils/alarmGeofencing';
@@ -349,6 +348,10 @@ export default function CreateAlarmScreen() {
       setNewTrigger({ ...newTrigger, max: timeString });
     }
 
+    setShowTimePicker(false);
+  };
+
+  const handleTimePickerCancel = () => {
     setShowTimePicker(false);
   };
 
@@ -1004,17 +1007,17 @@ export default function CreateAlarmScreen() {
         </View>
       </Modal>
 
-      {/* Time Picker Modal */}
-      <DateTimePickerModal
-        isVisible={showTimePicker}
+      {/* Time Picker Modal - Using cross-platform DatePickerModal */}
+      <DatePickerModal
+        visible={showTimePicker}
         mode="time"
-        onConfirm={handleTimePickerConfirm}
-        onCancel={() => setShowTimePicker(false)}
-        date={parseTimeString(
+        value={parseTimeString(
           timePickerMode === 'value' ? (newTrigger.value || '09:00') :
           timePickerMode === 'min' ? (newTrigger.min || '06:00') :
           (newTrigger.max || '22:00')
         )}
+        onConfirm={handleTimePickerConfirm}
+        onCancel={handleTimePickerCancel}
       />
     </SafeAreaView>
   );
