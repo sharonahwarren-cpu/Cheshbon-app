@@ -618,6 +618,12 @@ export default function HomeScreen() {
     // Don't close the modal here - let the Done button handle it
   };
 
+  const handleTodayPress = () => {
+    const today = new Date();
+    setSelectedDate(today);
+    setShowDatePicker(false);
+  };
+
   const formatDateDisplay = (date: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1075,6 +1081,10 @@ export default function HomeScreen() {
 
   const lifetimeSuccessCount = calculateLifetimeTotals();
 
+  const alternativeCalendarDate = userPreferences.alternativeCalendar && userPreferences.alternativeCalendar !== 'gregorian' 
+    ? formatAlternativeDate(selectedDate, userPreferences.alternativeCalendar) 
+    : null;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView 
@@ -1157,6 +1167,11 @@ export default function HomeScreen() {
             setShowDatePicker(true);
           }}>
             <Text style={styles.dateDisplay}>{dateDisplay}</Text>
+            {alternativeCalendarDate && (
+              <Text style={styles.alternativeCalendarDateSmall}>
+                {alternativeCalendarDate}
+              </Text>
+            )}
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -1206,18 +1221,17 @@ export default function HomeScreen() {
                   style={{ backgroundColor: colors.background }}
                 />
                 
-                {userPreferences.alternativeCalendar && userPreferences.alternativeCalendar !== 'gregorian' && (
-                  <View style={styles.alternativeCalendarInfo}>
-                    <Text style={styles.alternativeCalendarLabel}>
-                      {userPreferences.alternativeCalendar === 'hebrew' && '✡️ Hebrew Calendar'}
-                      {userPreferences.alternativeCalendar === 'chinese' && '🏮 Chinese Calendar'}
-                      {userPreferences.alternativeCalendar === 'islamic' && '☪️ Islamic Calendar'}
-                    </Text>
-                    <Text style={styles.alternativeCalendarDate}>
-                      {formatAlternativeDate(selectedDate, userPreferences.alternativeCalendar)}
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.todayButtonContainer}>
+                  <TouchableOpacity style={styles.todayButton} onPress={handleTodayPress}>
+                    <IconSymbol
+                      ios_icon_name="calendar"
+                      android_material_icon_name="today"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.todayButtonText}>Today</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           </Modal>
@@ -1681,6 +1695,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     minWidth: 120,
     textAlign: 'center',
+  },
+  alternativeCalendarDateSmall: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 2,
+    fontStyle: 'italic',
   },
   lifetimeCounterContainer: {
     flexDirection: 'column',
@@ -2279,21 +2300,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
   },
-  alternativeCalendarInfo: {
-    padding: 16,
-    backgroundColor: colors.backgroundAlt,
+  todayButtonContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  alternativeCalendarLabel: {
-    fontSize: 14,
+  todayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  todayButtonText: {
+    fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
-    marginBottom: 6,
-  },
-  alternativeCalendarDate: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    fontStyle: 'italic',
   },
 });

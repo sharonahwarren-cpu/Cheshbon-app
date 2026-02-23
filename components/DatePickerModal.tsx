@@ -22,6 +22,12 @@ export function DatePickerModal({ visible, value, mode = 'date', onConfirm, onCa
     }
   }, [visible, value]);
 
+  const handleTodayPress = () => {
+    const today = new Date();
+    setTempDate(today);
+    onConfirm(today);
+  };
+
   if (Platform.OS === 'web') {
     // Web-specific implementation using HTML input
     return (
@@ -79,6 +85,20 @@ export function DatePickerModal({ visible, value, mode = 'date', onConfirm, onCa
                 }}
               />
             </View>
+
+            {mode === 'date' && (
+              <View style={styles.todayButtonContainer}>
+                <TouchableOpacity style={styles.todayButton} onPress={handleTodayPress}>
+                  <IconSymbol
+                    ios_icon_name="calendar"
+                    android_material_icon_name="today"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.todayButtonText}>Today</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.buttons}>
               <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={onCancel}>
@@ -158,6 +178,20 @@ export function DatePickerModal({ visible, value, mode = 'date', onConfirm, onCa
             style={{ backgroundColor: colors.background }}
           />
 
+          {mode === 'date' && (
+            <View style={styles.todayButtonContainer}>
+              <TouchableOpacity style={styles.todayButton} onPress={handleTodayPress}>
+                <IconSymbol
+                  ios_icon_name="calendar"
+                  android_material_icon_name="today"
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text style={styles.todayButtonText}>Today</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.buttons}>
             <TouchableOpacity style={[styles.button, styles.cancelButton]} onPress={onCancel}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -205,6 +239,27 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     padding: 20,
+  },
+  todayButtonContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    alignItems: 'center',
+  },
+  todayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  todayButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
   },
   buttons: {
     flexDirection: 'row',
