@@ -1,5 +1,9 @@
 
+import { generateScheduleSummary } from '@/utils/scheduleDescriptions';
+import { DateTime } from 'luxon';
+import { DatePickerModal } from './DatePickerModal';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -11,14 +15,10 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { IconSymbol } from './IconSymbol';
-import { colors } from '@/styles/commonStyles';
-import { DatePickerModal } from './DatePickerModal';
-import { DateTime } from 'luxon';
-import { useRouter } from 'expo-router';
-import { generateScheduleSummary } from '@/utils/scheduleDescriptions';
 import { authenticatedGet } from '@/utils/api';
+import { IconSymbol } from './IconSymbol';
 import { getNextActivations, type GoalSchedule } from '@/utils/scheduleCalculations';
+import { colors } from '@/styles/commonStyles';
 
 export type ScheduleType = 'Always Active' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
 export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
@@ -161,10 +161,17 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   const [tempDate, setTempDate] = useState(new Date());
   const [showMonthlyAdvanced, setShowMonthlyAdvanced] = useState(false);
   const [showYearlyAdvanced, setShowYearlyAdvanced] = useState(false);
-  // State for yearly date picker (month + day selection)
+  
+  // NEW: Improved yearly date picker state
+  const [yearlyDateMode, setYearlyDateMode] = useState<'single' | 'range'>('single');
   const [addYearlyDateMonth, setAddYearlyDateMonth] = useState(1);
   const [addYearlyDateDay, setAddYearlyDateDay] = useState(1);
+  const [yearlyStartMonth, setYearlyStartMonth] = useState(1);
+  const [yearlyStartDay, setYearlyStartDay] = useState(1);
+  const [yearlyEndMonth, setYearlyEndMonth] = useState(1);
+  const [yearlyEndDay, setYearlyEndDay] = useState(7);
   const [showAddYearlyDatePicker, setShowAddYearlyDatePicker] = useState(false);
+  
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [showCalendarEventPicker, setShowCalendarEventPicker] = useState(false);
   const [calendarEventContext, setCalendarEventContext] = useState<'monthly' | 'yearly'>('monthly');
@@ -1036,22 +1043,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
 
     const monthCount = monthNames.length; // 12 for all calendars
 
-    // Check if a specific {month, day} entry exists in yearlyDates
-    const isDateSelected = (month: number, day: number): boolean => {
-      return config.yearlyDates?.some(d => d.month === month && d.day === day) || false;
-    };
-
-    // Toggle a {month, day} entry in yearlyDates
-    const toggleYearlyDate = (month: number, day: number) => {
-      console.log('[GoalScheduler] Toggling yearly date:', { month, day });
-      const current = config.yearlyDates || [];
-      const exists = current.some(d => d.month === month && d.day === day);
-      const updated = exists
-        ? current.filter(d => !(d.month === month && d.day === day))
-        : [...current, { month, day }].sort((a, b) => a.month !== b.month ? a.month - b.month : a.day - b.day);
-      updateConfig({ yearlyDates: updated });
-    };
-
     const removeYearlyDate = (index: number) => {
       const current = config.yearlyDates || [];
       updateConfig({ yearlyDates: current.filter((_, i) => i !== index) });
@@ -1064,18 +1055,54 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
 
     const formatYearlyDate = (entry: { month: number; day: number }) => {
       const monthName = monthNames[entry.month - 1] || `Month ${entry.month}`;
-      return `${monthName} ${entry.day}`;
+      const dayWithSuffix = `${entry.day}${getOrdinalSuffix(entry.day)}`;
+      return `${monthName} ${dayWithSuffix}`;
     };
 
     const formatYearlyRange = (range: { startMonth: number; startDay: number; endMonth: number; endDay: number }) => {
       const startMonthName = monthNames[range.startMonth - 1] || `Month ${range.startMonth}`;
       const endMonthName = monthNames[range.endMonth - 1] || `Month ${range.endMonth}`;
-      return `${startMonthName} ${range.startDay} - ${endMonthName} ${range.endDay}`;
+      const startDayWithSuffix = `${range.startDay}${getOrdinalSuffix(range.startDay)}`;
+      const endDayWithSuffix = `${range.endDay}${getOrdinalSuffix(range.endDay)}`;
+      return `${startMonthName} ${startDayWithSuffix} - ${endMonthName} ${endDayWithSuffix}`;
     };
 
     const maxDaysForMonth = (month: number): number => {
       const daysInMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
       return daysInMonth[month - 1] || 31;
+    };
+
+    // NEW: Handler for adding a single date or range
+    const handleAddYearlyDate = () => {
+      if (yearlyDateMode === 'single') {
+        if (!addYearlyDateMonth || !addYearlyDateDay) {
+          console.warn('[GoalScheduler] Cannot add yearly date: month or day not selected');
+          return;
+        }
+        const current = config.yearlyDates || [];
+        const exists = current.some(d => d.month === addYearlyDateMonth && d.day === addYearlyDateDay);
+        if (!exists) {
+          const updated = [...current, { month: addYearlyDateMonth, day: addYearlyDateDay }]
+            .sort((a, b) => a.month !== b.month ? a.month - b.month : a.day - b.day);
+          updateConfig({ yearlyDates: updated });
+        }
+        setShowAddYearlyDatePicker(false);
+      } else {
+        // Range mode
+        if (!yearlyStartMonth || !yearlyStartDay || !yearlyEndMonth || !yearlyEndDay) {
+          console.warn('[GoalScheduler] Cannot add yearly range: start or end not selected');
+          return;
+        }
+        const current = config.yearlyRanges || [];
+        const newRange = {
+          startMonth: yearlyStartMonth,
+          startDay: yearlyStartDay,
+          endMonth: yearlyEndMonth,
+          endDay: yearlyEndDay,
+        };
+        updateConfig({ yearlyRanges: [...current, newRange] });
+        setShowAddYearlyDatePicker(false);
+      }
     };
 
     return (
@@ -1137,7 +1164,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
           <>
             <Text style={styles.subLabel}>Specific Dates</Text>
             <Text style={styles.helperText}>
-              Add specific dates of the year (e.g., January 1st, December 25th)
+              Add specific dates of the year (e.g., January 1st, December 25th) or date ranges (e.g., December 20th - January 5th)
             </Text>
 
             {/* List of added yearly dates */}
@@ -1161,66 +1188,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               </View>
             )}
 
-            {/* Add Date Button */}
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => {
-                console.log('[GoalScheduler] User tapped Add Specific Date button');
-                setShowAddYearlyDatePicker(true);
-              }}
-            >
-              <IconSymbol
-                ios_icon_name="plus.circle.fill"
-                android_material_icon_name="add-circle"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.addButtonText}>Add Specific Date</Text>
-            </TouchableOpacity>
-          </>
-        )}
-        
-        {/* More Options - Date ranges */}
-        <TouchableOpacity
-          style={styles.advancedOptionButton}
-          onPress={() => setShowYearlyAdvanced(!showYearlyAdvanced)}
-        >
-          <IconSymbol
-            ios_icon_name="slider.horizontal.3"
-            android_material_icon_name="tune"
-            size={16}
-            color={colors.primary}
-          />
-          <Text style={styles.advancedOptionText}>Add date ranges</Text>
-        </TouchableOpacity>
-        
-        {showYearlyAdvanced && (
-          <View style={styles.advancedSection}>
-            <Text style={styles.subLabel}>Date Ranges</Text>
-            <Text style={styles.helperText}>
-              Add date ranges that span across months (e.g., December 20 to January 5)
-            </Text>
-            
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => {
-                console.log('User tapped Add Date Range button');
-                // Add a default range
-                const current = config.yearlyRanges || [];
-                updateConfig({ 
-                  yearlyRanges: [...current, { startMonth: 1, startDay: 1, endMonth: 1, endDay: 7 }] 
-                });
-              }}
-            >
-              <IconSymbol
-                ios_icon_name="plus.circle.fill"
-                android_material_icon_name="add-circle"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.addButtonText}>Add Date Range</Text>
-            </TouchableOpacity>
-
+            {/* List of added yearly ranges */}
             {config.yearlyRanges && config.yearlyRanges.length > 0 && (
               <View style={styles.yearlyRangesList}>
                 {config.yearlyRanges.map((range, index) => (
@@ -1240,7 +1208,49 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                 ))}
               </View>
             )}
-          </View>
+
+            {/* Add Date Button */}
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => {
+                console.log('[GoalScheduler] User tapped Add Date button');
+                setYearlyDateMode('single');
+                setAddYearlyDateMonth(1);
+                setAddYearlyDateDay(1);
+                setShowAddYearlyDatePicker(true);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="plus.circle.fill"
+                android_material_icon_name="add-circle"
+                size={18}
+                color={colors.primary}
+              />
+              <Text style={styles.addButtonText}>Add Date</Text>
+            </TouchableOpacity>
+
+            {/* Add Date Range Button */}
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => {
+                console.log('[GoalScheduler] User tapped Add Date Range button');
+                setYearlyDateMode('range');
+                setYearlyStartMonth(12);
+                setYearlyStartDay(20);
+                setYearlyEndMonth(1);
+                setYearlyEndDay(5);
+                setShowAddYearlyDatePicker(true);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="plus.circle.fill"
+                android_material_icon_name="add-circle"
+                size={18}
+                color={colors.primary}
+              />
+              <Text style={styles.addButtonText}>Add Date Range</Text>
+            </TouchableOpacity>
+          </>
         )}
         
         {/* End Date & Exclusions */}
@@ -1491,7 +1501,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       {renderMonthlyOptions()}
       {renderYearlyOptions()}
 
-      {/* Yearly Date Picker Modal - Add specific {month, day} date */}
+      {/* Yearly Date Picker Modal - NEW: Improved UI with single date and range modes */}
       <Modal
         visible={showAddYearlyDatePicker}
         transparent
@@ -1501,7 +1511,9 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Yearly Date</Text>
+              <Text style={styles.modalTitle}>
+                {yearlyDateMode === 'single' ? 'Add Yearly Date' : 'Add Date Range'}
+              </Text>
               <TouchableOpacity onPress={() => setShowAddYearlyDatePicker(false)}>
                 <IconSymbol
                   ios_icon_name="xmark"
@@ -1512,74 +1524,163 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalScroll}>
-              {/* Month Selection */}
-              <View style={styles.pickerSection}>
-                <Text style={styles.pickerLabel}>Select Month</Text>
-                <View style={styles.monthGrid}>
-                  {yearlyMonthNames.map((name, idx) => {
-                    const monthNum = idx + 1;
-                    const isSelected = addYearlyDateMonth === monthNum;
-                    return (
-                      <TouchableOpacity
-                        key={monthNum}
-                        style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
-                        onPress={() => {
-                          setAddYearlyDateMonth(monthNum);
-                          // Clamp day to valid range for new month
-                          const maxDay = maxDaysForYearlyMonth(monthNum);
-                          if (addYearlyDateDay > maxDay) setAddYearlyDateDay(maxDay);
-                        }}
-                      >
-                        <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
-                          {name.substring(0, 3)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
+              {yearlyDateMode === 'single' ? (
+                <>
+                  {/* Single Date Mode */}
+                  <View style={styles.pickerSection}>
+                    <Text style={styles.pickerLabel}>Select Month</Text>
+                    <View style={styles.monthGrid}>
+                      {yearlyMonthNames.map((name, idx) => {
+                        const monthNum = idx + 1;
+                        const isSelected = addYearlyDateMonth === monthNum;
+                        return (
+                          <TouchableOpacity
+                            key={monthNum}
+                            style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                            onPress={() => {
+                              setAddYearlyDateMonth(monthNum);
+                              const maxDay = maxDaysForYearlyMonth(monthNum);
+                              if (addYearlyDateDay > maxDay) setAddYearlyDateDay(maxDay);
+                            }}
+                          >
+                            <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                              {name.substring(0, 3)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
 
-              {/* Day Selection */}
-              <View style={styles.pickerSection}>
-                <Text style={styles.pickerLabel}>Select Day</Text>
-                <View style={styles.dateGridContainer}>
-                  {Array.from({ length: maxDaysForYearlyMonth(addYearlyDateMonth) }, (_, i) => {
-                    const dayNum = i + 1;
-                    const isSelected = addYearlyDateDay === dayNum;
-                    return (
-                      <TouchableOpacity
-                        key={dayNum}
-                        style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
-                        onPress={() => setAddYearlyDateDay(dayNum)}
-                      >
-                        <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
-                          {dayNum}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
+                  <View style={styles.pickerSection}>
+                    <Text style={styles.pickerLabel}>Select Day</Text>
+                    <View style={styles.dateGridContainer}>
+                      {Array.from({ length: maxDaysForYearlyMonth(addYearlyDateMonth) }, (_, i) => {
+                        const dayNum = i + 1;
+                        const isSelected = addYearlyDateDay === dayNum;
+                        return (
+                          <TouchableOpacity
+                            key={dayNum}
+                            style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                            onPress={() => setAddYearlyDateDay(dayNum)}
+                          >
+                            <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                              {dayNum}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
 
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={() => {
-                  console.log('[GoalScheduler] User confirmed yearly date:', { month: addYearlyDateMonth, day: addYearlyDateDay });
-                  // Add the {month, day} entry to yearlyDates
-                  const current = config.yearlyDates || [];
-                  const exists = current.some(d => d.month === addYearlyDateMonth && d.day === addYearlyDateDay);
-                  if (!exists) {
-                    const updated = [...current, { month: addYearlyDateMonth, day: addYearlyDateDay }]
-                      .sort((a, b) => a.month !== b.month ? a.month - b.month : a.day - b.day);
-                    updateConfig({ yearlyDates: updated });
-                  }
-                  setShowAddYearlyDatePicker(false);
-                }}
-              >
-                <Text style={styles.confirmButtonText}>
-                  Add {yearlyMonthNames[addYearlyDateMonth - 1]} {addYearlyDateDay}
-                </Text>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.confirmButton, (!addYearlyDateMonth || !addYearlyDateDay) && styles.confirmButtonDisabled]}
+                    onPress={handleAddYearlyDate}
+                    disabled={!addYearlyDateMonth || !addYearlyDateDay}
+                  >
+                    <Text style={styles.confirmButtonText}>
+                      Add {yearlyMonthNames[addYearlyDateMonth - 1]} {addYearlyDateDay}{getOrdinalSuffix(addYearlyDateDay)}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  {/* Range Mode */}
+                  <View style={styles.pickerSection}>
+                    <Text style={styles.pickerLabel}>Start Date</Text>
+                    <View style={styles.monthGrid}>
+                      {yearlyMonthNames.map((name, idx) => {
+                        const monthNum = idx + 1;
+                        const isSelected = yearlyStartMonth === monthNum;
+                        return (
+                          <TouchableOpacity
+                            key={monthNum}
+                            style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                            onPress={() => {
+                              setYearlyStartMonth(monthNum);
+                              const maxDay = maxDaysForYearlyMonth(monthNum);
+                              if (yearlyStartDay > maxDay) setYearlyStartDay(maxDay);
+                            }}
+                          >
+                            <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                              {name.substring(0, 3)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <View style={styles.dateGridContainer}>
+                      {Array.from({ length: maxDaysForYearlyMonth(yearlyStartMonth) }, (_, i) => {
+                        const dayNum = i + 1;
+                        const isSelected = yearlyStartDay === dayNum;
+                        return (
+                          <TouchableOpacity
+                            key={dayNum}
+                            style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                            onPress={() => setYearlyStartDay(dayNum)}
+                          >
+                            <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                              {dayNum}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <View style={styles.pickerSection}>
+                    <Text style={styles.pickerLabel}>End Date</Text>
+                    <View style={styles.monthGrid}>
+                      {yearlyMonthNames.map((name, idx) => {
+                        const monthNum = idx + 1;
+                        const isSelected = yearlyEndMonth === monthNum;
+                        return (
+                          <TouchableOpacity
+                            key={monthNum}
+                            style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                            onPress={() => {
+                              setYearlyEndMonth(monthNum);
+                              const maxDay = maxDaysForYearlyMonth(monthNum);
+                              if (yearlyEndDay > maxDay) setYearlyEndDay(maxDay);
+                            }}
+                          >
+                            <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                              {name.substring(0, 3)}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                    <View style={styles.dateGridContainer}>
+                      {Array.from({ length: maxDaysForYearlyMonth(yearlyEndMonth) }, (_, i) => {
+                        const dayNum = i + 1;
+                        const isSelected = yearlyEndDay === dayNum;
+                        return (
+                          <TouchableOpacity
+                            key={dayNum}
+                            style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                            onPress={() => setYearlyEndDay(dayNum)}
+                          >
+                            <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                              {dayNum}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.confirmButton, (!yearlyStartMonth || !yearlyStartDay || !yearlyEndMonth || !yearlyEndDay) && styles.confirmButtonDisabled]}
+                    onPress={handleAddYearlyDate}
+                    disabled={!yearlyStartMonth || !yearlyStartDay || !yearlyEndMonth || !yearlyEndDay}
+                  >
+                    <Text style={styles.confirmButtonText}>
+                      Add {yearlyMonthNames[yearlyStartMonth - 1]} {yearlyStartDay}{getOrdinalSuffix(yearlyStartDay)} - {yearlyMonthNames[yearlyEndMonth - 1]} {yearlyEndDay}{getOrdinalSuffix(yearlyEndDay)}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -2001,7 +2102,8 @@ const styles = StyleSheet.create({
   },
   yearlyRangesList: {
     gap: 8,
-    marginTop: 16,
+    marginTop: 8,
+    marginBottom: 16,
   },
   yearlyRangeItem: {
     flexDirection: 'row',
@@ -2129,7 +2231,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '70%',
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
