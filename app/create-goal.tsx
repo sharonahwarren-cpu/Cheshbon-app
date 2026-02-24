@@ -572,6 +572,9 @@ export default function CreateGoalScreen() {
   };
 
   const handleSubmit = async () => {
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚀 [YEARLY SCHEDULE ERROR MONITOR] Starting goal submission');
+    console.log('═══════════════════════════════════════════════════════');
     console.log(editingGoalId ? 'Submitting goal update form' : 'Submitting goal creation form');
     
     if (!title.trim()) {
@@ -593,14 +596,29 @@ export default function CreateGoalScreen() {
         ? 'alwaysactive' 
         : scheduleConfig.scheduleType.toLowerCase();
 
-      // CRITICAL DEBUG: Log the yearlyDates BEFORE any transformation
-      console.log('[CreateGoal] RAW scheduleConfig.yearlyDates from state:', JSON.stringify(scheduleConfig.yearlyDates, null, 2));
+      console.log('📊 [YEARLY SCHEDULE ERROR MONITOR] Schedule Config State:');
+      console.log('  - scheduleType:', scheduleConfig.scheduleType);
+      console.log('  - yearlyDates RAW:', scheduleConfig.yearlyDates);
+      console.log('  - yearlyDates TYPE:', typeof scheduleConfig.yearlyDates);
+      console.log('  - yearlyDates IS_ARRAY:', Array.isArray(scheduleConfig.yearlyDates));
+      
+      if (scheduleConfig.yearlyDates) {
+        console.log('  - yearlyDates LENGTH:', scheduleConfig.yearlyDates.length);
+        scheduleConfig.yearlyDates.forEach((d, i) => {
+          console.log(`  - yearlyDates[${i}]:`, JSON.stringify(d, null, 2));
+          console.log(`    - TYPE:`, typeof d);
+          console.log(`    - month:`, d.month, typeof d.month);
+          console.log(`    - day:`, d.day, typeof d.day);
+          console.log(`    - endMonth:`, d.endMonth, typeof d.endMonth);
+          console.log(`    - endDay:`, d.endDay, typeof d.endDay);
+        });
+      }
 
-      // CRITICAL FIX: Ensure yearlyDates are properly formatted as objects with all fields preserved
+      // CRITICAL FIX: The database column schedule_dates_of_year is text[] (not jsonb yet).
+      // To store structured data in a text[] column, each entry must be a JSON string.
+      // We stringify each yearly date object so PostgreSQL can store it as a text array element.
+      // The frontend already handles reading these back via JSON.parse in the yearlyDates normalization code.
       const yearlyDatesForBackend = scheduleConfig.yearlyDates?.map(d => {
-        // Log each entry before transformation
-        console.log('[CreateGoal] Processing yearlyDate entry:', JSON.stringify(d, null, 2));
-        
         const result = {
           month: d.month,
           day: d.day,
@@ -608,13 +626,19 @@ export default function CreateGoalScreen() {
           ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
         };
         
-        // Log the transformed result
-        console.log('[CreateGoal] Transformed yearlyDate entry:', JSON.stringify(result, null, 2));
-        return result;
+        console.log('🔄 [YEARLY SCHEDULE ERROR MONITOR] Transforming yearlyDate entry:');
+        console.log('  - INPUT:', JSON.stringify(d, null, 2));
+        console.log('  - OUTPUT (as JSON string for text[] column):', JSON.stringify(result));
+        
+        // Stringify each entry so it can be stored in the text[] column
+        return JSON.stringify(result);
       });
 
-      // CRITICAL DEBUG: Log the final yearlyDates array that will be sent
-      console.log('[CreateGoal] FINAL yearlyDates to be sent to backend:', JSON.stringify(yearlyDatesForBackend, null, 2));
+      console.log('📤 [YEARLY SCHEDULE ERROR MONITOR] Final yearlyDates for backend (text[] format):');
+      console.log('  - VALUE:', JSON.stringify(yearlyDatesForBackend, null, 2));
+      console.log('  - TYPE:', typeof yearlyDatesForBackend);
+      console.log('  - IS_ARRAY:', Array.isArray(yearlyDatesForBackend));
+      console.log('  - ENTRIES ARE STRINGS:', yearlyDatesForBackend?.every(e => typeof e === 'string'));
 
       const goalData: any = {
         title: title.trim(),
@@ -675,12 +699,12 @@ export default function CreateGoalScreen() {
         calendarType: scheduleConfig.calendarType,
       };
       
-      console.log('[CreateGoal] Schedule data being sent:', {
-        scheduleType: goalData.scheduleType,
-        scheduleRecurrenceType: goalData.scheduleRecurrenceType,
-        scheduleDaysOfWeek: goalData.scheduleDaysOfWeek,
-        yearlyDates: goalData.yearlyDates,
-      });
+      console.log('📦 [YEARLY SCHEDULE ERROR MONITOR] Goal Data Object:');
+      console.log('  - yearlyDates (text[] format):', JSON.stringify(goalData.yearlyDates, null, 2));
+      console.log('  - yearlyDates TYPE:', typeof goalData.yearlyDates);
+      console.log('  - yearlyDates IS_ARRAY:', Array.isArray(goalData.yearlyDates));
+      console.log('  - yearlyDates ENTRIES ARE STRINGS:', Array.isArray(goalData.yearlyDates) && goalData.yearlyDates.every((e: any) => typeof e === 'string'));
+      console.log('  - scheduleYearlyDates (text[] format):', JSON.stringify(goalData.scheduleYearlyDates, null, 2));
       
       // FIXED: Include alarms field when editing a goal
       if (editingGoalId && goalAlarms.length > 0) {
@@ -688,7 +712,8 @@ export default function CreateGoalScreen() {
         console.log('[API] Including alarms in goal update:', goalData.alarms);
       }
       
-      console.log('[API] Submitting goal data:', JSON.stringify(goalData, null, 2));
+      console.log('📋 [YEARLY SCHEDULE ERROR MONITOR] Full Goal Data:');
+      console.log(JSON.stringify(goalData, null, 2));
 
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
         goalData.reward = {
@@ -712,8 +737,13 @@ export default function CreateGoalScreen() {
 
       let createdOrUpdatedGoal: any;
       
+      console.log('🌐 [YEARLY SCHEDULE ERROR MONITOR] Sending request to backend...');
+      
       if (editingGoalId) {
+        console.log('  - Method: PUT');
+        console.log('  - Endpoint: /api/goals/' + editingGoalId);
         createdOrUpdatedGoal = await authenticatedPut(`/api/goals/${editingGoalId}`, goalData);
+        console.log('✅ [YEARLY SCHEDULE ERROR MONITOR] Backend response received:', createdOrUpdatedGoal);
         // CRITICAL FIX: After updating the goal, immediately refresh the schedule summary.
         // The backend will delete old occurrences and generate fresh ones based on the
         // newly saved schedule configuration, ensuring the UI shows current data.
@@ -725,7 +755,10 @@ export default function CreateGoalScreen() {
         }
         showSuccess('Goal updated successfully!');
       } else {
+        console.log('  - Method: POST');
+        console.log('  - Endpoint: /api/goals');
         createdOrUpdatedGoal = await authenticatedPost('/api/goals', goalData);
+        console.log('✅ [YEARLY SCHEDULE ERROR MONITOR] Backend response received:', createdOrUpdatedGoal);
         
         if (preselectedLifeAreaId && createdOrUpdatedGoal) {
           const goalId = createdOrUpdatedGoal.id || createdOrUpdatedGoal.data?.id;
@@ -740,6 +773,10 @@ export default function CreateGoalScreen() {
         
         showSuccess('Goal created successfully!');
       }
+      
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('✅ [YEARLY SCHEDULE ERROR MONITOR] Goal submission completed successfully');
+      console.log('═══════════════════════════════════════════════════════');
       
       setTimeout(() => {
         if (returnToLifeAreaWizard === 'true' && wizardLifeAreaId) {
@@ -763,7 +800,12 @@ export default function CreateGoalScreen() {
         }
       }, 1500);
     } catch (error: any) {
-      console.error('[API] Error saving goal:', error);
+      console.log('═══════════════════════════════════════════════════════');
+      console.error('❌ [YEARLY SCHEDULE ERROR MONITOR] Error saving goal');
+      console.error('  - Error message:', error.message);
+      console.error('  - Error stack:', error.stack);
+      console.error('  - Full error object:', JSON.stringify(error, null, 2));
+      console.log('═══════════════════════════════════════════════════════');
       showError(error.message || 'Failed to save goal');
     } finally {
       setSubmitting(false);

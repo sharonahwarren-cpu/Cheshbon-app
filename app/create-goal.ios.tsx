@@ -404,12 +404,50 @@ export default function CreateGoalScreen() {
           monthlyUseAlternativeCalendar: goalDetails.scheduleMonthlyUseAlternativeCalendar || goalDetails.schedule_monthly_use_alternative_calendar,
           monthlyCalendarEvent: goalDetails.scheduleMonthlyCalendarEvent || goalDetails.schedule_monthly_calendar_event,
           // Yearly - CRITICAL: read from yearlyDates (backend field name)
+          // The column is text[] so each entry is a JSON string that must be parsed back to an object
           yearlyMonths: parseJsonField(goalDetails.scheduleYearlyMonths || goalDetails.schedule_yearly_months),
-          yearlyDates: parseJsonField(
-            goalDetails.yearlyDates ||
-            goalDetails.scheduleYearlyDates ||
-            goalDetails.schedule_yearly_dates
-          ),
+          yearlyDates: (() => {
+            const rawYearlyDates = parseJsonField(
+              goalDetails.yearlyDates ||
+              goalDetails.scheduleYearlyDates ||
+              goalDetails.schedule_yearly_dates
+            );
+            if (!rawYearlyDates || !Array.isArray(rawYearlyDates)) return undefined;
+            // Normalize each entry: handle both JSON string format (text[] column) and object format (jsonb column)
+            const normalized = rawYearlyDates
+              .map((entry: any) => {
+                if (typeof entry === 'string') {
+                  try {
+                    const parsed = JSON.parse(entry);
+                    if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
+                      return {
+                        month: parsed.month,
+                        day: parsed.day,
+                        ...(typeof parsed.endMonth === 'number' ? { endMonth: parsed.endMonth } : {}),
+                        ...(typeof parsed.endDay === 'number' ? { endDay: parsed.endDay } : {}),
+                      };
+                    }
+                  } catch {
+                    // Not parseable - skip
+                  }
+                  console.warn('[CreateGoal iOS] Skipping invalid yearlyDates string entry:', entry);
+                  return null;
+                }
+                if (entry && typeof entry === 'object' && typeof entry.month === 'number' && typeof entry.day === 'number') {
+                  return {
+                    month: entry.month,
+                    day: entry.day,
+                    ...(typeof entry.endMonth === 'number' ? { endMonth: entry.endMonth } : {}),
+                    ...(typeof entry.endDay === 'number' ? { endDay: entry.endDay } : {}),
+                  };
+                }
+                console.warn('[CreateGoal iOS] Skipping invalid yearlyDates entry:', entry);
+                return null;
+              })
+              .filter(Boolean);
+            console.log('[CreateGoal iOS] Normalized yearlyDates:', normalized);
+            return normalized.length > 0 ? normalized : undefined;
+          })(),
           yearlyCalendarType: goalDetails.calendarType || goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
           yearlyUseAlternativeCalendar: goalDetails.scheduleYearlyUseAlternativeCalendar || goalDetails.schedule_yearly_use_alternative_calendar,
           yearlyCalendarEvent: goalDetails.scheduleYearlyCalendarEvent || goalDetails.schedule_yearly_calendar_event,
@@ -562,10 +600,29 @@ export default function CreateGoalScreen() {
         scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
         scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
         scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
-        // CRITICAL FIX: Backend PUT handler reads 'yearlyDates', not 'scheduleYearlyDates'.
-        yearlyDates: scheduleConfig.yearlyDates,
+        // CRITICAL FIX: The database column schedule_dates_of_year is text[] (not jsonb yet).
+        // Stringify each yearly date object so PostgreSQL can store it as a text array element.
+        // The frontend already handles reading these back via JSON.parse in the yearlyDates normalization code.
+        yearlyDates: scheduleConfig.yearlyDates?.map(d => {
+          const result = {
+            month: d.month,
+            day: d.day,
+            ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
+            ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
+          };
+          console.log('🔄 [iOS YEARLY SCHEDULE] Stringifying yearlyDate for text[] column:', JSON.stringify(result));
+          return JSON.stringify(result);
+        }),
         scheduleYearlyMonths: scheduleConfig.yearlyMonths,
-        scheduleYearlyDates: scheduleConfig.yearlyDates,
+        scheduleYearlyDates: scheduleConfig.yearlyDates?.map(d => {
+          const result = {
+            month: d.month,
+            day: d.day,
+            ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
+            ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
+          };
+          return JSON.stringify(result);
+        }),
         scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
         scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
         scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,
