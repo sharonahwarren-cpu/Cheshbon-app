@@ -1,5 +1,5 @@
 
-import { ScheduleConfig, WeekdayPosition } from '@/components/GoalScheduler';
+import { ScheduleConfig, WeekdayPosition, YearlyDateEntry } from '@/components/GoalScheduler';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -170,79 +170,77 @@ export function generateScheduleSummary(config: ScheduleConfig): string {
     return summary;
   }
 
+  // REBUILT FROM SCRATCH: Yearly schedule description (following Monthly pattern)
+  // yearlyDates is now Array<{month, day}> matching backend jsonb format
   if (scheduleType === 'Yearly') {
     const calendarType = config.yearlyUseAlternativeCalendar && config.yearlyCalendarType
       ? config.yearlyCalendarType
       : 'gregorian';
     const calendarLabel = calendarType !== 'gregorian' ? ` (${CALENDAR_NAMES[calendarType]})` : '';
 
+    const monthNames = calendarType === 'gregorian' ? GREGORIAN_MONTH_NAMES :
+                       calendarType === 'hebrew' ? HEBREW_MONTH_NAMES :
+                       GREGORIAN_MONTH_NAMES;
+
     // Calendar event takes precedence
     if (config.yearlyCalendarEvent) {
       return `Scheduled on ${config.yearlyCalendarEvent} every year${calendarLabel}`;
     }
 
-    // Specific dates
+    const parts: string[] = [];
+
+    // Specific dates - now Array<{month, day}> objects
     if (config.yearlyDates && config.yearlyDates.length > 0) {
-      const isHebrew = calendarType === 'hebrew';
-
-      // CRITICAL FIX: Normalize each entry to handle both:
-      // - New JSONB format: { month: 1, day: 3, endMonth: 2, endDay: 2 } (objects)
-      // - Legacy text[] format: strings that may be JSON-encoded objects
-      const normalizedDates = config.yearlyDates
-        .map((entry: any) => {
-          if (typeof entry === 'string') {
-            // Legacy string format - try to parse as JSON
-            try {
-              const parsed = JSON.parse(entry);
-              if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
-                return parsed;
-              }
-            } catch {
-              // Not parseable JSON - skip
-            }
-            return null; // Invalid legacy string entry
-          }
-          if (entry && typeof entry === 'object' && typeof entry.month === 'number' && typeof entry.day === 'number') {
-            return entry; // Valid object format
-          }
-          return null; // Invalid entry
-        })
-        .filter(Boolean);
-
-      const dateStrings = normalizedDates
-        .map((dateRange: any) => {
-          const monthName = isHebrew
-            ? (HEBREW_MONTH_NAMES[dateRange.month - 1] || `Month ${dateRange.month}`)
-            : (GREGORIAN_MONTH_NAMES[dateRange.month - 1] || new Date(2024, dateRange.month - 1, 1).toLocaleDateString('en-US', { month: 'long' }));
-          
-          if (dateRange.endMonth && dateRange.endDay) {
-            const endMonthName = isHebrew
-              ? (HEBREW_MONTH_NAMES[dateRange.endMonth - 1] || `Month ${dateRange.endMonth}`)
-              : (GREGORIAN_MONTH_NAMES[dateRange.endMonth - 1] || new Date(2024, dateRange.endMonth - 1, 1).toLocaleDateString('en-US', { month: 'long' }));
-            return `${monthName} ${formatOrdinal(dateRange.day)} to ${endMonthName} ${formatOrdinal(dateRange.endDay)}`;
-          }
-          
-          return `${monthName} ${formatOrdinal(dateRange.day)}`;
-        });
-
-      // CRITICAL FIX: Check if we have any valid date strings after filtering
-      if (dateStrings.length === 0) {
-        return `Yearly${calendarLabel} (no valid dates)`;
-      }
+      // Sort by month then day
+      const sortedDates = [...config.yearlyDates].sort((a, b) =>
+        a.month !== b.month ? a.month - b.month : a.day - b.day
+      );
+      const dateStrings = sortedDates.map(d => {
+        const monthName = monthNames[d.month - 1] || `Month ${d.month}`;
+        return `${monthName} ${formatOrdinal(d.day)}`;
+      });
 
       if (dateStrings.length === 1) {
-        return `Scheduled on ${dateStrings[0]} every year${calendarLabel}`;
+        parts.push(`${dateStrings[0]} every year`);
+      } else if (dateStrings.length === 2) {
+        parts.push(`${dateStrings[0]} and ${dateStrings[1]} every year`);
+      } else {
+        const lastDate = dateStrings.pop();
+        parts.push(`${dateStrings.join(', ')}, and ${lastDate} every year`);
       }
-
-      if (dateStrings.length === 2) {
-        return `Scheduled on ${dateStrings[0]} and ${dateStrings[1]} every year${calendarLabel}`;
-      }
-
-      const lastDate = dateStrings.pop();
-      return `Scheduled on ${dateStrings.join(', ')}, and ${lastDate} every year${calendarLabel}`;
     }
 
-    return `Yearly${calendarLabel} (no dates selected)`;
+    // Date ranges
+    if (config.yearlyRanges && config.yearlyRanges.length > 0) {
+      const rangeStrings = config.yearlyRanges.map(range => {
+        const startMonthName = monthNames[range.startMonth - 1] || `Month ${range.startMonth}`;
+        const endMonthName = monthNames[range.endMonth - 1] || `Month ${range.endMonth}`;
+        return `${startMonthName} ${formatOrdinal(range.startDay)} to ${endMonthName} ${formatOrdinal(range.endDay)}`;
+      });
+
+      if (rangeStrings.length === 1) {
+        const prefix = parts.length > 0 ? ' and' : '';
+        parts.push(`${prefix} from ${rangeStrings[0]} every year`);
+      } else if (rangeStrings.length === 2) {
+        const prefix = parts.length > 0 ? ' and' : '';
+        parts.push(`${prefix} from ${rangeStrings[0]} and ${rangeStrings[1]} every year`);
+      } else {
+        const lastRange = rangeStrings.pop();
+        const prefix = parts.length > 0 ? ' and' : '';
+        parts.push(`${prefix} from ${rangeStrings.join(', ')}, and ${lastRange} every year`);
+      }
+    }
+
+    if (parts.length === 0) {
+      return `Yearly${calendarLabel} (no dates selected)`;
+    }
+
+    let summary = 'Scheduled on ' + parts.join('');
+    
+    // Capitalize first letter
+    summary = summary.charAt(0).toUpperCase() + summary.slice(1);
+
+    return summary;
   }
 
   return scheduleType;
@@ -290,16 +288,13 @@ export function generateShortScheduleSummary(config: ScheduleConfig): string {
     return `${dateCount} day${dateCount > 1 ? 's' : ''}/month`;
   }
 
+  // REBUILT FROM SCRATCH: Yearly short summary (following Monthly pattern)
+  // yearlyDates is now Array<{month, day}> objects
   if (scheduleType === 'Yearly') {
     if (config.yearlyCalendarEvent) {
       return config.yearlyCalendarEvent;
     }
-    // CRITICAL FIX: Count only valid object entries (not legacy strings)
-    const validDates = config.yearlyDates?.filter((d: any) => {
-      if (typeof d === 'string') return false;
-      return d && typeof d === 'object' && typeof d.month === 'number' && typeof d.day === 'number';
-    }) || [];
-    const dateCount = validDates.length;
+    const dateCount = (config.yearlyDates?.length || 0) + (config.yearlyRanges?.length || 0);
     if (dateCount > 0) return `${dateCount} date${dateCount > 1 ? 's' : ''}/year`;
     return 'Yearly';
   }

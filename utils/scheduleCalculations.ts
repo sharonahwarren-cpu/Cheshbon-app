@@ -47,9 +47,14 @@ export interface ScheduleDetails {
   range?: { start: number; end: number };
   randomCount?: number; // e.g., 3; shuffle/select
 
-  // Yearly
+  // Yearly - REBUILT FROM SCRATCH (following Monthly pattern)
   months?: number[]; // 1-12 (Gregorian) or specific Hebrew/Chinese/Islamic month indices
-  datesOrRanges?: Array<{ month: number; days?: number[]; start?: number; end?: number }>;
+  // datesOrRanges: each entry can be a specific date (days array) or a range (start/end)
+  datesOrRanges?: Array<{ month: number; days?: number[]; start?: number; end?: number; endMonth?: number }>;
+  // yearlyDates: new {month, day} format from backend jsonb (alternative to datesOrRanges)
+  yearlyDates?: Array<{ month: number; day: number }>;
+  // yearlyRanges: new range format from backend jsonb
+  yearlyRanges?: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }>;
 }
 
 export interface GoalSchedule {
@@ -351,7 +356,8 @@ function getHebrewYearForGregorianYear(gregorianYear: number, hebrewMonth: numbe
 }
 
 /**
- * Generate yearly activations with proper Hebrew calendar support
+ * REBUILT FROM SCRATCH: Generate yearly activations (following Monthly pattern)
+ * Supports both new {month, day} format (yearlyDates/yearlyRanges) and legacy datesOrRanges format
  */
 function generateYearlyActivations(
   schedule: GoalSchedule,
@@ -362,9 +368,15 @@ function generateYearlyActivations(
   location?: { latitude: number; longitude: number }
 ): ActivationPreview[] {
   const activations: ActivationPreview[] = [];
-  const { datesOrRanges, startDate, endDate } = schedule.details;
+  const { datesOrRanges, yearlyDates, yearlyRanges, startDate, endDate } = schedule.details;
 
-  if (!datesOrRanges || datesOrRanges.length === 0) {
+  // Build a unified list of date entries from all sources
+  // New format: yearlyDates (Array<{month, day}>) and yearlyRanges (Array<{startMonth, startDay, endMonth, endDay}>)
+  // Legacy format: datesOrRanges (Array<{month, days?, start?, end?, endMonth?}>)
+  const hasNewFormat = (yearlyDates && yearlyDates.length > 0) || (yearlyRanges && yearlyRanges.length > 0);
+  const hasLegacyFormat = datesOrRanges && datesOrRanges.length > 0;
+
+  if (!hasNewFormat && !hasLegacyFormat) {
     console.warn('[ScheduleCalc] No dates or ranges specified for yearly schedule');
     return [];
   }
@@ -380,54 +392,93 @@ function generateYearlyActivations(
   const isHebrew = schedule.calendarType === 'Hebrew';
 
   while (activations.length < count && currentYear <= end.year) {
-    for (const dateRange of datesOrRanges) {
-      if (isHebrew) {
-        // Hebrew calendar: convert Hebrew month/day to Gregorian
-        const hebrewYear = getHebrewYearForGregorianYear(currentYear, dateRange.month);
-        
-        if (dateRange.days && dateRange.days.length > 0) {
-          for (const day of dateRange.days) {
-            const activation = hebrewToGregorianDate(hebrewYear, dateRange.month, day, timezone);
-            if (activation && activation.isValid && activation > now && activation <= end) {
-              activations.push(createActivationPreview(activation, schedule, alarms, location));
-              if (activations.length >= count) break;
-            }
+    // Process new format: yearlyDates (Array<{month, day}>)
+    if (yearlyDates && yearlyDates.length > 0) {
+      for (const entry of yearlyDates) {
+        if (isHebrew) {
+          const hebrewYear = getHebrewYearForGregorianYear(currentYear, entry.month);
+          const activation = hebrewToGregorianDate(hebrewYear, entry.month, entry.day, timezone);
+          if (activation && activation.isValid && activation > now && activation <= end) {
+            activations.push(createActivationPreview(activation, schedule, alarms, location));
           }
-        } else if (dateRange.start !== undefined && dateRange.end !== undefined) {
-          // Date range within a Hebrew month
-          for (let day = dateRange.start; day <= dateRange.end; day++) {
-            const activation = hebrewToGregorianDate(hebrewYear, dateRange.month, day, timezone);
-            if (activation && activation.isValid && activation > now && activation <= end) {
-              activations.push(createActivationPreview(activation, schedule, alarms, location));
-              if (activations.length >= count) break;
-            }
+        } else {
+          const activation = DateTime.fromObject(
+            { year: currentYear, month: entry.month, day: entry.day, hour: 9, minute: 0 },
+            { zone: timezone }
+          );
+          if (activation.isValid && activation > now && activation <= end) {
+            activations.push(createActivationPreview(activation, schedule, alarms, location));
           }
         }
-      } else {
-        // Gregorian calendar
-        if (dateRange.days && dateRange.days.length > 0) {
-          // Specific days in a month
-          for (const day of dateRange.days) {
-            const activation = DateTime.fromObject(
-              { year: currentYear, month: dateRange.month, day, hour: 9, minute: 0 },
-              { zone: timezone }
-            );
-            if (activation.isValid && activation > now && activation <= end) {
+        if (activations.length >= count) break;
+      }
+    }
+
+    if (activations.length >= count) break;
+
+    // Process new format: yearlyRanges (Array<{startMonth, startDay, endMonth, endDay}>)
+    if (yearlyRanges && yearlyRanges.length > 0) {
+      for (const range of yearlyRanges) {
+        if (isHebrew) {
+          const hebrewYear = getHebrewYearForGregorianYear(currentYear, range.startMonth);
+          for (let day = range.startDay; day <= range.endDay; day++) {
+            const activation = hebrewToGregorianDate(hebrewYear, range.startMonth, day, timezone);
+            if (activation && activation.isValid && activation > now && activation <= end) {
               activations.push(createActivationPreview(activation, schedule, alarms, location));
               if (activations.length >= count) break;
             }
           }
-        } else if (dateRange.start !== undefined && dateRange.end !== undefined) {
-          // Date range - may span across months
-          const startMonth = dateRange.month;
-          // Check if there's an endMonth stored (for cross-month ranges)
-          const endMonth = (dateRange as any).endMonth || dateRange.month;
+        } else {
+          // Cross-month range: iterate from start date to end date
+          let current = DateTime.fromObject(
+            { year: currentYear, month: range.startMonth, day: range.startDay, hour: 9, minute: 0 },
+            { zone: timezone }
+          );
+          const rangeEnd = DateTime.fromObject(
+            { year: currentYear, month: range.endMonth, day: range.endDay, hour: 9, minute: 0 },
+            { zone: timezone }
+          );
+          while (current <= rangeEnd && activations.length < count) {
+            if (current > now && current <= end) {
+              activations.push(createActivationPreview(current, schedule, alarms, location));
+            }
+            current = current.plus({ days: 1 });
+          }
+        }
+        if (activations.length >= count) break;
+      }
+    }
+
+    if (activations.length >= count) break;
+
+    // Process legacy format: datesOrRanges
+    if (datesOrRanges && datesOrRanges.length > 0) {
+      for (const dateRange of datesOrRanges) {
+        if (isHebrew) {
+          const hebrewYear = getHebrewYearForGregorianYear(currentYear, dateRange.month);
           
-          if (endMonth === startMonth) {
-            // Same month range
+          if (dateRange.days && dateRange.days.length > 0) {
+            for (const day of dateRange.days) {
+              const activation = hebrewToGregorianDate(hebrewYear, dateRange.month, day, timezone);
+              if (activation && activation.isValid && activation > now && activation <= end) {
+                activations.push(createActivationPreview(activation, schedule, alarms, location));
+                if (activations.length >= count) break;
+              }
+            }
+          } else if (dateRange.start !== undefined && dateRange.end !== undefined) {
             for (let day = dateRange.start; day <= dateRange.end; day++) {
+              const activation = hebrewToGregorianDate(hebrewYear, dateRange.month, day, timezone);
+              if (activation && activation.isValid && activation > now && activation <= end) {
+                activations.push(createActivationPreview(activation, schedule, alarms, location));
+                if (activations.length >= count) break;
+              }
+            }
+          }
+        } else {
+          if (dateRange.days && dateRange.days.length > 0) {
+            for (const day of dateRange.days) {
               const activation = DateTime.fromObject(
-                { year: currentYear, month: startMonth, day, hour: 9, minute: 0 },
+                { year: currentYear, month: dateRange.month, day, hour: 9, minute: 0 },
                 { zone: timezone }
               );
               if (activation.isValid && activation > now && activation <= end) {
@@ -435,27 +486,43 @@ function generateYearlyActivations(
                 if (activations.length >= count) break;
               }
             }
-          } else {
-            // Cross-month range: iterate from start date to end date
-            let current = DateTime.fromObject(
-              { year: currentYear, month: startMonth, day: dateRange.start, hour: 9, minute: 0 },
-              { zone: timezone }
-            );
-            const rangeEnd = DateTime.fromObject(
-              { year: currentYear, month: endMonth, day: dateRange.end, hour: 9, minute: 0 },
-              { zone: timezone }
-            );
-            while (current <= rangeEnd && activations.length < count) {
-              if (current > now && current <= end) {
-                activations.push(createActivationPreview(current, schedule, alarms, location));
+          } else if (dateRange.start !== undefined && dateRange.end !== undefined) {
+            const startMonth = dateRange.month;
+            const endMonth = (dateRange as any).endMonth || dateRange.month;
+            
+            if (endMonth === startMonth) {
+              for (let day = dateRange.start; day <= dateRange.end; day++) {
+                const activation = DateTime.fromObject(
+                  { year: currentYear, month: startMonth, day, hour: 9, minute: 0 },
+                  { zone: timezone }
+                );
+                if (activation.isValid && activation > now && activation <= end) {
+                  activations.push(createActivationPreview(activation, schedule, alarms, location));
+                  if (activations.length >= count) break;
+                }
               }
-              current = current.plus({ days: 1 });
+            } else {
+              let current = DateTime.fromObject(
+                { year: currentYear, month: startMonth, day: dateRange.start, hour: 9, minute: 0 },
+                { zone: timezone }
+              );
+              const rangeEnd = DateTime.fromObject(
+                { year: currentYear, month: endMonth, day: dateRange.end, hour: 9, minute: 0 },
+                { zone: timezone }
+              );
+              while (current <= rangeEnd && activations.length < count) {
+                if (current > now && current <= end) {
+                  activations.push(createActivationPreview(current, schedule, alarms, location));
+                }
+                current = current.plus({ days: 1 });
+              }
             }
           }
         }
+        if (activations.length >= count) break;
       }
-      if (activations.length >= count) break;
     }
+
     currentYear++;
   }
 
@@ -616,6 +683,7 @@ export function isGoalActiveOnDate(
 
   if (schedule.recurrenceType === 'yearly') {
     const isHebrew = schedule.calendarType === 'Hebrew';
+    const { yearlyDates, yearlyRanges, datesOrRanges } = schedule.details;
     
     if (isHebrew) {
       // For Hebrew calendar, convert the check date to Hebrew and compare
@@ -623,7 +691,12 @@ export function isGoalActiveOnDate(
         const hdate = new HDate(checkDate.toJSDate());
         const hebrewMonth = hdate.getMonth();
         const hebrewDay = hdate.getDate();
-        return schedule.details.datesOrRanges?.some(dr => {
+
+        // Check new yearlyDates format
+        if (yearlyDates?.some(d => d.month === hebrewMonth && d.day === hebrewDay)) return true;
+
+        // Check legacy datesOrRanges format
+        return datesOrRanges?.some(dr => {
           if (dr.month !== hebrewMonth) return false;
           if (dr.days?.includes(hebrewDay)) return true;
           if (dr.start !== undefined && dr.end !== undefined && hebrewDay >= dr.start && hebrewDay <= dr.end) return true;
@@ -636,7 +709,24 @@ export function isGoalActiveOnDate(
     
     const month = checkDate.month;
     const day = checkDate.day;
-    return schedule.details.datesOrRanges?.some(dr => {
+
+    // Check new yearlyDates format ({month, day} objects)
+    if (yearlyDates?.some(d => d.month === month && d.day === day)) return true;
+
+    // Check new yearlyRanges format
+    if (yearlyRanges?.some(r => {
+      if (r.startMonth === r.endMonth) {
+        return month === r.startMonth && day >= r.startDay && day <= r.endDay;
+      }
+      // Cross-month range
+      const checkDt = checkDate;
+      const startDt = DateTime.fromObject({ year: checkDate.year, month: r.startMonth, day: r.startDay });
+      const endDt = DateTime.fromObject({ year: checkDate.year, month: r.endMonth, day: r.endDay });
+      return checkDt >= startDt && checkDt <= endDt;
+    })) return true;
+
+    // Check legacy datesOrRanges format
+    return datesOrRanges?.some(dr => {
       if (dr.month !== month) return false;
       if (dr.days?.includes(day)) return true;
       if (dr.start !== undefined && dr.end !== undefined && day >= dr.start && day <= dr.end) return true;

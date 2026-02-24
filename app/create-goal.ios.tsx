@@ -403,9 +403,7 @@ export default function CreateGoalScreen() {
           monthlyCalendarType: goalDetails.scheduleMonthlyCalendarType || goalDetails.schedule_monthly_calendar_type,
           monthlyUseAlternativeCalendar: goalDetails.scheduleMonthlyUseAlternativeCalendar || goalDetails.schedule_monthly_use_alternative_calendar,
           monthlyCalendarEvent: goalDetails.scheduleMonthlyCalendarEvent || goalDetails.schedule_monthly_calendar_event,
-          // Yearly - CRITICAL: read from yearlyDates (backend field name)
-          // The column is text[] so each entry is a JSON string that must be parsed back to an object
-          yearlyMonths: parseJsonField(goalDetails.scheduleYearlyMonths || goalDetails.schedule_yearly_months),
+          // Yearly - new {month, day} format for yearlyDates (jsonb column)
           yearlyDates: (() => {
             const rawYearlyDates = parseJsonField(
               goalDetails.yearlyDates ||
@@ -413,19 +411,14 @@ export default function CreateGoalScreen() {
               goalDetails.schedule_yearly_dates
             );
             if (!rawYearlyDates || !Array.isArray(rawYearlyDates)) return undefined;
-            // Normalize each entry: handle both JSON string format (text[] column) and object format (jsonb column)
+            // Normalize each entry: must be {month, day} objects (new jsonb format)
             const normalized = rawYearlyDates
               .map((entry: any) => {
                 if (typeof entry === 'string') {
                   try {
                     const parsed = JSON.parse(entry);
                     if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
-                      return {
-                        month: parsed.month,
-                        day: parsed.day,
-                        ...(typeof parsed.endMonth === 'number' ? { endMonth: parsed.endMonth } : {}),
-                        ...(typeof parsed.endDay === 'number' ? { endDay: parsed.endDay } : {}),
-                      };
+                      return { month: parsed.month, day: parsed.day };
                     }
                   } catch {
                     // Not parseable - skip
@@ -434,18 +427,32 @@ export default function CreateGoalScreen() {
                   return null;
                 }
                 if (entry && typeof entry === 'object' && typeof entry.month === 'number' && typeof entry.day === 'number') {
-                  return {
-                    month: entry.month,
-                    day: entry.day,
-                    ...(typeof entry.endMonth === 'number' ? { endMonth: entry.endMonth } : {}),
-                    ...(typeof entry.endDay === 'number' ? { endDay: entry.endDay } : {}),
-                  };
+                  return { month: entry.month, day: entry.day };
                 }
                 console.warn('[CreateGoal iOS] Skipping invalid yearlyDates entry:', entry);
                 return null;
               })
-              .filter(Boolean);
-            console.log('[CreateGoal iOS] Normalized yearlyDates:', normalized);
+              .filter((e: any): e is { month: number; day: number } => e !== null);
+            console.log('[CreateGoal iOS] Normalized yearlyDates (new {month,day} format):', normalized);
+            return normalized.length > 0 ? normalized : undefined;
+          })(),
+          yearlyRanges: (() => {
+            const rawYearlyRanges = parseJsonField(
+              goalDetails.yearlyRanges ||
+              goalDetails.scheduleYearlyRanges ||
+              goalDetails.schedule_yearly_ranges
+            );
+            if (!rawYearlyRanges || !Array.isArray(rawYearlyRanges)) return undefined;
+            const normalized = rawYearlyRanges
+              .map((entry: any) => {
+                if (entry && typeof entry === 'object' &&
+                    typeof entry.startMonth === 'number' && typeof entry.startDay === 'number' &&
+                    typeof entry.endMonth === 'number' && typeof entry.endDay === 'number') {
+                  return { startMonth: entry.startMonth, startDay: entry.startDay, endMonth: entry.endMonth, endDay: entry.endDay };
+                }
+                return null;
+              })
+              .filter((e: any): e is { startMonth: number; startDay: number; endMonth: number; endDay: number } => e !== null);
             return normalized.length > 0 ? normalized : undefined;
           })(),
           yearlyCalendarType: goalDetails.calendarType || goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
@@ -541,10 +548,7 @@ export default function CreateGoalScreen() {
   };
 
   const handleSubmit = async () => {
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('🚀 [iOS YEARLY SCHEDULE FIX] Starting goal submission');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log(editingGoalId ? 'Submitting goal update form' : 'Submitting goal creation form');
+    console.log('[CreateGoal iOS]', editingGoalId ? 'Submitting goal update form' : 'Submitting goal creation form');
     
     if (!title.trim()) {
       showError('Goal title is required');
@@ -565,33 +569,27 @@ export default function CreateGoalScreen() {
         ? 'alwaysactive' 
         : scheduleConfig.scheduleType.toLowerCase();
 
-      console.log('📊 [iOS YEARLY SCHEDULE FIX] Schedule Config State:');
-      console.log('  - scheduleType:', scheduleConfig.scheduleType);
-      console.log('  - yearlyDates RAW:', scheduleConfig.yearlyDates);
+      console.log('[CreateGoal iOS] Schedule type:', scheduleConfig.scheduleType);
+      console.log('[CreateGoal iOS] yearlyDates (new {month,day} format):', JSON.stringify(scheduleConfig.yearlyDates));
+      console.log('[CreateGoal iOS] yearlyRanges:', JSON.stringify(scheduleConfig.yearlyRanges));
 
-      // ✅ CRITICAL FIX: Only send yearlyDates if scheduleType is "Yearly"
-      // This prevents stale yearly data from causing errors when saving non-yearly goals
-      let yearlyDatesForBackend = null;
+      // ✅ CRITICAL: Only send yearlyDates/yearlyRanges if scheduleType is "Yearly"
+      // yearlyDates is now Array<{month, day}> - send as plain objects (jsonb)
+      let yearlyDatesForBackend: Array<{ month: number; day: number }> | null = null;
+      let yearlyRangesForBackend: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }> | null = null;
       
-      if (scheduleConfig.scheduleType === 'Yearly' && scheduleConfig.yearlyDates) {
-        yearlyDatesForBackend = scheduleConfig.yearlyDates.map(d => {
-          const result = {
-            month: d.month,
-            day: d.day,
-            ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
-            ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
-          };
-          console.log('🔄 [iOS YEARLY SCHEDULE FIX] Transforming yearlyDate entry (plain object - backend will stringify):', JSON.stringify(result));
-          // ✅ RETURN PLAIN OBJECT - DO NOT STRINGIFY
-          return result;
-        });
+      if (scheduleConfig.scheduleType === 'Yearly') {
+        if (scheduleConfig.yearlyDates && scheduleConfig.yearlyDates.length > 0) {
+          yearlyDatesForBackend = scheduleConfig.yearlyDates.map(d => ({ month: d.month, day: d.day }));
+          console.log('[CreateGoal iOS] yearlyDates for backend:', JSON.stringify(yearlyDatesForBackend));
+        }
+        if (scheduleConfig.yearlyRanges && scheduleConfig.yearlyRanges.length > 0) {
+          yearlyRangesForBackend = scheduleConfig.yearlyRanges.map(r => ({
+            startMonth: r.startMonth, startDay: r.startDay, endMonth: r.endMonth, endDay: r.endDay,
+          }));
+          console.log('[CreateGoal iOS] yearlyRanges for backend:', JSON.stringify(yearlyRangesForBackend));
+        }
       }
-
-      console.log('📤 [iOS YEARLY SCHEDULE FIX] Final yearlyDates for backend:');
-      console.log('  - scheduleType:', scheduleConfig.scheduleType);
-      console.log('  - VALUE:', JSON.stringify(yearlyDatesForBackend, null, 2));
-      console.log('  - IS_NULL:', yearlyDatesForBackend === null);
-      console.log('  - WILL_BE_SENT:', scheduleConfig.scheduleType === 'Yearly' ? 'YES' : 'NO (cleared)');
 
       const goalData: any = {
         title: title.trim(),
@@ -631,12 +629,12 @@ export default function CreateGoalScreen() {
         scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
         scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
         scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
-        // ✅ CRITICAL FIX: Only send yearlyDates if scheduleType is "Yearly"
-        // This prevents stale yearly data from causing errors when saving non-yearly goals
+        // ✅ YEARLY SCHEDULE: Send new {month, day} format as jsonb
         yearlyDates: yearlyDatesForBackend,
         scheduleDatesOfYear: yearlyDatesForBackend,
-        scheduleYearlyMonths: scheduleConfig.yearlyMonths,
         scheduleYearlyDates: yearlyDatesForBackend,
+        yearlyRanges: yearlyRangesForBackend,
+        scheduleYearlyRanges: yearlyRangesForBackend,
         scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
         scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
         scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,
@@ -715,9 +713,7 @@ export default function CreateGoalScreen() {
         showSuccess('Goal created successfully!');
       }
       
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('✅ [iOS YEARLY SCHEDULE FIX] Goal submission completed successfully');
-      console.log('═══════════════════════════════════════════════════════');
+      console.log('[CreateGoal iOS] Goal submission completed successfully');
       
       setTimeout(() => {
         if (returnToLifeAreaWizard === 'true' && wizardLifeAreaId) {
@@ -741,10 +737,7 @@ export default function CreateGoalScreen() {
         }
       }, 1500);
     } catch (error: any) {
-      console.log('═══════════════════════════════════════════════════════');
-      console.error('❌ [iOS YEARLY SCHEDULE FIX] Error saving goal');
-      console.error('  - Error message:', error.message);
-      console.log('═══════════════════════════════════════════════════════');
+      console.error('[CreateGoal iOS] Error saving goal:', error.message);
       showError(error.message || 'Failed to save goal');
     } finally {
       setSubmitting(false);
