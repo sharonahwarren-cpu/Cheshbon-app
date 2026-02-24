@@ -12,17 +12,20 @@ import {
   Image,
   TextInput,
   KeyboardAvoidingView,
+  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from "@/utils/api";
+import { authenticatedGet, authenticatedPost, authenticatedDelete, getBearerToken, BACKEND_URL } from "@/utils/api";
 import { colors } from "@/styles/commonStyles";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
 import { IconSymbol } from "@/components/IconSymbol";
 import { DatePickerModal } from "@/components/DatePickerModal";
 import { DateTime } from 'luxon';
 import { getLocalTimezone } from '@/utils/dateUtils';
+import * as Speech from 'expo-speech';
+import { AudioRecorder, AudioRecording, RecordingOptions } from 'expo-audio';
 
 interface DailyEntry {
   id: string;
@@ -132,6 +135,21 @@ interface JournalEntry {
   updatedAt: string;
 }
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
 // Helper function to format date as YYYY-MM-DD in local timezone
 function formatDateLocal(date: Date): string {
   try {
@@ -189,7 +207,7 @@ function formatAlternativeDate(date: Date, calendarType: string): string {
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const params = useLocalSearchParams<{ date?: string }>();
+  const params = useLocalSearchParams<{ date?: string; openModal?: string; goalId?: string }>();
   const scrollViewRef = useRef<ScrollView>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [loading, setLoading] = useState(false);
@@ -220,6 +238,18 @@ export default function HomeScreen() {
 
   const [lifetimeTotals, setLifetimeTotals] = useState({ successes: 0, struggles: 0 });
 
+  // AI Chat state
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageInput, setMessageInput] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [audioRecording, setAudioRecording] = useState<AudioRecording | null>(null);
+  const flatListRef = useRef<FlatList>(null);
+
   useEffect(() => {
     if (params.date) {
       const dateFromParam = new Date(params.date);
@@ -228,6 +258,12 @@ export default function HomeScreen() {
       }
     }
   }, [params.date]);
+
+  useEffect(() => {
+    if (params.openModal === 'true') {
+      openAddReflectionModal();
+    }
+  }, [params.openModal, params.goalId]);
 
   useEffect(() => {
     loadData();
@@ -303,6 +339,290 @@ export default function HomeScreen() {
     }
   };
 
+  // AI Chat functions
+  const requestAudioPermissions = async () => {
+    try {
+      const { granted } = await AudioRecorder.requestPermissionsAsync();
+      if (!granted) {
+        showError('Microphone permission is required for voice input');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Error requesting audio permissions:', error);
+      return false;
+    }
+  };
+
+  const speakText = async (text: string) => {
+    try {
+      setIsSpeaking(true);
+      await Speech.speak(text, {
+        language: 'en-US',
+        pitch: 1.0,
+        rate: 0.9,
+        onDone: () => setIsSpeaking(false),
+        onStopped: () => setIsSpeaking(false),
+        onError: () => setIsSpeaking(false),
+      });
+    } catch (error) {
+      console.error('Error speaking text:', error);
+      setIsSpeaking(false);
+    }
+  };
+
+  const stopSpeaking = async () => {
+    try {
+      await Speech.stop();
+      setIsSpeaking(false);
+    } catch (error) {
+      console.error('Error stopping speech:', error);
+    }
+  };
+
+  const startRecording = async () => {
+    const hasPermission = await requestAudioPermissions();
+    if (!hasPermission) return;
+
+    try {
+      await stopSpeaking();
+      
+      const options: RecordingOptions = {
+        android: {
+          extension: '.m4a',
+          outputFormat: 2,
+          audioEncoder: 3,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          audioQuality: 127,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      };
+
+      const recording = await AudioRecorder.recordAsync(options);
+      setAudioRecording(recording);
+      setIsRecording(true);
+      console.log('Recording started');
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      showError('Failed to start recording');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!audioRecording) return;
+
+    try {
+      setIsRecording(false);
+      const uri = await audioRecording.stopAsync();
+      setAudioRecording(null);
+      console.log('Recording stopped, URI:', uri);
+      
+      if (uri) {
+        await transcribeAndSend(uri);
+      }
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+      showError('Failed to stop recording');
+    }
+  };
+
+  const transcribeAndSend = async (audioUri: string) => {
+    try {
+      setSendingMessage(true);
+      
+      const token = await getBearerToken();
+      if (!token) {
+        showError('Authentication required');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('audio', {
+        uri: audioUri,
+        type: 'audio/m4a',
+        name: 'recording.m4a',
+      } as any);
+
+      const response = await fetch(`${BACKEND_URL}/api/reflection-chat/transcribe`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Transcription failed');
+      }
+
+      const data = await response.json();
+      const transcribedText = data.text || data.transcription;
+      
+      if (transcribedText) {
+        setMessageInput(transcribedText);
+        await sendMessageWithText(transcribedText);
+      }
+    } catch (error) {
+      console.error('Error transcribing audio:', error);
+      showError('Failed to transcribe audio');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const loadConversations = async () => {
+    try {
+      const response = await authenticatedGet('/api/reflection-chat/conversations');
+      const conversationsData = Array.isArray(response) ? response : (response?.data || []);
+      setConversations(conversationsData);
+      console.log('Loaded conversations:', conversationsData.length);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+    }
+  };
+
+  const loadMessages = async (conversationId: string) => {
+    try {
+      const response = await authenticatedGet(`/api/reflection-chat/conversations/${conversationId}/messages`);
+      const messagesData = Array.isArray(response) ? response : (response?.data || []);
+      setMessages(messagesData);
+      console.log('Loaded messages:', messagesData.length);
+      
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      showError('Failed to load messages');
+    }
+  };
+
+  const startNewConversation = async () => {
+    try {
+      const response = await authenticatedPost('/api/reflection-chat/conversations', {});
+      const newConversation = response?.data || response;
+      
+      if (newConversation && newConversation.id) {
+        setCurrentConversationId(newConversation.id);
+        setMessages([]);
+        await loadConversations();
+        await loadMessages(newConversation.id);
+        console.log('Started new conversation:', newConversation.id);
+      }
+    } catch (error) {
+      console.error('Error starting new conversation:', error);
+      showError('Failed to start new conversation');
+    }
+  };
+
+  const sendMessageWithText = async (text: string) => {
+    if (!text.trim()) return;
+    
+    if (!currentConversationId) {
+      await startNewConversation();
+      return;
+    }
+
+    try {
+      setSendingMessage(true);
+      
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: text,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, userMessage]);
+      setMessageInput('');
+
+      const response = await authenticatedPost(
+        `/api/reflection-chat/conversations/${currentConversationId}/messages`,
+        { message: text }
+      );
+
+      const aiResponse = response?.data || response;
+      
+      if (aiResponse && aiResponse.response) {
+        const assistantMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: aiResponse.response,
+          createdAt: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+        
+        await speakText(aiResponse.response);
+        
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      showError('Failed to send message');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const sendMessage = async () => {
+    await sendMessageWithText(messageInput);
+  };
+
+  const deleteConversation = async (conversationId: string) => {
+    try {
+      await authenticatedDelete(`/api/reflection-chat/conversations/${conversationId}`);
+      await loadConversations();
+      
+      if (currentConversationId === conversationId) {
+        setCurrentConversationId(null);
+        setMessages([]);
+      }
+      
+      showSuccess('Conversation deleted');
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      showError('Failed to delete conversation');
+    }
+  };
+
+  const openChatModal = async () => {
+    setShowChatModal(true);
+    await loadConversations();
+    
+    if (conversations.length > 0 && !currentConversationId) {
+      const latestConversation = conversations[0];
+      setCurrentConversationId(latestConversation.id);
+      await loadMessages(latestConversation.id);
+    } else if (conversations.length === 0) {
+      await startNewConversation();
+    }
+  };
+
+  const closeChatModal = () => {
+    setShowChatModal(false);
+    stopSpeaking();
+  };
+
+  const selectConversation = async (conversationId: string) => {
+    setCurrentConversationId(conversationId);
+    await loadMessages(conversationId);
+  };
+
   const handleGoalSuccess = async (goalId: string) => {
     console.log('Recording success for goal:', goalId);
     try {
@@ -352,6 +672,7 @@ export default function HomeScreen() {
   };
 
   const openAddReflectionModal = () => {
+    const prefilledGoalId = params.goalId as string | undefined;
     setEditingReflection(null);
     setShowAddReflectionModal(true);
   };
@@ -526,126 +847,6 @@ export default function HomeScreen() {
     }
   };
 
-  const renderGoalCard = (goal: ActivatedGoal) => {
-    const { rewardTally, consequenceTally } = calculateDailyCurrencyTallies(goal);
-    const hasEntries = goal.dailyEntries && goal.dailyEntries.length > 0;
-    
-    const goalTypeText = goal.type === 'RESTRAINING' ? 'Restraining' : 'Proactive';
-    const goalTypeColor = goal.type === 'RESTRAINING' ? colors.secondary : colors.primary;
-
-    return (
-      <View key={goal.id} style={styles.goalCard}>
-        <View style={styles.goalHeader}>
-          <View style={styles.goalTitleRow}>
-            <Text style={styles.goalTitle}>{goal.title}</Text>
-            <TouchableOpacity onPress={() => handleEditGoal(goal.id)} style={styles.editButton}>
-              <IconSymbol
-                ios_icon_name="pencil"
-                android_material_icon_name="edit"
-                size={18}
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          </View>
-          <View style={[styles.goalTypeBadge, { backgroundColor: goalTypeColor + '20' }]}>
-            <Text style={[styles.goalTypeBadgeText, { color: goalTypeColor }]}>{goalTypeText}</Text>
-          </View>
-        </View>
-
-        {goal.description && (
-          <Text style={styles.goalDescription}>{goal.description}</Text>
-        )}
-
-        <View style={styles.goalActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.successButton]}
-            onPress={() => handleGoalSuccess(goal.id)}
-          >
-            <IconSymbol
-              ios_icon_name="checkmark.circle.fill"
-              android_material_icon_name="check-circle"
-              size={24}
-              color={colors.background}
-            />
-            <Text style={styles.actionButtonText}>Success</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.struggleButton]}
-            onPress={() => handleGoalStruggle(goal.id)}
-          >
-            <IconSymbol
-              ios_icon_name="xmark.circle.fill"
-              android_material_icon_name="cancel"
-              size={24}
-              color={colors.background}
-            />
-            <Text style={styles.actionButtonText}>Struggle</Text>
-          </TouchableOpacity>
-        </View>
-
-        {hasEntries && (
-          <View style={styles.entriesSection}>
-            <Text style={styles.entriesSectionTitle}>Today&apos;s Entries</Text>
-            {goal.dailyEntries?.map((entry, index) => {
-              const entryTypeText = entry.type === 'success' ? 'Success' : 'Struggle';
-              const entryTypeColor = entry.type === 'success' ? colors.success : colors.error;
-              const entryTime = new Date(entry.timestamp).toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit'
-              });
-
-              return (
-                <View key={index} style={styles.entryItem}>
-                  <View style={styles.entryInfo}>
-                    <View style={[styles.entryBadge, { backgroundColor: entryTypeColor + '20' }]}>
-                      <Text style={[styles.entryBadgeText, { color: entryTypeColor }]}>{entryTypeText}</Text>
-                    </View>
-                    <Text style={styles.entryTime}>{entryTime}</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => handleDeleteEntry(goal.id, entry.id)}
-                    style={styles.deleteEntryButton}
-                  >
-                    <IconSymbol
-                      ios_icon_name="trash"
-                      android_material_icon_name="delete"
-                      size={18}
-                      color={colors.error}
-                    />
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        <View style={styles.goalStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Today</Text>
-            <Text style={styles.statValue}>
-              {goal.todaySuccessCount || 0} / {goal.todayStruggleCount || 0}
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Lifetime</Text>
-            <Text style={styles.statValue}>
-              {goal.successCount || 0} / {goal.struggleCount || 0}
-            </Text>
-          </View>
-          {goal.streak !== undefined && goal.streak > 0 && (
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Streak</Text>
-              <Text style={[styles.statValue, styles.streakValue]}>
-                {goal.streak} 🔥
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
-
   const renderConciseGoalCard = (goal: ActivatedGoal) => {
     return (
       <View key={goal.id} style={styles.conciseGoalCard}>
@@ -736,6 +937,27 @@ export default function HomeScreen() {
     );
   };
 
+  const renderChatMessage = ({ item }: { item: ChatMessage }) => {
+    const isUser = item.role === 'user';
+    const messageTime = new Date(item.createdAt).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+
+    return (
+      <View style={[styles.chatMessageContainer, isUser ? styles.userMessageContainer : styles.assistantMessageContainer]}>
+        <View style={[styles.chatMessageBubble, isUser ? styles.userMessageBubble : styles.assistantMessageBubble]}>
+          <Text style={[styles.chatMessageText, isUser ? styles.userMessageText : styles.assistantMessageText]}>
+            {item.content}
+          </Text>
+          <Text style={[styles.chatMessageTime, isUser ? styles.userMessageTime : styles.assistantMessageTime]}>
+            {messageTime}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
   const dateDisplay = formatDateDisplay(selectedDate);
   const alternativeDateDisplay = formatAlternativeDate(selectedDate, alternativeCalendar);
   const isToday = formatDateLocal(selectedDate) === formatDateLocal(new Date());
@@ -777,7 +999,7 @@ export default function HomeScreen() {
           <View style={styles.quickActionsRow}>
             <TouchableOpacity 
               style={styles.quickActionButton}
-              onPress={() => router.push('/reflect')}
+              onPress={openChatModal}
             >
               <IconSymbol
                 ios_icon_name="pencil"
@@ -790,7 +1012,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity 
               style={styles.quickActionButton}
-              onPress={() => router.push('/reflect?openModal=true')}
+              onPress={openAddReflectionModal}
             >
               <IconSymbol
                 ios_icon_name="bolt.fill"
@@ -889,90 +1111,134 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
 
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeaderRow}>
-                <IconSymbol
-                  ios_icon_name="sparkles"
-                  android_material_icon_name="auto-awesome"
-                  size={22}
-                  color="#9B59B6"
-                />
-                <Text style={styles.sectionTitle}>Reflections</Text>
-              </View>
-              <TouchableOpacity onPress={openAddReflectionModal} style={styles.addButton}>
-                <IconSymbol
-                  ios_icon_name="plus.circle.fill"
-                  android_material_icon_name="add-circle"
-                  size={28}
-                  color={colors.primary}
-                />
-              </TouchableOpacity>
+          <View style={styles.conciseSection}>
+            <View style={styles.conciseSectionHeader}>
+              <IconSymbol
+                ios_icon_name="list.bullet"
+                android_material_icon_name="list"
+                size={20}
+                color={colors.text}
+              />
+              <Text style={styles.conciseSectionTitle}>Concise</Text>
             </View>
-
-            {reflections.length === 0 ? (
-              <View style={styles.emptyState}>
+            
+            {allGoals.length === 0 ? (
+              <View style={styles.emptyGoalsState}>
                 <IconSymbol
-                  ios_icon_name="sparkles"
-                  android_material_icon_name="auto-awesome"
-                  size={48}
+                  ios_icon_name="target"
+                  android_material_icon_name="flag"
+                  size={64}
                   color={colors.textSecondary}
                 />
-                <Text style={styles.emptyStateText}>
-                  No reflections for this day. Tap + to add one.
+                <Text style={styles.emptyGoalsTitle}>No Active Goals</Text>
+                <Text style={styles.emptyGoalsText}>
+                  Create your first goal to start tracking your progress
                 </Text>
-              </View>
-            ) : (
-              <View style={styles.reflectionsPreview}>
-                <Text style={styles.reflectionsCount}>
-                  {reflections.length} reflection{reflections.length !== 1 ? 's' : ''} today
-                </Text>
-                <TouchableOpacity 
-                  style={styles.viewAllButton}
-                  onPress={() => router.push(`/reflect?date=${formatDateLocal(selectedDate)}`)}
-                >
-                  <Text style={styles.viewAllButtonText}>View All</Text>
+                <TouchableOpacity style={styles.createGoalButton} onPress={handleCreateGoal}>
                   <IconSymbol
-                    ios_icon_name="chevron.right"
-                    android_material_icon_name="arrow-forward"
-                    size={16}
-                    color={colors.primary}
+                    ios_icon_name="plus.circle.fill"
+                    android_material_icon_name="add-circle"
+                    size={24}
+                    color={colors.background}
                   />
+                  <Text style={styles.createGoalButtonText}>Create Goal</Text>
                 </TouchableOpacity>
               </View>
+            ) : (
+              <>
+                {lifeAreas.map(area => renderLifeAreaNode(area, 0))}
+              </>
             )}
           </View>
-
-          {allGoals.length === 0 ? (
-            <View style={styles.emptyGoalsState}>
-              <IconSymbol
-                ios_icon_name="target"
-                android_material_icon_name="flag"
-                size={64}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.emptyGoalsTitle}>No Active Goals</Text>
-              <Text style={styles.emptyGoalsText}>
-                Create your first goal to start tracking your progress
-              </Text>
-              <TouchableOpacity style={styles.createGoalButton} onPress={handleCreateGoal}>
-                <IconSymbol
-                  ios_icon_name="plus.circle.fill"
-                  android_material_icon_name="add-circle"
-                  size={24}
-                  color={colors.background}
-                />
-                <Text style={styles.createGoalButtonText}>Create Goal</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              {lifeAreas.map(area => renderLifeAreaNode(area, 0))}
-            </>
-          )}
         </ScrollView>
       </View>
 
+      {/* AI Chat Modal */}
+      <Modal
+        visible={showChatModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={closeChatModal}
+      >
+        <SafeAreaView style={styles.chatModalContainer} edges={['top', 'bottom']}>
+          <View style={styles.chatModalHeader}>
+            <View style={styles.chatModalTitleRow}>
+              <Image 
+                source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                style={styles.chatModalIcon}
+              />
+              <Text style={styles.chatModalTitle}>AI Reflection Coach</Text>
+            </View>
+            <TouchableOpacity onPress={closeChatModal} style={styles.closeButton}>
+              <IconSymbol
+                ios_icon_name="xmark.circle.fill"
+                android_material_icon_name="close"
+                size={28}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderChatMessage}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.chatMessagesContainer}
+            showsVerticalScrollIndicator={false}
+          />
+
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.chatInputContainer}
+          >
+            <View style={styles.chatInputRow}>
+              <TouchableOpacity
+                style={styles.voiceButton}
+                onPress={isRecording ? stopRecording : startRecording}
+                disabled={sendingMessage}
+              >
+                <IconSymbol
+                  ios_icon_name={isRecording ? 'stop.circle.fill' : 'mic.circle.fill'}
+                  android_material_icon_name={isRecording ? 'stop-circle' : 'mic'}
+                  size={32}
+                  color={isRecording ? colors.error : colors.primary}
+                />
+              </TouchableOpacity>
+
+              <TextInput
+                style={styles.chatInput}
+                value={messageInput}
+                onChangeText={setMessageInput}
+                placeholder="Type your message..."
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                maxLength={500}
+                editable={!sendingMessage}
+              />
+
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={sendMessage}
+                disabled={!messageInput.trim() || sendingMessage}
+              >
+                {sendingMessage ? (
+                  <ActivityIndicator color={colors.background} size="small" />
+                ) : (
+                  <IconSymbol
+                    ios_icon_name="arrow.up.circle.fill"
+                    android_material_icon_name="send"
+                    size={32}
+                    color={messageInput.trim() ? colors.primary : colors.textSecondary}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Journal Modal */}
       <Modal
         visible={showJournalModal}
         animationType="slide"
@@ -1036,6 +1302,7 @@ export default function HomeScreen() {
         </SafeAreaView>
       </Modal>
 
+      {/* Add Reflection Modal */}
       {showAddReflectionModal && (
         <AddReflectionModal
           visible={showAddReflectionModal}
@@ -1051,10 +1318,12 @@ export default function HomeScreen() {
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
           strategies={strategies}
+          prefilledGoalId={params.goalId as string | undefined}
           sourceScreen="express"
         />
       )}
 
+      {/* Error Modal */}
       <Modal
         visible={showErrorModal}
         transparent
@@ -1075,6 +1344,7 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
+      {/* Success Modal */}
       <Modal
         visible={showSuccessModal}
         transparent
@@ -1260,66 +1530,20 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 22,
   },
-  section: {
+  conciseSection: {
     marginBottom: 24,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  sectionHeaderRow: {
+  conciseSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginBottom: 12,
+    paddingHorizontal: 4,
   },
-  sectionTitle: {
+  conciseSectionTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
-  },
-  addButton: {
-    padding: 4,
-  },
-  emptyState: {
-    padding: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 16,
-  },
-  reflectionsPreview: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  reflectionsCount: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  viewAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  viewAllButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.primary,
   },
   emptyGoalsState: {
     padding: 48,
@@ -1409,141 +1633,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     gap: 8,
   },
-  goalCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  goalHeader: {
-    marginBottom: 12,
-  },
-  goalTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  goalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-    flex: 1,
-  },
-  editButton: {
-    padding: 4,
-  },
-  goalTypeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  goalTypeBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  goalDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  goalActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  successButton: {
-    backgroundColor: colors.success,
-  },
-  struggleButton: {
-    backgroundColor: colors.error,
-  },
-  actionButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.background,
-  },
-  entriesSection: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  entriesSectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: 8,
-  },
-  entryItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  entryInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  entryBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  entryBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  entryTime: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  deleteEntryButton: {
-    padding: 4,
-  },
-  goalStats: {
-    flexDirection: 'row',
-    gap: 16,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  statItem: {
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  streakValue: {
-    color: colors.primary,
-  },
   conciseGoalCard: {
     backgroundColor: colors.card,
     borderRadius: 12,
@@ -1564,6 +1653,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
   },
+  editButton: {
+    padding: 4,
+  },
   conciseGoalActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1577,6 +1669,118 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginHorizontal: 12,
+  },
+  chatModalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  chatModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  chatModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  chatModalIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 7,
+  },
+  chatModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  chatMessagesContainer: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+  chatMessageContainer: {
+    marginBottom: 16,
+  },
+  userMessageContainer: {
+    alignItems: 'flex-end',
+  },
+  assistantMessageContainer: {
+    alignItems: 'flex-start',
+  },
+  chatMessageBubble: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 16,
+  },
+  userMessageBubble: {
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: 4,
+  },
+  assistantMessageBubble: {
+    backgroundColor: colors.card,
+    borderBottomLeftRadius: 4,
+  },
+  chatMessageText: {
+    fontSize: 15,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  userMessageText: {
+    color: colors.background,
+  },
+  assistantMessageText: {
+    color: colors.text,
+  },
+  chatMessageTime: {
+    fontSize: 11,
+  },
+  userMessageTime: {
+    color: colors.background,
+    opacity: 0.7,
+  },
+  assistantMessageTime: {
+    color: colors.textSecondary,
+  },
+  chatInputContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  chatInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  voiceButton: {
+    padding: 4,
+  },
+  chatInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: colors.text,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sendButton: {
+    padding: 4,
   },
   journalModalContainer: {
     flex: 1,
@@ -1606,9 +1810,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: colors.text,
-  },
-  closeButton: {
-    padding: 4,
   },
   journalModalInput: {
     flex: 1,
