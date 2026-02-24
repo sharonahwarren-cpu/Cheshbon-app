@@ -184,7 +184,7 @@ export default function CreateGoalScreen() {
     try {
       const result = await authenticatedGet<{
         summary: string;
-        nextOccurrences: Array<{ date: string; source: { section: string; details: string } } | string>;
+        nextOccurrences: ({ date: string; source: { section: string; details: string } } | string)[];
         calendarType?: string;
       }>(
         `/api/goals/${editingGoalId}/schedule-summary`

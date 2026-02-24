@@ -288,6 +288,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     };
 
     generateLocalOccurrences();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     config.scheduleType,
     JSON.stringify(config.weekdays),
@@ -302,6 +303,8 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     JSON.stringify(config.yearlyDates),
     config.startDate?.toISOString(),
     config.endDate?.toISOString(),
+    config.calendarType,
+    config.exclusionDates,
   ]);
 
   // CRITICAL FIX: Always use the LOCAL summary as the live preview while editing.
@@ -1019,6 +1022,66 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     );
   };
 
+  // CRITICAL FIX: Auto-add date when day is selected (for single date mode)
+  // This fixes the issue where users had to scroll down and click "Add date" manually
+  // MOVED OUTSIDE renderYearlyOptions to fix React Hooks rules violation
+  useEffect(() => {
+    if (config.scheduleType !== 'Yearly') return;
+    if (yearlyDateMode === 'single' && yearlyStartDay !== null) {
+      console.log('[GoalScheduler] Auto-adding single yearly date:', { month: yearlyStartMonth, day: yearlyStartDay });
+      const current = config.yearlyDates || [];
+      const newDate: YearlyDateSelection = {
+        month: yearlyStartMonth,
+        day: yearlyStartDay,
+      };
+      // Check if this date already exists to avoid duplicates
+      const exists = current.some(d => 
+        typeof d === 'object' && d.month === newDate.month && d.day === newDate.day && !d.endMonth
+      );
+      if (!exists) {
+        updateConfig({ yearlyDates: [...current, newDate] });
+      }
+      // Reset the selection
+      setYearlyStartDay(null);
+    }
+  }, [yearlyStartDay, yearlyDateMode, yearlyStartMonth, config.scheduleType, config.yearlyDates]);
+
+  // CRITICAL FIX: Auto-add date range when end day is selected (for range mode)
+  // MOVED OUTSIDE renderYearlyOptions to fix React Hooks rules violation
+  useEffect(() => {
+    if (config.scheduleType !== 'Yearly') return;
+    if (yearlyDateMode === 'range' && yearlyStartDay !== null && yearlyEndMonth !== null && yearlyEndDay !== null) {
+      console.log('[GoalScheduler] Auto-adding yearly date range:', { 
+        month: yearlyStartMonth, 
+        day: yearlyStartDay, 
+        endMonth: yearlyEndMonth, 
+        endDay: yearlyEndDay 
+      });
+      const current = config.yearlyDates || [];
+      const newDate: YearlyDateSelection = {
+        month: yearlyStartMonth,
+        day: yearlyStartDay,
+        endMonth: yearlyEndMonth,
+        endDay: yearlyEndDay,
+      };
+      // Check if this date range already exists to avoid duplicates
+      const exists = current.some(d => 
+        typeof d === 'object' && 
+        d.month === newDate.month && 
+        d.day === newDate.day && 
+        d.endMonth === newDate.endMonth && 
+        d.endDay === newDate.endDay
+      );
+      if (!exists) {
+        updateConfig({ yearlyDates: [...current, newDate] });
+      }
+      // Reset the selection
+      setYearlyStartDay(null);
+      setYearlyEndDay(null);
+      setYearlyEndMonth(null);
+    }
+  }, [yearlyStartDay, yearlyEndDay, yearlyEndMonth, yearlyDateMode, yearlyStartMonth, config.scheduleType, config.yearlyDates]);
+
   const renderYearlyOptions = () => {
     if (config.scheduleType !== 'Yearly') return null;
 
@@ -1061,48 +1124,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       }
       
       return `${startMonthName} ${dateSelection.day}`;
-    };
-
-    const handleAddYearlyDate = () => {
-      if (!yearlyStartDay) {
-        console.warn('[GoalScheduler] No start day selected');
-        return;
-      }
-
-      const current = config.yearlyDates || [];
-      
-      if (yearlyDateMode === 'range') {
-        // CRITICAL FIX: Validate that both end month AND end day are explicitly selected.
-        // yearlyEndMonth is now null by default, so this check ensures the user
-        // explicitly chose an end month (preventing silent endMonth=1 bugs).
-        if (yearlyEndMonth === null || !yearlyEndDay) {
-          console.warn('[GoalScheduler] End month or end day not selected for range');
-          return;
-        }
-        
-        const newDate: YearlyDateSelection = {
-          month: yearlyStartMonth,
-          day: yearlyStartDay,
-          endMonth: yearlyEndMonth,
-          endDay: yearlyEndDay,
-        };
-        console.log('[GoalScheduler] Adding yearly date range:', JSON.stringify(newDate));
-        updateConfig({ yearlyDates: [...current, newDate] });
-      } else {
-        const newDate: YearlyDateSelection = {
-          month: yearlyStartMonth,
-          day: yearlyStartDay,
-        };
-        console.log('[GoalScheduler] Adding yearly single date:', JSON.stringify(newDate));
-        updateConfig({ yearlyDates: [...current, newDate] });
-      }
-      
-      // Reset inputs
-      setYearlyStartDay(null);
-      setYearlyEndDay(null);
-      setYearlyStartMonth(1);
-      // CRITICAL FIX: Reset to null (unselected) not 1, to force explicit selection next time
-      setYearlyEndMonth(null);
     };
 
     return (
@@ -1164,7 +1185,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
           <>
             <Text style={styles.subLabel}>Add Dates or Date Ranges</Text>
             <Text style={styles.helperText}>
-              Select a single date (e.g., 1st January) or a date range (e.g., 30 Jan to 2 March)
+              Select a single date (e.g., 1st January) or a date range (e.g., 30 Jan to 2 March). Dates are automatically added when you select them.
             </Text>
 
             {/* Mode Toggle */}
@@ -1228,7 +1249,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                 </ScrollView>
 
                 {/* Day Grid */}
-                <Text style={styles.pickerLabel}>Day</Text>
+                <Text style={styles.pickerLabel}>Day (tap to add)</Text>
                 <View style={styles.dateGridContainer}>
                   {Array.from({ length: 31 }, (_, i) => {
                     const day = i + 1;
@@ -1237,7 +1258,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                       <TouchableOpacity
                         key={day}
                         style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
-                        onPress={() => setYearlyStartDay(isSelected ? null : day)}
+                        onPress={() => {
+                          console.log('[GoalScheduler] User selected day:', day);
+                          setYearlyStartDay(day);
+                        }}
                       >
                         <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
                           {day}
@@ -1246,35 +1270,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                     );
                   })}
                 </View>
-
-                {/* Preview of selected date */}
-                {yearlyStartDay && (
-                  <View style={styles.yearlyPreviewBox}>
-                    <IconSymbol
-                      ios_icon_name="calendar.badge.checkmark"
-                      android_material_icon_name="event-available"
-                      size={16}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.yearlyPreviewText}>
-                      {monthNames[yearlyStartMonth - 1]} {yearlyStartDay}{getOrdinalSuffix(yearlyStartDay)}
-                    </Text>
-                  </View>
-                )}
-
-                <TouchableOpacity 
-                  style={[styles.confirmButton, !yearlyStartDay && styles.confirmButtonDisabled]} 
-                  onPress={handleAddYearlyDate}
-                  disabled={!yearlyStartDay}
-                >
-                  <IconSymbol
-                    ios_icon_name="plus.circle.fill"
-                    android_material_icon_name="add-circle"
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={styles.confirmButtonText}>Add Date</Text>
-                </TouchableOpacity>
               </View>
             )}
 
@@ -1321,7 +1316,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                         <TouchableOpacity
                           key={day}
                           style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
-                          onPress={() => setYearlyStartDay(isSelected ? null : day)}
+                          onPress={() => setYearlyStartDay(day)}
                         >
                           <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
                             {day}
@@ -1385,7 +1380,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                     </View>
                   </ScrollView>
 
-                  <Text style={styles.pickerLabel}>Day</Text>
+                  <Text style={styles.pickerLabel}>Day (tap to add range)</Text>
                   <View style={styles.dateGridContainer}>
                     {Array.from({ length: 31 }, (_, i) => {
                       const day = i + 1;
@@ -1394,7 +1389,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                         <TouchableOpacity
                           key={day}
                           style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
-                          onPress={() => setYearlyEndDay(isSelected ? null : day)}
+                          onPress={() => {
+                            console.log('[GoalScheduler] User selected end day:', day);
+                            setYearlyEndDay(day);
+                          }}
                         >
                           <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
                             {day}
@@ -1404,37 +1402,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                     })}
                   </View>
                 </View>
-
-                {/* Preview of selected range */}
-                {/* CRITICAL FIX: Only show preview when end month is explicitly selected (not null) */}
-                {yearlyStartDay && yearlyEndMonth !== null && yearlyEndDay && (
-                  <View style={styles.yearlyPreviewBox}>
-                    <IconSymbol
-                      ios_icon_name="calendar.badge.checkmark"
-                      android_material_icon_name="event-available"
-                      size={16}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.yearlyPreviewText}>
-                      {monthNames[yearlyStartMonth - 1]} {yearlyStartDay}{getOrdinalSuffix(yearlyStartDay)} → {monthNames[yearlyEndMonth - 1]} {yearlyEndDay}{getOrdinalSuffix(yearlyEndDay)}
-                    </Text>
-                  </View>
-                )}
-
-                {/* CRITICAL FIX: Disable button unless end month is explicitly selected */}
-                <TouchableOpacity 
-                  style={[styles.confirmButton, (!yearlyStartDay || yearlyEndMonth === null || !yearlyEndDay) && styles.confirmButtonDisabled]} 
-                  onPress={handleAddYearlyDate}
-                  disabled={!yearlyStartDay || yearlyEndMonth === null || !yearlyEndDay}
-                >
-                  <IconSymbol
-                    ios_icon_name="plus.circle.fill"
-                    android_material_icon_name="add-circle"
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={styles.confirmButtonText}>Add Date Range</Text>
-                </TouchableOpacity>
               </View>
             )}
 
