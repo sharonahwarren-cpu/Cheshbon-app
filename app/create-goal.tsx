@@ -318,28 +318,34 @@ export default function CreateGoalScreen() {
         setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
         
         // CRITICAL FIX: Load schedule config from BOTH fields for backward compatibility
-        // Use scheduleRecurrenceType if available, otherwise fall back to scheduleType
+        // Priority: scheduleRecurrenceType > scheduleType
         const backendScheduleType = goalDetails.scheduleRecurrenceType || goalDetails.schedule_recurrence_type;
-        let frontendScheduleType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+        const frontendScheduleType = goalDetails.scheduleType || goalDetails.schedule_type;
         
-        // If we have a backend schedule type, map it back to frontend format
+        let displayScheduleType = 'Always Active';
+        
+        // If we have a backend schedule type, use it (it's the source of truth)
         if (backendScheduleType) {
           if (backendScheduleType === 'alwaysactive') {
-            frontendScheduleType = 'Always Active';
+            displayScheduleType = 'Always Active';
           } else {
-            // Capitalize first letter: 'weekly' -> 'Weekly'
-            frontendScheduleType = backendScheduleType.charAt(0).toUpperCase() + backendScheduleType.slice(1);
+            // Capitalize first letter: 'weekly' -> 'Weekly', 'fortnightly' -> 'Fortnightly'
+            displayScheduleType = backendScheduleType.charAt(0).toUpperCase() + backendScheduleType.slice(1);
           }
+        } else if (frontendScheduleType) {
+          // Fallback to frontend schedule type if backend type is not available
+          displayScheduleType = frontendScheduleType;
         }
         
         console.log('[CreateGoal] Schedule type mapping:', {
           backendScheduleType,
           frontendScheduleType,
-          rawScheduleType: goalDetails.scheduleType || goalDetails.schedule_type
+          displayScheduleType,
+          weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week
         });
         
         setScheduleConfig({
-          scheduleType: frontendScheduleType,
+          scheduleType: displayScheduleType,
           timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
           weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week,
         });
