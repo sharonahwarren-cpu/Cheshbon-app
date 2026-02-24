@@ -126,8 +126,14 @@ export function registerMitzvotRoutes(app: App) {
           nthDayOfMonth: mitzvah.scheduleNthDayOfMonth as any,
           monthlyRange: mitzvah.scheduleMonthlyRange as any,
           fortnightEvenOdd: (mitzvah.scheduleFortnightEvenOdd as any),
-          yearlyDates: mitzvah.scheduleYearlyDates as any,
-          yearlyRanges: mitzvah.scheduleYearlyRanges as any,
+          yearlyMonths: mitzvah.scheduleDateOfYearMonths ? mitzvah.scheduleDateOfYearMonths.map(m => parseInt(m)) : undefined,
+          yearlyDatesOrRanges: mitzvah.scheduleDatesOfYear ? (mitzvah.scheduleDatesOfYear as any[]).map((d: any) => {
+            try {
+              return typeof d === 'string' ? JSON.parse(d) : d;
+            } catch {
+              return null;
+            }
+          }).filter(Boolean) : undefined,
           weekendsOnly: mitzvah.scheduleWeekendsOnly || false,
           weekdaysOnly: mitzvah.scheduleWeekdaysOnly || false,
           exclusions: mitzvah.scheduleExclusions as any,
@@ -188,10 +194,10 @@ export function registerMitzvotRoutes(app: App) {
       scheduleDatesOfMonth?: number[];
       scheduleNthDayOfMonth?: any;
       scheduleTimesPerMonth?: number;
-      yearlyDates?: Array<{ month: number; day: number }>;
-      scheduleYearlyDates?: Array<{ month: number; day: number }>;
-      yearlyRanges?: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }>;
-      scheduleYearlyRanges?: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }>;
+      schedulePeriodOfYear?: any;
+      scheduleDatesOfYear?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+      yearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+      scheduleYearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
       scheduleRecurrenceType?: string;
       scheduleTimesPerDayDetails?: any;
       scheduleWeekendsOnly?: boolean;
@@ -200,6 +206,7 @@ export function registerMitzvotRoutes(app: App) {
       scheduleMonthlyRange?: any;
       scheduleMonthlyRandomCount?: number;
       scheduleExclusions?: any;
+      scheduleDateOfYearMonths?: string[];
       calendarType?: string;
       startDate?: string;
       endDate?: string;
@@ -228,11 +235,9 @@ export function registerMitzvotRoutes(app: App) {
       const startDate = body.startDate ? new Date(body.startDate) : null;
       const endDate = body.endDate ? new Date(body.endDate) : null;
 
-      // Handle yearly dates - check for all possible field names
-      const yearlyDatesInput = body.yearlyDates || body.scheduleYearlyDates;
-      const yearlyRangesInput = body.yearlyRanges || body.scheduleYearlyRanges;
+      // Handle yearly dates - check for all three possible field names
+      const yearlyDatesInput = body.scheduleDatesOfYear || body.yearlyDates || body.scheduleYearlyDates;
       const yearlyDatesToStore = scheduleType.toLowerCase() === 'yearly' ? parseJsonbField(yearlyDatesInput) : null;
-      const yearlyRangesToStore = scheduleType.toLowerCase() === 'yearly' ? parseJsonbField(yearlyRangesInput) : null;
 
       const mitzvotData = await app.db
         .insert(schema.mitzvot)
@@ -249,8 +254,8 @@ export function registerMitzvotRoutes(app: App) {
           scheduleDatesOfMonth: body.scheduleDatesOfMonth?.length ? body.scheduleDatesOfMonth : null,
           scheduleNthDayOfMonth: parseJsonbField(body.scheduleNthDayOfMonth),
           scheduleTimesPerMonth: body.scheduleTimesPerMonth || null,
-          scheduleYearlyDates: yearlyDatesToStore,
-          scheduleYearlyRanges: yearlyRangesToStore,
+          schedulePeriodOfYear: parseJsonbField(body.schedulePeriodOfYear),
+          scheduleDatesOfYear: yearlyDatesToStore,
           scheduleRecurrenceType: body.scheduleRecurrenceType || 'daily',
           scheduleTimesPerDayDetails: parseJsonbField(body.scheduleTimesPerDayDetails),
           scheduleWeekendsOnly: body.scheduleWeekendsOnly || false,
@@ -259,6 +264,7 @@ export function registerMitzvotRoutes(app: App) {
           scheduleMonthlyRange: parseJsonbField(body.scheduleMonthlyRange),
           scheduleMonthlyRandomCount: body.scheduleMonthlyRandomCount || null,
           scheduleExclusions: parseJsonbField(body.scheduleExclusions),
+          scheduleDateOfYearMonths: body.scheduleDateOfYearMonths?.length ? body.scheduleDateOfYearMonths : null,
           calendarType: body.calendarType || null,
           startDate,
           endDate,
@@ -328,13 +334,14 @@ export function registerMitzvotRoutes(app: App) {
       if (body.scheduleDatesOfMonth !== undefined) updateData.scheduleDatesOfMonth = body.scheduleDatesOfMonth?.length ? body.scheduleDatesOfMonth : null;
       if (body.scheduleNthDayOfMonth !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.scheduleNthDayOfMonth);
       if (body.scheduleTimesPerMonth !== undefined) updateData.scheduleTimesPerMonth = body.scheduleTimesPerMonth || null;
+      if (body.schedulePeriodOfYear !== undefined) updateData.schedulePeriodOfYear = parseJsonbField(body.schedulePeriodOfYear);
 
-      // Handle yearly dates - check for all possible field names
-      const yearlyDatesInput = body.yearlyDates || body.scheduleYearlyDates;
+      // Handle yearly dates - check for all three possible field names
+      const yearlyDatesInput = body.scheduleDatesOfYear || body.yearlyDates || body.scheduleYearlyDates;
       if (yearlyDatesInput !== undefined) {
         const newScheduleType = body.scheduleType !== undefined ? body.scheduleType : existingMitzvot[0].scheduleType;
         const yearlyDatesToStore = newScheduleType.toLowerCase() === 'yearly' ? parseJsonbField(yearlyDatesInput) : null;
-        updateData.scheduleYearlyDates = yearlyDatesToStore;
+        updateData.scheduleDatesOfYear = yearlyDatesToStore;
 
         app.logger.info(
           {
@@ -348,23 +355,14 @@ export function registerMitzvotRoutes(app: App) {
         );
       }
 
-      // Handle yearly ranges
-      const yearlyRangesInput = body.yearlyRanges || body.scheduleYearlyRanges;
-      if (yearlyRangesInput !== undefined) {
-        const newScheduleType = body.scheduleType !== undefined ? body.scheduleType : existingMitzvot[0].scheduleType;
-        const yearlyRangesToStore = newScheduleType.toLowerCase() === 'yearly' ? parseJsonbField(yearlyRangesInput) : null;
-        updateData.scheduleYearlyRanges = yearlyRangesToStore;
-      }
-
       // CRITICAL: When scheduleType is NOT "yearly", clear any stale yearly dates
       const finalScheduleType = body.scheduleType !== undefined ? body.scheduleType : existingMitzvot[0].scheduleType;
-      if (finalScheduleType.toLowerCase() !== 'yearly' && updateData.scheduleYearlyDates === undefined && updateData.scheduleYearlyRanges === undefined) {
-        if (yearlyDatesInput === undefined && yearlyRangesInput === undefined) {
-          updateData.scheduleYearlyDates = null;
-          updateData.scheduleYearlyRanges = null;
+      if (finalScheduleType.toLowerCase() !== 'yearly' && updateData.scheduleDatesOfYear === undefined) {
+        if (body.scheduleDatesOfYear === undefined && body.yearlyDates === undefined && body.scheduleYearlyDates === undefined) {
+          updateData.scheduleDatesOfYear = null;
           app.logger.info(
             { userId: session.user.id, mitzvahId: id, scheduleType: finalScheduleType },
-            'Clearing yearly dates and ranges - schedule type is not yearly'
+            'Clearing yearly dates - schedule type is not yearly'
           );
         }
       }
@@ -377,6 +375,7 @@ export function registerMitzvotRoutes(app: App) {
       if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = parseJsonbField(body.scheduleMonthlyRange);
       if (body.scheduleMonthlyRandomCount !== undefined) updateData.scheduleMonthlyRandomCount = body.scheduleMonthlyRandomCount || null;
       if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = parseJsonbField(body.scheduleExclusions);
+      if (body.scheduleDateOfYearMonths !== undefined) updateData.scheduleDateOfYearMonths = body.scheduleDateOfYearMonths?.length ? body.scheduleDateOfYearMonths : null;
       if (body.calendarType !== undefined) updateData.calendarType = body.calendarType || null;
       if (body.startDate !== undefined) updateData.startDate = body.startDate ? new Date(body.startDate) : null;
       if (body.endDate !== undefined) updateData.endDate = body.endDate ? new Date(body.endDate) : null;

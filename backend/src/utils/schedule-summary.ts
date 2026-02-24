@@ -13,8 +13,7 @@ export interface ScheduleSummaryRequest {
   scheduleNthDayOfMonth?: { day: string; nth: number };
   scheduleMonthlyRange?: { start: number; end: number };
   scheduleFortnightEvenOdd?: 'even' | 'odd';
-  scheduleYearlyDates?: Array<{ month: number; day: number }>;
-  scheduleYearlyRanges?: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }>;
+  scheduleDatesOfYear?: any[];
   scheduleTimesPerDayDetails?: Array<{ hour: number; minute: number; conditions?: string }>;
   scheduleWeekendsOnly?: boolean;
   scheduleWeekdaysOnly?: boolean;
@@ -183,30 +182,69 @@ function summarizeMonthly(config: ScheduleSummaryRequest): string {
  * Generate summary for Yearly schedules
  */
 function summarizeYearly(config: ScheduleSummaryRequest): string {
-  const parts: string[] = [];
-
-  // Handle yearly dates (specific month/day combinations)
-  if (config.scheduleYearlyDates && config.scheduleYearlyDates.length > 0) {
-    for (const date of config.scheduleYearlyDates) {
-      const monthName = getMonthName(date.month, config.calendarType);
-      const dayOrdinal = formatOrdinal(date.day);
-      parts.push(`${monthName} ${dayOrdinal}`);
-    }
+  if (!config.scheduleDatesOfYear || config.scheduleDatesOfYear.length === 0) {
+    return 'Scheduled yearly';
   }
 
-  // Handle yearly ranges (date ranges within a year)
-  if (config.scheduleYearlyRanges && config.scheduleYearlyRanges.length > 0) {
-    for (const range of config.scheduleYearlyRanges) {
-      const startMonthName = getMonthName(range.startMonth, config.calendarType);
-      const endMonthName = getMonthName(range.endMonth, config.calendarType);
-      const startOrdinal = formatOrdinal(range.startDay);
-      const endOrdinal = formatOrdinal(range.endDay);
+  const parts: string[] = [];
+  const datesOfYear = config.scheduleDatesOfYear as any[];
 
-      if (range.startMonth === range.endMonth) {
+  for (const dateRange of datesOfYear) {
+    const monthNum = dateRange.month;
+    let monthName = '';
+
+    if (config.calendarType === 'hebrew') {
+      monthName = HEBREW_MONTHS[monthNum - 1] || `Month ${monthNum}`;
+    } else if (config.calendarType === 'islamic') {
+      monthName = ISLAMIC_MONTHS[monthNum - 1] || `Month ${monthNum}`;
+    } else if (config.calendarType === 'chinese') {
+      monthName = CHINESE_MONTHS[monthNum - 1] || `Month ${monthNum}`;
+    } else {
+      monthName = GREGORIAN_MONTHS[monthNum - 1] || `Month ${monthNum}`;
+    }
+
+    // Support new format with month/day/endMonth/endDay for multi-month ranges
+    if ((dateRange as any).day !== undefined && (dateRange as any).endMonth !== undefined) {
+      const startMonth = dateRange.month;
+      const startDay = (dateRange as any).day;
+      const endMonth = (dateRange as any).endMonth || startMonth;
+      const endDay = (dateRange as any).endDay || startDay;
+
+      let startMonthName = '';
+      let endMonthName = '';
+
+      if (config.calendarType === 'hebrew') {
+        startMonthName = HEBREW_MONTHS[startMonth - 1] || `Month ${startMonth}`;
+        endMonthName = HEBREW_MONTHS[endMonth - 1] || `Month ${endMonth}`;
+      } else if (config.calendarType === 'islamic') {
+        startMonthName = ISLAMIC_MONTHS[startMonth - 1] || `Month ${startMonth}`;
+        endMonthName = ISLAMIC_MONTHS[endMonth - 1] || `Month ${endMonth}`;
+      } else if (config.calendarType === 'chinese') {
+        startMonthName = CHINESE_MONTHS[startMonth - 1] || `Month ${startMonth}`;
+        endMonthName = CHINESE_MONTHS[endMonth - 1] || `Month ${endMonth}`;
+      } else {
+        startMonthName = GREGORIAN_MONTHS[startMonth - 1] || `Month ${startMonth}`;
+        endMonthName = GREGORIAN_MONTHS[endMonth - 1] || `Month ${endMonth}`;
+      }
+
+      if (startMonth === endMonth) {
+        const startOrdinal = formatOrdinal(startDay);
+        const endOrdinal = formatOrdinal(endDay);
         parts.push(`${startMonthName} ${startOrdinal}-${endOrdinal}`);
       } else {
+        const startOrdinal = formatOrdinal(startDay);
+        const endOrdinal = formatOrdinal(endDay);
         parts.push(`${startMonthName} ${startOrdinal} - ${endMonthName} ${endOrdinal}`);
       }
+    } else if ((dateRange as any).days && (dateRange as any).days.length > 0) {
+      // Support old format with specific days in a month
+      const dates = (dateRange as any).days.map((d: number) => formatOrdinal(d));
+      parts.push(`${monthName} ${dates.join(' and ')}`);
+    } else if ((dateRange as any).start && (dateRange as any).end) {
+      // Support old format with range within a month
+      const startOrdinal = formatOrdinal((dateRange as any).start);
+      const endOrdinal = formatOrdinal((dateRange as any).end);
+      parts.push(`${monthName} ${startOrdinal}-${endOrdinal}`);
     }
   }
 
@@ -216,21 +254,6 @@ function summarizeYearly(config: ScheduleSummaryRequest): string {
 
   const calendarLabel = config.calendarType && config.calendarType !== 'gregorian' ? ` (${config.calendarType})` : '';
   return `Scheduled on ${parts.join(', ')} every year${calendarLabel}`;
-}
-
-/**
- * Helper function to get month name based on calendar type
- */
-function getMonthName(monthNum: number, calendarType?: string): string {
-  if (calendarType === 'hebrew') {
-    return HEBREW_MONTHS[monthNum - 1] || `Month ${monthNum}`;
-  } else if (calendarType === 'islamic') {
-    return ISLAMIC_MONTHS[monthNum - 1] || `Month ${monthNum}`;
-  } else if (calendarType === 'chinese') {
-    return CHINESE_MONTHS[monthNum - 1] || `Month ${monthNum}`;
-  } else {
-    return GREGORIAN_MONTHS[monthNum - 1] || `Month ${monthNum}`;
-  }
 }
 
 /**
@@ -399,46 +422,32 @@ function determineOccurrenceSource(
 
     case 'yearly':
       const month = date.getMonth() + 1;
-      let monthName = getMonthName(month, config.calendarType);
+      let monthName = '';
 
-      // Check if it matches a specific yearly date
-      if (config.scheduleYearlyDates) {
-        const match = config.scheduleYearlyDates.find(d => d.month === month && d.day === dayOfMonth);
-        if (match) {
-          return {
-            section: 'Yearly - Specific Date',
-            details: `${monthName} ${formatOrdinal(dayOfMonth)}`,
-          };
-        }
+      if (config.calendarType === 'hebrew') {
+        monthName = HEBREW_MONTHS[month - 1] || `Month ${month}`;
+      } else if (config.calendarType === 'islamic') {
+        monthName = ISLAMIC_MONTHS[month - 1] || `Month ${month}`;
+      } else if (config.calendarType === 'chinese') {
+        monthName = CHINESE_MONTHS[month - 1] || `Month ${month}`;
+      } else {
+        monthName = GREGORIAN_MONTHS[month - 1] || `Month ${month}`;
       }
 
-      // Check if it falls within a yearly range
-      if (config.scheduleYearlyRanges) {
-        for (const range of config.scheduleYearlyRanges) {
-          const startMonthDay = range.startMonth * 100 + range.startDay;
-          const endMonthDay = range.endMonth * 100 + range.endDay;
-          const currentMonthDay = month * 100 + dayOfMonth;
-
-          if (startMonthDay <= endMonthDay) {
-            if (currentMonthDay >= startMonthDay && currentMonthDay <= endMonthDay) {
-              const startMonthName = getMonthName(range.startMonth, config.calendarType);
-              const endMonthName = getMonthName(range.endMonth, config.calendarType);
-              const details = range.startMonth === range.endMonth
-                ? `${startMonthName} ${formatOrdinal(range.startDay)}-${formatOrdinal(range.endDay)}`
-                : `${startMonthName} ${formatOrdinal(range.startDay)} - ${endMonthName} ${formatOrdinal(range.endDay)}`;
+      // Check if it matches a specific date range
+      if (config.scheduleDatesOfYear) {
+        for (const dateRange of config.scheduleDatesOfYear as any[]) {
+          if (dateRange.month === month) {
+            if (dateRange.days?.includes(dayOfMonth)) {
               return {
-                section: 'Yearly - Date Range',
-                details,
+                section: 'Yearly - Specific Dates',
+                details: `${monthName} ${formatOrdinal(dayOfMonth)}`,
               };
             }
-          } else {
-            // Range wraps around year
-            if (currentMonthDay >= startMonthDay || currentMonthDay <= endMonthDay) {
-              const startMonthName = getMonthName(range.startMonth, config.calendarType);
-              const endMonthName = getMonthName(range.endMonth, config.calendarType);
+            if (dateRange.start && dateRange.end && dayOfMonth >= dateRange.start && dayOfMonth <= dateRange.end) {
               return {
                 section: 'Yearly - Date Range',
-                details: `${startMonthName} ${formatOrdinal(range.startDay)} - ${endMonthName} ${formatOrdinal(range.endDay)}`,
+                details: `${monthName} ${formatOrdinal(dateRange.start)}-${formatOrdinal(dateRange.end)}`,
               };
             }
           }
@@ -484,8 +493,8 @@ export function getNextOccurrencesForDisplay(
       nthDayOfMonth: config.scheduleNthDayOfMonth,
       monthlyRange: config.scheduleMonthlyRange,
       fortnightEvenOdd: config.scheduleFortnightEvenOdd as any,
-      yearlyDates: config.scheduleYearlyDates,
-      yearlyRanges: config.scheduleYearlyRanges,
+      yearlyMonths: config.scheduleDatesOfYear ? config.scheduleDatesOfYear.map((r: any) => r.month) : undefined,
+      yearlyDatesOrRanges: config.scheduleDatesOfYear,
       weekendsOnly: config.scheduleWeekendsOnly,
       weekdaysOnly: config.scheduleWeekdaysOnly,
     };

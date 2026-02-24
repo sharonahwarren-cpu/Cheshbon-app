@@ -28,8 +28,8 @@ export interface ScheduleConfig {
   monthlyRange?: { start: number; end: number };
   monthlyRandomCount?: number;
   nthDayOfMonth?: { day: string; nth: number }; // e.g., { day: 'Tuesday', nth: 2 }
-  yearlyDates?: Array<{ month: number; day: number }>;
-  yearlyRanges?: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }>;
+  yearlyMonths?: number[]; // Array of months (1-12 or 1-13 for Hebrew)
+  yearlyDatesOrRanges?: Array<{ month: number; days?: number[]; start?: number; end?: number }>;
   exclusions?: string[]; // ISO date strings to exclude
   location?: { latitude: number; longitude: number }; // For astronomical calculations
 }
@@ -181,59 +181,71 @@ export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boole
       return true;
 
     case 'yearly':
-      // For Hebrew calendar, compare by month/day
+      // For Hebrew calendar, use proper date conversion
       if (config.calendarType === 'hebrew') {
-        if (!config.yearlyDates && !config.yearlyRanges) return true;
+        if (!config.yearlyDatesOrRanges) return true;
 
-        // Check yearly dates
-        if (config.yearlyDates) {
-          const month = date.getMonth() + 1;
-          const day = date.getDate();
-          if (config.yearlyDates.some(d => d.month === month && d.day === day)) {
-            return true;
+        return config.yearlyDatesOrRanges.some(range => {
+          try {
+            // range.month is the Hebrew month number
+            if (!range.month) return false;
+
+            if (range.days) {
+              // Check if date matches any of the specified Hebrew days in this month
+              return range.days.some(day => {
+                return isDateInHebrewRange(date, range.month, day, day);
+              });
+            }
+            if (range.start && range.end) {
+              // Check if date falls within Hebrew day range in this month
+              return isDateInHebrewRange(date, range.month, range.start, range.end);
+            }
+            return false;
+          } catch {
+            return false;
           }
-        }
-
-        // Check yearly ranges
-        if (config.yearlyRanges) {
-          return config.yearlyRanges.some(range => {
-            const startDate = new Date(date.getFullYear(), range.startMonth - 1, range.startDay);
-            const endDate = new Date(date.getFullYear(), range.endMonth - 1, range.endDay);
-            return date >= startDate && date <= endDate;
-          });
-        }
-        return false;
+        });
       }
 
       // For Gregorian calendar
       const month = date.getMonth() + 1; // JavaScript months are 0-based
-      const day = date.getDate();
-
-      // Check yearly dates (specific month/day combinations)
-      if (config.yearlyDates) {
-        const hasMatch = config.yearlyDates.some(d => d.month === month && d.day === day);
-        if (!hasMatch && !config.yearlyRanges) {
-          return false;
-        }
+      if (config.yearlyMonths && !config.yearlyMonths.includes(month)) {
+        return false;
       }
+      if (config.yearlyDatesOrRanges) {
+        return config.yearlyDatesOrRanges.some(range => {
+          // Support new format with month/day/endMonth/endDay for multi-month ranges
+          if ((range as any).day !== undefined && (range as any).endMonth !== undefined) {
+            const startMonth = (range as any).month;
+            const startDay = (range as any).day;
+            const endMonth = (range as any).endMonth || startMonth;
+            const endDay = (range as any).endDay || startDay;
 
-      // Check yearly ranges (date ranges within a year)
-      if (config.yearlyRanges) {
-        return config.yearlyRanges.some(range => {
-          // Check if current date is within range
-          const currentMonthDay = month * 100 + day;
-          const startMonthDay = range.startMonth * 100 + range.startDay;
-          const endMonthDay = range.endMonth * 100 + range.endDay;
+            // Check if current date is within range
+            const currentMonthDay = month * 100 + date.getDate();
+            const startMonthDay = startMonth * 100 + startDay;
+            const endMonthDay = endMonth * 100 + endDay;
 
-          if (startMonthDay <= endMonthDay) {
-            return currentMonthDay >= startMonthDay && currentMonthDay <= endMonthDay;
-          } else {
-            // Range wraps around year
-            return currentMonthDay >= startMonthDay || currentMonthDay <= endMonthDay;
+            if (startMonthDay <= endMonthDay) {
+              return currentMonthDay >= startMonthDay && currentMonthDay <= endMonthDay;
+            } else {
+              // Range wraps around year
+              return currentMonthDay >= startMonthDay || currentMonthDay <= endMonthDay;
+            }
           }
+
+          // Support old format with month/days/start/end within a month
+          if (range.month !== month) return false;
+          if (range.days) {
+            return range.days.includes(date.getDate());
+          }
+          if (range.start && range.end) {
+            return date.getDate() >= range.start && date.getDate() <= range.end;
+          }
+          return false;
         });
       }
-      return config.yearlyDates ? false : true;
+      return true;
 
     case 'custom':
       return true;
