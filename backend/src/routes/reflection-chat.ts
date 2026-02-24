@@ -25,23 +25,7 @@ function getGeminiClient(): GoogleGenerativeAI {
   return genAI;
 }
 
-const SYSTEM_PROMPT = `You are Cheshbon, a warm and supportive self-improvement coach having a VOICE CONVERSATION with the user. This is spoken dialogue, not written text.
-
-Guidelines for voice conversation:
-- Speak naturally and conversationally, like a supportive friend or life coach
-- Use simple, everyday language - avoid jargon or complex terms
-- Use contractions (you're, I'm, we're) to sound natural
-- Keep sentences short and punchy - easier to listen to
-- NO markdown formatting, no asterisks, no bullet points
-- Ask follow-up questions naturally during the conversation
-- Show genuine empathy and encouragement
-- Avoid lists - instead weave thoughts into flowing conversation
-- Sound warm, approachable, and genuinely interested
-- When asking about their day, goals, or feelings, follow up with authentic curiosity
-
-When someone shares something, respond like you would in a real conversation with a supportive friend. Keep responses brief and spoken-friendly (typically 2-3 sentences). Ask one thoughtful follow-up question at a time.`;
-
-const VOICE_GREETING_SYSTEM = `You are Cheshbon, a warm and supportive self-improvement coach initiating a voice conversation. Generate a friendly, warm greeting as if checking in with a friend. Ask "How was your day?" in a natural way and be ready to explore their experiences, goals, and feelings. Keep it brief, warm, and spoken like a real conversation.`;
+const SYSTEM_PROMPT = `You are a supportive AI reflection coach helping users with goal setting, tracking, and reflection. Keep responses concise (2-3 sentences max) and conversational. Ask thoughtful questions to help users reflect on their progress, struggles, and wins. Use the provided context about their goals and reflections to give personalized guidance.`;
 
 export function registerReflectionChatRoutes(app: App) {
   const requireAuth = app.requireAuth();
@@ -83,122 +67,15 @@ export function registerReflectionChatRoutes(app: App) {
         'Reflection conversation created successfully'
       );
 
-      // Fetch context for personalized greeting
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-
-      const activeGoals = await app.db
-        .select()
-        .from(schema.goals)
-        .where(
-          and(
-            eq(schema.goals.userId, userId),
-            eq(schema.goals.isActive, true)
-          )
-        )
-        .limit(5);
-
-      const recentReflections = await app.db
-        .select()
-        .from(schema.reflections)
-        .where(
-          and(
-            eq(schema.reflections.userId, userId),
-            gt(schema.reflections.createdAt, sevenDaysAgo)
-          )
-        )
-        .orderBy(desc(schema.reflections.createdAt))
-        .limit(3);
-
-      const recentJournalEntries = await app.db
-        .select()
-        .from(schema.journalEntries)
-        .where(
-          and(
-            eq(schema.journalEntries.userId, userId),
-            gt(schema.journalEntries.createdAt, threeDaysAgo)
-          )
-        )
-        .orderBy(desc(schema.journalEntries.createdAt))
-        .limit(2);
-
-      // Build context for greeting
-      let contextStr = 'Context for personalized greeting:\n';
-
-      if (activeGoals.length > 0) {
-        contextStr += `Active goals: ${activeGoals.map(g => g.title).join(', ')}\n`;
-      }
-
-      if (recentReflections.length > 0) {
-        const recentOutcomes = recentReflections.map(r => r.outcome).join(', ');
-        contextStr += `Recent reflection outcomes: ${recentOutcomes}\n`;
-      }
-
-      if (recentJournalEntries.length > 0) {
-        contextStr += `User has been journaling recently\n`;
-      }
-
-      // Generate initial greeting from AI
-      let greetingText: string;
-
-      try {
-        const greetingModel = getGeminiClient().getGenerativeModel({
-          model: 'gemini-2.0-flash',
-          systemInstruction: VOICE_GREETING_SYSTEM,
-        });
-
-        const greetingResponse = await greetingModel.generateContent(contextStr);
-        greetingText = greetingResponse.response.text().trim();
-
-        app.logger.info(
-          { userId, conversationId: conversation.id, greetingLength: greetingText.length },
-          'Initial greeting generated'
-        );
-
-        // Save the initial greeting message
-        await app.db
-          .insert(schema.reflectionMessages)
-          .values({
-            conversationId: conversation.id,
-            role: 'assistant',
-            content: greetingText,
-          });
-
-        app.logger.info(
-          { userId, conversationId: conversation.id },
-          'Initial greeting message saved'
-        );
-      } catch (aiError) {
-        app.logger.warn(
-          { err: aiError, userId, conversationId: conversation.id },
-          'AI service unavailable, creating conversation without initial greeting'
-        );
-        greetingText = "Hi there! I'm Cheshbon, your self-improvement coach. How was your day?";
-
-        // Still save a default message so the conversation isn't empty
-        try {
-          await app.db
-            .insert(schema.reflectionMessages)
-            .values({
-              conversationId: conversation.id,
-              role: 'assistant',
-              content: greetingText,
-            });
-        } catch (dbError) {
-          app.logger.error(
-            { err: dbError, userId, conversationId: conversation.id },
-            'Failed to save default greeting message'
-          );
-        }
-      }
-
+      // Return conversation with initial greeting message (not saved to DB)
       return {
         id: conversation.id,
         title: conversation.title,
         createdAt: conversation.createdAt.toISOString(),
+        updatedAt: conversation.updatedAt.toISOString(),
         initialMessage: {
           role: 'assistant',
-          content: greetingText,
+          content: "Hello! I'm your AI reflection coach. How was your day? What would you like to reflect on?",
         },
       };
     } catch (error) {
@@ -229,30 +106,17 @@ export function registerReflectionChatRoutes(app: App) {
         .where(eq(schema.reflectionConversations.userId, userId))
         .orderBy(desc(schema.reflectionConversations.updatedAt));
 
-      // Get message counts for each conversation
-      const conversationsWithCounts = await Promise.all(
-        conversations.map(async (conv) => {
-          const messages = await app.db
-            .select()
-            .from(schema.reflectionMessages)
-            .where(eq(schema.reflectionMessages.conversationId, conv.id));
-
-          return {
-            id: conv.id,
-            title: conv.title,
-            createdAt: conv.createdAt.toISOString(),
-            updatedAt: conv.updatedAt.toISOString(),
-            messageCount: messages.length,
-          };
-        })
-      );
-
       app.logger.info(
-        { userId, count: conversationsWithCounts.length },
+        { userId, count: conversations.length },
         'Reflection conversations fetched successfully'
       );
 
-      return conversationsWithCounts;
+      return conversations.map(conv => ({
+        id: conv.id,
+        title: conv.title,
+        createdAt: conv.createdAt.toISOString(),
+        updatedAt: conv.updatedAt.toISOString(),
+      }));
     } catch (error) {
       app.logger.error(
         { err: error, userId },
@@ -307,6 +171,7 @@ export function registerReflectionChatRoutes(app: App) {
 
         return messages.map((msg) => ({
           id: msg.id,
+          conversationId: msg.conversationId,
           role: msg.role,
           content: msg.content,
           createdAt: msg.createdAt.toISOString(),
@@ -348,14 +213,11 @@ export function registerReflectionChatRoutes(app: App) {
             model: 'gemini-2.0-flash',
           });
 
-          // Convert base64 to buffer
-          const audioBuffer = Buffer.from(audioBase64, 'base64');
-
           // Create inline data object for Gemini
           const response = await transcriptionModel.generateContent([
             {
               inlineData: {
-                mimeType: 'audio/wav', // Assuming WAV format - could be configurable
+                mimeType: 'audio/wav',
                 data: audioBase64,
               },
             },
@@ -483,7 +345,7 @@ export function registerReflectionChatRoutes(app: App) {
         if (recentReflections.length > 0) {
           contextStr += 'Recent Reflections (Last 7 days):\n';
           for (const reflection of recentReflections) {
-            contextStr += `- [${reflection.outcome}] ${reflection.description?.substring(0, 100)}\n`;
+            contextStr += `- [${reflection.outcome}] ${reflection.description?.substring(0, 100) || ''}\n`;
           }
           contextStr += '\n';
         }
@@ -491,7 +353,7 @@ export function registerReflectionChatRoutes(app: App) {
         if (recentJournalEntries.length > 0) {
           contextStr += 'Recent Journal Entries (Last 3 days):\n';
           for (const entry of recentJournalEntries) {
-            contextStr += `- ${entry.content?.substring(0, 100)}\n`;
+            contextStr += `- ${entry.content?.substring(0, 100) || ''}\n`;
           }
           contextStr += '\n';
         }
@@ -526,10 +388,10 @@ export function registerReflectionChatRoutes(app: App) {
         } catch (aiError) {
           app.logger.error(
             { err: aiError, userId, conversationId: id },
-            'AI service error - using fallback response'
+            'AI service error'
           );
           return reply.status(503).send({
-            error: 'AI service is temporarily unavailable. Please contact support.',
+            error: 'AI service is currently unavailable. Please contact support.',
           });
         }
 
@@ -556,55 +418,21 @@ export function registerReflectionChatRoutes(app: App) {
           .set({ updatedAt: new Date() })
           .where(eq(schema.reflectionConversations.id, id));
 
-        // Generate or update title if it's the first message
-        if (conversationHistory.length === 1) {
-          try {
-            const titleModel = getGeminiClient().getGenerativeModel({
-              model: 'gemini-2.0-flash',
-            });
-
-            const titleResponse = await titleModel.generateContent(
-              `Generate a short 3-4 word title for this reflection conversation based on: "${userMessage}". Return ONLY the title, no quotes or punctuation.`
-            );
-
-            const title = titleResponse.response.text().trim();
-
-            await app.db
-              .update(schema.reflectionConversations)
-              .set({ title })
-              .where(eq(schema.reflectionConversations.id, id));
-
-            app.logger.info(
-              { userId, conversationId: id, title },
-              'Conversation title generated'
-            );
-          } catch (titleError) {
-            app.logger.warn(
-              { err: titleError, userId, conversationId: id },
-              'Failed to generate conversation title, skipping'
-            );
-            // Don't fail the entire request if title generation fails
-          }
-        }
-
         app.logger.info(
           { userId, conversationId: id, messageId: aiMessage.id },
           'AI response saved successfully'
         );
 
-        const response: any = {
-          id: aiMessage.id,
-          role: 'assistant',
-          content: aiText,
-          createdAt: aiMessage.createdAt.toISOString(),
+        const responseObj: any = {
+          response: aiText,
         };
 
         // Include transcribed text if audio was provided
         if (audioBase64 && !messageText) {
-          response.transcribedText = userMessage;
+          responseObj.transcribedText = userMessage;
         }
 
-        return response;
+        return responseObj;
       } catch (error) {
         app.logger.error(
           { err: error, userId, conversationId: id },
@@ -647,7 +475,12 @@ export function registerReflectionChatRoutes(app: App) {
           return reply.status(404).send({ error: 'Conversation not found' });
         }
 
-        // Delete conversation (cascade will delete messages)
+        // Delete all messages first
+        await app.db
+          .delete(schema.reflectionMessages)
+          .where(eq(schema.reflectionMessages.conversationId, id));
+
+        // Delete conversation
         await app.db
           .delete(schema.reflectionConversations)
           .where(eq(schema.reflectionConversations.id, id));
