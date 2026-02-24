@@ -434,6 +434,22 @@ export default function ReflectScreen() {
     }
   };
 
+  const loadConversations = async () => {
+    console.log('[API] Requesting /api/reflection-chat/conversations...');
+    setLoadingConversations(true);
+    try {
+      const response = await authenticatedGet('/api/reflection-chat/conversations');
+      const conversationsData = Array.isArray(response) ? response : (response?.data || []);
+      setConversations(conversationsData);
+      console.log('Loaded conversations:', conversationsData.length);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+      showError('Failed to load conversations');
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
   const loadMessages = async (conversationId: string) => {
     console.log(`[API] Requesting /api/reflection-chat/conversations/${conversationId}/messages...`);
     try {
@@ -487,8 +503,18 @@ export default function ReflectScreen() {
           await speakText(greetingMsg.content);
           console.log('[Voice] AI greeting spoken');
         }
-      } catch (greetingError) {
+      } catch (greetingError: any) {
         console.error('[Voice] Error getting AI greeting:', greetingError);
+        // Show user-friendly error message
+        const errorMsg = greetingError?.message || String(greetingError);
+        if (errorMsg.includes('API key') || errorMsg.includes('service')) {
+          showError('AI service is temporarily unavailable. The administrator needs to configure the API key. Please try again later.');
+        } else {
+          showError('Failed to start AI conversation. Please try again.');
+        }
+        // Close the conversation since it failed
+        setCurrentConversationId(null);
+        setMessages([]);
       } finally {
         setSendingMessage(false);
       }
@@ -496,9 +522,14 @@ export default function ReflectScreen() {
       setTimeout(() => {
         chatScrollRef.current?.scrollToEnd({ animated: true });
       }, 100);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating conversation:', error);
-      showError('Failed to create conversation');
+      const errorMsg = error?.message || String(error);
+      if (errorMsg.includes('API key') || errorMsg.includes('service')) {
+        showError('AI service is temporarily unavailable. The administrator needs to configure the API key. Please try again later.');
+      } else {
+        showError('Failed to create conversation. Please try again.');
+      }
       setSendingMessage(false);
     }
   };
