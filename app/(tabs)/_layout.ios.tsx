@@ -55,7 +55,13 @@ export default function TabLayout() {
     } else if (user && inAuthGroup && !prefsLoaded) {
       console.log('User authenticated, waiting for preferences to load...');
     }
-  }, [user, loading, segments, preferredHomeScreen, prefsLoaded]);
+  }, [user, loading, segments, preferredHomeScreen, prefsLoaded, router]);
+
+  // Handle AI chat navigation
+  const handleAIChatPress = () => {
+    console.log('[TabLayout iOS] AI Chat tab pressed, navigating to standalone screen');
+    router.push('/ai-chat');
+  };
 
   if (loading) {
     return (
