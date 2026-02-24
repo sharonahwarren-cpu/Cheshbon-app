@@ -330,12 +330,61 @@ export function registerReflectionChatRoutes(app: App) {
 
       const userId = session.user.id;
       const { id } = request.params as { id: string };
-      const { message } = request.body as { message: string };
+      const { message: messageText, audioBase64 } = request.body as { message?: string; audioBase64?: string };
 
       app.logger.info(
-        { userId, conversationId: id, messageLength: message?.length },
+        { userId, conversationId: id, hasAudio: !!audioBase64, messageLength: messageText?.length },
         'Processing reflection message'
       );
+
+      // Transcribe audio if provided
+      let userMessage = messageText;
+
+      if (audioBase64 && !messageText) {
+        try {
+          app.logger.info({ userId, conversationId: id }, 'Transcribing audio message');
+
+          const transcriptionModel = getGeminiClient().getGenerativeModel({
+            model: 'gemini-2.0-flash',
+          });
+
+          // Convert base64 to buffer
+          const audioBuffer = Buffer.from(audioBase64, 'base64');
+
+          // Create inline data object for Gemini
+          const response = await transcriptionModel.generateContent([
+            {
+              inlineData: {
+                mimeType: 'audio/wav', // Assuming WAV format - could be configurable
+                data: audioBase64,
+              },
+            },
+            'Please transcribe this audio and return only the text transcription without any formatting or explanations.',
+          ]);
+
+          userMessage = response.response.text().trim();
+
+          app.logger.info(
+            { userId, conversationId: id, transcribedLength: userMessage.length },
+            'Audio transcribed successfully'
+          );
+        } catch (transcriptionError) {
+          app.logger.error(
+            { err: transcriptionError, userId, conversationId: id },
+            'Failed to transcribe audio'
+          );
+          return reply.status(400).send({
+            error: 'Failed to process audio. Please try again or send a text message.',
+          });
+        }
+      }
+
+      if (!userMessage) {
+        app.logger.warn({ userId, conversationId: id }, 'No message or audio provided');
+        return reply.status(400).send({
+          error: 'Please provide either a message or audio data',
+        });
+      }
 
       try {
         // Verify conversation belongs to user
@@ -358,19 +407,19 @@ export function registerReflectionChatRoutes(app: App) {
         }
 
         // Save user message
-        const userMessages = await app.db
+        const userMessageRecords = await app.db
           .insert(schema.reflectionMessages)
           .values({
             conversationId: id,
             role: 'user',
-            content: message,
+            content: userMessage,
           })
           .returning();
 
-        const userMessage = userMessages[0];
+        const savedUserMessage = userMessageRecords[0];
 
         app.logger.info(
-          { userId, conversationId: id, messageId: userMessage.id },
+          { userId, conversationId: id, messageId: savedUserMessage.id },
           'User message saved'
         );
 
@@ -470,7 +519,7 @@ export function registerReflectionChatRoutes(app: App) {
           });
 
           const response = await chatSession.sendMessage(
-            `${contextStr}\nUser message: ${message}`
+            `${contextStr}\nUser message: ${userMessage}`
           );
 
           aiText = response.response.text();
@@ -515,7 +564,7 @@ export function registerReflectionChatRoutes(app: App) {
             });
 
             const titleResponse = await titleModel.generateContent(
-              `Generate a short 3-4 word title for this reflection conversation based on: "${message}". Return ONLY the title, no quotes or punctuation.`
+              `Generate a short 3-4 word title for this reflection conversation based on: "${userMessage}". Return ONLY the title, no quotes or punctuation.`
             );
 
             const title = titleResponse.response.text().trim();
@@ -543,12 +592,19 @@ export function registerReflectionChatRoutes(app: App) {
           'AI response saved successfully'
         );
 
-        return {
+        const response: any = {
           id: aiMessage.id,
           role: 'assistant',
           content: aiText,
           createdAt: aiMessage.createdAt.toISOString(),
         };
+
+        // Include transcribed text if audio was provided
+        if (audioBase64 && !messageText) {
+          response.transcribedText = userMessage;
+        }
+
+        return response;
       } catch (error) {
         app.logger.error(
           { err: error, userId, conversationId: id },
