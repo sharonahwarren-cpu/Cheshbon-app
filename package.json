@@ -22,6 +22,7 @@
     "@hebcal/core": "^6.0.8",
     "@js-joda/core": "^5.7.0",
     "@js-joda/timezone": "^2.23.0",
+    "@react-native-async-storage/async-storage": "^3.0.1",
     "@react-native-community/datetimepicker": "^8.3.0",
     "@react-native-community/slider": "^5.1.2",
     "@react-navigation/drawer": "^7.1.1",

@@ -12,6 +12,7 @@ import {
   Platform,
   Animated,
   Easing,
+  Modal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -20,6 +21,7 @@ import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedDelete } from '@/utils/api';
 import * as Speech from 'expo-speech';
 import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Message {
   id: string;
@@ -35,6 +37,22 @@ interface Conversation {
   createdAt: string;
   updatedAt: string;
 }
+
+interface VoiceSettings {
+  voice: string;
+  rate: number;
+  pitch: number;
+}
+
+const AVAILABLE_VOICES: { id: string; name: string; language: string }[] = [
+  { id: 'default', name: 'Default', language: 'en-US' },
+  { id: 'en-GB', name: 'British English', language: 'en-GB' },
+  { id: 'en-AU', name: 'Australian English', language: 'en-AU' },
+  { id: 'en-IN', name: 'Indian English', language: 'en-IN' },
+];
+
+const VOICE_SETTINGS_KEY = '@ai_voice_settings';
+const CONTINUOUS_MODE_KEY = '@ai_continuous_mode';
 
 export default function AIChatScreen() {
   const router = useRouter();
@@ -56,16 +74,32 @@ export default function AIChatScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
 
+  // Voice settings
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
+    voice: 'default',
+    rate: 0.95,
+    pitch: 1.0,
+  });
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+
+  // Continuous listening mode
+  const [continuousMode, setContinuousMode] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const continuousModeTimeout = useRef<NodeJS.Timeout | null>(null);
+
   // Pulse animation for recording button
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    console.log('[AI Chat] Screen mounted, loading conversations...');
+    console.log('[AI Chat] Screen mounted, loading conversations and settings...');
     loadConversations();
+    loadVoiceSettings();
+    loadContinuousMode();
     return () => {
       Speech.stop();
       if (pulseLoop.current) pulseLoop.current.stop();
+      if (continuousModeTimeout.current) clearTimeout(continuousModeTimeout.current);
     };
   }, []);
 
@@ -116,16 +150,81 @@ export default function AIChatScreen() {
     }
   }, [isRecording]);
 
+  // Load voice settings from storage
+  const loadVoiceSettings = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(VOICE_SETTINGS_KEY);
+      if (stored) {
+        const settings = JSON.parse(stored);
+        setVoiceSettings(settings);
+        console.log('[Voice Settings] Loaded:', settings);
+      }
+    } catch (err) {
+      console.error('[Voice Settings] Failed to load:', err);
+    }
+  };
+
+  // Save voice settings to storage
+  const saveVoiceSettings = async (settings: VoiceSettings) => {
+    try {
+      await AsyncStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings));
+      setVoiceSettings(settings);
+      console.log('[Voice Settings] Saved:', settings);
+    } catch (err) {
+      console.error('[Voice Settings] Failed to save:', err);
+    }
+  };
+
+  // Load continuous mode setting
+  const loadContinuousMode = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(CONTINUOUS_MODE_KEY);
+      if (stored) {
+        const enabled = JSON.parse(stored);
+        setContinuousMode(enabled);
+        console.log('[Continuous Mode] Loaded:', enabled);
+      }
+    } catch (err) {
+      console.error('[Continuous Mode] Failed to load:', err);
+    }
+  };
+
+  // Save continuous mode setting
+  const saveContinuousMode = async (enabled: boolean) => {
+    try {
+      await AsyncStorage.setItem(CONTINUOUS_MODE_KEY, JSON.stringify(enabled));
+      setContinuousMode(enabled);
+      console.log('[Continuous Mode] Saved:', enabled);
+    } catch (err) {
+      console.error('[Continuous Mode] Failed to save:', err);
+    }
+  };
+
   const speakText = useCallback(async (text: string) => {
     if (!autoSpeak) return;
     try {
       await Speech.stop();
       setIsSpeaking(true);
+      
+      const selectedVoice = AVAILABLE_VOICES.find(v => v.id === voiceSettings.voice);
+      const language = selectedVoice?.language || 'en-US';
+
+      console.log('[Voice] Speaking with settings:', { language, rate: voiceSettings.rate, pitch: voiceSettings.pitch });
+
       Speech.speak(text, {
-        language: 'en-US',
-        pitch: 1.0,
-        rate: 0.95,
-        onDone: () => setIsSpeaking(false),
+        language,
+        pitch: voiceSettings.pitch,
+        rate: voiceSettings.rate,
+        onDone: () => {
+          setIsSpeaking(false);
+          // If continuous mode is enabled, start listening again after AI finishes speaking
+          if (continuousMode && inputMode === 'voice') {
+            console.log('[Continuous Mode] AI finished speaking, starting to listen...');
+            setTimeout(() => {
+              startContinuousListening();
+            }, 500);
+          }
+        },
         onError: () => setIsSpeaking(false),
         onStopped: () => setIsSpeaking(false),
       });
@@ -133,7 +232,7 @@ export default function AIChatScreen() {
       console.error('[Voice] Speech error:', err);
       setIsSpeaking(false);
     }
-  }, [autoSpeak]);
+  }, [autoSpeak, voiceSettings, continuousMode, inputMode]);
 
   const stopSpeaking = async () => {
     try {
@@ -258,18 +357,59 @@ export default function AIChatScreen() {
       await audioRecorder.prepareToRecordAsync();
       audioRecorder.record();
       setIsRecording(true);
+      setIsListening(false);
     } catch (err) {
       console.error('[Voice] Failed to start recording:', err);
       showError('Failed to start recording. Please try again.');
     }
   };
 
+  // Continuous listening mode - auto-start recording after AI speaks
+  const startContinuousListening = async () => {
+    if (!continuousMode || isRecording || sending || isSpeaking) {
+      return;
+    }
+
+    try {
+      console.log('[Continuous Mode] Starting to listen...');
+      setIsListening(true);
+
+      // Wait a moment before starting recording
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      if (!continuousMode || isSpeaking) {
+        setIsListening(false);
+        return;
+      }
+
+      await startRecording();
+
+      // Auto-stop recording after 10 seconds of silence detection
+      // (In a production app, you'd use voice activity detection)
+      continuousModeTimeout.current = setTimeout(() => {
+        if (isRecording && continuousMode) {
+          console.log('[Continuous Mode] Auto-stopping recording after timeout');
+          stopRecordingAndSend();
+        }
+      }, 10000);
+    } catch (err) {
+      console.error('[Continuous Mode] Failed to start listening:', err);
+      setIsListening(false);
+    }
+  };
+
   const stopRecordingAndSend = async () => {
     if (!isRecording) return;
+
+    if (continuousModeTimeout.current) {
+      clearTimeout(continuousModeTimeout.current);
+      continuousModeTimeout.current = null;
+    }
 
     try {
       console.log('[Voice] Stopping recording...');
       setIsRecording(false);
+      setIsListening(false);
       await audioRecorder.stop();
 
       const uri = audioRecorder.uri;
@@ -290,10 +430,15 @@ export default function AIChatScreen() {
         const base64Data = (reader.result as string).split(',')[1];
         await sendAudioMessage(base64Data);
       };
+      reader.onerror = () => {
+        console.error('[Voice] Failed to read audio file');
+        showError('Failed to process recording. Please try again.');
+      };
       reader.readAsDataURL(blob);
     } catch (err) {
       console.error('[Voice] Failed to stop recording:', err);
       setIsRecording(false);
+      setIsListening(false);
       showError('Failed to process recording. Please try again.');
     }
   };
@@ -347,11 +492,9 @@ export default function AIChatScreen() {
         { audioBase64 }
       );
 
-      // Backend returns: { id, role, content, createdAt, transcribedText? }
-      const aiResponse = apiResponse?.data || apiResponse;
-      const transcribedText = aiResponse.transcribedText || '(voice message)';
-      const aiText = aiResponse.content || aiResponse.response || 'No response';
-      const aiMessageId = aiResponse.id || `ai-${Date.now()}`;
+      // Backend returns: { response, transcribedText? }
+      const transcribedText = apiResponse.transcribedText || '(voice message)';
+      const aiText = apiResponse.response || 'No response';
 
       console.log('[AI Chat] Audio response received:', { transcribedText: transcribedText.substring(0, 50), aiText: aiText.substring(0, 50) });
 
@@ -365,10 +508,10 @@ export default function AIChatScreen() {
           isTranscribed: true,
         },
         {
-          id: aiMessageId,
+          id: `ai-${Date.now()}`,
           role: 'assistant',
           content: aiText,
-          createdAt: aiResponse.createdAt || new Date().toISOString(),
+          createdAt: new Date().toISOString(),
         },
       ]);
 
@@ -444,10 +587,8 @@ export default function AIChatScreen() {
         message: userMessage,
       });
 
-      // Backend returns: { id, role, content, createdAt }
-      const aiResponse = response?.data || response;
-      const aiText = aiResponse.content || aiResponse.response || 'No response';
-      const aiMessageId = aiResponse.id || `ai-${Date.now()}`;
+      // Backend returns: { response }
+      const aiText = response.response || 'No response';
 
       console.log('[AI Chat] Text response received:', aiText.substring(0, 80));
       
@@ -460,10 +601,10 @@ export default function AIChatScreen() {
           createdAt: new Date().toISOString(),
         },
         {
-          id: aiMessageId,
+          id: `ai-${Date.now()}`,
           role: 'assistant',
           content: aiText,
-          createdAt: aiResponse.createdAt || new Date().toISOString(),
+          createdAt: new Date().toISOString(),
         },
       ]);
 
@@ -501,6 +642,9 @@ export default function AIChatScreen() {
   const currentConversation = conversations.find(c => c.id === currentConversationId);
   const conversationTitle = currentConversation?.title || 'AI Coach';
 
+  const ratePercentage = Math.round(voiceSettings.rate * 100);
+  const pitchPercentage = Math.round(voiceSettings.pitch * 100);
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen 
@@ -531,6 +675,17 @@ export default function AIChatScreen() {
                   ios_icon_name="line.3.horizontal"
                   android_material_icon_name="menu"
                   size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowVoiceSettings(true)}
+                style={styles.headerButton}
+              >
+                <IconSymbol
+                  ios_icon_name="slider.horizontal.3"
+                  android_material_icon_name="tune"
+                  size={20}
                   color={colors.text}
                 />
               </TouchableOpacity>
@@ -629,7 +784,9 @@ export default function AIChatScreen() {
                 </View>
                 <Text style={styles.welcomeTitle}>AI Reflection Coach</Text>
                 <Text style={styles.welcomeMessage}>
-                  Tap the mic to start a voice conversation, or switch to text mode below
+                  {continuousMode 
+                    ? 'Continuous mode enabled - I\'ll listen automatically after speaking'
+                    : 'Tap the mic to start a voice conversation, or switch to text mode below'}
                 </Text>
               </View>
             )}
@@ -731,6 +888,20 @@ export default function AIChatScreen() {
                   Type
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeButton, continuousMode && styles.modeButtonActive]}
+                onPress={() => saveContinuousMode(!continuousMode)}
+              >
+                <IconSymbol
+                  ios_icon_name={continuousMode ? 'infinity' : 'infinity.circle'}
+                  android_material_icon_name={continuousMode ? 'all-inclusive' : 'all-inclusive'}
+                  size={14}
+                  color={continuousMode ? colors.primary : colors.textSecondary}
+                />
+                <Text style={[styles.modeButtonText, continuousMode && styles.modeButtonTextActive]}>
+                  Auto
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {inputMode === 'voice' ? (
@@ -746,6 +917,18 @@ export default function AIChatScreen() {
                     />
                     <Text style={styles.stopSpeakText}>Stop Speaking</Text>
                   </TouchableOpacity>
+                )}
+
+                {isListening && !isRecording && (
+                  <View style={styles.listeningIndicator}>
+                    <IconSymbol
+                      ios_icon_name="waveform"
+                      android_material_icon_name="graphic-eq"
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.listeningText}>Listening...</Text>
+                  </View>
                 )}
 
                 <Animated.View style={[styles.micButtonWrapper, { transform: [{ scale: pulseAnim }] }]}>
@@ -777,6 +960,8 @@ export default function AIChatScreen() {
                     ? 'Processing...'
                     : isRecording
                     ? 'Tap to send'
+                    : continuousMode
+                    ? 'Auto mode - I\'ll listen after speaking'
                     : 'Tap to speak'}
                 </Text>
               </View>
@@ -814,6 +999,150 @@ export default function AIChatScreen() {
           </View>
         </KeyboardAvoidingView>
       </View>
+
+      {/* Voice Settings Modal */}
+      <Modal
+        visible={showVoiceSettings}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowVoiceSettings(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Voice Settings</Text>
+              <TouchableOpacity onPress={() => setShowVoiceSettings(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark.circle.fill"
+                  android_material_icon_name="close"
+                  size={28}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              {/* Voice Selection */}
+              <Text style={styles.settingLabel}>AI Voice</Text>
+              {AVAILABLE_VOICES.map((voice) => {
+                const isSelected = voiceSettings.voice === voice.id;
+                return (
+                  <TouchableOpacity
+                    key={voice.id}
+                    style={[styles.voiceOption, isSelected && styles.voiceOptionSelected]}
+                    onPress={() => saveVoiceSettings({ ...voiceSettings, voice: voice.id })}
+                  >
+                    <View style={styles.voiceOptionContent}>
+                      <Text style={[styles.voiceOptionName, isSelected && styles.voiceOptionNameSelected]}>
+                        {voice.name}
+                      </Text>
+                      <Text style={styles.voiceOptionLanguage}>{voice.language}</Text>
+                    </View>
+                    {isSelected && (
+                      <IconSymbol
+                        ios_icon_name="checkmark.circle.fill"
+                        android_material_icon_name="check-circle"
+                        size={24}
+                        color={colors.primary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Speed Control */}
+              <Text style={styles.settingLabel}>Speaking Speed: {ratePercentage}%</Text>
+              <View style={styles.sliderContainer}>
+                <Text style={styles.sliderLabel}>Slow</Text>
+                <View style={styles.sliderTrack}>
+                  <View style={[styles.sliderFill, { width: `${ratePercentage}%` }]} />
+                  <View style={styles.sliderButtons}>
+                    <TouchableOpacity
+                      style={styles.sliderButton}
+                      onPress={() => saveVoiceSettings({ ...voiceSettings, rate: Math.max(0.5, voiceSettings.rate - 0.1) })}
+                    >
+                      <IconSymbol
+                        ios_icon_name="minus"
+                        android_material_icon_name="remove"
+                        size={16}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.sliderButton}
+                      onPress={() => saveVoiceSettings({ ...voiceSettings, rate: Math.min(1.5, voiceSettings.rate + 0.1) })}
+                    >
+                      <IconSymbol
+                        ios_icon_name="plus"
+                        android_material_icon_name="add"
+                        size={16}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={styles.sliderLabel}>Fast</Text>
+              </View>
+
+              {/* Pitch Control */}
+              <Text style={styles.settingLabel}>Voice Pitch: {pitchPercentage}%</Text>
+              <View style={styles.sliderContainer}>
+                <Text style={styles.sliderLabel}>Low</Text>
+                <View style={styles.sliderTrack}>
+                  <View style={[styles.sliderFill, { width: `${pitchPercentage}%` }]} />
+                  <View style={styles.sliderButtons}>
+                    <TouchableOpacity
+                      style={styles.sliderButton}
+                      onPress={() => saveVoiceSettings({ ...voiceSettings, pitch: Math.max(0.5, voiceSettings.pitch - 0.1) })}
+                    >
+                      <IconSymbol
+                        ios_icon_name="minus"
+                        android_material_icon_name="remove"
+                        size={16}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.sliderButton}
+                      onPress={() => saveVoiceSettings({ ...voiceSettings, pitch: Math.min(1.5, voiceSettings.pitch + 0.1) })}
+                    >
+                      <IconSymbol
+                        ios_icon_name="plus"
+                        android_material_icon_name="add"
+                        size={16}
+                        color={colors.text}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <Text style={styles.sliderLabel}>High</Text>
+              </View>
+
+              {/* Test Voice Button */}
+              <TouchableOpacity
+                style={styles.testVoiceButton}
+                onPress={() => speakText('Hello! This is how I sound with your current settings.')}
+              >
+                <IconSymbol
+                  ios_icon_name="speaker.wave.2.fill"
+                  android_material_icon_name="volume-up"
+                  size={20}
+                  color={colors.background}
+                />
+                <Text style={styles.testVoiceButtonText}>Test Voice</Text>
+              </TouchableOpacity>
+
+              {/* Reset Button */}
+              <TouchableOpacity
+                style={styles.resetButton}
+                onPress={() => saveVoiceSettings({ voice: 'default', rate: 0.95, pitch: 1.0 })}
+              >
+                <Text style={styles.resetButtonText}>Reset to Default</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {showErrorModal && (
         <View style={styles.errorToast}>
@@ -1065,6 +1394,20 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontWeight: '600',
   },
+  listeningIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: colors.primary + '15',
+  },
+  listeningText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: '600',
+  },
   micButtonWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1093,6 +1436,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     fontWeight: '500',
+    textAlign: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -1123,6 +1467,138 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     opacity: 0.45,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  settingLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  voiceOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: colors.card,
+    marginBottom: 10,
+  },
+  voiceOptionSelected: {
+    backgroundColor: colors.primary + '15',
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  voiceOptionContent: {
+    flex: 1,
+  },
+  voiceOptionName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  voiceOptionNameSelected: {
+    color: colors.primary,
+  },
+  voiceOptionLanguage: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  sliderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  sliderLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    width: 40,
+  },
+  sliderTrack: {
+    flex: 1,
+    height: 40,
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  sliderFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: colors.primary + '30',
+  },
+  sliderButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    height: '100%',
+  },
+  sliderButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  testVoiceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 24,
+  },
+  testVoiceButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.background,
+  },
+  resetButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 12,
+    marginBottom: 20,
+  },
+  resetButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
   errorToast: {
     position: 'absolute',
     bottom: 20,
@@ -1147,3 +1623,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
+Now I need to install the AsyncStorage dependency:Perfect! Now let me update the iOS version to use the same implementation:
+
+<write file="app/ai-chat.ios.tsx">
+import React from 'react';
+import AIChatScreen from './ai-chat';
+
+// iOS uses the same implementation as the base file
+export default AIChatScreen;
