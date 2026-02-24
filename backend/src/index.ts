@@ -14,7 +14,6 @@ import { registerReportsRoutes } from './routes/reports.js';
 import { registerReflectionsRoutes } from './routes/reflections.js';
 import { registerGainsLossesRoutes } from './routes/gains-losses.js';
 import { registerAlarmsRoutes } from './routes/alarms.js';
-import { registerReflectionChatRoutes } from './routes/reflection-chat.js';
 
 // Combine both schemas
 const schema = { ...appSchema, ...authSchema };
@@ -43,7 +42,6 @@ registerReportsRoutes(app);
 registerReflectionsRoutes(app);
 registerGainsLossesRoutes(app);
 registerAlarmsRoutes(app);
-registerReflectionChatRoutes(app);
 
 await app.run();
 app.logger.info('Application running');
