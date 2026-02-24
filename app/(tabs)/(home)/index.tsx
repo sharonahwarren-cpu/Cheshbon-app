@@ -1,4 +1,5 @@
 
+import React, { useState, useEffect, useRef } from "react";
 import {
   StyleSheet,
   View,
@@ -12,14 +13,13 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { useAuth } from "@/contexts/AuthContext";
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from "@/utils/api";
-import React, { useState, useEffect, useRef } from "react";
 import { colors } from "@/styles/commonStyles";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
-import { useAuth } from "@/contexts/AuthContext";
 import { IconSymbol } from "@/components/IconSymbol";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { DatePickerModal } from "@/components/DatePickerModal";
 import { DateTime } from 'luxon';
 import { getLocalTimezone } from '@/utils/dateUtils';
@@ -133,20 +133,18 @@ interface JournalEntry {
 }
 
 // Helper function to format date as YYYY-MM-DD in local timezone
-// Uses Intl.DateTimeFormat to ensure correct local date regardless of UTC offset
 function formatDateLocal(date: Date): string {
   try {
     const localZone = getLocalTimezone();
-    // Use en-CA locale which formats as YYYY-MM-DD
     const formatted = new Intl.DateTimeFormat('en-CA', {
       timeZone: localZone,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     }).format(date);
+    console.log(`[Home] formatDateLocal: ${date.toISOString()} -> ${formatted} (${localZone})`);
     return formatted;
   } catch (error) {
-    // Fallback to simple extraction
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -154,89 +152,84 @@ function formatDateLocal(date: Date): string {
   }
 }
 
-// Helper function to format alternative calendar dates
+// Helper function to format alternative calendar date
 function formatAlternativeDate(date: Date, calendarType: string): string {
+  if (!calendarType || calendarType === 'gregorian') return '';
+  
   try {
     if (calendarType === 'hebrew') {
-      const formatter = new Intl.DateTimeFormat('he-IL-u-ca-hebrew', {
+      const hebrewDate = new Intl.DateTimeFormat('he-IL-u-ca-hebrew', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
-      });
-      return formatter.format(date);
-    } else if (calendarType === 'chinese') {
-      const formatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      });
-      return formatter.format(date);
+      }).format(date);
+      return hebrewDate;
     } else if (calendarType === 'islamic') {
-      const formatter = new Intl.DateTimeFormat('en-US-u-ca-islamic', {
+      const islamicDate = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
-      });
-      return formatter.format(date);
+      }).format(date);
+      return islamicDate;
+    } else if (calendarType === 'chinese') {
+      const chineseDate = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }).format(date);
+      return chineseDate;
     }
-    return '';
   } catch (error) {
-    console.error('Error formatting alternative date:', error);
-    return 'Date unavailable';
+    console.error('Error formatting alternative calendar date:', error);
   }
+  
+  return '';
 }
 
 export default function HomeScreen() {
-  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const params = useLocalSearchParams();
+  const { user } = useAuth();
+  const params = useLocalSearchParams<{ date?: string }>();
   const scrollViewRef = useRef<ScrollView>(null);
-  const scrollPositionRef = useRef(0);
-  
-  const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [currentView, setCurrentView] = useState<'reflect' | 'express'>('reflect');
-  const [expressViewMode, setExpressViewMode] = useState<'detailed' | 'concise'>('detailed');
-  const [homeScreenInitialized, setHomeScreenInitialized] = useState(false);
-  
-  const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
-  const [lifeAreaHierarchy, setLifeAreaHierarchy] = useState<LifeAreaNode[]>([]);
-  const [collapsedAreas, setCollapsedAreas] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(false);
+  const [lifeAreas, setLifeAreas] = useState<LifeAreaNode[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
-  
-  const [errorModalVisible, setErrorModalVisible] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [successModalMessage, setSuccessModalMessage] = useState('');
-  
-  const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
-  const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
-
-  const [journalEntry, setJournalEntry] = useState<JournalEntry | null>(null);
-  const [journalContent, setJournalContent] = useState('');
   const [reflections, setReflections] = useState<Reflection[]>([]);
+  const [journalEntry, setJournalEntry] = useState<JournalEntry | null>(null);
+
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
+  const [expandedLifeAreas, setExpandedLifeAreas] = useState<Record<string, boolean>>({});
+  const [expandedReflectionCategories, setExpandedReflectionCategories] = useState<Record<string, boolean>>({});
+
+  const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
+  const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
+
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [tempJournalContent, setTempJournalContent] = useState('');
+
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
-  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
-  const [prefilledGoalData, setPrefilledGoalData] = useState<{
-    category?: string;
-    type?: 'Restraint' | 'Proactive';
-    description?: string;
-  } | undefined>(undefined);
+  const [alternativeCalendar, setAlternativeCalendar] = useState<string>('gregorian');
+
+  const [lifetimeTotals, setLifetimeTotals] = useState({ successes: 0, struggles: 0 });
 
   useEffect(() => {
-    console.log("HomeScreen mounted");
-    loadData();
-  }, []);
+    if (params.date) {
+      const dateFromParam = new Date(params.date);
+      if (!isNaN(dateFromParam.getTime())) {
+        setSelectedDate(dateFromParam);
+      }
+    }
+  }, [params.date]);
 
   useEffect(() => {
-    console.log("Selected date changed, reloading data:", selectedDate);
     loadData();
   }, [selectedDate]);
 
@@ -251,377 +244,150 @@ export default function HomeScreen() {
 
   const showError = (message: string) => {
     setErrorMessage(message);
-    setErrorModalVisible(true);
+    setShowErrorModal(true);
   };
 
   const showSuccess = (message: string) => {
-    setSuccessModalMessage(message);
+    setSuccessMessage(message);
     setShowSuccessModal(true);
   };
 
   const loadData = async () => {
-    console.log("Loading home screen data");
+    const dateString = formatDateLocal(selectedDate);
+    console.log('Loading home data for date (local):', dateString);
     setLoading(true);
     try {
-      const dateString = formatDateLocal(selectedDate);
-      const [goalsRes, lifeAreasRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes] = await Promise.all([
-        authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
-        authenticatedGet('/api/life-areas'),
+      const [
+        lifeAreasRes,
+        currenciesRes,
+        gainsLossesRes,
+        strategiesRes,
+        prefsRes,
+        reflectionsRes,
+        journalRes,
+      ] = await Promise.all([
+        authenticatedGet(`/api/goals/activated?date=${dateString}`),
         authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/user-preferences'),
-        authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
+        authenticatedGet(`/api/journals/by-date?date=${dateString}`),
       ]);
-      
-      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+
       const lifeAreasData = Array.isArray(lifeAreasRes) ? lifeAreasRes : (lifeAreasRes?.data || []);
       const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
       const prefsData = prefsRes?.data || prefsRes || {};
-      const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
-      
-      console.log('[Home] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
-      console.log('[Home] Loaded currencies for modal:', currenciesData.length, 'currencies');
-      
-      setActivatedGoals(goalsData);
-      setLifeAreaHierarchy(lifeAreasData);
+      const journalData = journalRes?.data || journalRes || null;
+
+      setLifeAreas(lifeAreasData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
       setUserPreferences(prefsData);
-      setJournalEntry(journalData);
-      setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
-      
-      // Log timezone info for debugging and auto-update if changed
-      const deviceTimezone = getLocalTimezone();
-      const storedTimezone = prefsData.timezone;
-      console.log('[Home] Timezone info:', {
-        device: deviceTimezone,
-        stored: storedTimezone,
-        calendar: prefsData.alternativeCalendar,
-      });
-      
-      // Auto-update timezone if device timezone has changed (e.g., user traveled)
-      if (!storedTimezone || storedTimezone !== deviceTimezone) {
-        console.log('[Home] Updating timezone to device timezone:', deviceTimezone);
-        try {
-          await authenticatedPut('/api/user-preferences', { timezone: deviceTimezone });
-          console.log('[Home] Timezone updated successfully to:', deviceTimezone);
-        } catch (tzError) {
-          // Non-critical - just log the error
-          console.warn('[Home] Failed to update timezone:', tzError);
-        }
-      }
+      setJournalEntry(journalData);
+      setAlternativeCalendar(prefsData.alternativeCalendar || 'gregorian');
 
-      // Set initial view based on user's preferred home screen (only on first load)
-      if (!homeScreenInitialized) {
-        const preferredScreen = prefsData.preferredHomeScreen;
-        console.log('[Home] Setting initial view based on preferred home screen:', preferredScreen);
-        if (preferredScreen === 'goals-detailed') {
-          setCurrentView('express');
-          setExpressViewMode('detailed');
-        } else if (preferredScreen === 'goals-concise') {
-          setCurrentView('express');
-          setExpressViewMode('concise');
-        } else {
-          // Default to reflect
-          setCurrentView('reflect');
-        }
-        setHomeScreenInitialized(true);
-      }
-      
-      console.log("Home data loaded successfully");
-    } catch (error: any) {
-      console.error("Error loading home data:", error);
-      showError(error.message || "Failed to load data");
+      calculateLifetimeTotals();
+
+      console.log('Home data loaded successfully');
+    } catch (error) {
+      console.error('Error loading home data:', error);
+      showError('Failed to load home data');
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoalSuccess = async (goalId: string) => {
-    console.log("Recording success for goal:", goalId);
-    
-    // Create UTC timestamp for the selected date at current time in local timezone
-    const localZone = getLocalTimezone();
-    const now = DateTime.now().setZone(localZone);
-    // Use selected date but current time, converted to UTC ISO 8601
-    const selectedDt = DateTime.fromJSDate(selectedDate, { zone: localZone })
-      .set({ hour: now.hour, minute: now.minute, second: now.second });
-    const utcTimestamp = selectedDt.toUTC().toISO();
-    console.log(`[Home] Success timestamp: local=${selectedDt.toISO()} -> UTC=${utcTimestamp}`);
-    
-    const newEntry: DailyEntry = {
-      id: `temp-${Date.now()}`,
-      type: 'success',
-      timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
-    };
-    
-    setActivatedGoals(prevGoals => 
-      prevGoals.map(goal => {
-        if (goal.id === goalId) {
-          const updatedEntries = [...(goal.dailyEntries || []), newEntry];
-          return {
-            ...goal,
-            dailyEntries: updatedEntries,
-            todaySuccessCount: goal.todaySuccessCount + 1,
-          };
-        }
-        return goal;
-      })
-    );
-    
+    console.log('Recording success for goal:', goalId);
     try {
-      const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
-      const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
-      
-      setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
-            return {
-              ...goal,
-              dailyEntries: goal.dailyEntries?.map(e => 
-                e.id === newEntry.id ? { ...e, id: response.entryId || e.id } : e
-              ),
-              todaySuccessCount: response.todaySuccessCount || goal.todaySuccessCount,
-              successCount: response.successCount || goal.successCount,
-              streak: response.streak !== undefined ? response.streak : goal.streak,
-            };
-          }
-          return goal;
-        })
-      );
-    } catch (error: any) {
-      console.error("Error recording success:", error);
-      showError(error.message || "Failed to record success");
-      
-      setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
-            const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== newEntry.id);
-            return {
-              ...goal,
-              dailyEntries: filteredEntries,
-              todaySuccessCount: Math.max(0, goal.todaySuccessCount - 1),
-            };
-          }
-          return goal;
-        })
-      );
+      const dateString = formatDateLocal(selectedDate);
+      await authenticatedPost(`/api/goals/${goalId}/success`, { date: dateString });
+      showSuccess('Success recorded!');
+      await loadData();
+    } catch (error) {
+      console.error('Error recording success:', error);
+      showError('Failed to record success');
     }
   };
 
   const handleGoalStruggle = async (goalId: string) => {
-    console.log("Recording struggle for goal:", goalId);
-    
-    // Create UTC timestamp for the selected date at current time in local timezone
-    const localZone = getLocalTimezone();
-    const now = DateTime.now().setZone(localZone);
-    const selectedDt = DateTime.fromJSDate(selectedDate, { zone: localZone })
-      .set({ hour: now.hour, minute: now.minute, second: now.second });
-    const utcTimestamp = selectedDt.toUTC().toISO();
-    console.log(`[Home] Struggle timestamp: local=${selectedDt.toISO()} -> UTC=${utcTimestamp}`);
-    
-    const newEntry: DailyEntry = {
-      id: `temp-${Date.now()}`,
-      type: 'struggle',
-      timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
-    };
-    
-    setActivatedGoals(prevGoals => 
-      prevGoals.map(goal => {
-        if (goal.id === goalId) {
-          const updatedEntries = [...(goal.dailyEntries || []), newEntry];
-          return {
-            ...goal,
-            dailyEntries: updatedEntries,
-            todayStruggleCount: goal.todayStruggleCount + 1,
-          };
-        }
-        return goal;
-      })
-    );
-    
+    console.log('Recording struggle for goal:', goalId);
     try {
-      const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
-      const response: any = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
-      
-      setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
-            return {
-              ...goal,
-              dailyEntries: goal.dailyEntries?.map(e => 
-                e.id === newEntry.id ? { ...e, id: response?.entryId || e.id } : e
-              ),
-              todayStruggleCount: response?.todayStruggleCount || goal.todayStruggleCount,
-              struggleCount: response?.struggleCount || goal.struggleCount,
-              streak: response?.streak !== undefined ? response.streak : goal.streak,
-            };
-          }
-          return goal;
-        })
-      );
-    } catch (error: any) {
-      console.error("Error recording struggle:", error);
-      showError(error.message || "Failed to record struggle");
-      
-      setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
-            const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== newEntry.id);
-            return {
-              ...goal,
-              dailyEntries: filteredEntries,
-              todayStruggleCount: Math.max(0, goal.todayStruggleCount - 1),
-            };
-          }
-          return goal;
-        })
-      );
+      const dateString = formatDateLocal(selectedDate);
+      await authenticatedPost(`/api/goals/${goalId}/struggle`, { date: dateString });
+      showSuccess('Struggle recorded');
+      await loadData();
+    } catch (error) {
+      console.error('Error recording struggle:', error);
+      showError('Failed to record struggle');
     }
   };
 
   const handleDeleteEntry = async (goalId: string, entryId: string) => {
-    console.log("Deleting entry:", entryId, "for goal:", goalId);
-    
-    // If this is a temp ID (optimistic entry not yet confirmed by server), just remove it locally
-    if (entryId.startsWith('temp-')) {
-      console.log("Removing temp entry locally (not yet persisted):", entryId);
-      setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
-            const entryToDelete = goal.dailyEntries?.find(e => e.id === entryId);
-            const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== entryId);
-            return {
-              ...goal,
-              dailyEntries: filteredEntries,
-              todaySuccessCount: entryToDelete?.type === 'success' ? Math.max(0, goal.todaySuccessCount - 1) : goal.todaySuccessCount,
-              todayStruggleCount: entryToDelete?.type === 'struggle' ? Math.max(0, goal.todayStruggleCount - 1) : goal.todayStruggleCount,
-            };
-          }
-          return goal;
-        })
-      );
-      return;
-    }
-    
-    // Optimistically remove the entry from UI
-    setActivatedGoals(prevGoals => 
-      prevGoals.map(goal => {
-        if (goal.id === goalId) {
-          const entryToDelete = goal.dailyEntries?.find(e => e.id === entryId);
-          const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== entryId);
-          return {
-            ...goal,
-            dailyEntries: filteredEntries,
-            todaySuccessCount: entryToDelete?.type === 'success' ? Math.max(0, goal.todaySuccessCount - 1) : goal.todaySuccessCount,
-            todayStruggleCount: entryToDelete?.type === 'struggle' ? Math.max(0, goal.todayStruggleCount - 1) : goal.todayStruggleCount,
-          };
-        }
-        return goal;
-      })
-    );
-    
+    console.log('Deleting entry:', entryId, 'for goal:', goalId);
     try {
-      console.log(`[API] Deleting entry ${entryId} for goal ${goalId}`);
       await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
-      console.log(`[API] Entry deleted successfully`);
-    } catch (error: any) {
-      console.error("Error deleting entry:", error);
-      showError(error.message || "Failed to delete entry");
-      // Reload to restore correct state
+      showSuccess('Entry deleted');
       await loadData();
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      showError('Failed to delete entry');
     }
   };
 
   const handleEditGoal = (goalId: string) => {
-    console.log("Opening goal editor for:", goalId);
+    console.log('Navigating to edit goal:', goalId);
     router.push(`/create-goal?id=${goalId}`);
   };
 
   const handleCreateGoal = () => {
-    console.log("Opening goal creation screen");
+    console.log('Navigating to create goal');
     router.push('/create-goal');
   };
 
-  const openAddReflectionModal = (goalId?: string) => {
-    console.log("Opening Add Reflection modal from Home", goalId ? `for goal: ${goalId}` : "");
-    setPrefilledGoalId(goalId);
+  const openAddReflectionModal = () => {
     setEditingReflection(null);
-    
-    if (goalId && currentView === 'express') {
-      const goal = activatedGoals.find(g => g.id === goalId);
-      if (goal) {
-        console.log('[Home] Pre-filling reflection modal with goal data:', {
-          category: goal.behaviorCategories?.[0],
-          type: goal.type === 'PROACTIVE' ? 'Proactive' : 'Restraint',
-          description: goal.title,
-        });
-        
-        const reflectionType: 'Restraint' | 'Proactive' = 
-          goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive';
-        
-        const behaviorCategory = goal.behaviorCategories?.[0];
-        
-        setPrefilledGoalData({
-          category: behaviorCategory,
-          type: reflectionType,
-          description: goal.title,
-        });
-      } else {
-        setPrefilledGoalData(undefined);
-      }
-    } else {
-      setPrefilledGoalData(undefined);
-    }
-    
     setShowAddReflectionModal(true);
   };
 
   const openEditReflectionModal = (reflection: Reflection) => {
     setEditingReflection(reflection);
-    setPrefilledGoalId(undefined);
     setShowAddReflectionModal(true);
   };
 
   const handleReflectionSaved = (reflection: Reflection) => {
-    console.log('[Home] Reflection saved, closing modal and reloading data');
+    console.log('Reflection saved, updating list');
     if (editingReflection) {
       setReflections(reflections.map(r => r.id === reflection.id ? reflection : r));
     } else {
       setReflections([...reflections, reflection]);
     }
     setShowAddReflectionModal(false);
-    setPrefilledGoalId(undefined);
     setEditingReflection(null);
     showSuccess('Reflection saved successfully');
-    loadData();
   };
 
   const handleDeleteReflection = async (id: string) => {
     console.log('Deleting reflection:', id);
     try {
-      setLoading(true);
       await authenticatedDelete(`/api/reflections/${id}`);
       setReflections(reflections.filter(r => r.id !== id));
       showSuccess('Reflection deleted successfully');
     } catch (error) {
       console.error('Error deleting reflection:', error);
       showError('Failed to delete reflection');
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleOpenJournalModal = () => {
     console.log('Opening journal modal');
-    setTempJournalContent(journalContent);
+    setTempJournalContent(journalEntry?.content || '');
     setShowJournalModal(true);
   };
 
@@ -647,17 +413,14 @@ export default function HomeScreen() {
       if (savedEntry && savedEntry.deleted) {
         console.log('Journal entry deleted (content was empty)');
         setJournalEntry(null);
-        setJournalContent('');
         showSuccess('Journal entry deleted');
       } else if (savedEntry) {
         console.log('Journal entry saved');
         setJournalEntry(savedEntry);
-        setJournalContent(tempJournalContent);
         showSuccess('Journal saved successfully');
       } else {
         console.log('No journal entry (content was empty and no existing entry)');
         setJournalEntry(null);
-        setJournalContent('');
       }
       
       setShowJournalModal(false);
@@ -671,14 +434,14 @@ export default function HomeScreen() {
   };
 
   const toggleLifeArea = (areaId: string) => {
-    setCollapsedAreas(prev => ({
+    setExpandedLifeAreas(prev => ({
       ...prev,
       [areaId]: !prev[areaId],
     }));
   };
 
   const toggleReflectionCategory = (category: string) => {
-    setCollapsedCategories(prev => ({
+    setExpandedReflectionCategories(prev => ({
       ...prev,
       [category]: !prev[category],
     }));
@@ -697,93 +460,19 @@ export default function HomeScreen() {
   };
 
   const formatDateDisplay = (date: Date) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const compareDate = new Date(date);
-    compareDate.setHours(0, 0, 0, 0);
-    
-    const diffTime = compareDate.getTime() - today.getTime();
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === -1) return 'Yesterday';
-    if (diffDays === 1) return 'Tomorrow';
-    
-    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-    return date.toLocaleDateString(undefined, options);
+    const options: Intl.DateTimeFormatOptions = { 
+      weekday: 'short',
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    };
+    return date.toLocaleDateString('en-US', options);
   };
 
   const calculateDailyCurrencyTallies = (goal: ActivatedGoal) => {
-    const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
-    const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
-    const successCount = dailySuccessEntries.length;
-    const struggleCount = dailyStruggleEntries.length;
-
-    const tallies: Array<{ 
-      tally: number; 
-      currencySymbol: string; 
-      currencyType: 'reward' | 'consequence';
-      currencyId: string;
-    }> = [];
-
-    if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
-      const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
-      if (rewardCurrency) {
-        const completedRewardSets = Math.floor(successCount / goal.rewardSuccesses);
-        if (completedRewardSets > 0) {
-          const rewardAmount = completedRewardSets * goal.rewardAmount;
-          let rewardTally = 0;
-          
-          if (rewardCurrency.onSuccess === 'ADD') {
-            rewardTally = rewardAmount;
-          } else if (rewardCurrency.onSuccess === 'SUBTRACT') {
-            rewardTally = -rewardAmount;
-          }
-          
-          if (rewardTally !== 0) {
-            tallies.push({
-              tally: rewardTally,
-              currencySymbol: rewardCurrency.symbol || '',
-              currencyType: rewardCurrency.type || 'reward',
-              currencyId: rewardCurrency.id,
-            });
-          }
-        }
-      }
-    }
-
-    if (goal.consequenceCurrencyId && goal.consequenceAmount && goal.consequenceFailures) {
-      const consequenceCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
-      if (consequenceCurrency) {
-        const completedConsequenceSets = Math.floor(struggleCount / goal.consequenceFailures);
-        if (completedConsequenceSets > 0) {
-          const consequenceAmount = completedConsequenceSets * goal.consequenceAmount;
-          let consequenceTally = 0;
-          
-          if (consequenceCurrency.onFailure === 'ADD') {
-            consequenceTally = consequenceAmount;
-          } else if (consequenceCurrency.onFailure === 'SUBTRACT') {
-            consequenceTally = -consequenceAmount;
-          }
-          
-          if (consequenceTally !== 0) {
-            const existingTallyIndex = tallies.findIndex(t => t.currencyId === consequenceCurrency.id);
-            if (existingTallyIndex !== -1) {
-              tallies[existingTallyIndex].tally += consequenceTally;
-            } else {
-              tallies.push({
-                tally: consequenceTally,
-                currencySymbol: consequenceCurrency.symbol || '',
-                currencyType: consequenceCurrency.type || 'consequence',
-                currencyId: consequenceCurrency.id,
-              });
-            }
-          }
-        }
-      }
-    }
-    
-    return tallies.filter(t => t.tally !== 0);
+    const rewardTally = goal.todaySuccessCount || 0;
+    const consequenceTally = goal.todayStruggleCount || 0;
+    return { rewardTally, consequenceTally };
   };
 
   const getCategoryIcon = (category: string) => {
@@ -797,259 +486,184 @@ export default function HomeScreen() {
 
   const countTotalGoals = (area: LifeAreaNode): number => {
     let count = area.goals.length;
-    for (const child of area.children) {
+    area.children.forEach(child => {
       count += countTotalGoals(child);
-    }
+    });
     return count;
   };
 
   const hasActiveGoalsInHierarchy = (area: LifeAreaNode): boolean => {
     if (area.goals.length > 0) return true;
-    
-    for (const child of area.children) {
-      if (hasActiveGoalsInHierarchy(child)) return true;
-    }
-    
-    return false;
+    return area.children.some(child => hasActiveGoalsInHierarchy(child));
   };
 
   const getGoalsForArea = (areaId: string): ActivatedGoal[] => {
-    return activatedGoals.filter(goal => goal.lifeArea?.id === areaId);
+    const findGoals = (areas: LifeAreaNode[]): ActivatedGoal[] => {
+      for (const area of areas) {
+        if (area.id === areaId) {
+          return area.goals;
+        }
+        const childGoals = findGoals(area.children);
+        if (childGoals.length > 0) return childGoals;
+      }
+      return [];
+    };
+    return findGoals(lifeAreas);
   };
 
   const handleScroll = (event: any) => {
-    scrollPositionRef.current = event.nativeEvent.contentOffset.y;
+    const offsetY = event.nativeEvent.contentOffset.y;
+    console.log('Scroll offset:', offsetY);
   };
 
-  const calculateLifetimeTotals = () => {
-    const lifetimeSuccesses = activatedGoals.reduce((sum, goal) => sum + goal.successCount, 0);
-    return lifetimeSuccesses;
+  const calculateLifetimeTotals = async () => {
+    try {
+      const response = await authenticatedGet('/api/goals/lifetime-totals');
+      const data = response?.data || response || { successes: 0, struggles: 0 };
+      setLifetimeTotals(data);
+    } catch (error) {
+      console.error('Error loading lifetime totals:', error);
+    }
   };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
 
   const renderGoalCard = (goal: ActivatedGoal) => {
-    const typeIcon = goal.type === 'RESTRAINING' ? 'cancel' : 'check-circle';
-    const typeColor = goal.type === 'RESTRAINING' ? colors.error : colors.success;
+    const { rewardTally, consequenceTally } = calculateDailyCurrencyTallies(goal);
+    const hasEntries = goal.dailyEntries && goal.dailyEntries.length > 0;
     
-    const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
-    const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
-    const successCount = dailySuccessEntries.length;
-    const struggleCount = dailyStruggleEntries.length;
-    
-    const hasDescription = goal.description && goal.description.trim().length > 0;
-    
-    const currencyTallies = calculateDailyCurrencyTallies(goal);
-    const hasCurrencyTallies = currencyTallies.length > 0;
-    
-    const successButtonText = 'Success';
-    const struggleButtonText = 'Struggle';
-    
+    const goalTypeText = goal.type === 'RESTRAINING' ? 'Restraining' : 'Proactive';
+    const goalTypeColor = goal.type === 'RESTRAINING' ? colors.secondary : colors.primary;
+
     return (
       <View key={goal.id} style={styles.goalCard}>
-        <View style={styles.goalCardHeader}>
-          <TouchableOpacity 
-            style={styles.goalTitleRow}
-            onPress={() => handleEditGoal(goal.id)}
-          >
-            <IconSymbol
-              ios_icon_name={goal.type === 'RESTRAINING' ? 'xmark.circle.fill' : 'checkmark.circle.fill'}
-              android_material_icon_name={typeIcon}
-              size={20}
-              color={typeColor}
-            />
-            <View style={styles.goalTitleContainer}>
-              <Text style={styles.goalCardTitle}>{goal.title}</Text>
-              {hasDescription && (
-                <Text style={styles.goalDescription} numberOfLines={2}>
-                  {goal.description}
-                </Text>
-              )}
-            </View>
-          </TouchableOpacity>
-          
-          {hasCurrencyTallies && (
-            <View style={styles.currencyTalliesContainer}>
-              {currencyTallies.map((tally, index) => {
-                const tallyColor = tally.currencyType === 'reward' ? colors.success : colors.error;
-                const displayTally = tally.tally < 0 ? `-${Math.abs(tally.tally)}` : `${tally.tally}`;
-                const currencySymbolText = tally.currencySymbol;
-                
-                return (
-                  <View key={index} style={styles.currencyTallyBadge}>
-                    {currencySymbolText && (
-                      <Text style={styles.currencySymbolText}>
-                        {currencySymbolText}
-                      </Text>
-                    )}
-                    <Text style={[styles.currencyTallyText, { color: tallyColor }]}>
-                      {displayTally}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-          )}
+        <View style={styles.goalHeader}>
+          <View style={styles.goalTitleRow}>
+            <Text style={styles.goalTitle}>{goal.title}</Text>
+            <TouchableOpacity onPress={() => handleEditGoal(goal.id)} style={styles.editButton}>
+              <IconSymbol
+                ios_icon_name="pencil"
+                android_material_icon_name="edit"
+                size={18}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.goalTypeBadge, { backgroundColor: goalTypeColor + '20' }]}>
+            <Text style={[styles.goalTypeBadgeText, { color: goalTypeColor }]}>{goalTypeText}</Text>
+          </View>
         </View>
-        
-        <View style={styles.tallyRow}>
-          <View style={styles.tallySection}>
-            <Text style={[styles.tallyCount, { color: colors.success }]}>{successCount}</Text>
-            <IconSymbol
-              ios_icon_name="checkmark"
-              android_material_icon_name="check"
-              size={16}
-              color={colors.success}
-            />
-          </View>
-          <View style={styles.tallySection}>
-            <Text style={[styles.tallyCount, { color: colors.error }]}>{struggleCount}</Text>
-            <IconSymbol
-              ios_icon_name="xmark"
-              android_material_icon_name="close"
-              size={16}
-              color={colors.error}
-            />
-          </View>
-          {goal.streak !== undefined && goal.streak > 0 && (
-            <View style={styles.tallySection}>
-              <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{goal.streak}</Text>
-              <Text style={styles.streakEmoji}>🔥</Text>
-            </View>
-          )}
-        </View>
-        
-        {goal.dailyEntries && goal.dailyEntries.length > 0 && (
-          <View style={styles.entriesContainer}>
-            {goal.dailyEntries.map((entry) => {
-              const isSuccess = entry.type === 'success';
-              const entryColor = isSuccess ? colors.success : colors.error;
-              const entryIcon = isSuccess ? 'check' : 'close';
-              
-              return (
-                <TouchableOpacity
-                  key={entry.id}
-                  style={[styles.entryBadge, { borderColor: entryColor }]}
-                  onPress={() => openAddReflectionModal(goal.id)}
-                >
-                  <IconSymbol
-                    ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
-                    android_material_icon_name={entryIcon}
-                    size={12}
-                    color={entryColor}
-                  />
-                  <TouchableOpacity
-                    style={styles.deleteEntryButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleDeleteEntry(goal.id, entry.id);
-                    }}
-                  >
-                    <IconSymbol
-                      ios_icon_name="xmark"
-                      android_material_icon_name="close"
-                      size={10}
-                      color={colors.textSecondary}
-                    />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+
+        {goal.description && (
+          <Text style={styles.goalDescription}>{goal.description}</Text>
         )}
-        
-        <View style={styles.actionButtons}>
+
+        <View style={styles.goalActions}>
           <TouchableOpacity
             style={[styles.actionButton, styles.successButton]}
             onPress={() => handleGoalSuccess(goal.id)}
           >
             <IconSymbol
-              ios_icon_name="checkmark"
-              android_material_icon_name="check"
-              size={18}
-              color="#FFFFFF"
+              ios_icon_name="checkmark.circle.fill"
+              android_material_icon_name="check-circle"
+              size={24}
+              color={colors.background}
             />
-            <Text style={styles.actionButtonText}>{successButtonText}</Text>
+            <Text style={styles.actionButtonText}>Success</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.actionButton, styles.struggleButton]}
             onPress={() => handleGoalStruggle(goal.id)}
           >
             <IconSymbol
-              ios_icon_name="xmark"
-              android_material_icon_name="close"
-              size={18}
-              color="#FFFFFF"
+              ios_icon_name="xmark.circle.fill"
+              android_material_icon_name="cancel"
+              size={24}
+              color={colors.background}
             />
-            <Text style={styles.actionButtonText}>{struggleButtonText}</Text>
+            <Text style={styles.actionButtonText}>Struggle</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButton, styles.reflectionButton]}
-            onPress={() => openAddReflectionModal(goal.id)}
-          >
-            <IconSymbol
-              ios_icon_name="note.text"
-              android_material_icon_name="edit"
-              size={18}
-              color="#FFFFFF"
-            />
-          </TouchableOpacity>
+        </View>
+
+        {hasEntries && (
+          <View style={styles.entriesSection}>
+            <Text style={styles.entriesSectionTitle}>Today&apos;s Entries</Text>
+            {goal.dailyEntries?.map((entry, index) => {
+              const entryTypeText = entry.type === 'success' ? 'Success' : 'Struggle';
+              const entryTypeColor = entry.type === 'success' ? colors.success : colors.error;
+              const entryTime = new Date(entry.timestamp).toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit'
+              });
+
+              return (
+                <View key={index} style={styles.entryItem}>
+                  <View style={styles.entryInfo}>
+                    <View style={[styles.entryBadge, { backgroundColor: entryTypeColor + '20' }]}>
+                      <Text style={[styles.entryBadgeText, { color: entryTypeColor }]}>{entryTypeText}</Text>
+                    </View>
+                    <Text style={styles.entryTime}>{entryTime}</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteEntry(goal.id, entry.id)}
+                    style={styles.deleteEntryButton}
+                  >
+                    <IconSymbol
+                      ios_icon_name="trash"
+                      android_material_icon_name="delete"
+                      size={18}
+                      color={colors.error}
+                    />
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        <View style={styles.goalStats}>
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Today</Text>
+            <Text style={styles.statValue}>
+              {goal.todaySuccessCount || 0} / {goal.todayStruggleCount || 0}
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Text style={styles.statLabel}>Lifetime</Text>
+            <Text style={styles.statValue}>
+              {goal.successCount || 0} / {goal.struggleCount || 0}
+            </Text>
+          </View>
+          {goal.streak !== undefined && goal.streak > 0 && (
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Streak</Text>
+              <Text style={[styles.statValue, styles.streakValue]}>
+                {goal.streak} 🔥
+              </Text>
+            </View>
+          )}
         </View>
       </View>
     );
   };
 
   const renderConciseGoalCard = (goal: ActivatedGoal) => {
-    const dailySuccessEntries = goal.dailyEntries?.filter(e => e.type === 'success') || [];
-    const dailyStruggleEntries = goal.dailyEntries?.filter(e => e.type === 'struggle') || [];
-    const successCount = dailySuccessEntries.length;
-    const struggleCount = dailyStruggleEntries.length;
-    
-    const currencyTallies = calculateDailyCurrencyTallies(goal);
-    
     return (
-      <TouchableOpacity 
-        key={goal.id} 
-        style={styles.conciseGoalCard}
-        onPress={() => handleEditGoal(goal.id)}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.conciseGoalTitle} numberOfLines={1}>{goal.title}</Text>
-        <View style={styles.conciseCounters}>
-          <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.success }]}>✓{successCount}</Text>
-          </View>
-          <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.error }]}>✗{struggleCount}</Text>
-          </View>
-          {goal.streak !== undefined && goal.streak > 0 && (
-            <View style={styles.conciseCounter}>
-              <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{goal.streak}</Text>
-            </View>
-          )}
-          {currencyTallies.map((tally, index) => (
-            <View key={index} style={styles.conciseCounter}>
-              <Text style={[styles.conciseCounterText, { color: tally.currencyType === 'reward' ? colors.success : colors.error }]}>
-                {tally.currencySymbol}{Math.abs(tally.tally)}
-              </Text>
-            </View>
-          ))}
+      <View key={goal.id} style={styles.conciseGoalCard}>
+        <View style={styles.conciseGoalHeader}>
+          <Text style={styles.conciseGoalTitle} numberOfLines={1}>{goal.title}</Text>
+          <TouchableOpacity onPress={() => handleEditGoal(goal.id)} style={styles.editButton}>
+            <IconSymbol
+              ios_icon_name="pencil"
+              android_material_icon_name="edit"
+              size={16}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
         </View>
-        <View style={styles.conciseActions}>
+        <View style={styles.conciseGoalActions}>
           <TouchableOpacity
-            style={styles.conciseCheckButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleGoalSuccess(goal.id);
-            }}
+            style={styles.conciseActionButton}
+            onPress={() => handleGoalSuccess(goal.id)}
           >
             <IconSymbol
               ios_icon_name="checkmark.circle.fill"
@@ -1058,12 +672,12 @@ export default function HomeScreen() {
               color={colors.success}
             />
           </TouchableOpacity>
+          <Text style={styles.conciseGoalStats}>
+            {goal.todaySuccessCount || 0} / {goal.todayStruggleCount || 0}
+          </Text>
           <TouchableOpacity
-            style={styles.conciseStruggleButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleGoalStruggle(goal.id);
-            }}
+            style={styles.conciseActionButton}
+            onPress={() => handleGoalStruggle(goal.id)}
           >
             <IconSymbol
               ios_icon_name="xmark.circle.fill"
@@ -1073,73 +687,65 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
-  const renderLifeAreaNode = (area: LifeAreaNode, depth: number = 0): React.ReactNode => {
-    const isCollapsed = collapsedAreas[area.id];
-    const goalsForThisArea = getGoalsForArea(area.id);
+  const renderLifeAreaNode = (area: LifeAreaNode, depth: number) => {
+    const isExpanded = expandedLifeAreas[area.id];
+    const hasGoals = area.goals.length > 0;
     const hasChildren = area.children.length > 0;
-    const hasGoals = goalsForThisArea.length > 0;
-    
-    if (!hasActiveGoalsInHierarchy(area)) {
-      return null;
-    }
-    
-    const areaIconName = area.icon;
+    const totalGoals = countTotalGoals(area);
+    const hasAnyGoals = hasActiveGoalsInHierarchy(area);
+
+    if (!hasAnyGoals) return null;
+
+    const areaIconName = area.icon || 'folder';
     const areaColor = area.color || colors.primary;
-    
+
     return (
-      <View key={area.id} style={styles.lifeAreaSection}>
-        <TouchableOpacity 
-          style={[styles.lifeAreaHeader, { marginLeft: depth * 12 }]}
+      <View key={area.id} style={[styles.lifeAreaContainer, { marginLeft: depth * 16 }]}>
+        <TouchableOpacity
+          style={styles.lifeAreaHeader}
           onPress={() => toggleLifeArea(area.id)}
         >
           <View style={styles.lifeAreaTitleRow}>
             <IconSymbol
-              ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
-              android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
-              size={16}
+              ios_icon_name={isExpanded ? 'chevron.down' : 'chevron.right'}
+              android_material_icon_name={isExpanded ? 'arrow-downward' : 'arrow-forward'}
+              size={20}
               color={colors.text}
             />
-            {areaIconName && (
-              <Text style={[styles.lifeAreaIcon, { color: areaColor }]}>
-                {areaIconName}
-              </Text>
-            )}
-            <Text style={styles.lifeAreaTitle}>{area.name}</Text>
+            <View style={[styles.lifeAreaIconContainer, { backgroundColor: areaColor + '20' }]}>
+              <Text style={styles.lifeAreaIconText}>{areaIconName}</Text>
+            </View>
+            <Text style={styles.lifeAreaName}>{area.name}</Text>
+          </View>
+          <View style={styles.lifeAreaBadge}>
+            <Text style={styles.lifeAreaBadgeText}>{totalGoals}</Text>
           </View>
         </TouchableOpacity>
-        
-        {!isCollapsed && (
-          <>
-            {hasGoals && goalsForThisArea.map(goal => 
-              expressViewMode === 'detailed' ? renderGoalCard(goal) : renderConciseGoalCard(goal)
-            )}
-            
+
+        {isExpanded && (
+          <View style={styles.lifeAreaContent}>
+            {hasGoals && area.goals.map(goal => renderConciseGoalCard(goal))}
             {hasChildren && area.children.map(child => renderLifeAreaNode(child, depth + 1))}
-          </>
+          </View>
         )}
       </View>
     );
   };
 
   const dateDisplay = formatDateDisplay(selectedDate);
+  const alternativeDateDisplay = formatAlternativeDate(selectedDate, alternativeCalendar);
+  const isToday = formatDateLocal(selectedDate) === formatDateLocal(new Date());
 
-  const goalsForModal = activatedGoals.map(g => ({
-    id: g.id,
-    title: g.title,
-    behaviorCategories: g.behaviorCategories,
-    rewardCurrencyId: g.rewardCurrencyId,
-    rewardAmount: g.rewardAmount,
-    rewardSuccesses: g.rewardSuccesses,
-    consequenceCurrencyId: g.consequenceCurrencyId,
-    consequenceAmount: g.consequenceAmount,
-    consequenceFailures: g.consequenceFailures,
-    successCount: g.successCount,
-    struggleCount: g.struggleCount,
-  }));
+  const allGoals = lifeAreas.flatMap(area => {
+    const collectGoals = (node: LifeAreaNode): ActivatedGoal[] => {
+      return [...node.goals, ...node.children.flatMap(collectGoals)];
+    };
+    return collectGoals(area);
+  });
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
@@ -1154,331 +760,147 @@ export default function HomeScreen() {
     groupedReflections['All'] = reflections;
   }
 
-  const hasJournalContent = journalContent && journalContent.trim().length > 0;
-  const journalPreview = hasJournalContent ? journalContent.substring(0, 100) + (journalContent.length > 100 ? '...' : '') : '';
-
-  const uncategorizedGoals = activatedGoals.filter(goal => !goal.lifeArea);
-
-  const lifetimeSuccessCount = calculateLifetimeTotals();
-
-  const alternativeCalendarDate = userPreferences.alternativeCalendar && userPreferences.alternativeCalendar !== 'gregorian' 
-    ? formatAlternativeDate(selectedDate, userPreferences.alternativeCalendar) 
-    : null;
+  const hasJournalContent = journalEntry && journalEntry.content && journalEntry.content.trim().length > 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView 
-        ref={scrollViewRef}
-        style={styles.content} 
-        contentContainerStyle={styles.contentContainer}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-      >
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={styles.container}>
         <View style={styles.header}>
-          <Image
-            source={require('@/assets/images/Chesbon_app_Logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.headerTitle}>Cheshbon</Text>
-        </View>
+          <View style={styles.headerTop}>
+            <Image 
+              source={require('@/assets/images/Chesbon_app_Logo.png')} 
+              style={styles.appLogo}
+            />
+            <Text style={styles.appName}>Cheshbon</Text>
+          </View>
+          
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity 
+              style={styles.quickActionButton}
+              onPress={() => router.push('/reflect')}
+            >
+              <IconSymbol
+                ios_icon_name="pencil"
+                android_material_icon_name="edit"
+                size={20}
+                color={colors.background}
+              />
+              <Text style={styles.quickActionText}>Reflect</Text>
+            </TouchableOpacity>
 
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[styles.actionButtonLarge, currentView === 'reflect' && styles.actionButtonLargeActive]}
-            onPress={() => {
-              console.log("Switching to Reflect view");
-              setCurrentView('reflect');
-            }}
-          >
-            <IconSymbol
-              ios_icon_name="square.and.pencil"
-              android_material_icon_name="edit"
-              size={20}
-              color="#FFFFFF"
-            />
-            <Text style={styles.actionButtonLargeText}>Reflect</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButtonLarge, currentView === 'express' && styles.actionButtonLargeActive]}
-            onPress={() => {
-              console.log("Switching to Express view");
-              setCurrentView('express');
-            }}
-          >
-            <IconSymbol
-              ios_icon_name="bolt.fill"
-              android_material_icon_name="flash-on"
-              size={20}
-              color="#FFFFFF"
-            />
-            <Text style={styles.actionButtonLargeText}>Express</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.dateNavigator}>
-          <TouchableOpacity 
-            style={styles.dateNavButton}
-            onPress={handlePreviousDay}
-          >
-            <IconSymbol
-              ios_icon_name="chevron.left"
-              android_material_icon_name="arrow-back"
-              size={18}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-          
-          <TouchableOpacity onPress={() => {
-            console.log("Opening date picker");
-            setShowDatePicker(true);
-          }}>
-            <Text style={styles.dateDisplay}>{dateDisplay}</Text>
-            {alternativeCalendarDate && (
-              <Text style={styles.alternativeCalendarDateSmall}>
-                {alternativeCalendarDate}
-              </Text>
-            )}
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={styles.dateNavButton}
-            onPress={handleNextDay}
-          >
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="arrow-forward"
-              size={18}
-              color={colors.textSecondary}
-            />
-          </TouchableOpacity>
-          
-          <View style={styles.lifetimeCounterContainer}>
-            <IconSymbol
-              ios_icon_name="checkmark"
-              android_material_icon_name="check"
-              size={10}
-              color={colors.success}
-            />
-            <Text style={styles.lifetimeCounterText}>{lifetimeSuccessCount}</Text>
+            <TouchableOpacity 
+              style={styles.quickActionButton}
+              onPress={() => router.push('/reflect?openModal=true')}
+            >
+              <IconSymbol
+                ios_icon_name="bolt.fill"
+                android_material_icon_name="flash-on"
+                size={20}
+                color={colors.background}
+              />
+              <Text style={styles.quickActionText}>Express</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
-        <DatePickerModal
-          visible={showDatePicker}
-          value={selectedDate}
-          mode="date"
-          onConfirm={(date) => {
-            setSelectedDate(date);
-            setShowDatePicker(false);
-          }}
-          onCancel={() => setShowDatePicker(false)}
-        />
+        <View style={styles.dateNavigator}>
+          <TouchableOpacity onPress={handlePreviousDay} style={styles.dateNavButton}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={20}
+              color={colors.text}
+            />
+          </TouchableOpacity>
 
-        {currentView === 'reflect' ? (
-          <>
-            <TouchableOpacity 
-              style={styles.journalCard}
-              onPress={handleOpenJournalModal}
-              activeOpacity={0.7}
-            >
-              <View style={styles.journalCardHeader}>
-                <View style={styles.journalCardTitleRow}>
-                  <Image 
-                    source={require('@/assets/images/Chesbon_app_Logo.png')} 
-                    style={styles.journalAppIcon}
-                  />
-                  <Text style={styles.journalCardTitle}>Daily Journal</Text>
-                </View>
-              </View>
-              
-              {!hasJournalContent ? (
-                <View style={styles.journalPlaceholder}>
-                  <Image 
-                    source={require('@/assets/images/Chesbon_app_Logo.png')} 
-                    style={styles.journalPlaceholderIcon}
-                  />
-                  <Text style={styles.journalPlaceholderText}>Tap to write about your day…</Text>
-                </View>
-              ) : (
-                <View style={styles.journalPreviewContainer}>
-                  <Text style={styles.journalPreviewText} numberOfLines={3}>
-                    {journalPreview}
-                  </Text>
-                  {journalEntry && (
-                    <Text style={styles.journalTimestamp}>
-                      Last saved: {new Date(journalEntry.updatedAt).toLocaleString()}
-                    </Text>
-                  )}
-                </View>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionHeaderRow}>
-                  <IconSymbol
-                    ios_icon_name="sparkles"
-                    android_material_icon_name="auto-awesome"
-                    size={22}
-                    color="#9B59B6"
-                  />
-                  <Text style={styles.sectionTitle}>Reflections</Text>
-                </View>
-                <TouchableOpacity onPress={() => openAddReflectionModal()} style={styles.addButton}>
-                  <IconSymbol
-                    ios_icon_name="plus.circle.fill"
-                    android_material_icon_name="add-circle"
-                    size={28}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {reflections.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <IconSymbol
-                    ios_icon_name="sparkles"
-                    android_material_icon_name="auto-awesome"
-                    size={48}
-                    color={colors.textSecondary}
-                  />
-                  <Text style={styles.emptyStateText}>
-                    No reflections for this day. Tap + to add one.
-                  </Text>
-                </View>
-              ) : (
-                Object.entries(groupedReflections).map(([category, categoryReflections], catIndex) => {
-                  if (categoryReflections.length === 0) return null;
-                  
-                  const categoryIcon = getCategoryIcon(category);
-                  const isCollapsed = collapsedCategories[category];
-                  
-                  return (
-                    <React.Fragment key={catIndex}>
-                      {categoriesEnabled && category !== 'All' && (
-                        <TouchableOpacity 
-                          style={styles.reflectionCategoryHeader}
-                          onPress={() => toggleReflectionCategory(category)}
-                        >
-                          <IconSymbol
-                            ios_icon_name={isCollapsed ? 'chevron.right' : 'chevron.down'}
-                            android_material_icon_name={isCollapsed ? 'arrow-forward' : 'arrow-downward'}
-                            size={20}
-                            color={colors.text}
-                          />
-                          <IconSymbol
-                            ios_icon_name={categoryIcon.ios}
-                            android_material_icon_name={categoryIcon.android}
-                            size={20}
-                            color={colors.primary}
-                          />
-                          <Text style={styles.reflectionCategoryTitle}>{category}</Text>
-                          <View style={styles.reflectionCategoryBadge}>
-                            <Text style={styles.reflectionCategoryBadgeText}>{categoryReflections.length}</Text>
-                          </View>
-                        </TouchableOpacity>
-                      )}
-                      
-                      {!isCollapsed && categoryReflections.map((reflection, index) => {
-                        const typeText = reflection.type;
-                        const outcomeText = reflection.outcome ? 
-                          (reflection.outcome === 'success' ? 'Success' : 'Struggled') : 
-                          null;
-                        
-                        return (
-                          <React.Fragment key={index}>
-                            <View style={styles.reflectionCard}>
-                              <View style={styles.reflectionHeader}>
-                                <View style={styles.reflectionBadges}>
-                                  <View style={[styles.badge, reflection.type === 'Proactive' ? styles.badgeProactive : styles.badgeRestraint]}>
-                                    <Text style={styles.badgeText}>{typeText}</Text>
-                                  </View>
-                                  {reflection.outcome && (
-                                    <View style={[styles.badge, reflection.outcome === 'success' ? styles.badgeSuccess : styles.badgeStruggle]}>
-                                      <Text style={styles.badgeText}>{outcomeText}</Text>
-                                    </View>
-                                  )}
-                                </View>
-                                <View style={styles.reflectionActions}>
-                                  <TouchableOpacity
-                                    onPress={() => openEditReflectionModal(reflection)}
-                                    style={styles.iconButton}
-                                  >
-                                    <IconSymbol
-                                      ios_icon_name="pencil"
-                                      android_material_icon_name="edit"
-                                      size={20}
-                                      color={colors.primary}
-                                    />
-                                  </TouchableOpacity>
-                                  <TouchableOpacity
-                                    onPress={() => handleDeleteReflection(reflection.id)}
-                                    style={styles.iconButton}
-                                  >
-                                    <IconSymbol
-                                      ios_icon_name="trash"
-                                      android_material_icon_name="delete"
-                                      size={20}
-                                      color={colors.error}
-                                    />
-                                  </TouchableOpacity>
-                                </View>
-                              </View>
-
-                              <Text style={styles.reflectionDescription}>{reflection.description}</Text>
-
-                              {reflection.linkedGoalId && (
-                                <View style={styles.linkedGoalSection}>
-                                  <View style={styles.linkedGoalHeader}>
-                                    <IconSymbol
-                                      ios_icon_name="target"
-                                      android_material_icon_name="flag"
-                                      size={16}
-                                      color={colors.primary}
-                                    />
-                                    <Text style={styles.linkedGoalLabel}>Linked Goal</Text>
-                                  </View>
-                                  <Text style={styles.linkedGoalTitle}>
-                                    {reflection.linkedGoalTitle || goalsForModal.find(g => g.id === reflection.linkedGoalId)?.title || 'Unknown Goal'}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          </React.Fragment>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })
+          <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.dateDisplay}>
+            <View style={styles.dateTextContainer}>
+              <Text style={styles.dateText}>{dateDisplay}</Text>
+              {alternativeDateDisplay && (
+                <Text style={styles.alternativeDateText}>{alternativeDateDisplay}</Text>
               )}
             </View>
-          </>
-        ) : (
-          <>
-            <View style={styles.expressHeader}>
-              <TouchableOpacity
-                style={styles.viewModeToggle}
-                onPress={() => {
-                  console.log("Toggling Express view mode");
-                  setExpressViewMode(prev => prev === 'detailed' ? 'concise' : 'detailed');
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name={expressViewMode === 'detailed' ? 'list.bullet' : 'square.grid.2x2'}
-                  android_material_icon_name={expressViewMode === 'detailed' ? 'view-list' : 'view-module'}
-                  size={24}
-                  color={colors.primary}
+            {isToday && (
+              <View style={styles.todayBadge}>
+                <Text style={styles.todayBadgeText}>14</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleNextDay} style={styles.dateNavButton}>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="arrow-forward"
+              size={20}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {showDatePicker && (
+          <DatePickerModal
+            visible={showDatePicker}
+            date={selectedDate}
+            onConfirm={(date) => {
+              setSelectedDate(date);
+              setShowDatePicker(false);
+            }}
+            onCancel={() => setShowDatePicker(false)}
+          />
+        )}
+
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          <TouchableOpacity 
+            style={styles.journalCard}
+            onPress={handleOpenJournalModal}
+            activeOpacity={0.7}
+          >
+            <View style={styles.journalCardHeader}>
+              <View style={styles.journalCardTitleRow}>
+                <Image 
+                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                  style={styles.journalAppIcon}
                 />
-                <Text style={styles.viewModeToggleText}>
-                  {expressViewMode === 'detailed' ? 'Concise' : 'Detailed'}
+                <Text style={styles.journalCardTitle}>Daily Journal</Text>
+              </View>
+            </View>
+            
+            {!hasJournalContent ? (
+              <View style={styles.journalPlaceholder}>
+                <Image 
+                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
+                  style={styles.journalPlaceholderIcon}
+                />
+                <Text style={styles.journalPlaceholderText}>Tap to write about your day…</Text>
+              </View>
+            ) : (
+              <View style={styles.journalPreviewContainer}>
+                <Text style={styles.journalPreviewText} numberOfLines={3}>
+                  {journalEntry.content.substring(0, 100)}{journalEntry.content.length > 100 ? '...' : ''}
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.addGoalButton}
-                onPress={handleCreateGoal}
-              >
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionHeaderRow}>
+                <IconSymbol
+                  ios_icon_name="sparkles"
+                  android_material_icon_name="auto-awesome"
+                  size={22}
+                  color="#9B59B6"
+                />
+                <Text style={styles.sectionTitle}>Reflections</Text>
+              </View>
+              <TouchableOpacity onPress={openAddReflectionModal} style={styles.addButton}>
                 <IconSymbol
                   ios_icon_name="plus.circle.fill"
                   android_material_icon_name="add-circle"
@@ -1488,40 +910,68 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {lifeAreaHierarchy.length === 0 && uncategorizedGoals.length === 0 ? (
+            {reflections.length === 0 ? (
               <View style={styles.emptyState}>
                 <IconSymbol
-                  ios_icon_name="bolt"
-                  android_material_icon_name="flash-on"
-                  size={64}
-                  color={colors.muted}
+                  ios_icon_name="sparkles"
+                  android_material_icon_name="auto-awesome"
+                  size={48}
+                  color={colors.textSecondary}
                 />
-                <Text style={styles.emptyStateTitle}>No active goals today</Text>
                 <Text style={styles.emptyStateText}>
-                  Create goals in Settings to track them here
+                  No reflections for this day. Tap + to add one.
                 </Text>
               </View>
             ) : (
-              <>
-                {lifeAreaHierarchy.map(area => renderLifeAreaNode(area))}
-                
-                {uncategorizedGoals.length > 0 && (
-                  <View style={styles.lifeAreaSection}>
-                    <View style={styles.lifeAreaHeader}>
-                      <View style={styles.lifeAreaTitleRow}>
-                        <Text style={styles.lifeAreaTitle}>Uncategorized</Text>
-                      </View>
-                    </View>
-                    {uncategorizedGoals.map(goal => 
-                      expressViewMode === 'detailed' ? renderGoalCard(goal) : renderConciseGoalCard(goal)
-                    )}
-                  </View>
-                )}
-              </>
+              <View style={styles.reflectionsPreview}>
+                <Text style={styles.reflectionsCount}>
+                  {reflections.length} reflection{reflections.length !== 1 ? 's' : ''} today
+                </Text>
+                <TouchableOpacity 
+                  style={styles.viewAllButton}
+                  onPress={() => router.push(`/reflect?date=${formatDateLocal(selectedDate)}`)}
+                >
+                  <Text style={styles.viewAllButtonText}>View All</Text>
+                  <IconSymbol
+                    ios_icon_name="chevron.right"
+                    android_material_icon_name="arrow-forward"
+                    size={16}
+                    color={colors.primary}
+                  />
+                </TouchableOpacity>
+              </View>
             )}
-          </>
-        )}
-      </ScrollView>
+          </View>
+
+          {allGoals.length === 0 ? (
+            <View style={styles.emptyGoalsState}>
+              <IconSymbol
+                ios_icon_name="target"
+                android_material_icon_name="flag"
+                size={64}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.emptyGoalsTitle}>No Active Goals</Text>
+              <Text style={styles.emptyGoalsText}>
+                Create your first goal to start tracking your progress
+              </Text>
+              <TouchableOpacity style={styles.createGoalButton} onPress={handleCreateGoal}>
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={24}
+                  color={colors.background}
+                />
+                <Text style={styles.createGoalButtonText}>Create Goal</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              {lifeAreas.map(area => renderLifeAreaNode(area, 0))}
+            </>
+          )}
+        </ScrollView>
+      </View>
 
       <Modal
         visible={showJournalModal}
@@ -1590,31 +1040,26 @@ export default function HomeScreen() {
         <AddReflectionModal
           visible={showAddReflectionModal}
           onClose={() => {
-            console.log('[Home] Closing AddReflectionModal without saving');
             setShowAddReflectionModal(false);
-            setPrefilledGoalId(undefined);
             setEditingReflection(null);
-            setPrefilledGoalData(undefined);
           }}
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
-          goals={goalsForModal}
+          goals={allGoals}
           currencies={currencies}
           userPreferences={userPreferences}
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
           strategies={strategies}
-          prefilledGoalId={prefilledGoalId}
-          sourceScreen={currentView}
-          prefilledGoalData={prefilledGoalData}
+          sourceScreen="express"
         />
       )}
 
       <Modal
-        visible={errorModalVisible}
+        visible={showErrorModal}
+        transparent
         animationType="fade"
-        transparent={true}
-        onRequestClose={() => setErrorModalVisible(false)}
+        onRequestClose={() => setShowErrorModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.alertModal}>
@@ -1622,7 +1067,7 @@ export default function HomeScreen() {
             <Text style={styles.alertMessage}>{errorMessage}</Text>
             <TouchableOpacity
               style={styles.alertButton}
-              onPress={() => setErrorModalVisible(false)}
+              onPress={() => setShowErrorModal(false)}
             >
               <Text style={styles.alertButtonText}>OK</Text>
             </TouchableOpacity>
@@ -1632,19 +1077,19 @@ export default function HomeScreen() {
 
       <Modal
         visible={showSuccessModal}
+        transparent
         animationType="fade"
-        transparent={true}
         onRequestClose={() => setShowSuccessModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.successModal}>
+          <View style={styles.successFlashModal}>
             <IconSymbol
               ios_icon_name="checkmark.circle.fill"
               android_material_icon_name="check-circle"
               size={48}
               color={colors.success}
             />
-            <Text style={styles.successModalMessage}>{successModalMessage}</Text>
+            <Text style={styles.successFlashTitle}>{successMessage}</Text>
           </View>
         </View>
       </Modal>
@@ -1653,134 +1098,116 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingTop: Platform.OS === 'android' ? 48 : 0,
+  },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 12 : 4,
-    paddingBottom: 8,
+    paddingVertical: 12,
+    backgroundColor: colors.background,
+  },
+  headerTop: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
   },
-  logo: {
-    width: 100,
-    height: 100,
-    marginBottom: 2,
+  appLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
+  appName: {
+    fontSize: 24,
+    fontWeight: '700',
     color: colors.text,
   },
-  buttonContainer: {
+  quickActionsRow: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 12,
     gap: 12,
   },
-  actionButtonLarge: {
+  quickActionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: colors.primary,
-    gap: 8,
-    opacity: 0.6,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  actionButtonLargeActive: {
-    opacity: 1,
-  },
-  actionButtonLargeText: {
+  quickActionText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.background,
   },
   dateNavigator: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    marginBottom: 12,
-    gap: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: colors.card,
+    marginHorizontal: 20,
+    borderRadius: 12,
+    marginBottom: 16,
   },
   dateNavButton: {
     padding: 8,
-    borderRadius: 8,
-    backgroundColor: colors.backgroundAlt,
   },
   dateDisplay: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    minWidth: 120,
-    textAlign: 'center',
-  },
-  alternativeCalendarDateSmall: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 2,
-    fontStyle: 'italic',
-  },
-  lifetimeCounterContainer: {
-    flexDirection: 'column',
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'center',
+    gap: 12,
   },
-  lifetimeCounterText: {
-    fontSize: 9,
+  dateTextContainer: {
+    alignItems: 'center',
+  },
+  dateText: {
+    fontSize: 16,
     fontWeight: '600',
-    color: colors.success,
+    color: colors.text,
+  },
+  alternativeDateText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  todayBadge: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  todayBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.background,
   },
   content: {
     flex: 1,
   },
   contentContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
-  },
-  expressHeader: {
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  addGoalButton: {
-    padding: 4,
-  },
-  viewModeToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  viewModeToggleText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
+    paddingBottom: 40,
   },
   journalCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 16,
+    padding: 20,
     marginBottom: 20,
     borderWidth: 2,
     borderColor: colors.border,
@@ -1791,7 +1218,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   journalCardHeader: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   journalCardTitleRow: {
     flexDirection: 'row',
@@ -1799,30 +1226,30 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   journalAppIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 42,
+    height: 42,
+    borderRadius: 9,
   },
   journalCardTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.text,
   },
   journalPlaceholder: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: 40,
   },
   journalPlaceholderIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
-    opacity: 0.5,
+    width: 72,
+    height: 72,
+    borderRadius: 15,
+    opacity: 0.6,
   },
   journalPlaceholderText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textSecondary,
-    marginTop: 8,
+    marginTop: 12,
     textAlign: 'center',
   },
   journalPreviewContainer: {
@@ -1833,13 +1260,8 @@ const styles = StyleSheet.create({
     color: colors.text,
     lineHeight: 22,
   },
-  journalTimestamp: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
   section: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1861,55 +1283,137 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   emptyState: {
+    padding: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
   },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  emptyStateText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  reflectionsPreview: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reflectionsCount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewAllButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  emptyGoalsState: {
+    padding: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    marginTop: 20,
+  },
+  emptyGoalsTitle: {
+    fontSize: 22,
+    fontWeight: '700',
     color: colors.text,
     marginTop: 16,
     marginBottom: 8,
   },
-  emptyStateText: {
-    fontSize: 14,
+  emptyGoalsText: {
+    fontSize: 16,
     color: colors.textSecondary,
     textAlign: 'center',
-    paddingHorizontal: 40,
+    marginBottom: 24,
   },
-  reflectionCategoryHeader: {
+  createGoalButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    marginBottom: 10,
+    gap: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  reflectionCategoryTitle: {
-    fontSize: 16,
+  createGoalButtonText: {
+    fontSize: 18,
     fontWeight: '700',
+    color: colors.background,
+  },
+  lifeAreaContainer: {
+    marginBottom: 12,
+  },
+  lifeAreaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    padding: 14,
+    borderRadius: 12,
+  },
+  lifeAreaTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  lifeAreaIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lifeAreaIconText: {
+    fontSize: 16,
+  },
+  lifeAreaName: {
+    fontSize: 16,
+    fontWeight: '600',
     color: colors.text,
     flex: 1,
   },
-  reflectionCategoryBadge: {
+  lifeAreaBadge: {
     backgroundColor: colors.primary,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  reflectionCategoryBadgeText: {
+  lifeAreaBadgeText: {
     fontSize: 12,
     fontWeight: '700',
     color: colors.background,
   },
-  reflectionCard: {
+  lifeAreaContent: {
+    marginTop: 8,
+    gap: 8,
+  },
+  goalCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: '#000',
@@ -1918,214 +1422,53 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  reflectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  reflectionBadges: {
-    flexDirection: 'row',
-    gap: 6,
-    flex: 1,
-    flexWrap: 'wrap',
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeProactive: {
-    backgroundColor: colors.primary + '20',
-  },
-  badgeRestraint: {
-    backgroundColor: colors.secondary + '20',
-  },
-  badgeSuccess: {
-    backgroundColor: colors.success + '20',
-  },
-  badgeStruggle: {
-    backgroundColor: colors.error + '20',
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  reflectionActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  iconButton: {
-    padding: 4,
-  },
-  reflectionDescription: {
-    fontSize: 15,
-    color: colors.text,
-    marginBottom: 10,
-    lineHeight: 22,
-  },
-  linkedGoalSection: {
-    backgroundColor: colors.primary + '10',
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  linkedGoalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  linkedGoalLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
-    textTransform: 'uppercase',
-  },
-  linkedGoalTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  lifeAreaSection: {
-    marginBottom: 6,
-  },
-  lifeAreaHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: colors.card,
-    borderRadius: 6,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  lifeAreaTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    flex: 1,
-  },
-  lifeAreaIcon: {
-    fontSize: 14,
-  },
-  lifeAreaTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  goalCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  goalCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+  goalHeader: {
     marginBottom: 12,
   },
   goalTitleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    flex: 1,
-  },
-  goalTitleContainer: {
-    flex: 1,
-  },
-  goalCardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
-  },
-  goalDescription: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    lineHeight: 16,
-  },
-  currencyTalliesContainer: {
-    flexDirection: 'column',
-    gap: 4,
-  },
-  currencyTallyBadge: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  goalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+    flex: 1,
+  },
+  editButton: {
+    padding: 4,
+  },
+  goalTypeBadge: {
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
-    backgroundColor: colors.backgroundAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
+    alignSelf: 'flex-start',
   },
-  currencySymbolText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
+  goalTypeBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
-  currencyTallyText: {
+  goalDescription: {
     fontSize: 14,
-    fontWeight: 'bold',
-  },
-  tallyRow: {
-    flexDirection: 'row',
-    gap: 24,
+    color: colors.textSecondary,
     marginBottom: 12,
+    lineHeight: 20,
   },
-  tallySection: {
+  goalActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  tallyCount: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  streakEmoji: {
-    fontSize: 16,
-  },
-  entriesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+    gap: 12,
     marginBottom: 12,
-  },
-  entryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    backgroundColor: colors.backgroundAlt,
-  },
-  deleteEntryButton: {
-    padding: 2,
-    backgroundColor: colors.card,
-    borderRadius: 3,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 8,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
     paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    gap: 6,
+    borderRadius: 12,
   },
   successButton: {
     backgroundColor: colors.success,
@@ -2133,58 +1476,107 @@ const styles = StyleSheet.create({
   struggleButton: {
     backgroundColor: colors.error,
   },
-  reflectionButton: {
-    backgroundColor: colors.primary,
-    flex: 0,
-    paddingHorizontal: 12,
-  },
   actionButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.background,
   },
-  conciseGoalCard: {
-    backgroundColor: colors.card,
-    borderRadius: 6,
-    padding: 6,
-    marginBottom: 2,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
+  entriesSection: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  entriesSectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  entryItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6,
+    paddingVertical: 8,
+  },
+  entryInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  entryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  entryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  entryTime: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  deleteEntryButton: {
+    padding: 4,
+  },
+  goalStats: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  statItem: {
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  streakValue: {
+    color: colors.primary,
+  },
+  conciseGoalCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  conciseGoalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
   conciseGoalTitle: {
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: colors.text,
     flex: 1,
   },
-  conciseCounters: {
+  conciseGoalActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
   },
-  conciseCounter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
+  conciseActionButton: {
+    padding: 4,
   },
-  conciseCounterText: {
-    fontSize: 10,
+  conciseGoalStats: {
+    fontSize: 14,
     fontWeight: '600',
-  },
-  conciseActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  conciseCheckButton: {
-    padding: 2,
-  },
-  conciseStruggleButton: {
-    padding: 2,
+    color: colors.text,
+    marginHorizontal: 12,
   },
   journalModalContainer: {
     flex: 1,
@@ -2256,54 +1648,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   alertModal: {
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: colors.background,
     borderRadius: 16,
-    padding: 24,
-    width: '80%',
-    maxWidth: 400,
-    alignItems: 'center',
+    padding: 20,
+    margin: 20,
+    minWidth: 280,
   },
   alertTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   alertMessage: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   alertButton: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 32,
-    minWidth: 100,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   alertButtonText: {
-    fontSize: 16,
+    color: colors.background,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#FFFFFF',
-    textAlign: 'center',
   },
-  successModal: {
+  successFlashModal: {
     backgroundColor: colors.background,
     borderRadius: 20,
     padding: 32,
+    margin: 40,
     alignItems: 'center',
-    gap: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 8,
   },
-  successModalMessage: {
+  successFlashTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.text,
+    marginTop: 16,
     textAlign: 'center',
   },
 });
