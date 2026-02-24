@@ -19,9 +19,10 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { AddReflectionModal } from '@/components/AddReflectionModal';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete, getBearerToken, BACKEND_URL } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { StreamdownRN } from 'streamdown-rn';
+import * as Speech from 'expo-speech';
+import { AudioRecorder, AudioRecording, RecordingOptions } from 'expo-audio';
 
 interface JournalEntry {
   id: string;
@@ -169,6 +170,184 @@ export default function ReflectScreen() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
 
+  // Voice state
+  const [isRecording, setIsRecording] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [recording, setRecording] = useState<AudioRecording | null>(null);
+  const [audioPermission, setAudioPermission] = useState(false);
+
+  useEffect(() => {
+    requestAudioPermissions();
+    return () => {
+      Speech.stop();
+    };
+  }, []);
+
+  const requestAudioPermissions = async () => {
+    console.log('[Voice] Requesting audio permissions...');
+    try {
+      const { granted } = await AudioRecorder.requestPermissionsAsync();
+      setAudioPermission(granted);
+      if (granted) {
+        console.log('[Voice] Audio permissions granted');
+      } else {
+        console.log('[Voice] Audio permissions denied');
+      }
+    } catch (error) {
+      console.error('[Voice] Error requesting audio permissions:', error);
+    }
+  };
+
+  const speakText = async (text: string) => {
+    console.log('[Voice] Speaking text:', text.substring(0, 80) + '...');
+    await Speech.stop();
+    setIsSpeaking(true);
+    try {
+      Speech.speak(text, {
+        rate: 0.95,
+        pitch: 1.0,
+        onDone: () => {
+          console.log('[Voice] Speech finished');
+          setIsSpeaking(false);
+        },
+        onError: (error) => {
+          console.error('[Voice] Speech error:', error);
+          setIsSpeaking(false);
+        },
+        onStopped: () => {
+          setIsSpeaking(false);
+        },
+      });
+    } catch (error) {
+      console.error('[Voice] Error speaking text:', error);
+      setIsSpeaking(false);
+    }
+  };
+
+  const stopSpeaking = async () => {
+    console.log('[Voice] Stopping speech...');
+    await Speech.stop();
+    setIsSpeaking(false);
+  };
+
+  const startRecording = async () => {
+    if (!audioPermission) {
+      const { granted } = await AudioRecorder.requestPermissionsAsync();
+      if (!granted) {
+        showError('Microphone permission is required for voice input');
+        return;
+      }
+      setAudioPermission(true);
+    }
+
+    await stopSpeaking();
+
+    console.log('[Voice] Starting recording...');
+    try {
+      const recordingOptions: RecordingOptions = {
+        android: {
+          extension: '.m4a',
+          outputFormat: 'mpeg4',
+          audioEncoder: 'aac',
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          outputFormat: 'mpeg4aac',
+          audioQuality: 'high',
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      };
+      const newRecording = await AudioRecorder.recordAsync(recordingOptions);
+      setRecording(newRecording);
+      setIsRecording(true);
+      console.log('[Voice] Recording started');
+    } catch (error) {
+      console.error('[Voice] Failed to start recording:', error);
+      showError('Failed to start recording');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!recording) return;
+
+    console.log('[Voice] Stopping recording...');
+    setIsRecording(false);
+    
+    try {
+      const uri = await recording.stopAsync();
+      console.log('[Voice] Recording stopped, URI:', uri);
+      setRecording(null);
+      
+      if (uri) {
+        await transcribeAndSend(uri);
+      }
+    } catch (error) {
+      console.error('[Voice] Error stopping recording:', error);
+      showError('Failed to process recording');
+      setRecording(null);
+    }
+  };
+
+  const transcribeAndSend = async (audioUri: string) => {
+    console.log('[Voice] Transcribing audio...');
+    setSendingMessage(true);
+    
+    try {
+      const token = await getBearerToken();
+      const formData = new FormData();
+      const ext = audioUri.split('.').pop() || 'm4a';
+      const mimeType = ext === 'webm' ? 'audio/webm' : ext === 'wav' ? 'audio/wav' : 'audio/m4a';
+
+      formData.append('audio', {
+        uri: audioUri,
+        type: mimeType,
+        name: `recording.${ext}`,
+      } as any);
+
+      const response = await fetch(`${BACKEND_URL}/api/cheshbon/transcribe`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        console.warn('[Voice] Transcription endpoint not available, status:', response.status);
+        showError('Voice transcription is not available. Please type your message.');
+        setSendingMessage(false);
+        return;
+      }
+
+      const data = await response.json();
+      const transcribedText = data.transcription || data.text || '';
+      console.log('[Voice] Transcription result:', transcribedText);
+      
+      if (transcribedText.trim()) {
+        await sendMessageWithText(transcribedText);
+      } else {
+        showError('Could not understand the audio. Please try again or type your message.');
+        setSendingMessage(false);
+      }
+    } catch (error) {
+      console.error('[Voice] Transcription error:', error);
+      showError('Failed to transcribe audio. Please type your message instead.');
+      setSendingMessage(false);
+    }
+  };
+
   useEffect(() => {
     if (params.date) {
       const dateFromParam = new Date(params.date);
@@ -255,22 +434,6 @@ export default function ReflectScreen() {
     }
   };
 
-  const loadConversations = async () => {
-    console.log('[API] Requesting /api/reflection-chat/conversations...');
-    setLoadingConversations(true);
-    try {
-      const response = await authenticatedGet('/api/reflection-chat/conversations');
-      const conversationsData = Array.isArray(response) ? response : (response?.data || []);
-      setConversations(conversationsData);
-      console.log('Loaded conversations:', conversationsData.length);
-    } catch (error) {
-      console.error('Error loading conversations:', error);
-      showError('Failed to load conversations');
-    } finally {
-      setLoadingConversations(false);
-    }
-  };
-
   const loadMessages = async (conversationId: string) => {
     console.log(`[API] Requesting /api/reflection-chat/conversations/${conversationId}/messages...`);
     try {
@@ -297,36 +460,73 @@ export default function ReflectScreen() {
       
       setCurrentConversationId(newConversation.id);
       setMessages([]);
-      setConversations([newConversation, ...conversations]);
+      setConversations(prev => [newConversation, ...prev]);
       
       console.log('New conversation created:', newConversation.id);
+
+      // Trigger AI to initiate the conversation with a greeting
+      setSendingMessage(true);
+      try {
+        console.log('[API] Requesting AI greeting for new conversation...');
+        const greetingResponse = await authenticatedPost(
+          `/api/reflection-chat/conversations/${newConversation.id}/messages`,
+          { message: 'Please start our session by greeting me warmly and asking how my day has been. Keep it short and conversational, like a friendly life coach checking in.' }
+        );
+        const aiGreeting = greetingResponse?.data || greetingResponse;
+        
+        if (aiGreeting && aiGreeting.content) {
+          const greetingMsg: ChatMessage = {
+            id: aiGreeting.id || 'greeting-' + Date.now(),
+            role: 'assistant',
+            content: aiGreeting.content,
+            createdAt: aiGreeting.createdAt || new Date().toISOString(),
+          };
+          setMessages([greetingMsg]);
+          
+          // Speak the greeting
+          await speakText(greetingMsg.content);
+          console.log('[Voice] AI greeting spoken');
+        }
+      } catch (greetingError) {
+        console.error('[Voice] Error getting AI greeting:', greetingError);
+      } finally {
+        setSendingMessage(false);
+      }
+
+      setTimeout(() => {
+        chatScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     } catch (error) {
       console.error('Error creating conversation:', error);
       showError('Failed to create conversation');
+      setSendingMessage(false);
     }
   };
 
-  const sendMessage = async () => {
-    const trimmedMessage = messageInput.trim();
+  const sendMessageWithText = async (text: string) => {
+    const trimmedMessage = text.trim();
     if (!trimmedMessage || !currentConversationId) {
       console.log('Cannot send empty message or no conversation selected');
       return;
     }
 
-    console.log('Sending message to AI:', trimmedMessage);
+    const isInitTrigger = trimmedMessage.startsWith('Please start our session by greeting me warmly');
+
+    console.log('Sending message to AI:', isInitTrigger ? '[INIT]' : trimmedMessage);
     setSendingMessage(true);
 
-    // Optimistically add user message to UI
-    const tempUserMessage: ChatMessage = {
+    const tempUserMessage: ChatMessage | null = isInitTrigger ? null : {
       id: 'temp-' + Date.now(),
       role: 'user',
       content: trimmedMessage,
       createdAt: new Date().toISOString(),
     };
-    setMessages(prev => [...prev, tempUserMessage]);
-    setMessageInput('');
 
-    // Scroll to bottom
+    if (tempUserMessage) {
+      setMessages(prev => [...prev, tempUserMessage]);
+      setMessageInput('');
+    }
+
     setTimeout(() => {
       chatScrollRef.current?.scrollToEnd({ animated: true });
     }, 100);
@@ -340,32 +540,54 @@ export default function ReflectScreen() {
       
       const aiMessage = response?.data || response;
       
-      // Replace temp message with real messages from backend
-      // The backend returns the AI assistant message; user message was already saved server-side
-      setMessages(prev => {
-        const withoutTemp = prev.filter(m => m.id !== tempUserMessage.id);
-        const updatedUserMessage = { 
-          ...tempUserMessage, 
-          id: aiMessage.userMessageId || tempUserMessage.id 
-        };
-        return [...withoutTemp, updatedUserMessage, aiMessage];
-      });
+      if (isInitTrigger) {
+        if (aiMessage && aiMessage.content) {
+          const greetingMsg: ChatMessage = {
+            id: aiMessage.id || 'greeting-' + Date.now(),
+            role: 'assistant',
+            content: aiMessage.content,
+            createdAt: aiMessage.createdAt || new Date().toISOString(),
+          };
+          setMessages([greetingMsg]);
+          await speakText(greetingMsg.content);
+        }
+      } else {
+        setMessages(prev => {
+          const withoutTemp = prev.filter(m => m.id !== tempUserMessage?.id);
+          const updatedUserMessage = tempUserMessage ? { 
+            ...tempUserMessage, 
+            id: aiMessage.userMessageId || tempUserMessage.id 
+          } : null;
+          return updatedUserMessage 
+            ? [...withoutTemp, updatedUserMessage, aiMessage]
+            : [...withoutTemp, aiMessage];
+        });
 
-      // Scroll to bottom after AI response
+        // Speak the AI response
+        if (aiMessage && aiMessage.content) {
+          await speakText(aiMessage.content);
+        }
+      }
+
       setTimeout(() => {
         chatScrollRef.current?.scrollToEnd({ animated: true });
       }, 100);
 
-      console.log('AI response received');
+      console.log('AI response received and spoken');
     } catch (error) {
       console.error('Error sending message:', error);
       showError('Failed to send message');
-      // Remove temp message on error
-      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
-      setMessageInput(trimmedMessage); // Restore message input
+      if (tempUserMessage) {
+        setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
+        setMessageInput(trimmedMessage);
+      }
     } finally {
       setSendingMessage(false);
     }
+  };
+
+  const sendMessage = async () => {
+    await sendMessageWithText(messageInput);
   };
 
   const deleteConversation = async (conversationId: string) => {
@@ -388,7 +610,7 @@ export default function ReflectScreen() {
   };
 
   const openChatModal = async () => {
-    console.log('Opening AI chat modal');
+    console.log('[Voice] Opening AI chat modal');
     setShowChatModal(true);
     await loadConversations();
   };
@@ -399,6 +621,7 @@ export default function ReflectScreen() {
     setCurrentConversationId(null);
     setMessages([]);
     setMessageInput('');
+    stopSpeaking();
   };
 
   const selectConversation = async (conversationId: string) => {
@@ -563,9 +786,23 @@ export default function ReflectScreen() {
           {isUser ? (
             <Text style={styles.userMessageText}>{item.content}</Text>
           ) : (
-            <StreamdownRN theme="dark">
-              {item.content}
-            </StreamdownRN>
+            <View>
+              <Text style={styles.aiMessageText}>{item.content}</Text>
+              <TouchableOpacity 
+                style={styles.speakAgainButton}
+                onPress={() => isSpeaking ? stopSpeaking() : speakText(item.content)}
+              >
+                <IconSymbol
+                  ios_icon_name={isSpeaking ? "stop.circle.fill" : "speaker.wave.2.fill"}
+                  android_material_icon_name={isSpeaking ? "stop" : "volume-up"}
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text style={styles.speakAgainText}>
+                  {isSpeaking ? 'Stop speaking' : 'Speak again'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
           <Text style={[styles.messageTime, isUser ? styles.userMessageTime : styles.aiMessageTime]}>
             {messageTime}
@@ -1096,15 +1333,26 @@ export default function ReflectScreen() {
                 showsVerticalScrollIndicator={false}
                 ListEmptyComponent={
                   <View style={styles.emptyChatState}>
-                    <IconSymbol
-                      ios_icon_name="brain.head.profile"
-                      android_material_icon_name="psychology"
-                      size={48}
-                      color={colors.textSecondary}
-                    />
-                    <Text style={styles.emptyChatText}>
-                      Start the conversation! Ask about your goals, reflect on your progress, or discuss challenges.
-                    </Text>
+                    {sendingMessage ? (
+                      <>
+                        <ActivityIndicator size="large" color={colors.primary} />
+                        <Text style={styles.emptyChatText}>
+                          Cheshbon is preparing your session...
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <IconSymbol
+                          ios_icon_name="microphone.fill"
+                          android_material_icon_name="mic"
+                          size={48}
+                          color={colors.textSecondary}
+                        />
+                        <Text style={styles.emptyChatText}>
+                          Cheshbon will greet you shortly. Tap the mic to speak or type below.
+                        </Text>
+                      </>
+                    )}
                   </View>
                 }
               />
@@ -1114,16 +1362,30 @@ export default function ReflectScreen() {
                   style={styles.chatInput}
                   value={messageInput}
                   onChangeText={setMessageInput}
-                  placeholder="Type your message..."
+                  placeholder="Type or speak your message..."
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   maxLength={1000}
-                  editable={!sendingMessage}
+                  editable={!sendingMessage && !isRecording}
                 />
+
                 <TouchableOpacity
-                  style={[styles.sendButton, (!messageInput.trim() || sendingMessage) && styles.sendButtonDisabled]}
+                  style={[styles.voiceButton, isRecording && styles.voiceButtonActive]}
+                  onPress={isRecording ? stopRecording : startRecording}
+                  disabled={sendingMessage}
+                >
+                  <IconSymbol
+                    ios_icon_name={isRecording ? "stop.circle.fill" : "microphone.fill"}
+                    android_material_icon_name={isRecording ? "stop" : "mic"}
+                    size={24}
+                    color={colors.background}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.sendButton, (!messageInput.trim() || sendingMessage || isRecording) && styles.sendButtonDisabled]}
                   onPress={sendMessage}
-                  disabled={!messageInput.trim() || sendingMessage}
+                  disabled={!messageInput.trim() || sendingMessage || isRecording}
                 >
                   {sendingMessage ? (
                     <ActivityIndicator size="small" color={colors.background} />
@@ -1137,6 +1399,21 @@ export default function ReflectScreen() {
                   )}
                 </TouchableOpacity>
               </View>
+
+              {isSpeaking && (
+                <View style={styles.speakingIndicator}>
+                  <IconSymbol
+                    ios_icon_name="speaker.wave.2.fill"
+                    android_material_icon_name="volume-up"
+                    size={18}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.speakingText}>Cheshbon is speaking...</Text>
+                  <TouchableOpacity onPress={stopSpeaking} style={styles.stopSpeakingButton}>
+                    <Text style={styles.stopSpeakingText}>Stop</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </KeyboardAvoidingView>
           )}
         </SafeAreaView>
@@ -1864,6 +2141,11 @@ const styles = StyleSheet.create({
     color: colors.background,
     lineHeight: 22,
   },
+  aiMessageText: {
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 22,
+  },
   messageTime: {
     fontSize: 11,
     marginTop: 4,
@@ -1895,6 +2177,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  voiceButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceButtonActive: {
+    backgroundColor: colors.error,
+  },
   sendButton: {
     width: 44,
     height: 44,
@@ -1905,6 +2198,45 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  speakAgainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 4,
+  },
+  speakAgainText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  speakingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.primary + '20',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  speakingText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '600',
+    flex: 1,
+  },
+  stopSpeakingButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+  },
+  stopSpeakingText: {
+    fontSize: 12,
+    color: colors.background,
+    fontWeight: '600',
   },
   journalModalContainer: {
     flex: 1,
