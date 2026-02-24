@@ -203,12 +203,47 @@ function summarizeYearly(config: ScheduleSummaryRequest): string {
       monthName = GREGORIAN_MONTHS[monthNum - 1] || `Month ${monthNum}`;
     }
 
-    if (dateRange.days && dateRange.days.length > 0) {
-      const dates = dateRange.days.map((d: number) => formatOrdinal(d));
+    // Support new format with month/day/endMonth/endDay for multi-month ranges
+    if ((dateRange as any).day !== undefined && (dateRange as any).endMonth !== undefined) {
+      const startMonth = dateRange.month;
+      const startDay = (dateRange as any).day;
+      const endMonth = (dateRange as any).endMonth || startMonth;
+      const endDay = (dateRange as any).endDay || startDay;
+
+      let startMonthName = '';
+      let endMonthName = '';
+
+      if (config.calendarType === 'hebrew') {
+        startMonthName = HEBREW_MONTHS[startMonth - 1] || `Month ${startMonth}`;
+        endMonthName = HEBREW_MONTHS[endMonth - 1] || `Month ${endMonth}`;
+      } else if (config.calendarType === 'islamic') {
+        startMonthName = ISLAMIC_MONTHS[startMonth - 1] || `Month ${startMonth}`;
+        endMonthName = ISLAMIC_MONTHS[endMonth - 1] || `Month ${endMonth}`;
+      } else if (config.calendarType === 'chinese') {
+        startMonthName = CHINESE_MONTHS[startMonth - 1] || `Month ${startMonth}`;
+        endMonthName = CHINESE_MONTHS[endMonth - 1] || `Month ${endMonth}`;
+      } else {
+        startMonthName = GREGORIAN_MONTHS[startMonth - 1] || `Month ${startMonth}`;
+        endMonthName = GREGORIAN_MONTHS[endMonth - 1] || `Month ${endMonth}`;
+      }
+
+      if (startMonth === endMonth) {
+        const startOrdinal = formatOrdinal(startDay);
+        const endOrdinal = formatOrdinal(endDay);
+        parts.push(`${startMonthName} ${startOrdinal}-${endOrdinal}`);
+      } else {
+        const startOrdinal = formatOrdinal(startDay);
+        const endOrdinal = formatOrdinal(endDay);
+        parts.push(`${startMonthName} ${startOrdinal} - ${endMonthName} ${endOrdinal}`);
+      }
+    } else if ((dateRange as any).days && (dateRange as any).days.length > 0) {
+      // Support old format with specific days in a month
+      const dates = (dateRange as any).days.map((d: number) => formatOrdinal(d));
       parts.push(`${monthName} ${dates.join(' and ')}`);
-    } else if (dateRange.start && dateRange.end) {
-      const startOrdinal = formatOrdinal(dateRange.start);
-      const endOrdinal = formatOrdinal(dateRange.end);
+    } else if ((dateRange as any).start && (dateRange as any).end) {
+      // Support old format with range within a month
+      const startOrdinal = formatOrdinal((dateRange as any).start);
+      const endOrdinal = formatOrdinal((dateRange as any).end);
       parts.push(`${monthName} ${startOrdinal}-${endOrdinal}`);
     }
   }

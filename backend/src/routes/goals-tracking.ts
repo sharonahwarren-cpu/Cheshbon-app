@@ -36,8 +36,24 @@ function isGoalActiveOnDateHelper(goal: any, dateStr: string): boolean {
 
     case 'Yearly':
       if (goal.scheduleDatesOfYear && Array.isArray(goal.scheduleDatesOfYear)) {
-        const monthDay = `${String(month).padStart(2, '0')}-${String(dateOfMonth).padStart(2, '0')}`;
-        return goal.scheduleDatesOfYear.includes(monthDay);
+        return goal.scheduleDatesOfYear.some((dateRange: any) => {
+          const startMonth = dateRange.month;
+          const startDay = dateRange.day;
+          const endMonth = dateRange.endMonth || startMonth;
+          const endDay = dateRange.endDay || startDay;
+
+          // Check if current date is within range
+          const currentMonthDay = month * 100 + dateOfMonth;
+          const startMonthDay = startMonth * 100 + startDay;
+          const endMonthDay = endMonth * 100 + endDay;
+
+          if (startMonthDay <= endMonthDay) {
+            return currentMonthDay >= startMonthDay && currentMonthDay <= endMonthDay;
+          } else {
+            // Range wraps around year (e.g., Nov to Feb)
+            return currentMonthDay >= startMonthDay || currentMonthDay <= endMonthDay;
+          }
+        });
       }
       return true;
 
