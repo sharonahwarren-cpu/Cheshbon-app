@@ -417,6 +417,12 @@ export default function CreateGoalScreen() {
 
     setSubmitting(true);
     try {
+      // CRITICAL FIX: Map scheduleType to scheduleRecurrenceType for backend
+      // The backend expects scheduleRecurrenceType, not scheduleType
+      const scheduleRecurrenceType = scheduleConfig.scheduleType === 'Always Active' 
+        ? 'alwaysactive' 
+        : scheduleConfig.scheduleType.toLowerCase();
+
       const goalData: any = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -425,7 +431,8 @@ export default function CreateGoalScreen() {
         behaviorCategories: behaviorCategories.length > 0 ? behaviorCategories : undefined,
         type,
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
-        scheduleType: scheduleConfig.scheduleType,
+        scheduleType: scheduleConfig.scheduleType, // Keep for frontend compatibility
+        scheduleRecurrenceType, // CRITICAL: Send the correct field for backend
         scheduleTimesPerDay: scheduleConfig.timesPerDay,
         scheduleDaysOfWeek: scheduleConfig.weekdays,
       };
