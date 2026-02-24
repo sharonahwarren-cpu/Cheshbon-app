@@ -7,14 +7,14 @@ import { getNextActivations, type GoalSchedule, type ActivationPreview } from '@
 
 interface GoalSchedulePreviewProps {
   schedule: GoalSchedule;
-  alarms?: Array<{
+  alarms?: {
     id: string;
-    triggers: Array<{
+    triggers: {
       type: 'time' | 'astronomical' | 'location';
       value?: string;
       offsetMinutes?: number;
-    }>;
-  }>;
+    }[];
+  }[];
   location?: { latitude: number; longitude: number };
   count?: number;
 }
@@ -35,10 +35,6 @@ export function GoalSchedulePreview({
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
-    loadActivations();
-  }, [schedule, alarms, location, count]);
-
   const loadActivations = async () => {
     console.log('[GoalSchedulePreview] Loading activations');
     setLoading(true);
@@ -53,6 +49,11 @@ export function GoalSchedulePreview({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadActivations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schedule, alarms, location, count]);
 
   if (loading) {
     return (

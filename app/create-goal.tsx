@@ -348,10 +348,64 @@ export default function CreateGoalScreen() {
           weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week
         });
         
+        // CRITICAL FIX: Load ALL schedule configuration fields, not just scheduleType and weekdays
+        // This ensures the GoalScheduler component has complete data to generate accurate summaries
+        const parseJsonField = (field: any) => {
+          if (!field) return undefined;
+          if (typeof field === 'string') {
+            try {
+              return JSON.parse(field);
+            } catch (e) {
+              console.error('[CreateGoal] Failed to parse JSON field:', e);
+              return undefined;
+            }
+          }
+          return field;
+        };
+
+        const parseDateField = (field: any) => {
+          if (!field) return undefined;
+          try {
+            return new Date(field);
+          } catch (e) {
+            console.error('[CreateGoal] Failed to parse date field:', e);
+            return undefined;
+          }
+        };
+
         setScheduleConfig({
           scheduleType: displayScheduleType,
+          // Daily
           timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
-          weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week,
+          specificTimes: parseJsonField(goalDetails.scheduleSpecificTimes || goalDetails.schedule_specific_times),
+          // Weekly
+          weekdays: parseJsonField(goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week),
+          weekendsOnly: goalDetails.scheduleWeekendsOnly || goalDetails.schedule_weekends_only,
+          weekdaysOnly: goalDetails.scheduleWeekdaysOnly || goalDetails.schedule_weekdays_only,
+          // Fortnightly
+          fortnightDays: parseJsonField(goalDetails.scheduleFortnightDays || goalDetails.schedule_fortnight_days),
+          fortnightWeek: goalDetails.scheduleFortnightWeek || goalDetails.schedule_fortnight_week,
+          // Monthly
+          monthlyDates: parseJsonField(goalDetails.scheduleMonthlyDates || goalDetails.schedule_monthly_dates),
+          monthlyNthDay: parseJsonField(goalDetails.scheduleMonthlyNthDay || goalDetails.schedule_monthly_nth_day),
+          monthlyWeekdayPositions: parseJsonField(goalDetails.scheduleMonthlyWeekdayPositions || goalDetails.schedule_monthly_weekday_positions),
+          monthlyRangeStart: goalDetails.scheduleMonthlyRangeStart || goalDetails.schedule_monthly_range_start,
+          monthlyRangeEnd: goalDetails.scheduleMonthlyRangeEnd || goalDetails.schedule_monthly_range_end,
+          monthlyRandomCount: goalDetails.scheduleMonthlyRandomCount || goalDetails.schedule_monthly_random_count,
+          monthlyCalendarType: goalDetails.scheduleMonthlyCalendarType || goalDetails.schedule_monthly_calendar_type,
+          monthlyUseAlternativeCalendar: goalDetails.scheduleMonthlyUseAlternativeCalendar || goalDetails.schedule_monthly_use_alternative_calendar,
+          monthlyCalendarEvent: goalDetails.scheduleMonthlyCalendarEvent || goalDetails.schedule_monthly_calendar_event,
+          // Yearly
+          yearlyMonths: parseJsonField(goalDetails.scheduleYearlyMonths || goalDetails.schedule_yearly_months),
+          yearlyDates: parseJsonField(goalDetails.scheduleYearlyDates || goalDetails.schedule_yearly_dates),
+          yearlyCalendarType: goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
+          yearlyUseAlternativeCalendar: goalDetails.scheduleYearlyUseAlternativeCalendar || goalDetails.schedule_yearly_use_alternative_calendar,
+          yearlyCalendarEvent: goalDetails.scheduleYearlyCalendarEvent || goalDetails.schedule_yearly_calendar_event,
+          // Advanced
+          calendarType: goalDetails.scheduleCalendarType || goalDetails.schedule_calendar_type,
+          startDate: parseDateField(goalDetails.scheduleStartDate || goalDetails.schedule_start_date),
+          endDate: parseDateField(goalDetails.scheduleEndDate || goalDetails.schedule_end_date),
+          exclusionDates: parseJsonField(goalDetails.scheduleExclusionDates || goalDetails.schedule_exclusion_dates)?.map((d: string) => new Date(d)),
         });
         
         if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {

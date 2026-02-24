@@ -32,7 +32,7 @@ export interface ScheduleConfig {
   
   // Daily
   timesPerDay?: number;
-  specificTimes?: Array<{ hour: number; minute: number; label?: string }>;
+  specificTimes?: { hour: number; minute: number; label?: string }[];
   
   // Weekly
   weekdays?: number[]; // 0-6 (Sunday-Saturday)
@@ -45,7 +45,7 @@ export interface ScheduleConfig {
   
   // Monthly
   monthlyDates?: number[]; // [1, 15, 30]
-  monthlyNthDay?: Array<{ day: string; nth: number }>; // "Second Tuesday"
+  monthlyNthDay?: { day: string; nth: number }[]; // "Second Tuesday"
   monthlyWeekdayPositions?: WeekdayPosition[]; // NEW: e.g., [{weekday: 5, position: 1}, {weekday: 0, position: 5}] = 1st Friday and last Sunday
   monthlyRangeStart?: number;
   monthlyRangeEnd?: number;
@@ -56,7 +56,7 @@ export interface ScheduleConfig {
   
   // Yearly
   yearlyMonths?: number[]; // [1, 6, 12]
-  yearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+  yearlyDates?: { month: number; day: number; endMonth?: number; endDay?: number }[];
   yearlyCalendarType?: CalendarType;
   yearlyUseAlternativeCalendar?: boolean; // NEW: Flag to show calendar type selector
   yearlyCalendarEvent?: string; // NEW: Hebrew calendar event
@@ -243,6 +243,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
         updateConfig({ weekdays: [1, 2, 3, 4, 5], weekendsOnly: false });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.weekendsOnly, config.weekdaysOnly]);
 
   const handleDatePickerConfirm = (selectedDate: Date) => {
