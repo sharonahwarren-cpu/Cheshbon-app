@@ -10,11 +10,15 @@ function parseJsonbField(value: any): any {
   if (!value) return null;
   if (typeof value === 'string') {
     try {
-      return JSON.parse(value);
-    } catch {
+      const parsed = JSON.parse(value);
+      console.log('[parseJsonbField] Parsed string to:', parsed);
+      return parsed;
+    } catch (error) {
+      console.log('[parseJsonbField] Failed to parse string:', value, error);
       return null;
     }
   }
+  console.log('[parseJsonbField] Returning value as-is:', value);
   return value;
 }
 
@@ -296,8 +300,8 @@ export function registerGoalRoutes(app: App) {
 
 
     app.logger.info(
-      { userId: session.user.id, title: body.title, type: body.type, alarmCount: body.alarms?.length },
-      'Creating goal'
+      { userId: session.user.id, title: body.title, type: body.type, alarmCount: body.alarms?.length, yearlyDates: body.yearlyDates },
+      'Creating goal with yearly dates'
     );
 
     try {
@@ -314,6 +318,15 @@ export function registerGoalRoutes(app: App) {
         },
         'Converting goal dates to UTC'
       );
+
+      // Process yearly dates
+      const yearlyDatesToStore = parseJsonbField(body.yearlyDates);
+      if (body.yearlyDates) {
+        app.logger.info(
+          { userId: session.user.id, originalYearlyDates: body.yearlyDates, parsedYearlyDates: yearlyDatesToStore },
+          'Processing yearly dates for POST'
+        );
+      }
 
       const goals = await app.db
         .insert(schema.goals)
@@ -335,7 +348,7 @@ export function registerGoalRoutes(app: App) {
           scheduleDaysOfWeek: (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null,
           scheduleDatesOfMonth: (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null,
           scheduleNthDayOfMonth: parseJsonbField(body.monthlyWeekdayRules),
-          scheduleDatesOfYear: parseJsonbField(body.yearlyDates),
+          scheduleDatesOfYear: yearlyDatesToStore,
           rewardCurrencyId: body.reward?.currencyId || null,
           rewardSuccesses: body.reward?.successes || null,
           rewardAmount: body.reward?.amount || null,
@@ -357,7 +370,10 @@ export function registerGoalRoutes(app: App) {
         .returning();
       const goal = goals[0];
 
-      app.logger.info({ userId: session.user.id, goalId: goal.id }, 'Goal created successfully');
+      app.logger.info(
+        { userId: session.user.id, goalId: goal.id, storedYearlyDates: goal.scheduleDatesOfYear },
+        'Goal created successfully'
+      );
       return goal;
     } catch (error) {
       app.logger.error(
@@ -416,7 +432,7 @@ export function registerGoalRoutes(app: App) {
       scheduleExclusions?: string[];
     };
 
-    app.logger.info({ userId: session.user.id, goalId: id }, 'Updating goal');
+    app.logger.info({ userId: session.user.id, goalId: id, yearlyDates: body.yearlyDates }, 'Updating goal with yearly dates');
 
     try {
       // Check if goal exists and belongs to user
@@ -465,7 +481,14 @@ export function registerGoalRoutes(app: App) {
       }
       if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
       if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.monthlyWeekdayRules);
-      if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = parseJsonbField(body.yearlyDates);
+      if (body.yearlyDates !== undefined) {
+        const parsedYearlyDates = parseJsonbField(body.yearlyDates);
+        app.logger.info(
+          { userId: session.user.id, goalId: id, originalYearlyDates: body.yearlyDates, parsedYearlyDates },
+          'Processing yearly dates for update'
+        );
+        updateData.scheduleDatesOfYear = parsedYearlyDates;
+      }
       if (body.calendarType !== undefined) {
         const newCalendarType = body.calendarType || null;
         const oldCalendarType = existingGoal[0].calendarType;
@@ -543,6 +566,11 @@ export function registerGoalRoutes(app: App) {
       }
 
       const updatedGoal = updatedGoals[0];
+
+      app.logger.info(
+        { userId: session.user.id, goalId: id, storedYearlyDates: updatedGoal.scheduleDatesOfYear },
+        'Goal updated successfully'
+      );
 
       // Initialize or update goal_currency_balances if currencies are set
       if (body.reward !== undefined && body.reward?.currencyId) {
