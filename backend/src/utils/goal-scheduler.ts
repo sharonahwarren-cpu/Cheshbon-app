@@ -214,6 +214,27 @@ export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boole
       }
       if (config.yearlyDatesOrRanges) {
         return config.yearlyDatesOrRanges.some(range => {
+          // Support new format with month/day/endMonth/endDay for multi-month ranges
+          if ((range as any).day !== undefined && (range as any).endMonth !== undefined) {
+            const startMonth = (range as any).month;
+            const startDay = (range as any).day;
+            const endMonth = (range as any).endMonth || startMonth;
+            const endDay = (range as any).endDay || startDay;
+
+            // Check if current date is within range
+            const currentMonthDay = month * 100 + date.getDate();
+            const startMonthDay = startMonth * 100 + startDay;
+            const endMonthDay = endMonth * 100 + endDay;
+
+            if (startMonthDay <= endMonthDay) {
+              return currentMonthDay >= startMonthDay && currentMonthDay <= endMonthDay;
+            } else {
+              // Range wraps around year
+              return currentMonthDay >= startMonthDay || currentMonthDay <= endMonthDay;
+            }
+          }
+
+          // Support old format with month/days/start/end within a month
           if (range.month !== month) return false;
           if (range.days) {
             return range.days.includes(date.getDate());

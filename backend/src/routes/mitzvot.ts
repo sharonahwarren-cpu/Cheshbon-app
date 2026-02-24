@@ -182,7 +182,7 @@ export function registerMitzvotRoutes(app: App) {
       scheduleNthDayOfMonth?: any;
       scheduleTimesPerMonth?: number;
       schedulePeriodOfYear?: any;
-      scheduleDatesOfYear?: string[];
+      scheduleDatesOfYear?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
       scheduleRecurrenceType?: string;
       scheduleTimesPerDayDetails?: any;
       scheduleWeekendsOnly?: boolean;

@@ -125,6 +125,10 @@ export function registerGoalRoutes(app: App) {
         ? (typeof goal.scheduleExclusions === 'string' ? JSON.parse(goal.scheduleExclusions) : goal.scheduleExclusions)
         : null;
 
+      const yearlyDates = goal.scheduleDatesOfYear
+        ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear)
+        : null;
+
       // Convert dates to ISO 8601 UTC format
       const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
 
@@ -137,7 +141,7 @@ export function registerGoalRoutes(app: App) {
         endDate: convertToISO(goal.endDate),
         createdAt: convertToISO(goal.createdAt),
         updatedAt: convertToISO(goal.updatedAt),
-        yearlyDates: goal.scheduleDatesOfYear || [],
+        yearlyDates: yearlyDates || [],
         monthlyDates: goal.scheduleDatesOfMonth || [],
         monthlyWeekdayRules: monthlyWeekdayRules || [],
         selectedWeekdays: goal.scheduleDaysOfWeek || [],
@@ -266,7 +270,7 @@ export function registerGoalRoutes(app: App) {
       selectedFortnightDays?: number[];
       monthlyDates?: number[];
       monthlyWeekdayRules?: Array<{ week: number; day: number }>;
-      yearlyDates?: string[];
+      yearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
       scheduleRecurrenceType?: string;
       scheduleTimesPerDayDetails?: Array<{ hour: number; minute: number; conditions?: string }>;
       scheduleWeekendsOnly?: boolean;
@@ -318,7 +322,7 @@ export function registerGoalRoutes(app: App) {
           scheduleDaysOfWeek: (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null,
           scheduleDatesOfMonth: (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null,
           scheduleNthDayOfMonth: body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null,
-          scheduleDatesOfYear: (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null,
+          scheduleDatesOfYear: body.yearlyDates?.length ? body.yearlyDates : null,
           rewardCurrencyId: body.reward?.currencyId || null,
           rewardSuccesses: body.reward?.successes || null,
           rewardAmount: body.reward?.amount || null,
@@ -388,7 +392,7 @@ export function registerGoalRoutes(app: App) {
       selectedFortnightDays?: number[];
       monthlyDates?: number[];
       monthlyWeekdayRules?: Array<{ week: number; day: number }>;
-      yearlyDates?: string[];
+      yearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
       scheduleRecurrenceType?: string;
       scheduleTimesPerDayDetails?: Array<{ hour: number; minute: number; conditions?: string }>;
       scheduleWeekendsOnly?: boolean;
@@ -448,7 +452,7 @@ export function registerGoalRoutes(app: App) {
       }
       if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
       if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null;
-      if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = (body.yearlyDates?.length ? body.yearlyDates : null) as string[] | null;
+      if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = body.yearlyDates?.length ? body.yearlyDates : null;
       if (body.calendarType !== undefined) {
         const newCalendarType = body.calendarType || null;
         const oldCalendarType = existingGoal[0].calendarType;
@@ -756,7 +760,7 @@ export function registerGoalRoutes(app: App) {
         monthlyRandomCount: goal.scheduleMonthlyRandomCount,
         nthDayOfMonth: goal.scheduleNthDayOfMonth ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth) : undefined,
         yearlyMonths: goal.scheduleDateOfYearMonths,
-        yearlyDatesOrRanges: goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear) : undefined,
+        yearlyDatesOrRanges: goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : Array.isArray(goal.scheduleDatesOfYear) ? goal.scheduleDatesOfYear : undefined) : undefined,
         exclusions: goal.scheduleExclusions ? (typeof goal.scheduleExclusions === 'string' ? JSON.parse(goal.scheduleExclusions) : goal.scheduleExclusions) : undefined,
       };
 
@@ -839,7 +843,7 @@ export function registerGoalRoutes(app: App) {
         scheduleNthDayOfMonth: scheduleType === 'Monthly' ? (goal.scheduleNthDayOfMonth ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth) : undefined) : undefined,
         scheduleMonthlyRange: scheduleType === 'Monthly' ? (goal.scheduleMonthlyRange ? (typeof goal.scheduleMonthlyRange === 'string' ? JSON.parse(goal.scheduleMonthlyRange) : goal.scheduleMonthlyRange) : undefined) : undefined,
         scheduleFortnightEvenOdd: scheduleType === 'Fortnightly' ? goal.scheduleFortnightEvenOdd : undefined,
-        scheduleDatesOfYear: scheduleType === 'Yearly' ? (goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear) : undefined) : undefined,
+        scheduleDatesOfYear: scheduleType === 'Yearly' ? (goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : Array.isArray(goal.scheduleDatesOfYear) ? goal.scheduleDatesOfYear : undefined) : undefined) : undefined,
         scheduleTimesPerDayDetails: goal.scheduleTimesPerDayDetails ? (typeof goal.scheduleTimesPerDayDetails === 'string' ? JSON.parse(goal.scheduleTimesPerDayDetails) : goal.scheduleTimesPerDayDetails) : undefined,
         scheduleWeekendsOnly: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') ? goal.scheduleWeekendsOnly : false,
         scheduleWeekdaysOnly: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') ? goal.scheduleWeekdaysOnly : false,
