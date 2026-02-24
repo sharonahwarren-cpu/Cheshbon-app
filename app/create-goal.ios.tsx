@@ -541,6 +541,9 @@ export default function CreateGoalScreen() {
   };
 
   const handleSubmit = async () => {
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚀 [iOS YEARLY SCHEDULE FIX] Starting goal submission');
+    console.log('═══════════════════════════════════════════════════════');
     console.log(editingGoalId ? 'Submitting goal update form' : 'Submitting goal creation form');
     
     if (!title.trim()) {
@@ -561,6 +564,34 @@ export default function CreateGoalScreen() {
       const scheduleRecurrenceType = scheduleConfig.scheduleType === 'Always Active' 
         ? 'alwaysactive' 
         : scheduleConfig.scheduleType.toLowerCase();
+
+      console.log('📊 [iOS YEARLY SCHEDULE FIX] Schedule Config State:');
+      console.log('  - scheduleType:', scheduleConfig.scheduleType);
+      console.log('  - yearlyDates RAW:', scheduleConfig.yearlyDates);
+
+      // ✅ CRITICAL FIX: Only send yearlyDates if scheduleType is "Yearly"
+      // This prevents stale yearly data from causing errors when saving non-yearly goals
+      let yearlyDatesForBackend = null;
+      
+      if (scheduleConfig.scheduleType === 'Yearly' && scheduleConfig.yearlyDates) {
+        yearlyDatesForBackend = scheduleConfig.yearlyDates.map(d => {
+          const result = {
+            month: d.month,
+            day: d.day,
+            ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
+            ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
+          };
+          console.log('🔄 [iOS YEARLY SCHEDULE FIX] Transforming yearlyDate entry (plain object - backend will stringify):', JSON.stringify(result));
+          // ✅ RETURN PLAIN OBJECT - DO NOT STRINGIFY
+          return result;
+        });
+      }
+
+      console.log('📤 [iOS YEARLY SCHEDULE FIX] Final yearlyDates for backend:');
+      console.log('  - scheduleType:', scheduleConfig.scheduleType);
+      console.log('  - VALUE:', JSON.stringify(yearlyDatesForBackend, null, 2));
+      console.log('  - IS_NULL:', yearlyDatesForBackend === null);
+      console.log('  - WILL_BE_SENT:', scheduleConfig.scheduleType === 'Yearly' ? 'YES' : 'NO (cleared)');
 
       const goalData: any = {
         title: title.trim(),
@@ -586,7 +617,7 @@ export default function CreateGoalScreen() {
         scheduleFortnightEvenOdd: scheduleConfig.fortnightWeek === 'week1' ? 'even' : scheduleConfig.fortnightWeek === 'week2' ? 'odd' : undefined,
         // CRITICAL FIX: Backend PUT handler reads 'monthlyDates', not 'scheduleMonthlyDates'.
         monthlyDates: scheduleConfig.monthlyDates,
-        scheduleMonthlyDates: scheduleConfig.monthlyDates,
+        scheduleDatesOfMonth: scheduleConfig.monthlyDates,
         // CRITICAL FIX: Backend PUT handler reads 'monthlyWeekdayRules', not 'scheduleMonthlyWeekdayPositions'.
         monthlyWeekdayRules: scheduleConfig.monthlyWeekdayPositions,
         scheduleMonthlyWeekdayPositions: scheduleConfig.monthlyWeekdayPositions,
@@ -600,31 +631,12 @@ export default function CreateGoalScreen() {
         scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
         scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
         scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
-        // ✅ CRITICAL FIX: Send yearlyDates as PLAIN OBJECTS (not stringified)
-        // The backend will handle stringification when storing in the text[] column
-        // Previously we were double-stringifying: frontend stringified + backend stringified = malformed array literal
-        yearlyDates: scheduleConfig.yearlyDates?.map(d => {
-          const result = {
-            month: d.month,
-            day: d.day,
-            ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
-            ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
-          };
-          console.log('🔄 [iOS YEARLY SCHEDULE FIX] Transforming yearlyDate entry (plain object - backend will stringify):', JSON.stringify(result));
-          // ✅ RETURN PLAIN OBJECT - DO NOT STRINGIFY
-          return result;
-        }),
+        // ✅ CRITICAL FIX: Only send yearlyDates if scheduleType is "Yearly"
+        // This prevents stale yearly data from causing errors when saving non-yearly goals
+        yearlyDates: yearlyDatesForBackend,
+        scheduleDatesOfYear: yearlyDatesForBackend,
         scheduleYearlyMonths: scheduleConfig.yearlyMonths,
-        scheduleYearlyDates: scheduleConfig.yearlyDates?.map(d => {
-          const result = {
-            month: d.month,
-            day: d.day,
-            ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
-            ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
-          };
-          // ✅ RETURN PLAIN OBJECT - DO NOT STRINGIFY
-          return result;
-        }),
+        scheduleYearlyDates: yearlyDatesForBackend,
         scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
         scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
         scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,
@@ -703,6 +715,10 @@ export default function CreateGoalScreen() {
         showSuccess('Goal created successfully!');
       }
       
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('✅ [iOS YEARLY SCHEDULE FIX] Goal submission completed successfully');
+      console.log('═══════════════════════════════════════════════════════');
+      
       setTimeout(() => {
         if (returnToLifeAreaWizard === 'true' && wizardLifeAreaId) {
           setModalVisible(false);
@@ -725,7 +741,10 @@ export default function CreateGoalScreen() {
         }
       }, 1500);
     } catch (error: any) {
-      console.error('[API] Error saving goal:', error);
+      console.log('═══════════════════════════════════════════════════════');
+      console.error('❌ [iOS YEARLY SCHEDULE FIX] Error saving goal');
+      console.error('  - Error message:', error.message);
+      console.log('═══════════════════════════════════════════════════════');
       showError(error.message || 'Failed to save goal');
     } finally {
       setSubmitting(false);

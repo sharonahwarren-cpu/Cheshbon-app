@@ -1,14 +1,5 @@
 
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { DateTime } from 'luxon';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { colors } from '@/styles/commonStyles';
-import { LoadingButton } from '@/components/LoadingButton';
-import { DatePickerModal } from '@/components/DatePickerModal';
-import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
-import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,9 +12,18 @@ import {
   Platform,
   Switch,
 } from 'react-native';
-import { getLocalTimezone } from '@/utils/dateUtils';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { DateTime } from 'luxon';
+import { DatePickerModal } from '@/components/DatePickerModal';
+import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
+import React, { useState, useEffect } from 'react';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { getLocalTimezone } from '@/utils/dateUtils';
 import { useFocusEffect } from '@react-navigation/native';
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import { colors } from '@/styles/commonStyles';
+import { LoadingButton } from '@/components/LoadingButton';
 
 interface Goal {
   id: string;
@@ -623,31 +623,40 @@ export default function CreateGoalScreen() {
         });
       }
 
-      // ✅ CRITICAL FIX: Send yearlyDates as PLAIN OBJECTS, not stringified
-      // The backend will handle stringification when storing in the text[] column
-      // Previously we were double-stringifying: frontend stringified + backend stringified = malformed array literal
-      const yearlyDatesForBackend = scheduleConfig.yearlyDates?.map(d => {
-        const result = {
-          month: d.month,
-          day: d.day,
-          ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
-          ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
-        };
-        
-        console.log('🔄 [YEARLY SCHEDULE FIX] Transforming yearlyDate entry:');
-        console.log('  - INPUT:', JSON.stringify(d, null, 2));
-        console.log('  - OUTPUT (as plain object - backend will stringify):', JSON.stringify(result, null, 2));
-        
-        // ✅ RETURN PLAIN OBJECT - DO NOT STRINGIFY
-        return result;
-      });
+      // ✅ CRITICAL FIX: Only send yearlyDates if scheduleType is "Yearly"
+      // This prevents stale yearly data from causing errors when saving non-yearly schedules
+      let yearlyDatesForBackend: any[] | null = null;
+      
+      if (scheduleConfig.scheduleType === 'Yearly' && scheduleConfig.yearlyDates && scheduleConfig.yearlyDates.length > 0) {
+        // Send yearlyDates as PLAIN OBJECTS (not stringified)
+        // The backend will handle stringification when storing in the text[] column
+        yearlyDatesForBackend = scheduleConfig.yearlyDates.map(d => {
+          const result = {
+            month: d.month,
+            day: d.day,
+            ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
+            ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
+          };
+          
+          console.log('🔄 [YEARLY SCHEDULE FIX] Transforming yearlyDate entry:');
+          console.log('  - INPUT:', JSON.stringify(d, null, 2));
+          console.log('  - OUTPUT (as plain object - backend will stringify):', JSON.stringify(result, null, 2));
+          
+          // ✅ RETURN PLAIN OBJECT - DO NOT STRINGIFY
+          return result;
+        });
+      }
 
-      console.log('📤 [YEARLY SCHEDULE FIX] Final yearlyDates for backend (plain objects):');
+      console.log('📤 [YEARLY SCHEDULE FIX] Final yearlyDates for backend:');
+      console.log('  - scheduleType:', scheduleConfig.scheduleType);
       console.log('  - VALUE:', JSON.stringify(yearlyDatesForBackend, null, 2));
       console.log('  - TYPE:', typeof yearlyDatesForBackend);
+      console.log('  - IS_NULL:', yearlyDatesForBackend === null);
       console.log('  - IS_ARRAY:', Array.isArray(yearlyDatesForBackend));
-      console.log('  - ENTRIES ARE OBJECTS:', yearlyDatesForBackend?.every(e => typeof e === 'object' && e !== null));
-      console.log('  - ENTRIES ARE NOT STRINGS:', yearlyDatesForBackend?.every(e => typeof e !== 'string'));
+      if (yearlyDatesForBackend) {
+        console.log('  - ENTRIES ARE OBJECTS:', yearlyDatesForBackend.every(e => typeof e === 'object' && e !== null));
+        console.log('  - ENTRIES ARE NOT STRINGS:', yearlyDatesForBackend.every(e => typeof e !== 'string'));
+      }
 
       const goalData: any = {
         title: title.trim(),
@@ -688,8 +697,8 @@ export default function CreateGoalScreen() {
         scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
         scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
         scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
-        // ✅ CRITICAL FIX: Send yearlyDates as PLAIN OBJECTS (not stringified)
-        // The backend will handle stringification when storing in the text[] column
+        // ✅ CRITICAL FIX: Only send yearlyDates if scheduleType is "Yearly"
+        // Send as PLAIN OBJECTS (not stringified) - backend will handle stringification
         yearlyDates: yearlyDatesForBackend,
         scheduleDatesOfYear: yearlyDatesForBackend,
         scheduleYearlyMonths: scheduleConfig.yearlyMonths,
@@ -709,12 +718,15 @@ export default function CreateGoalScreen() {
       };
       
       console.log('📦 [YEARLY SCHEDULE FIX] Goal Data Object:');
-      console.log('  - yearlyDates (plain objects):', JSON.stringify(goalData.yearlyDates, null, 2));
+      console.log('  - scheduleType:', goalData.scheduleType);
+      console.log('  - yearlyDates (plain objects or null):', JSON.stringify(goalData.yearlyDates, null, 2));
       console.log('  - yearlyDates TYPE:', typeof goalData.yearlyDates);
+      console.log('  - yearlyDates IS_NULL:', goalData.yearlyDates === null);
       console.log('  - yearlyDates IS_ARRAY:', Array.isArray(goalData.yearlyDates));
-      console.log('  - yearlyDates ENTRIES ARE OBJECTS:', Array.isArray(goalData.yearlyDates) && goalData.yearlyDates.every((e: any) => typeof e === 'object' && e !== null));
-      console.log('  - yearlyDates ENTRIES ARE NOT STRINGS:', Array.isArray(goalData.yearlyDates) && goalData.yearlyDates.every((e: any) => typeof e !== 'string'));
-      console.log('  - scheduleYearlyDates (plain objects):', JSON.stringify(goalData.scheduleYearlyDates, null, 2));
+      if (goalData.yearlyDates) {
+        console.log('  - yearlyDates ENTRIES ARE OBJECTS:', goalData.yearlyDates.every((e: any) => typeof e === 'object' && e !== null));
+        console.log('  - yearlyDates ENTRIES ARE NOT STRINGS:', goalData.yearlyDates.every((e: any) => typeof e !== 'string'));
+      }
       
       // FIXED: Include alarms field when editing a goal
       if (editingGoalId && goalAlarms.length > 0) {
