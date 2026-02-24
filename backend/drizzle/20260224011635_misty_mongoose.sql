@@ -1,0 +1,1 @@
+ALTER TABLE "user_preferences" ADD COLUMN "use_ai_cheshbon" boolean DEFAULT false NOT NULL;
