@@ -17,7 +17,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedDelete, BACKEND_URL, getBearerToken } from '@/utils/api';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { Audio } from 'expo-av';
+import { AudioRecorder, AudioRecording, RecordingOptions } from 'expo-audio';
 import * as FileSystem from 'expo-file-system';
 
 interface CheshbonSession {
@@ -57,7 +57,7 @@ export default function CheshbonScreen() {
   const [categories, setCategories] = useState<MitzvahCategory[]>([]);
 
   // Recording state
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<AudioRecording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [transcription, setTranscription] = useState('');
@@ -126,21 +126,40 @@ export default function CheshbonScreen() {
   const startRecording = async () => {
     try {
       console.log('[Cheshbon] Requesting audio permissions...');
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
+      const { granted } = await AudioRecorder.requestPermissionsAsync();
+      if (!granted) {
         showError('Microphone permission is required for voice recording.');
         return;
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
       console.log('[Cheshbon] Starting recording...');
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      const recordingOptions: RecordingOptions = {
+        android: {
+          extension: '.m4a',
+          outputFormat: 'mpeg4',
+          audioEncoder: 'aac',
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          outputFormat: 'mpeg4aac',
+          audioQuality: 'high',
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      };
+
+      const newRecording = await AudioRecorder.recordAsync(recordingOptions);
       setRecording(newRecording);
       setIsRecording(true);
       setTranscription('');
@@ -157,8 +176,7 @@ export default function CheshbonScreen() {
     try {
       console.log('[Cheshbon] Stopping recording...');
       setIsRecording(false);
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      const uri = await recording.stopAsync();
       setRecording(null);
 
       if (uri) {
