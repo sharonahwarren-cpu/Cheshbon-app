@@ -317,10 +317,29 @@ export default function CreateGoalScreen() {
         setType(goalDetails.type || 'Proactive');
         setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
         
-        // Load schedule config from goal details
-        const rawScheduleType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+        // CRITICAL FIX: Load schedule config from BOTH fields for backward compatibility
+        // Use scheduleRecurrenceType if available, otherwise fall back to scheduleType
+        const backendScheduleType = goalDetails.scheduleRecurrenceType || goalDetails.schedule_recurrence_type;
+        let frontendScheduleType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+        
+        // If we have a backend schedule type, map it back to frontend format
+        if (backendScheduleType) {
+          if (backendScheduleType === 'alwaysactive') {
+            frontendScheduleType = 'Always Active';
+          } else {
+            // Capitalize first letter: 'weekly' -> 'Weekly'
+            frontendScheduleType = backendScheduleType.charAt(0).toUpperCase() + backendScheduleType.slice(1);
+          }
+        }
+        
+        console.log('[CreateGoal] Schedule type mapping:', {
+          backendScheduleType,
+          frontendScheduleType,
+          rawScheduleType: goalDetails.scheduleType || goalDetails.schedule_type
+        });
+        
         setScheduleConfig({
-          scheduleType: rawScheduleType,
+          scheduleType: frontendScheduleType,
           timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
           weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week,
         });
@@ -443,6 +462,12 @@ export default function CreateGoalScreen() {
         scheduleTimesPerDay: scheduleConfig.timesPerDay,
         scheduleDaysOfWeek: scheduleConfig.weekdays,
       };
+      
+      console.log('[CreateGoal] Schedule data being sent:', {
+        scheduleType: goalData.scheduleType,
+        scheduleRecurrenceType: goalData.scheduleRecurrenceType,
+        scheduleDaysOfWeek: goalData.scheduleDaysOfWeek
+      });
       
       // FIXED: Include alarms field when editing a goal
       if (editingGoalId && goalAlarms.length > 0) {
