@@ -22,6 +22,24 @@ function parseJsonbField(value: any): any {
   return value;
 }
 
+// Helper function to convert yearlyDates array of objects to array of JSON strings for text[] storage
+function convertYearlyDatesToTextArray(yearlyDates: any): string[] | null {
+  if (!yearlyDates || !Array.isArray(yearlyDates)) return null;
+  try {
+    return yearlyDates.map((item) => {
+      if (typeof item === 'string') {
+        // Already a string, return as-is
+        return item;
+      }
+      // Convert object to JSON string
+      return JSON.stringify(item);
+    });
+  } catch (error) {
+    console.log('[convertYearlyDatesToTextArray] Error converting:', error);
+    return null;
+  }
+}
+
 export function registerGoalRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
@@ -320,6 +338,7 @@ export function registerGoalRoutes(app: App) {
       );
 
       // Process yearly dates with detailed logging
+      // Convert array of objects to array of JSON strings for text[] storage
       if (body.yearlyDates !== undefined) {
         console.log('[POST /api/goals] yearlyDates received:', body.yearlyDates);
         console.log('[POST /api/goals] yearlyDates type:', typeof body.yearlyDates);
@@ -327,12 +346,12 @@ export function registerGoalRoutes(app: App) {
         console.log('[POST /api/goals] yearlyDates stringified:', JSON.stringify(body.yearlyDates));
       }
 
-      const yearlyDatesToStore = parseJsonbField(body.yearlyDates);
+      const yearlyDatesToStore = convertYearlyDatesToTextArray(body.yearlyDates);
 
       if (body.yearlyDates) {
-        console.log('[POST /api/goals] After parseJsonbField:', yearlyDatesToStore);
-        console.log('[POST /api/goals] After parseJsonbField type:', typeof yearlyDatesToStore);
-        console.log('[POST /api/goals] After parseJsonbField isArray:', Array.isArray(yearlyDatesToStore));
+        console.log('[POST /api/goals] After convertYearlyDatesToTextArray:', yearlyDatesToStore);
+        console.log('[POST /api/goals] After conversion type:', typeof yearlyDatesToStore);
+        console.log('[POST /api/goals] After conversion isArray:', Array.isArray(yearlyDatesToStore));
 
         app.logger.info(
           {
@@ -340,9 +359,9 @@ export function registerGoalRoutes(app: App) {
             originalYearlyDates: body.yearlyDates,
             originalType: typeof body.yearlyDates,
             isArray: Array.isArray(body.yearlyDates),
-            parsedYearlyDates: yearlyDatesToStore,
-            parsedType: typeof yearlyDatesToStore,
-            parsedIsArray: Array.isArray(yearlyDatesToStore),
+            convertedYearlyDates: yearlyDatesToStore,
+            convertedType: typeof yearlyDatesToStore,
+            convertedIsArray: Array.isArray(yearlyDatesToStore),
           },
           'Processing yearly dates for POST'
         );
@@ -516,16 +535,17 @@ export function registerGoalRoutes(app: App) {
       if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.monthlyWeekdayRules);
       if (body.yearlyDates !== undefined) {
         // Detailed logging of yearlyDates processing
+        // Convert array of objects to array of JSON strings for text[] storage
         console.log('[PUT /api/goals/:id] yearlyDates received:', body.yearlyDates);
         console.log('[PUT /api/goals/:id] yearlyDates type:', typeof body.yearlyDates);
         console.log('[PUT /api/goals/:id] yearlyDates isArray:', Array.isArray(body.yearlyDates));
         console.log('[PUT /api/goals/:id] yearlyDates stringified:', JSON.stringify(body.yearlyDates));
 
-        const parsedYearlyDates = parseJsonbField(body.yearlyDates);
+        const convertedYearlyDates = convertYearlyDatesToTextArray(body.yearlyDates);
 
-        console.log('[PUT /api/goals/:id] After parseJsonbField:', parsedYearlyDates);
-        console.log('[PUT /api/goals/:id] After parseJsonbField type:', typeof parsedYearlyDates);
-        console.log('[PUT /api/goals/:id] After parseJsonbField isArray:', Array.isArray(parsedYearlyDates));
+        console.log('[PUT /api/goals/:id] After convertYearlyDatesToTextArray:', convertedYearlyDates);
+        console.log('[PUT /api/goals/:id] After conversion type:', typeof convertedYearlyDates);
+        console.log('[PUT /api/goals/:id] After conversion isArray:', Array.isArray(convertedYearlyDates));
 
         app.logger.info(
           {
@@ -534,13 +554,13 @@ export function registerGoalRoutes(app: App) {
             originalYearlyDates: body.yearlyDates,
             originalType: typeof body.yearlyDates,
             isArray: Array.isArray(body.yearlyDates),
-            parsedYearlyDates,
-            parsedType: typeof parsedYearlyDates,
-            parsedIsArray: Array.isArray(parsedYearlyDates),
+            convertedYearlyDates,
+            convertedType: typeof convertedYearlyDates,
+            convertedIsArray: Array.isArray(convertedYearlyDates),
           },
           'Processing yearly dates for update'
         );
-        updateData.scheduleDatesOfYear = parsedYearlyDates;
+        updateData.scheduleDatesOfYear = convertedYearlyDates;
 
         console.log('[PUT /api/goals/:id] updateData.scheduleDatesOfYear:', updateData.scheduleDatesOfYear);
       }
