@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,18 +9,23 @@ import {
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost } from '@/utils/api';
+import * as Speech from 'expo-speech';
+import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   createdAt: string;
+  isTranscribed?: boolean;
 }
 
 interface Conversation {
@@ -39,12 +44,25 @@ export default function AIChatScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [showConversations, setShowConversations] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [autoSpeak, setAutoSpeak] = useState(true);
+  const [inputMode, setInputMode] = useState<'voice' | 'text'>('voice');
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
 
+  // Pulse animation for recording button
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
+
   useEffect(() => {
     loadConversations();
+    return () => {
+      Speech.stop();
+      if (pulseLoop.current) pulseLoop.current.stop();
+    };
   }, []);
 
   useEffect(() => {
@@ -61,8 +79,61 @@ export default function AIChatScreen() {
     }
   }, [messages]);
 
+  useEffect(() => {
+    if (isRecording) {
+      pulseLoop.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.25,
+            duration: 600,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 600,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulseLoop.current.start();
+    } else {
+      if (pulseLoop.current) pulseLoop.current.stop();
+      pulseAnim.setValue(1);
+    }
+  }, [isRecording]);
+
+  const speakText = useCallback(async (text: string) => {
+    if (!autoSpeak) return;
+    try {
+      await Speech.stop();
+      setIsSpeaking(true);
+      Speech.speak(text, {
+        language: 'en-US',
+        pitch: 1.0,
+        rate: 0.95,
+        onDone: () => setIsSpeaking(false),
+        onError: () => setIsSpeaking(false),
+        onStopped: () => setIsSpeaking(false),
+      });
+    } catch (err) {
+      console.error('[Voice] Speech error:', err);
+      setIsSpeaking(false);
+    }
+  }, [autoSpeak]);
+
+  const stopSpeaking = async () => {
+    try {
+      await Speech.stop();
+      setIsSpeaking(false);
+    } catch (err) {
+      console.error('[Voice] Stop speech error:', err);
+    }
+  };
+
   const loadConversations = async () => {
-    console.log('Loading conversations...');
+    console.log('[AI Chat iOS] Loading conversations...');
     try {
       setLoading(true);
       const response = await authenticatedGet('/api/reflection-chat/conversations');
@@ -71,9 +142,11 @@ export default function AIChatScreen() {
       
       if (conversationsData.length > 0 && !currentConversationId) {
         setCurrentConversationId(conversationsData[0].id);
+      } else if (conversationsData.length === 0) {
+        await createNewConversationInternal(true);
       }
     } catch (error) {
-      console.error('Error loading conversations:', error);
+      console.error('[AI Chat iOS] Error loading conversations:', error);
       showError('Failed to load conversations');
     } finally {
       setLoading(false);
@@ -81,36 +154,182 @@ export default function AIChatScreen() {
   };
 
   const loadMessages = async (conversationId: string) => {
-    console.log('Loading messages for conversation:', conversationId);
+    console.log('[AI Chat iOS] Loading messages for conversation:', conversationId);
     try {
       setLoading(true);
       const response = await authenticatedGet(`/api/reflection-chat/conversations/${conversationId}/messages`);
       const messagesData = Array.isArray(response) ? response : (response?.data || []);
       setMessages(messagesData);
     } catch (error) {
-      console.error('Error loading messages:', error);
+      console.error('[AI Chat iOS] Error loading messages:', error);
       showError('Failed to load messages');
     } finally {
       setLoading(false);
     }
   };
 
-  const createNewConversation = async () => {
-    console.log('Creating new conversation...');
+  const createNewConversationInternal = async (silent = false) => {
+    console.log('[AI Chat iOS] Creating new conversation...');
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await authenticatedPost('/api/reflection-chat/conversations', {});
       const newConversation = response?.data || response;
       
-      setConversations([newConversation, ...conversations]);
+      setConversations(prev => [newConversation, ...prev]);
       setCurrentConversationId(newConversation.id);
-      setMessages([]);
       setShowConversations(false);
+
+      // Handle initial greeting message from backend
+      if (newConversation.initialMessage) {
+        const greetingMsg: Message = {
+          id: `greeting-${Date.now()}`,
+          role: 'assistant',
+          content: newConversation.initialMessage.content,
+          createdAt: new Date().toISOString(),
+        };
+        setMessages([greetingMsg]);
+        setTimeout(() => speakText(greetingMsg.content), 600);
+      } else {
+        setMessages([]);
+      }
     } catch (error) {
-      console.error('Error creating conversation:', error);
-      showError('Failed to create new conversation');
+      console.error('[AI Chat iOS] Error creating conversation:', error);
+      if (!silent) showError('Failed to create new conversation');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }
+  };
+
+  const createNewConversation = () => createNewConversationInternal(false);
+
+  const startRecording = async () => {
+    try {
+      console.log('[Voice iOS] Requesting audio permissions...');
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        showError('Microphone permission is required for voice input');
+        return;
+      }
+
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+
+      console.log('[Voice iOS] Starting recording...');
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      setIsRecording(true);
+    } catch (err) {
+      console.error('[Voice iOS] Failed to start recording:', err);
+      showError('Failed to start recording. Please try again.');
+    }
+  };
+
+  const stopRecordingAndSend = async () => {
+    if (!isRecording) return;
+
+    try {
+      console.log('[Voice iOS] Stopping recording...');
+      setIsRecording(false);
+      await audioRecorder.stop();
+
+      const uri = audioRecorder.uri;
+
+      if (!uri) {
+        showError('Recording failed. Please try again.');
+        return;
+      }
+
+      console.log('[Voice iOS] Recording saved to:', uri);
+
+      const fetchResponse = await fetch(uri);
+      const blob = await fetchResponse.blob();
+      const reader = new FileReader();
+
+      reader.onloadend = async () => {
+        const base64Data = (reader.result as string).split(',')[1];
+        await sendAudioMessage(base64Data);
+      };
+      reader.readAsDataURL(blob);
+    } catch (err) {
+      console.error('[Voice iOS] Failed to stop recording:', err);
+      setIsRecording(false);
+      showError('Failed to process recording. Please try again.');
+    }
+  };
+
+  const sendAudioMessage = async (audioBase64: string) => {
+    let conversationId = currentConversationId;
+
+    if (!conversationId) {
+      try {
+        const response = await authenticatedPost('/api/reflection-chat/conversations', {});
+        const newConversation = response?.data || response;
+        conversationId = newConversation.id;
+        setCurrentConversationId(conversationId);
+        setConversations(prev => [newConversation, ...prev]);
+
+        if (newConversation.initialMessage) {
+          const greetingMsg: Message = {
+            id: `greeting-${Date.now()}`,
+            role: 'assistant',
+            content: newConversation.initialMessage.content,
+            createdAt: new Date().toISOString(),
+          };
+          setMessages([greetingMsg]);
+        }
+      } catch (error) {
+        console.error('[AI Chat iOS] Error creating conversation:', error);
+        showError('Failed to create conversation');
+        return;
+      }
+    }
+
+    const tempMsg: Message = {
+      id: `temp-voice-${Date.now()}`,
+      role: 'user',
+      content: '🎤 Processing voice...',
+      createdAt: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, tempMsg]);
+    setSending(true);
+
+    try {
+      console.log('[AI Chat iOS] Sending audio message to backend...');
+      const apiResponse = await authenticatedPost(
+        `/api/reflection-chat/conversations/${conversationId}/messages`,
+        { audioBase64 }
+      );
+
+      const aiResponse = apiResponse?.data || apiResponse;
+      const transcribedText = aiResponse.transcribedText || '(voice message)';
+      const aiText = aiResponse.response || aiResponse.content || 'No response';
+
+      setMessages(prev => [
+        ...prev.filter(m => m.id !== tempMsg.id),
+        {
+          id: `user-voice-${Date.now()}`,
+          role: 'user',
+          content: transcribedText,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: `ai-${Date.now()}`,
+          role: 'assistant',
+          content: aiText,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+
+      speakText(aiText);
+      await loadConversations();
+    } catch (error) {
+      console.error('[AI Chat iOS] Error sending audio message:', error);
+      setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
+      showError('Failed to process voice message. Try typing instead.');
+    } finally {
+      setSending(false);
     }
   };
 
@@ -129,9 +348,19 @@ export default function AIChatScreen() {
         const newConversation = response?.data || response;
         conversationId = newConversation.id;
         setCurrentConversationId(conversationId);
-        setConversations([newConversation, ...conversations]);
+        setConversations(prev => [newConversation, ...prev]);
+
+        if (newConversation.initialMessage) {
+          const greetingMsg: Message = {
+            id: `greeting-${Date.now()}`,
+            role: 'assistant',
+            content: newConversation.initialMessage.content,
+            createdAt: new Date().toISOString(),
+          };
+          setMessages([greetingMsg]);
+        }
       } catch (error) {
-        console.error('Error creating conversation:', error);
+        console.error('[AI Chat iOS] Error creating conversation:', error);
         showError('Failed to create conversation');
         setSending(false);
         return;
@@ -148,11 +377,13 @@ export default function AIChatScreen() {
 
     try {
       setSending(true);
+      console.log('[AI Chat iOS] Sending text message...');
       const response = await authenticatedPost(`/api/reflection-chat/conversations/${conversationId}/messages`, {
         message: userMessage,
       });
 
       const aiResponse = response?.data || response;
+      const aiText = aiResponse.response || aiResponse.content || 'No response';
       
       setMessages(prev => [
         ...prev.filter(m => m.id !== tempUserMessage.id),
@@ -165,14 +396,15 @@ export default function AIChatScreen() {
         {
           id: `ai-${Date.now()}`,
           role: 'assistant',
-          content: aiResponse.response || aiResponse.content || 'No response',
+          content: aiText,
           createdAt: new Date().toISOString(),
         },
       ]);
 
+      speakText(aiText);
       await loadConversations();
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('[AI Chat iOS] Error sending message:', error);
       showError('Failed to send message');
       setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
     } finally {
@@ -181,6 +413,8 @@ export default function AIChatScreen() {
   };
 
   const switchConversation = (conversationId: string) => {
+    Speech.stop();
+    setIsSpeaking(false);
     setCurrentConversationId(conversationId);
     setShowConversations(false);
   };
@@ -188,19 +422,18 @@ export default function AIChatScreen() {
   const showError = (message: string) => {
     setErrorMessage(message);
     setShowErrorModal(true);
-    setTimeout(() => setShowErrorModal(false), 3000);
+    setTimeout(() => setShowErrorModal(false), 3500);
   };
 
   const currentConversation = conversations.find(c => c.id === currentConversationId);
-  const conversationTitle = currentConversation?.title || 'New Conversation';
-
-  const welcomeMessage = "Hello! I'm your AI reflection coach. I'm here to help you with:\n\n• Reflecting on your goals and progress\n• Setting meaningful goals\n• Monitoring your achievements\n• Providing insights and guidance\n\nHow can I help you today?";
+  const conversationTitle = currentConversation?.title || 'AI Coach';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
 
       <View style={styles.container}>
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => setShowConversations(!showConversations)}
@@ -213,20 +446,43 @@ export default function AIChatScreen() {
               color={colors.text}
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {conversationTitle}
-          </Text>
-          <TouchableOpacity 
-            onPress={createNewConversation}
-            style={styles.headerButton}
-          >
-            <IconSymbol
-              ios_icon_name="plus.circle.fill"
-              android_material_icon_name="add-circle"
-              size={24}
-              color={colors.primary}
-            />
-          </TouchableOpacity>
+
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {conversationTitle}
+            </Text>
+            {isSpeaking && (
+              <View style={styles.speakingBadge}>
+                <View style={styles.speakingDot} />
+                <Text style={styles.speakingText}>Speaking</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => setAutoSpeak(!autoSpeak)}
+              style={[styles.headerButton, autoSpeak && styles.headerButtonActive]}
+            >
+              <IconSymbol
+                ios_icon_name={autoSpeak ? 'speaker.wave.2.fill' : 'speaker.slash.fill'}
+                android_material_icon_name={autoSpeak ? 'volume-up' : 'volume-off'}
+                size={20}
+                color={autoSpeak ? colors.primary : colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={createNewConversation}
+              style={styles.headerButton}
+            >
+              <IconSymbol
+                ios_icon_name="plus.circle.fill"
+                android_material_icon_name="add-circle"
+                size={24}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {showConversations && (
@@ -275,26 +531,29 @@ export default function AIChatScreen() {
         <KeyboardAvoidingView 
           style={styles.content}
           behavior="padding"
-          keyboardVerticalOffset={90}
+          keyboardVerticalOffset={100}
         >
           <ScrollView
             ref={scrollViewRef}
             style={styles.messagesContainer}
             contentContainerStyle={styles.messagesContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             {messages.length === 0 && !loading && (
               <View style={styles.welcomeContainer}>
                 <View style={styles.welcomeIconContainer}>
                   <IconSymbol
-                    ios_icon_name="sparkles"
-                    android_material_icon_name="auto-awesome"
-                    size={64}
+                    ios_icon_name="mic.fill"
+                    android_material_icon_name="mic"
+                    size={56}
                     color={colors.primary}
                   />
                 </View>
                 <Text style={styles.welcomeTitle}>AI Reflection Coach</Text>
-                <Text style={styles.welcomeMessage}>{welcomeMessage}</Text>
+                <Text style={styles.welcomeMessage}>
+                  Tap the mic to start a voice conversation, or switch to text mode below
+                </Text>
               </View>
             )}
 
@@ -303,21 +562,25 @@ export default function AIChatScreen() {
               
               return (
                 <View
-                  key={index}
+                  key={msg.id || index}
                   style={[
                     styles.messageContainer,
                     isUser ? styles.userMessageContainer : styles.aiMessageContainer,
                   ]}
                 >
                   {!isUser && (
-                    <View style={styles.aiAvatar}>
+                    <TouchableOpacity
+                      style={styles.aiAvatar}
+                      onPress={() => speakText(msg.content)}
+                      activeOpacity={0.7}
+                    >
                       <IconSymbol
                         ios_icon_name="sparkles"
                         android_material_icon_name="auto-awesome"
-                        size={20}
+                        size={18}
                         color={colors.background}
                       />
-                    </View>
+                    </TouchableOpacity>
                   )}
                   <View
                     style={[
@@ -334,12 +597,12 @@ export default function AIChatScreen() {
             })}
 
             {sending && (
-              <View style={styles.messageContainer}>
+              <View style={[styles.messageContainer, styles.aiMessageContainer]}>
                 <View style={styles.aiAvatar}>
                   <IconSymbol
                     ios_icon_name="sparkles"
                     android_material_icon_name="auto-awesome"
-                    size={20}
+                    size={18}
                     color={colors.background}
                   />
                 </View>
@@ -354,37 +617,123 @@ export default function AIChatScreen() {
             {loading && messages.length === 0 && (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.loadingText}>Starting conversation...</Text>
               </View>
             )}
           </ScrollView>
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.input}
-              value={message}
-              onChangeText={setMessage}
-              placeholder="Ask about your goals, reflections, or progress..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              maxLength={1000}
-              editable={!sending}
-            />
-            <TouchableOpacity
-              style={[styles.sendButton, (!message.trim() || sending) && styles.sendButtonDisabled]}
-              onPress={sendMessage}
-              disabled={!message.trim() || sending}
-            >
-              {sending ? (
-                <ActivityIndicator size="small" color={colors.background} />
-              ) : (
+          {/* Input Area */}
+          <View style={styles.inputArea}>
+            {/* Mode Toggle */}
+            <View style={styles.modeToggle}>
+              <TouchableOpacity
+                style={[styles.modeButton, inputMode === 'voice' && styles.modeButtonActive]}
+                onPress={() => setInputMode('voice')}
+              >
                 <IconSymbol
-                  ios_icon_name="arrow.up.circle.fill"
-                  android_material_icon_name="send"
-                  size={32}
-                  color={colors.background}
+                  ios_icon_name="mic.fill"
+                  android_material_icon_name="mic"
+                  size={14}
+                  color={inputMode === 'voice' ? colors.primary : colors.textSecondary}
                 />
-              )}
-            </TouchableOpacity>
+                <Text style={[styles.modeButtonText, inputMode === 'voice' && styles.modeButtonTextActive]}>
+                  Voice
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeButton, inputMode === 'text' && styles.modeButtonActive]}
+                onPress={() => setInputMode('text')}
+              >
+                <IconSymbol
+                  ios_icon_name="keyboard"
+                  android_material_icon_name="keyboard"
+                  size={14}
+                  color={inputMode === 'text' ? colors.primary : colors.textSecondary}
+                />
+                <Text style={[styles.modeButtonText, inputMode === 'text' && styles.modeButtonTextActive]}>
+                  Type
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {inputMode === 'voice' ? (
+              /* Voice Input */
+              <View style={styles.voiceInputContainer}>
+                {isSpeaking && (
+                  <TouchableOpacity style={styles.stopSpeakButton} onPress={stopSpeaking}>
+                    <IconSymbol
+                      ios_icon_name="stop.circle.fill"
+                      android_material_icon_name="stop-circle"
+                      size={18}
+                      color={colors.error}
+                    />
+                    <Text style={styles.stopSpeakText}>Stop Speaking</Text>
+                  </TouchableOpacity>
+                )}
+
+                <Animated.View style={[styles.micButtonWrapper, { transform: [{ scale: pulseAnim }] }]}>
+                  <TouchableOpacity
+                    style={[
+                      styles.micButton,
+                      isRecording && styles.micButtonRecording,
+                      sending && styles.micButtonDisabled,
+                    ]}
+                    onPress={isRecording ? stopRecordingAndSend : startRecording}
+                    disabled={sending}
+                    activeOpacity={0.8}
+                  >
+                    {sending ? (
+                      <ActivityIndicator size="large" color={colors.background} />
+                    ) : (
+                      <IconSymbol
+                        ios_icon_name={isRecording ? 'stop.fill' : 'mic.fill'}
+                        android_material_icon_name={isRecording ? 'stop' : 'mic'}
+                        size={34}
+                        color={colors.background}
+                      />
+                    )}
+                  </TouchableOpacity>
+                </Animated.View>
+
+                <Text style={styles.micHint}>
+                  {sending
+                    ? 'Processing...'
+                    : isRecording
+                    ? 'Tap to send'
+                    : 'Tap to speak'}
+                </Text>
+              </View>
+            ) : (
+              /* Text Input */
+              <View style={styles.inputContainer}>
+                <TextInput
+                  style={styles.input}
+                  value={message}
+                  onChangeText={setMessage}
+                  placeholder="Ask about your goals, reflections, or progress..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  maxLength={1000}
+                  editable={!sending}
+                />
+                <TouchableOpacity
+                  style={[styles.sendButton, (!message.trim() || sending) && styles.sendButtonDisabled]}
+                  onPress={sendMessage}
+                  disabled={!message.trim() || sending}
+                >
+                  {sending ? (
+                    <ActivityIndicator size="small" color={colors.background} />
+                  ) : (
+                    <IconSymbol
+                      ios_icon_name="arrow.up.circle.fill"
+                      android_material_icon_name="send"
+                      size={32}
+                      color={colors.background}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -422,15 +771,43 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerButton: {
-    padding: 4,
+    padding: 6,
+    borderRadius: 8,
+  },
+  headerButtonActive: {
+    backgroundColor: colors.primary + '15',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 8,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: colors.text,
-    flex: 1,
-    textAlign: 'center',
-    marginHorizontal: 12,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  speakingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  speakingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  speakingText: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: '500',
   },
   conversationsPanel: {
     position: 'absolute',
@@ -492,37 +869,36 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   welcomeContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
     paddingHorizontal: 24,
   },
   welcomeIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.primary + '20',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: colors.primary + '18',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   welcomeTitle: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 16,
+    marginBottom: 10,
     textAlign: 'center',
   },
   welcomeMessage: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
   },
   messageContainer: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 14,
     alignItems: 'flex-end',
   },
   userMessageContainer: {
@@ -532,19 +908,19 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   aiAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
   },
   messageBubble: {
-    maxWidth: '75%',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 20,
+    maxWidth: '78%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
   },
   userMessageBubble: {
     backgroundColor: colors.primary,
@@ -555,8 +931,8 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
   },
   messageText: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 21,
   },
   userMessageText: {
     color: colors.background,
@@ -569,43 +945,127 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     backgroundColor: colors.card,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 18,
     borderBottomLeftRadius: 4,
   },
   typingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: colors.textSecondary,
   },
   loadingContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  inputArea: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+    paddingBottom: 8,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
+    gap: 8,
+  },
+  modeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+  },
+  modeButtonActive: {
+    backgroundColor: colors.primary + '18',
+  },
+  modeButtonText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  modeButtonTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  voiceInputContainer: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  stopSpeakButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: colors.error + '15',
+  },
+  stopSpeakText: {
+    fontSize: 13,
+    color: colors.error,
+    fontWeight: '600',
+  },
+  micButtonWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  micButton: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  micButtonRecording: {
+    backgroundColor: colors.error,
+    shadowColor: colors.error,
+  },
+  micButtonDisabled: {
+    opacity: 0.6,
+  },
+  micHint: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.background,
+    paddingVertical: 8,
+    gap: 8,
   },
   input: {
     flex: 1,
     backgroundColor: colors.card,
-    borderRadius: 24,
+    borderRadius: 22,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    paddingTop: 12,
-    fontSize: 16,
+    paddingVertical: 10,
+    paddingTop: 10,
+    fontSize: 15,
     color: colors.text,
-    maxHeight: 120,
-    marginRight: 8,
+    maxHeight: 110,
   },
   sendButton: {
     width: 44,
@@ -616,19 +1076,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   errorToast: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 110,
     left: 20,
     right: 20,
     backgroundColor: colors.error,
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -637,7 +1097,7 @@ const styles = StyleSheet.create({
   },
   errorToastText: {
     color: colors.background,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     flex: 1,
   },

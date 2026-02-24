@@ -79,8 +79,11 @@ export default function TabLayout() {
         <Icon sf="chart.bar.fill" />
         <Label>Reports</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger key="ai-chat" name="ai-chat">
-        <Icon sf="sparkles" />
+      <NativeTabs.Trigger 
+        key="ai-chat" 
+        name="ai-chat"
+      >
+        <Icon sf="mic.fill" />
         <Label>AI</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger key="profile" name="profile">
