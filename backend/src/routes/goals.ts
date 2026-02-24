@@ -5,7 +5,8 @@ import * as schema from '../db/schema.js';
 import { getNextActivations, calculateAstronomicalTimes, applyTimeOffset, type ScheduleConfig } from '../utils/goal-scheduler.js';
 import { getScheduleSummaryWithOccurrences } from '../utils/schedule-summary.js';
 
-// Helper function to safely parse JSONB fields
+// Helper function to safely handle JSONB fields
+// For JSONB columns: if the value is a string, parse it to an object; otherwise, use as-is
 function parseJsonbField(value: any): any {
   if (!value) return null;
   if (typeof value === 'string') {
@@ -20,24 +21,6 @@ function parseJsonbField(value: any): any {
   }
   console.log('[parseJsonbField] Returning value as-is:', value);
   return value;
-}
-
-// Helper function to convert yearlyDates array of objects to array of JSON strings for text[] storage
-function convertYearlyDatesToTextArray(yearlyDates: any): string[] | null {
-  if (!yearlyDates || !Array.isArray(yearlyDates)) return null;
-  try {
-    return yearlyDates.map((item) => {
-      if (typeof item === 'string') {
-        // Already a string, return as-is
-        return item;
-      }
-      // Convert object to JSON string
-      return JSON.stringify(item);
-    });
-  } catch (error) {
-    console.log('[convertYearlyDatesToTextArray] Error converting:', error);
-    return null;
-  }
 }
 
 export function registerGoalRoutes(app: App) {
@@ -338,20 +321,18 @@ export function registerGoalRoutes(app: App) {
       );
 
       // Process yearly dates with detailed logging
-      // Convert array of objects to array of JSON strings for text[] storage
       if (body.yearlyDates !== undefined) {
         console.log('[POST /api/goals] yearlyDates received:', body.yearlyDates);
         console.log('[POST /api/goals] yearlyDates type:', typeof body.yearlyDates);
         console.log('[POST /api/goals] yearlyDates isArray:', Array.isArray(body.yearlyDates));
-        console.log('[POST /api/goals] yearlyDates stringified:', JSON.stringify(body.yearlyDates));
       }
 
-      const yearlyDatesToStore = convertYearlyDatesToTextArray(body.yearlyDates);
+      const yearlyDatesToStore = parseJsonbField(body.yearlyDates);
 
       if (body.yearlyDates) {
-        console.log('[POST /api/goals] After convertYearlyDatesToTextArray:', yearlyDatesToStore);
-        console.log('[POST /api/goals] After conversion type:', typeof yearlyDatesToStore);
-        console.log('[POST /api/goals] After conversion isArray:', Array.isArray(yearlyDatesToStore));
+        console.log('[POST /api/goals] After parseJsonbField:', yearlyDatesToStore);
+        console.log('[POST /api/goals] After parsing type:', typeof yearlyDatesToStore);
+        console.log('[POST /api/goals] After parsing isArray:', Array.isArray(yearlyDatesToStore));
 
         app.logger.info(
           {
@@ -359,9 +340,9 @@ export function registerGoalRoutes(app: App) {
             originalYearlyDates: body.yearlyDates,
             originalType: typeof body.yearlyDates,
             isArray: Array.isArray(body.yearlyDates),
-            convertedYearlyDates: yearlyDatesToStore,
-            convertedType: typeof yearlyDatesToStore,
-            convertedIsArray: Array.isArray(yearlyDatesToStore),
+            parsedYearlyDates: yearlyDatesToStore,
+            parsedType: typeof yearlyDatesToStore,
+            parsedIsArray: Array.isArray(yearlyDatesToStore),
           },
           'Processing yearly dates for POST'
         );
@@ -535,17 +516,15 @@ export function registerGoalRoutes(app: App) {
       if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.monthlyWeekdayRules);
       if (body.yearlyDates !== undefined) {
         // Detailed logging of yearlyDates processing
-        // Convert array of objects to array of JSON strings for text[] storage
         console.log('[PUT /api/goals/:id] yearlyDates received:', body.yearlyDates);
         console.log('[PUT /api/goals/:id] yearlyDates type:', typeof body.yearlyDates);
         console.log('[PUT /api/goals/:id] yearlyDates isArray:', Array.isArray(body.yearlyDates));
-        console.log('[PUT /api/goals/:id] yearlyDates stringified:', JSON.stringify(body.yearlyDates));
 
-        const convertedYearlyDates = convertYearlyDatesToTextArray(body.yearlyDates);
+        const parsedYearlyDates = parseJsonbField(body.yearlyDates);
 
-        console.log('[PUT /api/goals/:id] After convertYearlyDatesToTextArray:', convertedYearlyDates);
-        console.log('[PUT /api/goals/:id] After conversion type:', typeof convertedYearlyDates);
-        console.log('[PUT /api/goals/:id] After conversion isArray:', Array.isArray(convertedYearlyDates));
+        console.log('[PUT /api/goals/:id] After parseJsonbField:', parsedYearlyDates);
+        console.log('[PUT /api/goals/:id] After parsing type:', typeof parsedYearlyDates);
+        console.log('[PUT /api/goals/:id] After parsing isArray:', Array.isArray(parsedYearlyDates));
 
         app.logger.info(
           {
@@ -554,13 +533,13 @@ export function registerGoalRoutes(app: App) {
             originalYearlyDates: body.yearlyDates,
             originalType: typeof body.yearlyDates,
             isArray: Array.isArray(body.yearlyDates),
-            convertedYearlyDates,
-            convertedType: typeof convertedYearlyDates,
-            convertedIsArray: Array.isArray(convertedYearlyDates),
+            parsedYearlyDates,
+            parsedType: typeof parsedYearlyDates,
+            parsedIsArray: Array.isArray(parsedYearlyDates),
           },
           'Processing yearly dates for update'
         );
-        updateData.scheduleDatesOfYear = convertedYearlyDates;
+        updateData.scheduleDatesOfYear = parsedYearlyDates;
 
         console.log('[PUT /api/goals/:id] updateData.scheduleDatesOfYear:', updateData.scheduleDatesOfYear);
       }
