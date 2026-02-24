@@ -433,15 +433,51 @@ export default function CreateGoalScreen() {
           monthlyUseAlternativeCalendar: goalDetails.scheduleMonthlyUseAlternativeCalendar || goalDetails.schedule_monthly_use_alternative_calendar,
           monthlyCalendarEvent: goalDetails.scheduleMonthlyCalendarEvent || goalDetails.schedule_monthly_calendar_event,
           // Yearly - CRITICAL: read from yearlyDates (backend field name)
+          // The backend now stores yearlyDates as JSONB (array of objects), not text[]
+          // We must parse and validate each entry to ensure it's a proper object with month/day
           yearlyMonths: parseJsonField(
             goalDetails.scheduleYearlyMonths ||
             goalDetails.schedule_yearly_months
           ),
-          yearlyDates: parseJsonField(
-            goalDetails.yearlyDates ||
-            goalDetails.scheduleYearlyDates ||
-            goalDetails.schedule_yearly_dates
-          ),
+          yearlyDates: (() => {
+            const rawYearlyDates = parseJsonField(
+              goalDetails.yearlyDates ||
+              goalDetails.scheduleYearlyDates ||
+              goalDetails.schedule_yearly_dates
+            );
+            if (!rawYearlyDates || !Array.isArray(rawYearlyDates)) return undefined;
+            // Normalize each entry: handle both object format (new JSONB) and string format (legacy text[])
+            const normalized = rawYearlyDates
+              .map((entry: any) => {
+                if (typeof entry === 'string') {
+                  // Legacy string format - try to parse as JSON object
+                  try {
+                    const parsed = JSON.parse(entry);
+                    if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
+                      return parsed;
+                    }
+                  } catch {
+                    // Not a JSON string - skip invalid legacy entries
+                  }
+                  console.warn('[CreateGoal] Skipping invalid legacy yearlyDates string entry:', entry);
+                  return null;
+                }
+                if (entry && typeof entry === 'object' && typeof entry.month === 'number' && typeof entry.day === 'number') {
+                  // Valid object format (new JSONB format)
+                  return {
+                    month: entry.month,
+                    day: entry.day,
+                    ...(typeof entry.endMonth === 'number' ? { endMonth: entry.endMonth } : {}),
+                    ...(typeof entry.endDay === 'number' ? { endDay: entry.endDay } : {}),
+                  };
+                }
+                console.warn('[CreateGoal] Skipping invalid yearlyDates entry:', entry);
+                return null;
+              })
+              .filter(Boolean);
+            console.log('[CreateGoal] Normalized yearlyDates:', normalized);
+            return normalized.length > 0 ? normalized : undefined;
+          })(),
           yearlyCalendarType: goalDetails.yearlyCalendarType || goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
           yearlyUseAlternativeCalendar: goalDetails.scheduleYearlyUseAlternativeCalendar || goalDetails.schedule_yearly_use_alternative_calendar,
           yearlyCalendarEvent: goalDetails.scheduleYearlyCalendarEvent || goalDetails.schedule_yearly_calendar_event,
@@ -597,9 +633,21 @@ export default function CreateGoalScreen() {
         scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
         scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
         // CRITICAL FIX: Backend PUT handler reads 'yearlyDates', not 'scheduleYearlyDates'.
-        yearlyDates: scheduleConfig.yearlyDates,
+        // The backend now stores yearlyDates as JSONB (array of objects with month/day/endMonth/endDay).
+        // Ensure we send proper objects, not strings.
+        yearlyDates: scheduleConfig.yearlyDates?.map(d => ({
+          month: d.month,
+          day: d.day,
+          ...(d.endMonth !== undefined ? { endMonth: d.endMonth } : {}),
+          ...(d.endDay !== undefined ? { endDay: d.endDay } : {}),
+        })),
         scheduleYearlyMonths: scheduleConfig.yearlyMonths,
-        scheduleYearlyDates: scheduleConfig.yearlyDates,
+        scheduleYearlyDates: scheduleConfig.yearlyDates?.map(d => ({
+          month: d.month,
+          day: d.day,
+          ...(d.endMonth !== undefined ? { endMonth: d.endMonth } : {}),
+          ...(d.endDay !== undefined ? { endDay: d.endDay } : {}),
+        })),
         scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
         scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
         scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,

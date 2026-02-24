@@ -248,12 +248,20 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               ? { start: config.monthlyRangeStart, end: config.monthlyRangeEnd }
               : undefined,
             randomCount: config.monthlyRandomCount,
-            datesOrRanges: config.yearlyDates?.map(d => ({
-              month: d.month,
-              days: d.endMonth ? undefined : [d.day],
-              start: d.day,
-              end: d.endDay || d.day,
-            })),
+            datesOrRanges: config.yearlyDates
+              ?.filter((d: any) => {
+                // CRITICAL FIX: Filter out invalid entries (legacy string format or missing month/day)
+                if (typeof d === 'string') return false;
+                if (!d || typeof d !== 'object') return false;
+                return typeof d.month === 'number' && typeof d.day === 'number';
+              })
+              .map((d: any) => ({
+                month: d.month,
+                days: d.endMonth ? undefined : [d.day],
+                start: d.day,
+                end: d.endDay || d.day,
+                endMonth: d.endMonth,
+              })),
             startDate: config.startDate?.toISOString(),
             endDate: config.endDate?.toISOString(),
             exclusions: config.exclusionDates?.map(d => d.toISOString()),
@@ -1025,7 +1033,23 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       updateConfig({ yearlyDates: current.filter((_, i) => i !== index) });
     };
 
-    const formatYearlyDate = (dateSelection: YearlyDateSelection) => {
+    const formatYearlyDate = (dateSelection: YearlyDateSelection | any) => {
+      // CRITICAL FIX: Handle both new JSONB object format and legacy string format
+      if (typeof dateSelection === 'string') {
+        // Legacy string format - try to parse
+        try {
+          const parsed = JSON.parse(dateSelection);
+          if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
+            return formatYearlyDate(parsed);
+          }
+        } catch {
+          // Not parseable
+        }
+        return `Invalid date: ${dateSelection}`;
+      }
+      if (!dateSelection || typeof dateSelection.month !== 'number' || typeof dateSelection.day !== 'number') {
+        return 'Invalid date';
+      }
       const startMonthName = monthNames[dateSelection.month - 1] || `Month ${dateSelection.month}`;
       
       if (dateSelection.endMonth && dateSelection.endDay) {
@@ -1393,29 +1417,36 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
             {config.yearlyDates && config.yearlyDates.length > 0 && (
               <View style={styles.yearlyDatesList}>
                 <Text style={styles.subLabel}>Selected Dates</Text>
-                {config.yearlyDates.map((dateSelection, index) => (
-                  <View key={index} style={styles.yearlyDateItem}>
-                    <View style={styles.yearlyDateItemContent}>
-                      <IconSymbol
-                        ios_icon_name={dateSelection.endMonth ? 'calendar' : 'calendar.badge.checkmark'}
-                        android_material_icon_name={dateSelection.endMonth ? 'date-range' : 'event-available'}
-                        size={16}
-                        color={colors.primary}
-                      />
-                      <Text style={styles.yearlyDateText}>
-                        {formatYearlyDate(dateSelection)}
-                      </Text>
+                {config.yearlyDates.map((dateSelection: any, index) => {
+                  // CRITICAL FIX: Skip invalid entries (legacy strings or malformed objects)
+                  const isValid = typeof dateSelection === 'object' && dateSelection !== null
+                    && typeof dateSelection.month === 'number'
+                    && typeof dateSelection.day === 'number';
+                  if (!isValid) return null;
+                  return (
+                    <View key={index} style={styles.yearlyDateItem}>
+                      <View style={styles.yearlyDateItemContent}>
+                        <IconSymbol
+                          ios_icon_name={dateSelection.endMonth ? 'calendar' : 'calendar.badge.checkmark'}
+                          android_material_icon_name={dateSelection.endMonth ? 'date-range' : 'event-available'}
+                          size={16}
+                          color={colors.primary}
+                        />
+                        <Text style={styles.yearlyDateText}>
+                          {formatYearlyDate(dateSelection)}
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={() => removeYearlyDate(index)}>
+                        <IconSymbol
+                          ios_icon_name="xmark.circle.fill"
+                          android_material_icon_name="cancel"
+                          size={20}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity onPress={() => removeYearlyDate(index)}>
-                      <IconSymbol
-                        ios_icon_name="xmark.circle.fill"
-                        android_material_icon_name="cancel"
-                        size={20}
-                        color={colors.error}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             )}
           </>

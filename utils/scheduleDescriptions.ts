@@ -184,20 +184,51 @@ export function generateScheduleSummary(config: ScheduleConfig): string {
     // Specific dates
     if (config.yearlyDates && config.yearlyDates.length > 0) {
       const isHebrew = calendarType === 'hebrew';
-      const dateStrings = config.yearlyDates.map(dateRange => {
-        const monthName = isHebrew
-          ? (HEBREW_MONTH_NAMES[dateRange.month - 1] || `Month ${dateRange.month}`)
-          : (GREGORIAN_MONTH_NAMES[dateRange.month - 1] || new Date(2024, dateRange.month - 1, 1).toLocaleDateString('en-US', { month: 'long' }));
-        
-        if (dateRange.endMonth && dateRange.endDay) {
-          const endMonthName = isHebrew
-            ? (HEBREW_MONTH_NAMES[dateRange.endMonth - 1] || `Month ${dateRange.endMonth}`)
-            : (GREGORIAN_MONTH_NAMES[dateRange.endMonth - 1] || new Date(2024, dateRange.endMonth - 1, 1).toLocaleDateString('en-US', { month: 'long' }));
-          return `${monthName} ${formatOrdinal(dateRange.day)} to ${endMonthName} ${formatOrdinal(dateRange.endDay)}`;
-        }
-        
-        return `${monthName} ${formatOrdinal(dateRange.day)}`;
-      });
+
+      // CRITICAL FIX: Normalize each entry to handle both:
+      // - New JSONB format: { month: 1, day: 3, endMonth: 2, endDay: 2 } (objects)
+      // - Legacy text[] format: strings that may be JSON-encoded objects
+      const normalizedDates = config.yearlyDates
+        .map((entry: any) => {
+          if (typeof entry === 'string') {
+            // Legacy string format - try to parse as JSON
+            try {
+              const parsed = JSON.parse(entry);
+              if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
+                return parsed;
+              }
+            } catch {
+              // Not parseable JSON - skip
+            }
+            return null; // Invalid legacy string entry
+          }
+          if (entry && typeof entry === 'object' && typeof entry.month === 'number' && typeof entry.day === 'number') {
+            return entry; // Valid object format
+          }
+          return null; // Invalid entry
+        })
+        .filter(Boolean);
+
+      const dateStrings = normalizedDates
+        .map((dateRange: any) => {
+          const monthName = isHebrew
+            ? (HEBREW_MONTH_NAMES[dateRange.month - 1] || `Month ${dateRange.month}`)
+            : (GREGORIAN_MONTH_NAMES[dateRange.month - 1] || new Date(2024, dateRange.month - 1, 1).toLocaleDateString('en-US', { month: 'long' }));
+          
+          if (dateRange.endMonth && dateRange.endDay) {
+            const endMonthName = isHebrew
+              ? (HEBREW_MONTH_NAMES[dateRange.endMonth - 1] || `Month ${dateRange.endMonth}`)
+              : (GREGORIAN_MONTH_NAMES[dateRange.endMonth - 1] || new Date(2024, dateRange.endMonth - 1, 1).toLocaleDateString('en-US', { month: 'long' }));
+            return `${monthName} ${formatOrdinal(dateRange.day)} to ${endMonthName} ${formatOrdinal(dateRange.endDay)}`;
+          }
+          
+          return `${monthName} ${formatOrdinal(dateRange.day)}`;
+        });
+
+      // CRITICAL FIX: Check if we have any valid date strings after filtering
+      if (dateStrings.length === 0) {
+        return `Yearly${calendarLabel} (no valid dates)`;
+      }
 
       if (dateStrings.length === 1) {
         return `Scheduled on ${dateStrings[0]} every year${calendarLabel}`;
@@ -263,7 +294,12 @@ export function generateShortScheduleSummary(config: ScheduleConfig): string {
     if (config.yearlyCalendarEvent) {
       return config.yearlyCalendarEvent;
     }
-    const dateCount = config.yearlyDates?.length || 0;
+    // CRITICAL FIX: Count only valid object entries (not legacy strings)
+    const validDates = config.yearlyDates?.filter((d: any) => {
+      if (typeof d === 'string') return false;
+      return d && typeof d === 'object' && typeof d.month === 'number' && typeof d.day === 'number';
+    }) || [];
+    const dateCount = validDates.length;
     if (dateCount > 0) return `${dateCount} date${dateCount > 1 ? 's' : ''}/year`;
     return 'Yearly';
   }
