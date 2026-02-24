@@ -10,22 +10,17 @@ import {
   Modal,
   Platform,
   Image,
-  TextInput,
-  KeyboardAvoidingView,
-  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
-import { authenticatedGet, authenticatedPost, authenticatedDelete, getBearerToken, BACKEND_URL } from "@/utils/api";
+import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
 import { colors } from "@/styles/commonStyles";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
 import { IconSymbol } from "@/components/IconSymbol";
 import { DatePickerModal } from "@/components/DatePickerModal";
 import { DateTime } from 'luxon';
 import { getLocalTimezone } from '@/utils/dateUtils';
-import * as Speech from 'expo-speech';
-import { AudioRecorder, AudioRecording, RecordingOptions } from 'expo-audio';
 
 interface DailyEntry {
   id: string;
@@ -125,6 +120,7 @@ interface Reflection {
 interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
+  alternativeCalendar?: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 }
 
 interface JournalEntry {
@@ -133,21 +129,6 @@ interface JournalEntry {
   entryDate: string;
   createdAt: string;
   updatedAt: string;
-}
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  createdAt: string;
-}
-
-interface Conversation {
-  id: string;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-  messageCount: number;
 }
 
 // Helper function to format date as YYYY-MM-DD in local timezone
@@ -230,25 +211,10 @@ export default function HomeScreen() {
   const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
   const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
 
-  const [showJournalModal, setShowJournalModal] = useState(false);
-  const [tempJournalContent, setTempJournalContent] = useState('');
-
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [alternativeCalendar, setAlternativeCalendar] = useState<string>('gregorian');
 
   const [lifetimeTotals, setLifetimeTotals] = useState({ successes: 0, struggles: 0 });
-
-  // AI Chat state
-  const [showChatModal, setShowChatModal] = useState(false);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [messageInput, setMessageInput] = useState('');
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [audioRecording, setAudioRecording] = useState<AudioRecording | null>(null);
-  const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     if (params.date) {
@@ -339,290 +305,6 @@ export default function HomeScreen() {
     }
   };
 
-  // AI Chat functions
-  const requestAudioPermissions = async () => {
-    try {
-      const { granted } = await AudioRecorder.requestPermissionsAsync();
-      if (!granted) {
-        showError('Microphone permission is required for voice input');
-        return false;
-      }
-      return true;
-    } catch (error) {
-      console.error('Error requesting audio permissions:', error);
-      return false;
-    }
-  };
-
-  const speakText = async (text: string) => {
-    try {
-      setIsSpeaking(true);
-      await Speech.speak(text, {
-        language: 'en-US',
-        pitch: 1.0,
-        rate: 0.9,
-        onDone: () => setIsSpeaking(false),
-        onStopped: () => setIsSpeaking(false),
-        onError: () => setIsSpeaking(false),
-      });
-    } catch (error) {
-      console.error('Error speaking text:', error);
-      setIsSpeaking(false);
-    }
-  };
-
-  const stopSpeaking = async () => {
-    try {
-      await Speech.stop();
-      setIsSpeaking(false);
-    } catch (error) {
-      console.error('Error stopping speech:', error);
-    }
-  };
-
-  const startRecording = async () => {
-    const hasPermission = await requestAudioPermissions();
-    if (!hasPermission) return;
-
-    try {
-      await stopSpeaking();
-      
-      const options: RecordingOptions = {
-        android: {
-          extension: '.m4a',
-          outputFormat: 2,
-          audioEncoder: 3,
-          sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.m4a',
-          audioQuality: 127,
-          sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-        },
-        web: {
-          mimeType: 'audio/webm',
-          bitsPerSecond: 128000,
-        },
-      };
-
-      const recording = await AudioRecorder.recordAsync(options);
-      setAudioRecording(recording);
-      setIsRecording(true);
-      console.log('Recording started');
-    } catch (error) {
-      console.error('Error starting recording:', error);
-      showError('Failed to start recording');
-    }
-  };
-
-  const stopRecording = async () => {
-    if (!audioRecording) return;
-
-    try {
-      setIsRecording(false);
-      const uri = await audioRecording.stopAsync();
-      setAudioRecording(null);
-      console.log('Recording stopped, URI:', uri);
-      
-      if (uri) {
-        await transcribeAndSend(uri);
-      }
-    } catch (error) {
-      console.error('Error stopping recording:', error);
-      showError('Failed to stop recording');
-    }
-  };
-
-  const transcribeAndSend = async (audioUri: string) => {
-    try {
-      setSendingMessage(true);
-      
-      const token = await getBearerToken();
-      if (!token) {
-        showError('Authentication required');
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append('audio', {
-        uri: audioUri,
-        type: 'audio/m4a',
-        name: 'recording.m4a',
-      } as any);
-
-      const response = await fetch(`${BACKEND_URL}/api/reflection-chat/transcribe`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Transcription failed');
-      }
-
-      const data = await response.json();
-      const transcribedText = data.text || data.transcription;
-      
-      if (transcribedText) {
-        setMessageInput(transcribedText);
-        await sendMessageWithText(transcribedText);
-      }
-    } catch (error) {
-      console.error('Error transcribing audio:', error);
-      showError('Failed to transcribe audio');
-    } finally {
-      setSendingMessage(false);
-    }
-  };
-
-  const loadConversations = async () => {
-    try {
-      const response = await authenticatedGet('/api/reflection-chat/conversations');
-      const conversationsData = Array.isArray(response) ? response : (response?.data || []);
-      setConversations(conversationsData);
-      console.log('Loaded conversations:', conversationsData.length);
-    } catch (error) {
-      console.error('Error loading conversations:', error);
-    }
-  };
-
-  const loadMessages = async (conversationId: string) => {
-    try {
-      const response = await authenticatedGet(`/api/reflection-chat/conversations/${conversationId}/messages`);
-      const messagesData = Array.isArray(response) ? response : (response?.data || []);
-      setMessages(messagesData);
-      console.log('Loaded messages:', messagesData.length);
-      
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    } catch (error) {
-      console.error('Error loading messages:', error);
-      showError('Failed to load messages');
-    }
-  };
-
-  const startNewConversation = async () => {
-    try {
-      const response = await authenticatedPost('/api/reflection-chat/conversations', {});
-      const newConversation = response?.data || response;
-      
-      if (newConversation && newConversation.id) {
-        setCurrentConversationId(newConversation.id);
-        setMessages([]);
-        await loadConversations();
-        await loadMessages(newConversation.id);
-        console.log('Started new conversation:', newConversation.id);
-      }
-    } catch (error) {
-      console.error('Error starting new conversation:', error);
-      showError('Failed to start new conversation');
-    }
-  };
-
-  const sendMessageWithText = async (text: string) => {
-    if (!text.trim()) return;
-    
-    if (!currentConversationId) {
-      await startNewConversation();
-      return;
-    }
-
-    try {
-      setSendingMessage(true);
-      
-      const userMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: text,
-        createdAt: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, userMessage]);
-      setMessageInput('');
-
-      const response = await authenticatedPost(
-        `/api/reflection-chat/conversations/${currentConversationId}/messages`,
-        { message: text }
-      );
-
-      const aiResponse = response?.data || response;
-      
-      if (aiResponse && aiResponse.response) {
-        const assistantMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: aiResponse.response,
-          createdAt: new Date().toISOString(),
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-        
-        await speakText(aiResponse.response);
-        
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      showError('Failed to send message');
-    } finally {
-      setSendingMessage(false);
-    }
-  };
-
-  const sendMessage = async () => {
-    await sendMessageWithText(messageInput);
-  };
-
-  const deleteConversation = async (conversationId: string) => {
-    try {
-      await authenticatedDelete(`/api/reflection-chat/conversations/${conversationId}`);
-      await loadConversations();
-      
-      if (currentConversationId === conversationId) {
-        setCurrentConversationId(null);
-        setMessages([]);
-      }
-      
-      showSuccess('Conversation deleted');
-    } catch (error) {
-      console.error('Error deleting conversation:', error);
-      showError('Failed to delete conversation');
-    }
-  };
-
-  const openChatModal = async () => {
-    setShowChatModal(true);
-    await loadConversations();
-    
-    if (conversations.length > 0 && !currentConversationId) {
-      const latestConversation = conversations[0];
-      setCurrentConversationId(latestConversation.id);
-      await loadMessages(latestConversation.id);
-    } else if (conversations.length === 0) {
-      await startNewConversation();
-    }
-  };
-
-  const closeChatModal = () => {
-    setShowChatModal(false);
-    stopSpeaking();
-  };
-
-  const selectConversation = async (conversationId: string) => {
-    setCurrentConversationId(conversationId);
-    await loadMessages(conversationId);
-  };
-
   const handleGoalSuccess = async (goalId: string) => {
     console.log('Recording success for goal:', goalId);
     try {
@@ -703,54 +385,6 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error deleting reflection:', error);
       showError('Failed to delete reflection');
-    }
-  };
-
-  const handleOpenJournalModal = () => {
-    console.log('Opening journal modal');
-    setTempJournalContent(journalEntry?.content || '');
-    setShowJournalModal(true);
-  };
-
-  const handleCloseJournalModal = () => {
-    console.log('Closing journal modal without saving');
-    setShowJournalModal(false);
-    setTempJournalContent('');
-  };
-
-  const handleSaveJournal = async () => {
-    console.log('Saving journal entry...');
-    try {
-      setLoading(true);
-      const dateString = formatDateLocal(selectedDate);
-      
-      const response = await authenticatedPost('/api/journals/by-date', {
-        date: dateString,
-        content: tempJournalContent,
-      });
-
-      const savedEntry = response?.data || response;
-      
-      if (savedEntry && savedEntry.deleted) {
-        console.log('Journal entry deleted (content was empty)');
-        setJournalEntry(null);
-        showSuccess('Journal entry deleted');
-      } else if (savedEntry) {
-        console.log('Journal entry saved');
-        setJournalEntry(savedEntry);
-        showSuccess('Journal saved successfully');
-      } else {
-        console.log('No journal entry (content was empty and no existing entry)');
-        setJournalEntry(null);
-      }
-      
-      setShowJournalModal(false);
-      setTempJournalContent('');
-    } catch (error) {
-      console.error('Error saving journal:', error);
-      showError('Failed to save journal entry');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -937,27 +571,6 @@ export default function HomeScreen() {
     );
   };
 
-  const renderChatMessage = ({ item }: { item: ChatMessage }) => {
-    const isUser = item.role === 'user';
-    const messageTime = new Date(item.createdAt).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-
-    return (
-      <View style={[styles.chatMessageContainer, isUser ? styles.userMessageContainer : styles.assistantMessageContainer]}>
-        <View style={[styles.chatMessageBubble, isUser ? styles.userMessageBubble : styles.assistantMessageBubble]}>
-          <Text style={[styles.chatMessageText, isUser ? styles.userMessageText : styles.assistantMessageText]}>
-            {item.content}
-          </Text>
-          <Text style={[styles.chatMessageTime, isUser ? styles.userMessageTime : styles.assistantMessageTime]}>
-            {messageTime}
-          </Text>
-        </View>
-      </View>
-    );
-  };
-
   const dateDisplay = formatDateDisplay(selectedDate);
   const alternativeDateDisplay = formatAlternativeDate(selectedDate, alternativeCalendar);
   const isToday = formatDateLocal(selectedDate) === formatDateLocal(new Date());
@@ -982,8 +595,6 @@ export default function HomeScreen() {
     groupedReflections['All'] = reflections;
   }
 
-  const hasJournalContent = journalEntry && journalEntry.content && journalEntry.content.trim().length > 0;
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
@@ -999,7 +610,7 @@ export default function HomeScreen() {
           <View style={styles.quickActionsRow}>
             <TouchableOpacity 
               style={styles.quickActionButton}
-              onPress={openChatModal}
+              onPress={() => router.push('/reflect')}
             >
               <IconSymbol
                 ios_icon_name="pencil"
@@ -1044,7 +655,12 @@ export default function HomeScreen() {
             </View>
             {isToday && (
               <View style={styles.todayBadge}>
-                <Text style={styles.todayBadgeText}>14</Text>
+                <IconSymbol
+                  ios_icon_name="checkmark"
+                  android_material_icon_name="check"
+                  size={12}
+                  color={colors.background}
+                />
               </View>
             )}
           </TouchableOpacity>
@@ -1079,38 +695,6 @@ export default function HomeScreen() {
           onScroll={handleScroll}
           scrollEventThrottle={16}
         >
-          <TouchableOpacity 
-            style={styles.journalCard}
-            onPress={handleOpenJournalModal}
-            activeOpacity={0.7}
-          >
-            <View style={styles.journalCardHeader}>
-              <View style={styles.journalCardTitleRow}>
-                <Image 
-                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
-                  style={styles.journalAppIcon}
-                />
-                <Text style={styles.journalCardTitle}>Daily Journal</Text>
-              </View>
-            </View>
-            
-            {!hasJournalContent ? (
-              <View style={styles.journalPlaceholder}>
-                <Image 
-                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
-                  style={styles.journalPlaceholderIcon}
-                />
-                <Text style={styles.journalPlaceholderText}>Tap to write about your day…</Text>
-              </View>
-            ) : (
-              <View style={styles.journalPreviewContainer}>
-                <Text style={styles.journalPreviewText} numberOfLines={3}>
-                  {journalEntry.content.substring(0, 100)}{journalEntry.content.length > 100 ? '...' : ''}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
           <View style={styles.conciseSection}>
             <View style={styles.conciseSectionHeader}>
               <IconSymbol
@@ -1120,6 +704,14 @@ export default function HomeScreen() {
                 color={colors.text}
               />
               <Text style={styles.conciseSectionTitle}>Concise</Text>
+              <TouchableOpacity onPress={handleCreateGoal} style={styles.addGoalButton}>
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={24}
+                  color={colors.primary}
+                />
+              </TouchableOpacity>
             </View>
             
             {allGoals.length === 0 ? (
@@ -1130,19 +722,10 @@ export default function HomeScreen() {
                   size={64}
                   color={colors.textSecondary}
                 />
-                <Text style={styles.emptyGoalsTitle}>No Active Goals</Text>
+                <Text style={styles.emptyGoalsTitle}>No active goals today</Text>
                 <Text style={styles.emptyGoalsText}>
-                  Create your first goal to start tracking your progress
+                  Create goals in Settings to track them here
                 </Text>
-                <TouchableOpacity style={styles.createGoalButton} onPress={handleCreateGoal}>
-                  <IconSymbol
-                    ios_icon_name="plus.circle.fill"
-                    android_material_icon_name="add-circle"
-                    size={24}
-                    color={colors.background}
-                  />
-                  <Text style={styles.createGoalButtonText}>Create Goal</Text>
-                </TouchableOpacity>
               </View>
             ) : (
               <>
@@ -1152,155 +735,6 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
       </View>
-
-      {/* AI Chat Modal */}
-      <Modal
-        visible={showChatModal}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={closeChatModal}
-      >
-        <SafeAreaView style={styles.chatModalContainer} edges={['top', 'bottom']}>
-          <View style={styles.chatModalHeader}>
-            <View style={styles.chatModalTitleRow}>
-              <Image 
-                source={require('@/assets/images/Chesbon_app_Logo.png')} 
-                style={styles.chatModalIcon}
-              />
-              <Text style={styles.chatModalTitle}>AI Reflection Coach</Text>
-            </View>
-            <TouchableOpacity onPress={closeChatModal} style={styles.closeButton}>
-              <IconSymbol
-                ios_icon_name="xmark.circle.fill"
-                android_material_icon_name="close"
-                size={28}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderChatMessage}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.chatMessagesContainer}
-            showsVerticalScrollIndicator={false}
-          />
-
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.chatInputContainer}
-          >
-            <View style={styles.chatInputRow}>
-              <TouchableOpacity
-                style={styles.voiceButton}
-                onPress={isRecording ? stopRecording : startRecording}
-                disabled={sendingMessage}
-              >
-                <IconSymbol
-                  ios_icon_name={isRecording ? 'stop.circle.fill' : 'mic.circle.fill'}
-                  android_material_icon_name={isRecording ? 'stop-circle' : 'mic'}
-                  size={32}
-                  color={isRecording ? colors.error : colors.primary}
-                />
-              </TouchableOpacity>
-
-              <TextInput
-                style={styles.chatInput}
-                value={messageInput}
-                onChangeText={setMessageInput}
-                placeholder="Type your message..."
-                placeholderTextColor={colors.textSecondary}
-                multiline
-                maxLength={500}
-                editable={!sendingMessage}
-              />
-
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={sendMessage}
-                disabled={!messageInput.trim() || sendingMessage}
-              >
-                {sendingMessage ? (
-                  <ActivityIndicator color={colors.background} size="small" />
-                ) : (
-                  <IconSymbol
-                    ios_icon_name="arrow.up.circle.fill"
-                    android_material_icon_name="send"
-                    size={32}
-                    color={messageInput.trim() ? colors.primary : colors.textSecondary}
-                  />
-                )}
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Journal Modal */}
-      <Modal
-        visible={showJournalModal}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        onRequestClose={handleCloseJournalModal}
-      >
-        <SafeAreaView style={styles.journalModalContainer} edges={['top', 'bottom']}>
-          <KeyboardAvoidingView 
-            style={styles.journalModalContent}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          >
-            <View style={styles.journalModalHeader}>
-              <View style={styles.journalModalTitleRow}>
-                <Image 
-                  source={require('@/assets/images/Chesbon_app_Logo.png')} 
-                  style={styles.journalModalIcon}
-                />
-                <Text style={styles.journalModalTitle}>Daily Journal</Text>
-              </View>
-              <TouchableOpacity onPress={handleCloseJournalModal} style={styles.closeButton}>
-                <IconSymbol
-                  ios_icon_name="xmark.circle.fill"
-                  android_material_icon_name="close"
-                  size={28}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <TextInput
-              style={styles.journalModalInput}
-              value={tempJournalContent}
-              onChangeText={setTempJournalContent}
-              placeholder="Write your thoughts for today..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              textAlignVertical="top"
-              autoFocus
-            />
-
-            <TouchableOpacity
-              style={styles.saveJournalButton}
-              onPress={handleSaveJournal}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.background} />
-              ) : (
-                <React.Fragment>
-                  <IconSymbol
-                    ios_icon_name="checkmark.circle.fill"
-                    android_material_icon_name="check-circle"
-                    size={24}
-                    color={colors.background}
-                  />
-                  <Text style={styles.saveJournalButtonText}>Save & Close</Text>
-                </React.Fragment>
-              )}
-            </TouchableOpacity>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
 
       {/* Add Reflection Modal */}
       {showAddReflectionModal && (
@@ -1462,73 +896,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
   },
-  todayBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.background,
-  },
   content: {
     flex: 1,
   },
   contentContainer: {
     paddingHorizontal: 20,
     paddingBottom: 40,
-  },
-  journalCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 2,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  journalCardHeader: {
-    marginBottom: 16,
-  },
-  journalCardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  journalAppIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 9,
-  },
-  journalCardTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  journalPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  journalPlaceholderIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 15,
-    opacity: 0.6,
-  },
-  journalPlaceholderText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  journalPreviewContainer: {
-    gap: 8,
-  },
-  journalPreviewText: {
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 22,
   },
   conciseSection: {
     marginBottom: 24,
@@ -1544,6 +917,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
+    flex: 1,
+  },
+  addGoalButton: {
+    padding: 4,
   },
   emptyGoalsState: {
     padding: 48,
@@ -1565,25 +942,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: 24,
-  },
-  createGoalButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    borderRadius: 16,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  createGoalButtonText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.background,
   },
   lifeAreaContainer: {
     marginBottom: 12,
@@ -1669,178 +1027,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginHorizontal: 12,
-  },
-  chatModalContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  chatModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  chatModalTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  chatModalIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 7,
-  },
-  chatModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  closeButton: {
-    padding: 4,
-  },
-  chatMessagesContainer: {
-    padding: 20,
-    paddingBottom: 100,
-  },
-  chatMessageContainer: {
-    marginBottom: 16,
-  },
-  userMessageContainer: {
-    alignItems: 'flex-end',
-  },
-  assistantMessageContainer: {
-    alignItems: 'flex-start',
-  },
-  chatMessageBubble: {
-    maxWidth: '80%',
-    padding: 12,
-    borderRadius: 16,
-  },
-  userMessageBubble: {
-    backgroundColor: colors.primary,
-    borderBottomRightRadius: 4,
-  },
-  assistantMessageBubble: {
-    backgroundColor: colors.card,
-    borderBottomLeftRadius: 4,
-  },
-  chatMessageText: {
-    fontSize: 15,
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  userMessageText: {
-    color: colors.background,
-  },
-  assistantMessageText: {
-    color: colors.text,
-  },
-  chatMessageTime: {
-    fontSize: 11,
-  },
-  userMessageTime: {
-    color: colors.background,
-    opacity: 0.7,
-  },
-  assistantMessageTime: {
-    color: colors.textSecondary,
-  },
-  chatInputContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  chatInputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
-  },
-  voiceButton: {
-    padding: 4,
-  },
-  chatInput: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: colors.text,
-    maxHeight: 100,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  sendButton: {
-    padding: 4,
-  },
-  journalModalContainer: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  journalModalContent: {
-    flex: 1,
-    padding: 20,
-  },
-  journalModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  journalModalTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  journalModalIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 5,
-  },
-  journalModalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  journalModalInput: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    fontSize: 16,
-    color: colors.text,
-    textAlignVertical: 'top',
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 20,
-  },
-  saveJournalButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 16,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  saveJournalButtonText: {
-    color: colors.background,
-    fontSize: 18,
-    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,
