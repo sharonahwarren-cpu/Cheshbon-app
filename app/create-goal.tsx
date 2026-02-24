@@ -317,10 +317,35 @@ export default function CreateGoalScreen() {
         setType(goalDetails.type || 'Proactive');
         setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
         
-        // Load schedule config from goal details
-        const rawScheduleType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+        // CRITICAL FIX: Load schedule config from BOTH fields for backward compatibility
+        // Priority: scheduleRecurrenceType > scheduleType
+        const backendScheduleType = goalDetails.scheduleRecurrenceType || goalDetails.schedule_recurrence_type;
+        const frontendScheduleType = goalDetails.scheduleType || goalDetails.schedule_type;
+        
+        let displayScheduleType = 'Always Active';
+        
+        // If we have a backend schedule type, use it (it's the source of truth)
+        if (backendScheduleType) {
+          if (backendScheduleType === 'alwaysactive') {
+            displayScheduleType = 'Always Active';
+          } else {
+            // Capitalize first letter: 'weekly' -> 'Weekly', 'fortnightly' -> 'Fortnightly'
+            displayScheduleType = backendScheduleType.charAt(0).toUpperCase() + backendScheduleType.slice(1);
+          }
+        } else if (frontendScheduleType) {
+          // Fallback to frontend schedule type if backend type is not available
+          displayScheduleType = frontendScheduleType;
+        }
+        
+        console.log('[CreateGoal] Schedule type mapping:', {
+          backendScheduleType,
+          frontendScheduleType,
+          displayScheduleType,
+          weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week
+        });
+        
         setScheduleConfig({
-          scheduleType: rawScheduleType,
+          scheduleType: displayScheduleType,
           timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
           weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week,
         });
@@ -424,6 +449,12 @@ export default function CreateGoalScreen() {
 
     setSubmitting(true);
     try {
+      // CRITICAL FIX: Map scheduleType to scheduleRecurrenceType for backend
+      // The backend expects scheduleRecurrenceType, not scheduleType
+      const scheduleRecurrenceType = scheduleConfig.scheduleType === 'Always Active' 
+        ? 'alwaysactive' 
+        : scheduleConfig.scheduleType.toLowerCase();
+
       const goalData: any = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -432,10 +463,17 @@ export default function CreateGoalScreen() {
         behaviorCategories: behaviorCategories.length > 0 ? behaviorCategories : undefined,
         type,
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
-        scheduleType: scheduleConfig.scheduleType,
+        scheduleType: scheduleConfig.scheduleType, // Keep for frontend compatibility
+        scheduleRecurrenceType, // CRITICAL: Send the correct field for backend
         scheduleTimesPerDay: scheduleConfig.timesPerDay,
         scheduleDaysOfWeek: scheduleConfig.weekdays,
       };
+      
+      console.log('[CreateGoal] Schedule data being sent:', {
+        scheduleType: goalData.scheduleType,
+        scheduleRecurrenceType: goalData.scheduleRecurrenceType,
+        scheduleDaysOfWeek: goalData.scheduleDaysOfWeek
+      });
       
       // FIXED: Include alarms field when editing a goal
       if (editingGoalId && goalAlarms.length > 0) {
@@ -2005,16 +2043,5 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
-  },
-  strategyItem: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  strategyDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 4,
   },
 });

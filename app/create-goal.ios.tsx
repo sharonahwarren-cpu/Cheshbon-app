@@ -301,7 +301,7 @@ export default function CreateGoalScreen() {
 
       if (editingGoalId && goalDetailsData) {
         const goalDetails = goalDetailsData?.data || goalDetailsData;
-        console.log('[API] Goal details loaded for editing:', goalDetails);
+        console.log('[API] Goal details loaded for editing:', JSON.stringify(goalDetails, null, 2));
         
         setTitle(goalDetails.title || '');
         setDescription(goalDetails.description || '');
@@ -311,12 +311,56 @@ export default function CreateGoalScreen() {
         setType(goalDetails.type || 'Proactive');
         setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
         
-        // Load schedule config from goal details
-        const rawScheduleType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+        // CRITICAL FIX: Properly load schedule config from backend
+        // Priority: scheduleRecurrenceType > schedule_recurrence_type > scheduleType > schedule_type
+        const backendScheduleType = goalDetails.scheduleRecurrenceType || goalDetails.schedule_recurrence_type;
+        
+        let frontendScheduleType: string;
+        if (backendScheduleType) {
+          // Map backend format to frontend format
+          if (backendScheduleType === 'alwaysactive') {
+            frontendScheduleType = 'Always Active';
+          } else {
+            // Capitalize first letter: 'weekly' -> 'Weekly', 'monthly' -> 'Monthly'
+            frontendScheduleType = backendScheduleType.charAt(0).toUpperCase() + backendScheduleType.slice(1);
+          }
+        } else {
+          // Fallback to old scheduleType field if scheduleRecurrenceType doesn't exist
+          frontendScheduleType = goalDetails.scheduleType || goalDetails.schedule_type || 'Always Active';
+        }
+        
+        console.log('[CreateGoal iOS] Schedule type mapping:', {
+          backendScheduleType,
+          frontendScheduleType,
+          rawScheduleType: goalDetails.scheduleType || goalDetails.schedule_type,
+          rawScheduleDaysOfWeek: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week
+        });
+        
+        // CRITICAL FIX: Load ALL schedule config fields, not just scheduleType
         setScheduleConfig({
-          scheduleType: rawScheduleType,
+          scheduleType: frontendScheduleType,
           timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
           weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week,
+          weekendsOnly: goalDetails.scheduleWeekendsOnly || goalDetails.schedule_weekends_only,
+          weekdaysOnly: goalDetails.scheduleWeekdaysOnly || goalDetails.schedule_weekdays_only,
+          fortnightDays: goalDetails.scheduleFortnightDays || goalDetails.schedule_fortnight_days,
+          fortnightWeek: goalDetails.scheduleFortnightWeek || goalDetails.schedule_fortnight_week,
+          monthlyDates: goalDetails.scheduleMonthlyDates || goalDetails.schedule_monthly_dates,
+          monthlyWeekdayPositions: goalDetails.scheduleMonthlyWeekdayPositions || goalDetails.schedule_monthly_weekday_positions,
+          monthlyRangeStart: goalDetails.scheduleMonthlyRangeStart || goalDetails.schedule_monthly_range_start,
+          monthlyRangeEnd: goalDetails.scheduleMonthlyRangeEnd || goalDetails.schedule_monthly_range_end,
+          monthlyRandomCount: goalDetails.scheduleMonthlyRandomCount || goalDetails.schedule_monthly_random_count,
+          monthlyCalendarType: goalDetails.scheduleMonthlyCalendarType || goalDetails.schedule_monthly_calendar_type,
+          monthlyUseAlternativeCalendar: goalDetails.scheduleMonthlyUseAlternativeCalendar || goalDetails.schedule_monthly_use_alternative_calendar,
+          monthlyCalendarEvent: goalDetails.scheduleMonthlyCalendarEvent || goalDetails.schedule_monthly_calendar_event,
+          yearlyMonths: goalDetails.scheduleYearlyMonths || goalDetails.schedule_yearly_months,
+          yearlyDates: goalDetails.scheduleYearlyDates || goalDetails.schedule_yearly_dates,
+          yearlyCalendarType: goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
+          yearlyUseAlternativeCalendar: goalDetails.scheduleYearlyUseAlternativeCalendar || goalDetails.schedule_yearly_use_alternative_calendar,
+          yearlyCalendarEvent: goalDetails.scheduleYearlyCalendarEvent || goalDetails.schedule_yearly_calendar_event,
+          startDate: goalDetails.scheduleStartDate || goalDetails.schedule_start_date,
+          endDate: goalDetails.scheduleEndDate || goalDetails.schedule_end_date,
+          exclusionDates: goalDetails.scheduleExclusionDates || goalDetails.schedule_exclusion_dates,
         });
         
         if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {
@@ -417,6 +461,12 @@ export default function CreateGoalScreen() {
 
     setSubmitting(true);
     try {
+      // CRITICAL FIX: Map scheduleType to scheduleRecurrenceType for backend
+      // The backend expects scheduleRecurrenceType, not scheduleType
+      const scheduleRecurrenceType = scheduleConfig.scheduleType === 'Always Active' 
+        ? 'alwaysactive' 
+        : scheduleConfig.scheduleType.toLowerCase();
+
       const goalData: any = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -425,10 +475,37 @@ export default function CreateGoalScreen() {
         behaviorCategories: behaviorCategories.length > 0 ? behaviorCategories : undefined,
         type,
         strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
-        scheduleType: scheduleConfig.scheduleType,
+        scheduleType: scheduleConfig.scheduleType, // Keep for frontend compatibility
+        scheduleRecurrenceType, // CRITICAL: Send the correct field for backend
         scheduleTimesPerDay: scheduleConfig.timesPerDay,
         scheduleDaysOfWeek: scheduleConfig.weekdays,
+        scheduleWeekendsOnly: scheduleConfig.weekendsOnly,
+        scheduleWeekdaysOnly: scheduleConfig.weekdaysOnly,
+        scheduleFortnightDays: scheduleConfig.fortnightDays,
+        scheduleFortnightWeek: scheduleConfig.fortnightWeek,
+        scheduleMonthlyDates: scheduleConfig.monthlyDates,
+        scheduleMonthlyWeekdayPositions: scheduleConfig.monthlyWeekdayPositions,
+        scheduleMonthlyRangeStart: scheduleConfig.monthlyRangeStart,
+        scheduleMonthlyRangeEnd: scheduleConfig.monthlyRangeEnd,
+        scheduleMonthlyRandomCount: scheduleConfig.monthlyRandomCount,
+        scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
+        scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
+        scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
+        scheduleYearlyMonths: scheduleConfig.yearlyMonths,
+        scheduleYearlyDates: scheduleConfig.yearlyDates,
+        scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
+        scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
+        scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,
+        scheduleStartDate: scheduleConfig.startDate,
+        scheduleEndDate: scheduleConfig.endDate,
+        scheduleExclusionDates: scheduleConfig.exclusionDates,
       };
+      
+      console.log('[CreateGoal iOS] Schedule data being sent:', {
+        scheduleType: goalData.scheduleType,
+        scheduleRecurrenceType: goalData.scheduleRecurrenceType,
+        scheduleDaysOfWeek: goalData.scheduleDaysOfWeek
+      });
       
       // Include alarms field when editing a goal
       if (editingGoalId && goalAlarms.length > 0) {
@@ -1914,6 +1991,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  pickerItemSelected: {
+    backgroundColor: colors.card,
+  },
+  pickerItemText: {
+    fontSize: 16,
+    color: colors.text,
+  },
+  pickerItemTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  strategyItem: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  strategyDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
   alertModal: {
     backgroundColor: colors.background,
     borderRadius: 20,
@@ -1961,35 +2068,5 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     fontWeight: '600',
-  },
-  pickerItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  pickerItemSelected: {
-    backgroundColor: colors.card,
-  },
-  pickerItemText: {
-    fontSize: 16,
-    color: colors.text,
-  },
-  pickerItemTextSelected: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  strategyItem: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  strategyDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 4,
   },
 });
