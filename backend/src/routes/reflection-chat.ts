@@ -6,7 +6,23 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
-const SYSTEM_PROMPT = `You are a supportive and insightful self-improvement coach. Help the user reflect on their goals, successes, and struggles. Ask thoughtful questions, provide encouragement, and help them gain clarity on their personal growth journey. Be empathetic, non-judgmental, and focus on actionable insights. Keep responses concise and conversational.`;
+const SYSTEM_PROMPT = `You are Cheshbon, a warm and supportive self-improvement coach having a VOICE CONVERSATION with the user. This is spoken dialogue, not written text.
+
+Guidelines for voice conversation:
+- Speak naturally and conversationally, like a supportive friend or life coach
+- Use simple, everyday language - avoid jargon or complex terms
+- Use contractions (you're, I'm, we're) to sound natural
+- Keep sentences short and punchy - easier to listen to
+- NO markdown formatting, no asterisks, no bullet points
+- Ask follow-up questions naturally during the conversation
+- Show genuine empathy and encouragement
+- Avoid lists - instead weave thoughts into flowing conversation
+- Sound warm, approachable, and genuinely interested
+- When asking about their day, goals, or feelings, follow up with authentic curiosity
+
+When someone shares something, respond like you would in a real conversation with a supportive friend. Keep responses brief and spoken-friendly (typically 2-3 sentences). Ask one thoughtful follow-up question at a time.`;
+
+const VOICE_GREETING_SYSTEM = `You are Cheshbon, a warm and supportive self-improvement coach initiating a voice conversation. Generate a friendly, warm greeting as if checking in with a friend. Ask "How was your day?" in a natural way and be ready to explore their experiences, goals, and feelings. Keep it brief, warm, and spoken like a real conversation.`;
 
 export function registerReflectionChatRoutes(app: App) {
   const requireAuth = app.requireAuth();
@@ -39,10 +55,97 @@ export function registerReflectionChatRoutes(app: App) {
         'Reflection conversation created successfully'
       );
 
+      // Fetch context for personalized greeting
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+
+      const activeGoals = await app.db
+        .select()
+        .from(schema.goals)
+        .where(
+          and(
+            eq(schema.goals.userId, userId),
+            eq(schema.goals.isActive, true)
+          )
+        )
+        .limit(5);
+
+      const recentReflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(
+          and(
+            eq(schema.reflections.userId, userId),
+            gt(schema.reflections.createdAt, sevenDaysAgo)
+          )
+        )
+        .orderBy(desc(schema.reflections.createdAt))
+        .limit(3);
+
+      const recentJournalEntries = await app.db
+        .select()
+        .from(schema.journalEntries)
+        .where(
+          and(
+            eq(schema.journalEntries.userId, userId),
+            gt(schema.journalEntries.createdAt, threeDaysAgo)
+          )
+        )
+        .orderBy(desc(schema.journalEntries.createdAt))
+        .limit(2);
+
+      // Build context for greeting
+      let contextStr = 'Context for personalized greeting:\n';
+
+      if (activeGoals.length > 0) {
+        contextStr += `Active goals: ${activeGoals.map(g => g.title).join(', ')}\n`;
+      }
+
+      if (recentReflections.length > 0) {
+        const recentOutcomes = recentReflections.map(r => r.outcome).join(', ');
+        contextStr += `Recent reflection outcomes: ${recentOutcomes}\n`;
+      }
+
+      if (recentJournalEntries.length > 0) {
+        contextStr += `User has been journaling recently\n`;
+      }
+
+      // Generate initial greeting from AI
+      const greetingModel = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        systemInstruction: VOICE_GREETING_SYSTEM,
+      });
+
+      const greetingResponse = await greetingModel.generateContent(contextStr);
+      const greetingText = greetingResponse.response.text().trim();
+
+      app.logger.info(
+        { userId, conversationId: conversation.id, greetingLength: greetingText.length },
+        'Initial greeting generated'
+      );
+
+      // Save the initial greeting message
+      await app.db
+        .insert(schema.reflectionMessages)
+        .values({
+          conversationId: conversation.id,
+          role: 'assistant',
+          content: greetingText,
+        });
+
+      app.logger.info(
+        { userId, conversationId: conversation.id },
+        'Initial greeting message saved'
+      );
+
       return {
         id: conversation.id,
         title: conversation.title,
         createdAt: conversation.createdAt.toISOString(),
+        initialMessage: {
+          role: 'assistant',
+          content: greetingText,
+        },
       };
     } catch (error) {
       app.logger.error(
