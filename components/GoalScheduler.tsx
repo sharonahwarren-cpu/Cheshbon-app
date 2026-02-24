@@ -176,7 +176,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   const [yearlyDateMode, setYearlyDateMode] = useState<'single' | 'range'>('single');
   const [yearlyStartMonth, setYearlyStartMonth] = useState<number>(1);
   const [yearlyStartDay, setYearlyStartDay] = useState<number | null>(null);
-  const [yearlyEndMonth, setYearlyEndMonth] = useState<number>(1);
+  // CRITICAL FIX: Default yearlyEndMonth to null (unselected) to force explicit selection.
+  // Previously defaulted to 1 (January), causing silent bugs where users would select
+  // a day without realizing they needed to also select the end month.
+  const [yearlyEndMonth, setYearlyEndMonth] = useState<number | null>(null);
   const [yearlyEndDay, setYearlyEndDay] = useState<number | null>(null);
 
   // Backend schedule summary state
@@ -1069,8 +1072,11 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       const current = config.yearlyDates || [];
       
       if (yearlyDateMode === 'range') {
-        if (!yearlyEndDay) {
-          console.warn('[GoalScheduler] No end day selected for range');
+        // CRITICAL FIX: Validate that both end month AND end day are explicitly selected.
+        // yearlyEndMonth is now null by default, so this check ensures the user
+        // explicitly chose an end month (preventing silent endMonth=1 bugs).
+        if (yearlyEndMonth === null || !yearlyEndDay) {
+          console.warn('[GoalScheduler] End month or end day not selected for range');
           return;
         }
         
@@ -1080,12 +1086,14 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
           endMonth: yearlyEndMonth,
           endDay: yearlyEndDay,
         };
+        console.log('[GoalScheduler] Adding yearly date range:', JSON.stringify(newDate));
         updateConfig({ yearlyDates: [...current, newDate] });
       } else {
         const newDate: YearlyDateSelection = {
           month: yearlyStartMonth,
           day: yearlyStartDay,
         };
+        console.log('[GoalScheduler] Adding yearly single date:', JSON.stringify(newDate));
         updateConfig({ yearlyDates: [...current, newDate] });
       }
       
@@ -1093,7 +1101,8 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       setYearlyStartDay(null);
       setYearlyEndDay(null);
       setYearlyStartMonth(1);
-      setYearlyEndMonth(1);
+      // CRITICAL FIX: Reset to null (unselected) not 1, to force explicit selection next time
+      setYearlyEndMonth(null);
     };
 
     return (
@@ -1166,6 +1175,8 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                   setYearlyDateMode('single');
                   setYearlyStartDay(null);
                   setYearlyEndDay(null);
+                  // CRITICAL FIX: Reset end month to null when switching modes
+                  setYearlyEndMonth(null);
                 }}
               >
                 <Text style={[styles.toggleButtonText, yearlyDateMode === 'single' && styles.toggleButtonTextActive]}>
@@ -1178,6 +1189,8 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                   setYearlyDateMode('range');
                   setYearlyStartDay(null);
                   setYearlyEndDay(null);
+                  // CRITICAL FIX: Reset end month to null when switching modes to force explicit selection
+                  setYearlyEndMonth(null);
                 }}
               >
                 <Text style={[styles.toggleButtonText, yearlyDateMode === 'range' && styles.toggleButtonTextActive]}>
@@ -1338,17 +1351,27 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                     <Text style={styles.yearlyRangeLabel}>End Date</Text>
                   </View>
 
+                  {/* CRITICAL FIX: Show helper text when no end month is selected */}
+                  {yearlyEndMonth === null && (
+                    <Text style={[styles.helperText, { color: colors.primary, fontWeight: '600', marginBottom: 8 }]}>
+                      ⚠️ Please select an end month below
+                    </Text>
+                  )}
+
                   <Text style={styles.pickerLabel}>Month</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScrollView}>
                     <View style={styles.monthGrid}>
                       {monthNames.map((month, index) => {
                         const monthNum = index + 1;
+                        // CRITICAL FIX: yearlyEndMonth is now null by default (not 1),
+                        // so no month appears pre-selected until the user explicitly taps one.
                         const isSelected = yearlyEndMonth === monthNum;
                         return (
                           <TouchableOpacity
                             key={monthNum}
                             style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
                             onPress={() => {
+                              console.log('[GoalScheduler] End month selected:', monthNum);
                               setYearlyEndMonth(monthNum);
                               setYearlyEndDay(null);
                             }}
@@ -1383,7 +1406,8 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                 </View>
 
                 {/* Preview of selected range */}
-                {yearlyStartDay && yearlyEndDay && (
+                {/* CRITICAL FIX: Only show preview when end month is explicitly selected (not null) */}
+                {yearlyStartDay && yearlyEndMonth !== null && yearlyEndDay && (
                   <View style={styles.yearlyPreviewBox}>
                     <IconSymbol
                       ios_icon_name="calendar.badge.checkmark"
@@ -1397,10 +1421,11 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                   </View>
                 )}
 
+                {/* CRITICAL FIX: Disable button unless end month is explicitly selected */}
                 <TouchableOpacity 
-                  style={[styles.confirmButton, (!yearlyStartDay || !yearlyEndDay) && styles.confirmButtonDisabled]} 
+                  style={[styles.confirmButton, (!yearlyStartDay || yearlyEndMonth === null || !yearlyEndDay) && styles.confirmButtonDisabled]} 
                   onPress={handleAddYearlyDate}
-                  disabled={!yearlyStartDay || !yearlyEndDay}
+                  disabled={!yearlyStartDay || yearlyEndMonth === null || !yearlyEndDay}
                 >
                   <IconSymbol
                     ios_icon_name="plus.circle.fill"

@@ -593,6 +593,29 @@ export default function CreateGoalScreen() {
         ? 'alwaysactive' 
         : scheduleConfig.scheduleType.toLowerCase();
 
+      // CRITICAL DEBUG: Log the yearlyDates BEFORE any transformation
+      console.log('[CreateGoal] RAW scheduleConfig.yearlyDates from state:', JSON.stringify(scheduleConfig.yearlyDates, null, 2));
+
+      // CRITICAL FIX: Ensure yearlyDates are properly formatted as objects with all fields preserved
+      const yearlyDatesForBackend = scheduleConfig.yearlyDates?.map(d => {
+        // Log each entry before transformation
+        console.log('[CreateGoal] Processing yearlyDate entry:', JSON.stringify(d, null, 2));
+        
+        const result = {
+          month: d.month,
+          day: d.day,
+          ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
+          ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
+        };
+        
+        // Log the transformed result
+        console.log('[CreateGoal] Transformed yearlyDate entry:', JSON.stringify(result, null, 2));
+        return result;
+      });
+
+      // CRITICAL DEBUG: Log the final yearlyDates array that will be sent
+      console.log('[CreateGoal] FINAL yearlyDates to be sent to backend:', JSON.stringify(yearlyDatesForBackend, null, 2));
+
       const goalData: any = {
         title: title.trim(),
         description: description.trim() || undefined,
@@ -635,19 +658,9 @@ export default function CreateGoalScreen() {
         // CRITICAL FIX: Backend PUT handler reads 'yearlyDates', not 'scheduleYearlyDates'.
         // The backend now stores yearlyDates as JSONB (array of objects with month/day/endMonth/endDay).
         // Ensure we send proper objects, not strings.
-        yearlyDates: scheduleConfig.yearlyDates?.map(d => ({
-          month: d.month,
-          day: d.day,
-          ...(d.endMonth !== undefined ? { endMonth: d.endMonth } : {}),
-          ...(d.endDay !== undefined ? { endDay: d.endDay } : {}),
-        })),
+        yearlyDates: yearlyDatesForBackend,
         scheduleYearlyMonths: scheduleConfig.yearlyMonths,
-        scheduleYearlyDates: scheduleConfig.yearlyDates?.map(d => ({
-          month: d.month,
-          day: d.day,
-          ...(d.endMonth !== undefined ? { endMonth: d.endMonth } : {}),
-          ...(d.endDay !== undefined ? { endDay: d.endDay } : {}),
-        })),
+        scheduleYearlyDates: yearlyDatesForBackend,
         scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
         scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
         scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,
@@ -665,7 +678,8 @@ export default function CreateGoalScreen() {
       console.log('[CreateGoal] Schedule data being sent:', {
         scheduleType: goalData.scheduleType,
         scheduleRecurrenceType: goalData.scheduleRecurrenceType,
-        scheduleDaysOfWeek: goalData.scheduleDaysOfWeek
+        scheduleDaysOfWeek: goalData.scheduleDaysOfWeek,
+        yearlyDates: goalData.yearlyDates,
       });
       
       // FIXED: Include alarms field when editing a goal
