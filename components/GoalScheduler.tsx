@@ -162,14 +162,15 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   // Generate local schedule summary (used as fallback)
   const localScheduleSummary = generateScheduleSummary(config);
 
-  // Fetch backend schedule summary when goalId is available
+  // CRITICAL FIX: Fetch backend schedule summary when goalId is available OR when config changes
   useEffect(() => {
     if (goalId && config.scheduleType !== 'Always Active') {
+      console.log('[GoalScheduler] Config changed, fetching fresh schedule summary');
       fetchBackendScheduleSummary();
     } else {
       setBackendSummary(null);
     }
-  }, [goalId, config.scheduleType]);
+  }, [goalId, config.scheduleType, config.weekdays, config.monthlyDates, config.yearlyMonths, config.fortnightDays]);
 
   const fetchBackendScheduleSummary = async () => {
     if (!goalId) return;
@@ -193,6 +194,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   const scheduleSummary = backendSummary?.summary || localScheduleSummary;
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
+    console.log('[GoalScheduler] Updating config:', updates);
     onChange({ ...config, ...updates });
   };
 
@@ -309,7 +311,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               <TouchableOpacity
                 key={type}
                 style={[styles.typeButton, isSelected && styles.typeButtonSelected]}
-                onPress={() => updateConfig({ scheduleType: type })}
+                onPress={() => {
+                  console.log('[GoalScheduler] User selected schedule type:', type);
+                  updateConfig({ scheduleType: type });
+                }}
               >
                 <Text style={[styles.typeButtonText, isSelected && styles.typeButtonTextSelected]}>
                   {type}
@@ -339,7 +344,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
           <Text style={styles.summaryTitle}>Schedule Summary</Text>
           {goalId && (
             <TouchableOpacity
-              onPress={fetchBackendScheduleSummary}
+              onPress={() => {
+                console.log('[GoalScheduler] User pressed refresh button');
+                fetchBackendScheduleSummary();
+              }}
               disabled={loadingBackendSummary}
               style={styles.refreshButton}
             >
@@ -425,6 +433,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     if (config.scheduleType !== 'Weekly') return null;
 
     const toggleWeekday = (day: number) => {
+      console.log('[GoalScheduler] Toggling weekday:', day);
       const current = config.weekdays || [];
       const updated = current.includes(day)
         ? current.filter(d => d !== day)
@@ -549,6 +558,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     if (config.scheduleType !== 'Fortnightly') return null;
 
     const toggleFortnightDay = (day: number) => {
+      console.log('[GoalScheduler] Toggling fortnight day:', day);
       const current = config.fortnightDays || [];
       const updated = current.includes(day)
         ? current.filter(d => d !== day)
@@ -692,6 +702,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     const hasCalendarEvent = config.monthlyCalendarEvent;
 
     const toggleDate = (date: number) => {
+      console.log('[GoalScheduler] Toggling monthly date:', date);
       const current = config.monthlyDates || [];
       const updated = current.includes(date)
         ? current.filter(d => d !== date)
@@ -977,6 +988,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                        ISLAMIC_MONTHS;
 
     const toggleMonth = (month: number) => {
+      console.log('[GoalScheduler] Toggling yearly month:', month);
       const current = config.yearlyMonths || [];
       const updated = current.includes(month)
         ? current.filter(m => m !== month)
