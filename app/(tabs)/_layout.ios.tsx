@@ -71,10 +71,6 @@ export default function TabLayout() {
 
   return (
     <NativeTabs>
-      <NativeTabs.Trigger key="reflect" name="reflect">
-        <Icon sf="square.and.pencil" />
-        <Label>Reflect</Label>
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger key="home" name="(home)">
         <Icon sf="house.fill" />
         <Label>Home</Label>
@@ -82,6 +78,10 @@ export default function TabLayout() {
       <NativeTabs.Trigger key="reports" name="reports">
         <Icon sf="chart.bar.fill" />
         <Label>Reports</Label>
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger key="reflect" name="reflect">
+        <Icon sf="sparkles" />
+        <Label>AI</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger key="profile" name="profile">
         <Icon sf="person.fill" />
