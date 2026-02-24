@@ -449,6 +449,7 @@ export function getNextOccurrencesForDisplay(
     const scheduleConfig: ScheduleConfig = {
       calendarType: (config.calendarType || 'gregorian') as any,
       recurrenceType: (config.scheduleRecurrenceType || config.scheduleType || 'daily') as any,
+      scheduleType: (config.scheduleType as any),
       startDate: config.startDate,
       endDate: config.endDate,
       timezone: config.timezone || 'UTC',
