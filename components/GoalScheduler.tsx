@@ -18,6 +18,7 @@ import { DateTime } from 'luxon';
 import { useRouter } from 'expo-router';
 import { generateScheduleSummary } from '@/utils/scheduleDescriptions';
 import { authenticatedGet } from '@/utils/api';
+import { getNextActivations, type GoalSchedule } from '@/utils/scheduleCalculations';
 
 export type ScheduleType = 'Always Active' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
 export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
@@ -159,6 +160,9 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   const [loadingBackendSummary, setLoadingBackendSummary] = useState(false);
   const [backendSummaryError, setBackendSummaryError] = useState<string | null>(null);
 
+  // Local next occurrences - generated from current config (live preview)
+  const [localNextOccurrences, setLocalNextOccurrences] = useState<OccurrenceWithSource[]>([]);
+
   // Generate local schedule summary (used as fallback)
   const localScheduleSummary = generateScheduleSummary(config);
 
@@ -181,53 +185,102 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     }
   }, [goalId]);
 
-  // CRITICAL FIX: Fetch backend schedule summary when goalId is available OR when ANY config field changes
-  // This ensures the summary updates immediately when the user changes ANY schedule setting.
-  // The backend now ALWAYS deletes old occurrences and generates fresh ones on every call,
-  // so we always get up-to-date data reflecting the current schedule configuration.
+  // Fetch backend schedule summary ONLY on initial mount (when goalId is first available).
+  // We do NOT re-fetch when config changes because the config changes happen in the UI
+  // BEFORE the goal is saved. The backend still has the OLD saved data, so fetching on
+  // config change would show stale/incorrect dates.
+  // The local summary (generateScheduleSummary) is used as the live preview while editing.
+  // The backend summary is fetched on mount to show the last-saved schedule state.
   useEffect(() => {
     if (goalId && config.scheduleType !== 'Always Active') {
-      console.log('[GoalScheduler] Config changed or component mounted, fetching fresh schedule summary from backend');
+      console.log('[GoalScheduler] Component mounted, fetching saved schedule summary from backend');
       fetchBackendScheduleSummary();
     } else {
       setBackendSummary(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goalId]); // Only re-fetch when goalId changes, NOT when config changes
+
+  // Generate local next occurrences from current config (live preview while editing)
+  useEffect(() => {
+    if (config.scheduleType === 'Always Active') {
+      setLocalNextOccurrences([]);
+      return;
+    }
+
+    const generateLocalOccurrences = async () => {
+      try {
+        // Map frontend ScheduleConfig to GoalSchedule for scheduleCalculations
+        const recurrenceType = config.scheduleType === 'Always Active'
+          ? 'always_active'
+          : config.scheduleType.toLowerCase() as any;
+
+        const goalSchedule: GoalSchedule = {
+          calendarType: (config.calendarType || 'Gregorian') as any,
+          recurrenceType,
+          details: {
+            daysOfWeek: config.weekdays,
+            weekendsOnly: config.weekendsOnly,
+            weekdaysOnly: config.weekdaysOnly,
+            fortnightDays: config.fortnightDays,
+            evenOddWeeks: config.fortnightWeek === 'week1' ? 'even' : config.fortnightWeek === 'week2' ? 'odd' : undefined,
+            dates: config.monthlyDates,
+            range: (config.monthlyRangeStart && config.monthlyRangeEnd)
+              ? { start: config.monthlyRangeStart, end: config.monthlyRangeEnd }
+              : undefined,
+            randomCount: config.monthlyRandomCount,
+            months: config.yearlyMonths,
+            datesOrRanges: config.yearlyDates?.map(d => ({
+              month: d.month,
+              days: [d.day],
+              start: d.day,
+              end: d.endDay || d.day,
+            })),
+            startDate: config.startDate?.toISOString(),
+            endDate: config.endDate?.toISOString(),
+            exclusions: config.exclusionDates?.map(d => d.toISOString()),
+          },
+        };
+
+        const previews = await getNextActivations(goalSchedule, undefined, 5);
+        const occurrences: OccurrenceWithSource[] = previews.map(p => ({
+          date: p.description,
+          source: {
+            section: config.scheduleType,
+            details: p.localTime,
+          },
+        }));
+        setLocalNextOccurrences(occurrences);
+        console.log('[GoalScheduler] Generated local next occurrences:', occurrences.length);
+      } catch (error) {
+        console.error('[GoalScheduler] Error generating local occurrences:', error);
+        setLocalNextOccurrences([]);
+      }
+    };
+
+    generateLocalOccurrences();
   }, [
-    goalId,
     config.scheduleType,
-    // Weekly
-    JSON.stringify(config.weekdays), // Use JSON.stringify for array comparison
+    JSON.stringify(config.weekdays),
     config.weekendsOnly,
     config.weekdaysOnly,
-    // Fortnightly
     JSON.stringify(config.fortnightDays),
     config.fortnightWeek,
-    // Monthly
     JSON.stringify(config.monthlyDates),
-    JSON.stringify(config.monthlyWeekdayPositions),
     config.monthlyRangeStart,
     config.monthlyRangeEnd,
     config.monthlyRandomCount,
-    config.monthlyCalendarType,
-    config.monthlyUseAlternativeCalendar,
-    config.monthlyCalendarEvent,
-    // Yearly
     JSON.stringify(config.yearlyMonths),
     JSON.stringify(config.yearlyDates),
-    config.yearlyCalendarType,
-    config.yearlyUseAlternativeCalendar,
-    config.yearlyCalendarEvent,
-    // Advanced
     config.startDate?.toISOString(),
     config.endDate?.toISOString(),
-    JSON.stringify(config.exclusionDates?.map(d => d.toISOString())),
-    fetchBackendScheduleSummary,
   ]);
 
-  // Use backend summary if available, otherwise fall back to local.
-  // The backend always generates fresh data (deletes old occurrences first),
-  // so the backend summary is always preferred over the local calculation.
-  const scheduleSummary = backendSummary?.summary || localScheduleSummary;
+  // CRITICAL FIX: Always use the LOCAL summary as the live preview while editing.
+  // The backend summary is based on SAVED data and would show stale information
+  // when the user is actively changing the schedule in the wizard.
+  // The local next occurrences are generated from the current UI state.
+  const scheduleSummary = localScheduleSummary;
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
     console.log('[GoalScheduler] Updating config:', updates);
@@ -379,86 +432,34 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
             color={colors.primary}
           />
           <Text style={styles.summaryTitle}>Schedule Summary</Text>
-          {goalId && (
-            <TouchableOpacity
-              onPress={() => {
-                console.log('[GoalScheduler] User pressed refresh button');
-                fetchBackendScheduleSummary();
-              }}
-              disabled={loadingBackendSummary}
-              style={styles.refreshButton}
-            >
-              {loadingBackendSummary ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <IconSymbol
-                  ios_icon_name="arrow.clockwise"
-                  android_material_icon_name="refresh"
-                  size={16}
-                  color={colors.primary}
-                />
-              )}
-            </TouchableOpacity>
-          )}
         </View>
-        {loadingBackendSummary ? (
-          <View style={styles.summaryLoadingRow}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={styles.summaryLoadingText}>Loading schedule summary...</Text>
+        <Text style={styles.summaryText}>{scheduleSummary}</Text>
+        {localNextOccurrences.length > 0 && (
+          <View style={styles.nextOccurrencesContainer}>
+            <Text style={styles.nextOccurrencesTitle}>Next Occurrences (preview):</Text>
+            {localNextOccurrences.map((occurrence, index) => {
+              const dateText = occurrence.date;
+              return (
+                <View
+                  key={index}
+                  style={styles.nextOccurrenceRow}
+                >
+                  <IconSymbol
+                    ios_icon_name="circle.fill"
+                    android_material_icon_name="circle"
+                    size={6}
+                    color={index === 0 ? colors.primary : colors.textSecondary}
+                  />
+                  <Text style={[
+                    styles.nextOccurrenceText,
+                    index === 0 && styles.nextOccurrenceTextFirst,
+                  ]}>
+                    {dateText}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
-        ) : (
-          <>
-            <Text style={styles.summaryText}>{scheduleSummary}</Text>
-            {backendSummaryError && !backendSummary && (
-              <Text style={styles.summaryFallbackNote}>
-                (Showing local summary — tap refresh to retry)
-              </Text>
-            )}
-            {backendSummary?.nextOccurrences && backendSummary.nextOccurrences.length > 0 && (
-              <View style={styles.nextOccurrencesContainer}>
-                <Text style={styles.nextOccurrencesTitle}>Next Occurrences:</Text>
-                <Text style={styles.nextOccurrencesHint}>
-                  Tap any date to see which schedule section generated it
-                </Text>
-                {backendSummary.nextOccurrences.map((occurrence, index) => {
-                  // CRITICAL FIX: Always extract the date string, never render the object
-                  const dateText = occurrence.date;
-                  const hasSource = occurrence.source && occurrence.source.section;
-                  
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      style={styles.nextOccurrenceRow}
-                      onPress={() => hasSource ? handleOccurrencePress(occurrence) : undefined}
-                      disabled={!hasSource}
-                    >
-                      <IconSymbol
-                        ios_icon_name="circle.fill"
-                        android_material_icon_name="circle"
-                        size={6}
-                        color={index === 0 ? colors.primary : colors.textSecondary}
-                      />
-                      <Text style={[
-                        styles.nextOccurrenceText,
-                        index === 0 && styles.nextOccurrenceTextFirst,
-                        hasSource && styles.nextOccurrenceTextClickable,
-                      ]}>
-                        {dateText}
-                      </Text>
-                      {hasSource && (
-                        <IconSymbol
-                          ios_icon_name="info.circle"
-                          android_material_icon_name="info"
-                          size={16}
-                          color={colors.primary}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
-          </>
         )}
       </View>
     );

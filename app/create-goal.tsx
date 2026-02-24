@@ -373,39 +373,83 @@ export default function CreateGoalScreen() {
           }
         };
 
+        // CRITICAL FIX: The backend GET /api/goals/:id returns fields with these names:
+        // - selectedWeekdays (mapped from scheduleDaysOfWeek)
+        // - selectedFortnightDays (mapped from scheduleDaysOfWeek)
+        // - monthlyDates (mapped from scheduleDatesOfMonth)
+        // - monthlyWeekdayRules (mapped from scheduleNthDayOfMonth)
+        // - yearlyDates (mapped from scheduleDatesOfYear)
+        // - startDate, endDate (direct fields)
+        // - scheduleMonthlyRange (parsed JSONB)
+        // - scheduleExclusions (parsed JSONB)
+        // We must read from these backend field names, not the frontend field names.
+        const weekdays = parseJsonField(
+          goalDetails.selectedWeekdays ||
+          goalDetails.scheduleDaysOfWeek ||
+          goalDetails.schedule_days_of_week
+        );
+        
+        const monthlyRange = parseJsonField(goalDetails.scheduleMonthlyRange);
+        const exclusions = parseJsonField(goalDetails.scheduleExclusions);
+
+        console.log('[CreateGoal] Loading weekdays from backend:', weekdays);
+        console.log('[CreateGoal] Loading monthlyRange from backend:', monthlyRange);
+
         setScheduleConfig({
           scheduleType: displayScheduleType,
           // Daily
           timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
-          specificTimes: parseJsonField(goalDetails.scheduleSpecificTimes || goalDetails.schedule_specific_times),
-          // Weekly
-          weekdays: parseJsonField(goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week),
-          weekendsOnly: goalDetails.scheduleWeekendsOnly || goalDetails.schedule_weekends_only,
-          weekdaysOnly: goalDetails.scheduleWeekdaysOnly || goalDetails.schedule_weekdays_only,
-          // Fortnightly
-          fortnightDays: parseJsonField(goalDetails.scheduleFortnightDays || goalDetails.schedule_fortnight_days),
+          specificTimes: parseJsonField(goalDetails.scheduleTimesPerDayDetails || goalDetails.scheduleSpecificTimes || goalDetails.schedule_specific_times),
+          // Weekly - CRITICAL: read from selectedWeekdays (backend field name)
+          weekdays,
+          weekendsOnly: goalDetails.scheduleWeekendsOnly || goalDetails.schedule_weekends_only || false,
+          weekdaysOnly: goalDetails.scheduleWeekdaysOnly || goalDetails.schedule_weekdays_only || false,
+          // Fortnightly - CRITICAL: read from selectedFortnightDays (backend field name)
+          fortnightDays: parseJsonField(
+            goalDetails.selectedFortnightDays ||
+            goalDetails.scheduleFortnightDays ||
+            goalDetails.schedule_fortnight_days
+          ),
           fortnightWeek: goalDetails.scheduleFortnightWeek || goalDetails.schedule_fortnight_week,
-          // Monthly
-          monthlyDates: parseJsonField(goalDetails.scheduleMonthlyDates || goalDetails.schedule_monthly_dates),
-          monthlyNthDay: parseJsonField(goalDetails.scheduleMonthlyNthDay || goalDetails.schedule_monthly_nth_day),
-          monthlyWeekdayPositions: parseJsonField(goalDetails.scheduleMonthlyWeekdayPositions || goalDetails.schedule_monthly_weekday_positions),
-          monthlyRangeStart: goalDetails.scheduleMonthlyRangeStart || goalDetails.schedule_monthly_range_start,
-          monthlyRangeEnd: goalDetails.scheduleMonthlyRangeEnd || goalDetails.schedule_monthly_range_end,
+          // Monthly - CRITICAL: read from monthlyDates (backend field name)
+          monthlyDates: parseJsonField(
+            goalDetails.monthlyDates ||
+            goalDetails.scheduleMonthlyDates ||
+            goalDetails.schedule_monthly_dates
+          ),
+          monthlyNthDay: parseJsonField(
+            goalDetails.monthlyWeekdayRules ||
+            goalDetails.scheduleMonthlyNthDay ||
+            goalDetails.schedule_monthly_nth_day
+          ),
+          monthlyWeekdayPositions: parseJsonField(
+            goalDetails.scheduleMonthlyWeekdayPositions ||
+            goalDetails.schedule_monthly_weekday_positions
+          ),
+          monthlyRangeStart: monthlyRange?.start || goalDetails.scheduleMonthlyRangeStart || goalDetails.schedule_monthly_range_start,
+          monthlyRangeEnd: monthlyRange?.end || goalDetails.scheduleMonthlyRangeEnd || goalDetails.schedule_monthly_range_end,
           monthlyRandomCount: goalDetails.scheduleMonthlyRandomCount || goalDetails.schedule_monthly_random_count,
           monthlyCalendarType: goalDetails.scheduleMonthlyCalendarType || goalDetails.schedule_monthly_calendar_type,
           monthlyUseAlternativeCalendar: goalDetails.scheduleMonthlyUseAlternativeCalendar || goalDetails.schedule_monthly_use_alternative_calendar,
           monthlyCalendarEvent: goalDetails.scheduleMonthlyCalendarEvent || goalDetails.schedule_monthly_calendar_event,
-          // Yearly
-          yearlyMonths: parseJsonField(goalDetails.scheduleYearlyMonths || goalDetails.schedule_yearly_months),
-          yearlyDates: parseJsonField(goalDetails.scheduleYearlyDates || goalDetails.schedule_yearly_dates),
-          yearlyCalendarType: goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
+          // Yearly - CRITICAL: read from yearlyDates (backend field name)
+          yearlyMonths: parseJsonField(
+            goalDetails.scheduleYearlyMonths ||
+            goalDetails.schedule_yearly_months
+          ),
+          yearlyDates: parseJsonField(
+            goalDetails.yearlyDates ||
+            goalDetails.scheduleYearlyDates ||
+            goalDetails.schedule_yearly_dates
+          ),
+          yearlyCalendarType: goalDetails.yearlyCalendarType || goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
           yearlyUseAlternativeCalendar: goalDetails.scheduleYearlyUseAlternativeCalendar || goalDetails.schedule_yearly_use_alternative_calendar,
           yearlyCalendarEvent: goalDetails.scheduleYearlyCalendarEvent || goalDetails.schedule_yearly_calendar_event,
-          // Advanced
-          calendarType: goalDetails.scheduleCalendarType || goalDetails.schedule_calendar_type,
-          startDate: parseDateField(goalDetails.scheduleStartDate || goalDetails.schedule_start_date),
-          endDate: parseDateField(goalDetails.scheduleEndDate || goalDetails.schedule_end_date),
-          exclusionDates: parseJsonField(goalDetails.scheduleExclusionDates || goalDetails.schedule_exclusion_dates)?.map((d: string) => new Date(d)),
+          // Advanced - CRITICAL: startDate/endDate are direct fields on the goal
+          calendarType: goalDetails.calendarType || goalDetails.scheduleCalendarType || goalDetails.schedule_calendar_type,
+          startDate: parseDateField(goalDetails.startDate || goalDetails.scheduleStartDate || goalDetails.schedule_start_date),
+          endDate: parseDateField(goalDetails.endDate || goalDetails.scheduleEndDate || goalDetails.schedule_end_date),
+          exclusionDates: exclusions?.map((d: string) => new Date(d)),
         });
         
         if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {
@@ -524,7 +568,50 @@ export default function CreateGoalScreen() {
         scheduleType: scheduleConfig.scheduleType, // Keep for frontend compatibility
         scheduleRecurrenceType, // CRITICAL: Send the correct field for backend
         scheduleTimesPerDay: scheduleConfig.timesPerDay,
+        // CRITICAL FIX: Backend PUT handler reads 'selectedWeekdays', not 'scheduleDaysOfWeek'.
+        // Sending both ensures compatibility with both create and update endpoints.
+        selectedWeekdays: scheduleConfig.weekdays,
         scheduleDaysOfWeek: scheduleConfig.weekdays,
+        scheduleWeekendsOnly: scheduleConfig.weekendsOnly,
+        scheduleWeekdaysOnly: scheduleConfig.weekdaysOnly,
+        // CRITICAL FIX: Backend PUT handler reads 'selectedFortnightDays', not 'scheduleFortnightDays'.
+        selectedFortnightDays: scheduleConfig.fortnightDays,
+        scheduleFortnightDays: scheduleConfig.fortnightDays,
+        scheduleFortnightWeek: scheduleConfig.fortnightWeek,
+        // CRITICAL FIX: Backend reads 'scheduleFortnightEvenOdd' for fortnight week type.
+        scheduleFortnightEvenOdd: scheduleConfig.fortnightWeek === 'week1' ? 'even' : scheduleConfig.fortnightWeek === 'week2' ? 'odd' : undefined,
+        // CRITICAL FIX: Backend PUT handler reads 'monthlyDates', not 'scheduleMonthlyDates'.
+        monthlyDates: scheduleConfig.monthlyDates,
+        scheduleMonthlyDates: scheduleConfig.monthlyDates,
+        // CRITICAL FIX: Backend PUT handler reads 'monthlyWeekdayRules', not 'scheduleMonthlyWeekdayPositions'.
+        monthlyWeekdayRules: scheduleConfig.monthlyWeekdayPositions,
+        scheduleMonthlyWeekdayPositions: scheduleConfig.monthlyWeekdayPositions,
+        scheduleMonthlyRangeStart: scheduleConfig.monthlyRangeStart,
+        scheduleMonthlyRangeEnd: scheduleConfig.monthlyRangeEnd,
+        // CRITICAL FIX: Backend reads 'scheduleMonthlyRange' as {start, end} object.
+        scheduleMonthlyRange: (scheduleConfig.monthlyRangeStart && scheduleConfig.monthlyRangeEnd)
+          ? { start: scheduleConfig.monthlyRangeStart, end: scheduleConfig.monthlyRangeEnd }
+          : undefined,
+        scheduleMonthlyRandomCount: scheduleConfig.monthlyRandomCount,
+        scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
+        scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
+        scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
+        // CRITICAL FIX: Backend PUT handler reads 'yearlyDates', not 'scheduleYearlyDates'.
+        yearlyDates: scheduleConfig.yearlyDates,
+        scheduleYearlyMonths: scheduleConfig.yearlyMonths,
+        scheduleYearlyDates: scheduleConfig.yearlyDates,
+        scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
+        scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
+        scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,
+        // CRITICAL FIX: Backend PUT handler reads 'startDate'/'endDate', not 'scheduleStartDate'/'scheduleEndDate'.
+        startDate: scheduleConfig.startDate?.toISOString(),
+        endDate: scheduleConfig.endDate?.toISOString(),
+        scheduleStartDate: scheduleConfig.startDate,
+        scheduleEndDate: scheduleConfig.endDate,
+        // CRITICAL FIX: Backend PUT handler reads 'scheduleExclusions', not 'scheduleExclusionDates'.
+        scheduleExclusions: scheduleConfig.exclusionDates?.map(d => d.toISOString()),
+        scheduleExclusionDates: scheduleConfig.exclusionDates,
+        calendarType: scheduleConfig.calendarType,
       };
       
       console.log('[CreateGoal] Schedule data being sent:', {
