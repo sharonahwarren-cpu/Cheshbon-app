@@ -5,7 +5,8 @@ import * as schema from '../db/schema.js';
 import { getNextActivations, calculateAstronomicalTimes, applyTimeOffset, type ScheduleConfig } from '../utils/goal-scheduler.js';
 import { getScheduleSummaryWithOccurrences } from '../utils/schedule-summary.js';
 
-// Helper function to safely parse JSONB fields
+// Helper function to safely handle JSONB fields
+// For JSONB columns: if the value is a string, parse it to an object; otherwise, use as-is
 function parseJsonbField(value: any): any {
   if (!value) return null;
   if (typeof value === 'string') {
@@ -324,15 +325,14 @@ export function registerGoalRoutes(app: App) {
         console.log('[POST /api/goals] yearlyDates received:', body.yearlyDates);
         console.log('[POST /api/goals] yearlyDates type:', typeof body.yearlyDates);
         console.log('[POST /api/goals] yearlyDates isArray:', Array.isArray(body.yearlyDates));
-        console.log('[POST /api/goals] yearlyDates stringified:', JSON.stringify(body.yearlyDates));
       }
 
       const yearlyDatesToStore = parseJsonbField(body.yearlyDates);
 
       if (body.yearlyDates) {
         console.log('[POST /api/goals] After parseJsonbField:', yearlyDatesToStore);
-        console.log('[POST /api/goals] After parseJsonbField type:', typeof yearlyDatesToStore);
-        console.log('[POST /api/goals] After parseJsonbField isArray:', Array.isArray(yearlyDatesToStore));
+        console.log('[POST /api/goals] After parsing type:', typeof yearlyDatesToStore);
+        console.log('[POST /api/goals] After parsing isArray:', Array.isArray(yearlyDatesToStore));
 
         app.logger.info(
           {
@@ -519,13 +519,12 @@ export function registerGoalRoutes(app: App) {
         console.log('[PUT /api/goals/:id] yearlyDates received:', body.yearlyDates);
         console.log('[PUT /api/goals/:id] yearlyDates type:', typeof body.yearlyDates);
         console.log('[PUT /api/goals/:id] yearlyDates isArray:', Array.isArray(body.yearlyDates));
-        console.log('[PUT /api/goals/:id] yearlyDates stringified:', JSON.stringify(body.yearlyDates));
 
         const parsedYearlyDates = parseJsonbField(body.yearlyDates);
 
         console.log('[PUT /api/goals/:id] After parseJsonbField:', parsedYearlyDates);
-        console.log('[PUT /api/goals/:id] After parseJsonbField type:', typeof parsedYearlyDates);
-        console.log('[PUT /api/goals/:id] After parseJsonbField isArray:', Array.isArray(parsedYearlyDates));
+        console.log('[PUT /api/goals/:id] After parsing type:', typeof parsedYearlyDates);
+        console.log('[PUT /api/goals/:id] After parsing isArray:', Array.isArray(parsedYearlyDates));
 
         app.logger.info(
           {
