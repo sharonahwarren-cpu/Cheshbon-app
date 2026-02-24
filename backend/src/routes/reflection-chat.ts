@@ -4,7 +4,26 @@ import { eq, and, desc, gt } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+// Initialize Gemini client lazily - only when needed
+let genAI: GoogleGenerativeAI | null = null;
+let geminiInitError: string | null = null;
+
+function getGeminiClient(): GoogleGenerativeAI {
+  if (geminiInitError) {
+    throw new Error(geminiInitError);
+  }
+
+  if (!genAI) {
+    const apiKey = process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      geminiInitError = 'Google API key is not configured';
+      throw new Error(geminiInitError);
+    }
+    genAI = new GoogleGenerativeAI(apiKey);
+  }
+
+  return genAI;
+}
 
 const SYSTEM_PROMPT = `You are Cheshbon, a warm and supportive self-improvement coach having a VOICE CONVERSATION with the user. This is spoken dialogue, not written text.
 
@@ -26,6 +45,15 @@ const VOICE_GREETING_SYSTEM = `You are Cheshbon, a warm and supportive self-impr
 
 export function registerReflectionChatRoutes(app: App) {
   const requireAuth = app.requireAuth();
+
+  // Validate Gemini API configuration on startup
+  if (!process.env.GOOGLE_API_KEY) {
+    app.logger.warn(
+      'GOOGLE_API_KEY environment variable is not set. AI reflection chat features will not be available.'
+    );
+  } else {
+    app.logger.info('Reflection chat routes registered - AI service available');
+  }
 
   // POST /api/reflection-chat/conversations - Create a new reflection conversation
   app.fastify.post('/api/reflection-chat/conversations', async (
@@ -111,32 +139,58 @@ export function registerReflectionChatRoutes(app: App) {
       }
 
       // Generate initial greeting from AI
-      const greetingModel = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        systemInstruction: VOICE_GREETING_SYSTEM,
-      });
+      let greetingText: string;
 
-      const greetingResponse = await greetingModel.generateContent(contextStr);
-      const greetingText = greetingResponse.response.text().trim();
-
-      app.logger.info(
-        { userId, conversationId: conversation.id, greetingLength: greetingText.length },
-        'Initial greeting generated'
-      );
-
-      // Save the initial greeting message
-      await app.db
-        .insert(schema.reflectionMessages)
-        .values({
-          conversationId: conversation.id,
-          role: 'assistant',
-          content: greetingText,
+      try {
+        const greetingModel = getGeminiClient().getGenerativeModel({
+          model: 'gemini-2.0-flash',
+          systemInstruction: VOICE_GREETING_SYSTEM,
         });
 
-      app.logger.info(
-        { userId, conversationId: conversation.id },
-        'Initial greeting message saved'
-      );
+        const greetingResponse = await greetingModel.generateContent(contextStr);
+        greetingText = greetingResponse.response.text().trim();
+
+        app.logger.info(
+          { userId, conversationId: conversation.id, greetingLength: greetingText.length },
+          'Initial greeting generated'
+        );
+
+        // Save the initial greeting message
+        await app.db
+          .insert(schema.reflectionMessages)
+          .values({
+            conversationId: conversation.id,
+            role: 'assistant',
+            content: greetingText,
+          });
+
+        app.logger.info(
+          { userId, conversationId: conversation.id },
+          'Initial greeting message saved'
+        );
+      } catch (aiError) {
+        app.logger.warn(
+          { err: aiError, userId, conversationId: conversation.id },
+          'AI service unavailable, creating conversation without initial greeting'
+        );
+        greetingText = "Hi there! I'm Cheshbon, your self-improvement coach. How was your day?";
+
+        // Still save a default message so the conversation isn't empty
+        try {
+          await app.db
+            .insert(schema.reflectionMessages)
+            .values({
+              conversationId: conversation.id,
+              role: 'assistant',
+              content: greetingText,
+            });
+        } catch (dbError) {
+          app.logger.error(
+            { err: dbError, userId, conversationId: conversation.id },
+            'Failed to save default greeting message'
+          );
+        }
+      }
 
       return {
         id: conversation.id,
@@ -400,23 +454,35 @@ export function registerReflectionChatRoutes(app: App) {
         }));
 
         // Call Gemini API
-        const model = genAI.getGenerativeModel({
-          model: 'gemini-2.0-flash',
-          systemInstruction: SYSTEM_PROMPT,
-        });
+        let aiText: string;
 
-        const chatSession = model.startChat({
-          history: conversationMessages.slice(0, -1).map((msg) => ({
-            role: msg.role === 'user' ? 'user' : 'model',
-            parts: [{ text: msg.content }],
-          })),
-        });
+        try {
+          const model = getGeminiClient().getGenerativeModel({
+            model: 'gemini-2.0-flash',
+            systemInstruction: SYSTEM_PROMPT,
+          });
 
-        const response = await chatSession.sendMessage(
-          `${contextStr}\nUser message: ${message}`
-        );
+          const chatSession = model.startChat({
+            history: conversationMessages.slice(0, -1).map((msg) => ({
+              role: msg.role === 'user' ? 'user' : 'model',
+              parts: [{ text: msg.content }],
+            })),
+          });
 
-        const aiText = response.response.text();
+          const response = await chatSession.sendMessage(
+            `${contextStr}\nUser message: ${message}`
+          );
+
+          aiText = response.response.text();
+        } catch (aiError) {
+          app.logger.error(
+            { err: aiError, userId, conversationId: id },
+            'AI service error - using fallback response'
+          );
+          return reply.status(503).send({
+            error: 'AI service is temporarily unavailable. Please contact support.',
+          });
+        }
 
         app.logger.info(
           { userId, conversationId: id, responseLength: aiText.length },
@@ -443,25 +509,33 @@ export function registerReflectionChatRoutes(app: App) {
 
         // Generate or update title if it's the first message
         if (conversationHistory.length === 1) {
-          const titleModel = genAI.getGenerativeModel({
-            model: 'gemini-2.0-flash',
-          });
+          try {
+            const titleModel = getGeminiClient().getGenerativeModel({
+              model: 'gemini-2.0-flash',
+            });
 
-          const titleResponse = await titleModel.generateContent(
-            `Generate a short 3-4 word title for this reflection conversation based on: "${message}". Return ONLY the title, no quotes or punctuation.`
-          );
+            const titleResponse = await titleModel.generateContent(
+              `Generate a short 3-4 word title for this reflection conversation based on: "${message}". Return ONLY the title, no quotes or punctuation.`
+            );
 
-          const title = titleResponse.response.text().trim();
+            const title = titleResponse.response.text().trim();
 
-          await app.db
-            .update(schema.reflectionConversations)
-            .set({ title })
-            .where(eq(schema.reflectionConversations.id, id));
+            await app.db
+              .update(schema.reflectionConversations)
+              .set({ title })
+              .where(eq(schema.reflectionConversations.id, id));
 
-          app.logger.info(
-            { userId, conversationId: id, title },
-            'Conversation title generated'
-          );
+            app.logger.info(
+              { userId, conversationId: id, title },
+              'Conversation title generated'
+            );
+          } catch (titleError) {
+            app.logger.warn(
+              { err: titleError, userId, conversationId: id },
+              'Failed to generate conversation title, skipping'
+            );
+            // Don't fail the entire request if title generation fails
+          }
         }
 
         app.logger.info(
