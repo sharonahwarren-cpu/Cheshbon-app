@@ -319,11 +319,31 @@ export function registerGoalRoutes(app: App) {
         'Converting goal dates to UTC'
       );
 
-      // Process yearly dates
+      // Process yearly dates with detailed logging
+      if (body.yearlyDates !== undefined) {
+        console.log('[POST /api/goals] yearlyDates received:', body.yearlyDates);
+        console.log('[POST /api/goals] yearlyDates type:', typeof body.yearlyDates);
+        console.log('[POST /api/goals] yearlyDates isArray:', Array.isArray(body.yearlyDates));
+        console.log('[POST /api/goals] yearlyDates stringified:', JSON.stringify(body.yearlyDates));
+      }
+
       const yearlyDatesToStore = parseJsonbField(body.yearlyDates);
+
       if (body.yearlyDates) {
+        console.log('[POST /api/goals] After parseJsonbField:', yearlyDatesToStore);
+        console.log('[POST /api/goals] After parseJsonbField type:', typeof yearlyDatesToStore);
+        console.log('[POST /api/goals] After parseJsonbField isArray:', Array.isArray(yearlyDatesToStore));
+
         app.logger.info(
-          { userId: session.user.id, originalYearlyDates: body.yearlyDates, parsedYearlyDates: yearlyDatesToStore },
+          {
+            userId: session.user.id,
+            originalYearlyDates: body.yearlyDates,
+            originalType: typeof body.yearlyDates,
+            isArray: Array.isArray(body.yearlyDates),
+            parsedYearlyDates: yearlyDatesToStore,
+            parsedType: typeof yearlyDatesToStore,
+            parsedIsArray: Array.isArray(yearlyDatesToStore),
+          },
           'Processing yearly dates for POST'
         );
       }
@@ -432,7 +452,20 @@ export function registerGoalRoutes(app: App) {
       scheduleExclusions?: string[];
     };
 
-    app.logger.info({ userId: session.user.id, goalId: id, yearlyDates: body.yearlyDates }, 'Updating goal with yearly dates');
+    // Log raw request details
+    console.log('[PUT /api/goals/:id] Raw request body:', request.body);
+    console.log('[PUT /api/goals/:id] body.yearlyDates:', body.yearlyDates);
+    console.log('[PUT /api/goals/:id] body.yearlyDates type:', typeof body.yearlyDates);
+
+    app.logger.info(
+      {
+        userId: session.user.id,
+        goalId: id,
+        yearlyDates: body.yearlyDates,
+        yearlyDatesType: typeof body.yearlyDates,
+      },
+      'Updating goal with yearly dates'
+    );
 
     try {
       // Check if goal exists and belongs to user
@@ -482,12 +515,34 @@ export function registerGoalRoutes(app: App) {
       if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
       if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.monthlyWeekdayRules);
       if (body.yearlyDates !== undefined) {
+        // Detailed logging of yearlyDates processing
+        console.log('[PUT /api/goals/:id] yearlyDates received:', body.yearlyDates);
+        console.log('[PUT /api/goals/:id] yearlyDates type:', typeof body.yearlyDates);
+        console.log('[PUT /api/goals/:id] yearlyDates isArray:', Array.isArray(body.yearlyDates));
+        console.log('[PUT /api/goals/:id] yearlyDates stringified:', JSON.stringify(body.yearlyDates));
+
         const parsedYearlyDates = parseJsonbField(body.yearlyDates);
+
+        console.log('[PUT /api/goals/:id] After parseJsonbField:', parsedYearlyDates);
+        console.log('[PUT /api/goals/:id] After parseJsonbField type:', typeof parsedYearlyDates);
+        console.log('[PUT /api/goals/:id] After parseJsonbField isArray:', Array.isArray(parsedYearlyDates));
+
         app.logger.info(
-          { userId: session.user.id, goalId: id, originalYearlyDates: body.yearlyDates, parsedYearlyDates },
+          {
+            userId: session.user.id,
+            goalId: id,
+            originalYearlyDates: body.yearlyDates,
+            originalType: typeof body.yearlyDates,
+            isArray: Array.isArray(body.yearlyDates),
+            parsedYearlyDates,
+            parsedType: typeof parsedYearlyDates,
+            parsedIsArray: Array.isArray(parsedYearlyDates),
+          },
           'Processing yearly dates for update'
         );
         updateData.scheduleDatesOfYear = parsedYearlyDates;
+
+        console.log('[PUT /api/goals/:id] updateData.scheduleDatesOfYear:', updateData.scheduleDatesOfYear);
       }
       if (body.calendarType !== undefined) {
         const newCalendarType = body.calendarType || null;
@@ -553,6 +608,15 @@ export function registerGoalRoutes(app: App) {
       if (body.scheduleMonthlyRandomCount !== undefined) updateData.scheduleMonthlyRandomCount = body.scheduleMonthlyRandomCount || null;
       if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = parseJsonbField(body.scheduleExclusions);
       updateData.updatedAt = new Date();
+
+      // Log what's being sent to the database
+      if (updateData.scheduleDatesOfYear !== undefined) {
+        console.log('[PUT /api/goals/:id] About to send to DB:');
+        console.log('  scheduleDatesOfYear:', updateData.scheduleDatesOfYear);
+        console.log('  type:', typeof updateData.scheduleDatesOfYear);
+        console.log('  isArray:', Array.isArray(updateData.scheduleDatesOfYear));
+        console.log('  stringified:', JSON.stringify(updateData.scheduleDatesOfYear));
+      }
 
       const updatedGoals = await app.db
         .update(schema.goals)
