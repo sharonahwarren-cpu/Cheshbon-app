@@ -148,7 +148,7 @@ export default function AIChatScreen() {
       if (pulseLoop.current) pulseLoop.current.stop();
       pulseAnim.setValue(1);
     }
-  }, [isRecording]);
+  }, [isRecording, pulseAnim]);
 
   // Load voice settings from storage
   const loadVoiceSettings = async () => {
@@ -1623,12 +1623,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-
-Now I need to install the AsyncStorage dependency:Perfect! Now let me update the iOS version to use the same implementation:
-
-<write file="app/ai-chat.ios.tsx">
-import React from 'react';
-import AIChatScreen from './ai-chat';
-
-// iOS uses the same implementation as the base file
-export default AIChatScreen;
