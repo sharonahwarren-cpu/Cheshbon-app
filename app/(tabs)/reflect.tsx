@@ -317,10 +317,28 @@ export default function ReflectScreen() {
       const newConversation = response?.data || response;
       
       setCurrentConversationId(newConversation.id);
-      setMessages([]);
+      
+      // If there's an initial message from the AI, add it to messages
+      if (newConversation.initialMessage) {
+        const initialMsg: ChatMessage = {
+          id: 'initial-' + Date.now(),
+          role: 'assistant',
+          content: newConversation.initialMessage.content,
+          createdAt: newConversation.createdAt,
+        };
+        setMessages([initialMsg]);
+      } else {
+        setMessages([]);
+      }
+      
       setConversations([newConversation, ...conversations]);
       
       console.log('New conversation created:', newConversation.id);
+      
+      // Scroll to bottom to show initial greeting
+      setTimeout(() => {
+        chatScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     } catch (error) {
       console.error('Error creating conversation:', error);
       showError('Failed to create conversation');
@@ -697,7 +715,7 @@ export default function ReflectScreen() {
               <View style={styles.aiChatTextContainer}>
                 <Text style={styles.aiChatTitle}>AI Reflection Coach</Text>
                 <Text style={styles.aiChatSubtitle}>
-                  Chat about your goals, successes, and growth
+                  Let's talk about your day and goals
                 </Text>
               </View>
               <IconSymbol
@@ -1045,7 +1063,7 @@ export default function ReflectScreen() {
                   />
                   <Text style={styles.emptyConversationsTitle}>Start Your First Conversation</Text>
                   <Text style={styles.emptyConversationsText}>
-                    Chat with your AI reflection coach about your goals, successes, and personal growth journey.
+                    Your AI coach will ask about your day and help you reflect on your goals, journal entries, and personal growth.
                   </Text>
                   <TouchableOpacity style={styles.startChatButton} onPress={startNewConversation}>
                     <IconSymbol
@@ -1132,7 +1150,7 @@ export default function ReflectScreen() {
                       color={colors.textSecondary}
                     />
                     <Text style={styles.emptyChatText}>
-                      Start the conversation! Ask about your goals, reflect on your progress, or discuss challenges.
+                      Loading conversation...
                     </Text>
                   </View>
                 }
