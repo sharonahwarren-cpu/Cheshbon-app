@@ -196,6 +196,8 @@ export function registerMitzvotRoutes(app: App) {
       scheduleTimesPerMonth?: number;
       schedulePeriodOfYear?: any;
       scheduleDatesOfYear?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+      yearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+      scheduleYearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
       scheduleRecurrenceType?: string;
       scheduleTimesPerDayDetails?: any;
       scheduleWeekendsOnly?: boolean;
@@ -233,6 +235,10 @@ export function registerMitzvotRoutes(app: App) {
       const startDate = body.startDate ? new Date(body.startDate) : null;
       const endDate = body.endDate ? new Date(body.endDate) : null;
 
+      // Handle yearly dates - check for all three possible field names
+      const yearlyDatesInput = body.scheduleDatesOfYear || body.yearlyDates || body.scheduleYearlyDates;
+      const yearlyDatesToStore = scheduleType.toLowerCase() === 'yearly' ? parseJsonbField(yearlyDatesInput) : null;
+
       const mitzvotData = await app.db
         .insert(schema.mitzvot)
         .values({
@@ -249,7 +255,7 @@ export function registerMitzvotRoutes(app: App) {
           scheduleNthDayOfMonth: parseJsonbField(body.scheduleNthDayOfMonth),
           scheduleTimesPerMonth: body.scheduleTimesPerMonth || null,
           schedulePeriodOfYear: parseJsonbField(body.schedulePeriodOfYear),
-          scheduleDatesOfYear: parseJsonbField(body.scheduleDatesOfYear),
+          scheduleDatesOfYear: yearlyDatesToStore,
           scheduleRecurrenceType: body.scheduleRecurrenceType || 'daily',
           scheduleTimesPerDayDetails: parseJsonbField(body.scheduleTimesPerDayDetails),
           scheduleWeekendsOnly: body.scheduleWeekendsOnly || false,
@@ -329,7 +335,38 @@ export function registerMitzvotRoutes(app: App) {
       if (body.scheduleNthDayOfMonth !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.scheduleNthDayOfMonth);
       if (body.scheduleTimesPerMonth !== undefined) updateData.scheduleTimesPerMonth = body.scheduleTimesPerMonth || null;
       if (body.schedulePeriodOfYear !== undefined) updateData.schedulePeriodOfYear = parseJsonbField(body.schedulePeriodOfYear);
-      if (body.scheduleDatesOfYear !== undefined) updateData.scheduleDatesOfYear = parseJsonbField(body.scheduleDatesOfYear);
+
+      // Handle yearly dates - check for all three possible field names
+      const yearlyDatesInput = body.scheduleDatesOfYear || body.yearlyDates || body.scheduleYearlyDates;
+      if (yearlyDatesInput !== undefined) {
+        const newScheduleType = body.scheduleType !== undefined ? body.scheduleType : existingMitzvot[0].scheduleType;
+        const yearlyDatesToStore = newScheduleType.toLowerCase() === 'yearly' ? parseJsonbField(yearlyDatesInput) : null;
+        updateData.scheduleDatesOfYear = yearlyDatesToStore;
+
+        app.logger.info(
+          {
+            userId: session.user.id,
+            mitzvahId: id,
+            scheduleType: newScheduleType,
+            input: yearlyDatesInput,
+            stored: yearlyDatesToStore,
+          },
+          'Processing yearly dates for update'
+        );
+      }
+
+      // CRITICAL: When scheduleType is NOT "yearly", clear any stale yearly dates
+      const finalScheduleType = body.scheduleType !== undefined ? body.scheduleType : existingMitzvot[0].scheduleType;
+      if (finalScheduleType.toLowerCase() !== 'yearly' && updateData.scheduleDatesOfYear === undefined) {
+        if (body.scheduleDatesOfYear === undefined && body.yearlyDates === undefined && body.scheduleYearlyDates === undefined) {
+          updateData.scheduleDatesOfYear = null;
+          app.logger.info(
+            { userId: session.user.id, mitzvahId: id, scheduleType: finalScheduleType },
+            'Clearing yearly dates - schedule type is not yearly'
+          );
+        }
+      }
+
       if (body.scheduleRecurrenceType !== undefined) updateData.scheduleRecurrenceType = body.scheduleRecurrenceType;
       if (body.scheduleTimesPerDayDetails !== undefined) updateData.scheduleTimesPerDayDetails = parseJsonbField(body.scheduleTimesPerDayDetails);
       if (body.scheduleWeekendsOnly !== undefined) updateData.scheduleWeekendsOnly = body.scheduleWeekendsOnly;

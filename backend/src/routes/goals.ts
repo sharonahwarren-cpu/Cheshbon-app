@@ -289,6 +289,8 @@ export function registerGoalRoutes(app: App) {
       monthlyDates?: number[];
       monthlyWeekdayRules?: Array<{ week: number; day: number }>;
       yearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+      scheduleDatesOfYear?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+      scheduleYearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
       scheduleRecurrenceType?: string;
       scheduleTimesPerDayDetails?: Array<{ hour: number; minute: number; conditions?: string }>;
       scheduleWeekendsOnly?: boolean;
@@ -320,29 +322,18 @@ export function registerGoalRoutes(app: App) {
         'Converting goal dates to UTC'
       );
 
-      // Process yearly dates with detailed logging
-      if (body.yearlyDates !== undefined) {
-        console.log('[POST /api/goals] yearlyDates received:', body.yearlyDates);
-        console.log('[POST /api/goals] yearlyDates type:', typeof body.yearlyDates);
-        console.log('[POST /api/goals] yearlyDates isArray:', Array.isArray(body.yearlyDates));
-      }
+      // Process yearly dates - check for all three possible field names
+      const yearlyDatesInput = body.yearlyDates || body.scheduleDatesOfYear || body.scheduleYearlyDates;
+      const yearlyDatesToStore = body.scheduleType === 'Yearly' ? parseJsonbField(yearlyDatesInput) : null;
 
-      const yearlyDatesToStore = parseJsonbField(body.yearlyDates);
-
-      if (body.yearlyDates) {
-        console.log('[POST /api/goals] After parseJsonbField:', yearlyDatesToStore);
-        console.log('[POST /api/goals] After parsing type:', typeof yearlyDatesToStore);
-        console.log('[POST /api/goals] After parsing isArray:', Array.isArray(yearlyDatesToStore));
-
+      if (yearlyDatesInput || body.scheduleType === 'Yearly') {
         app.logger.info(
           {
             userId: session.user.id,
-            originalYearlyDates: body.yearlyDates,
-            originalType: typeof body.yearlyDates,
-            isArray: Array.isArray(body.yearlyDates),
-            parsedYearlyDates: yearlyDatesToStore,
-            parsedType: typeof yearlyDatesToStore,
-            parsedIsArray: Array.isArray(yearlyDatesToStore),
+            scheduleType: body.scheduleType || 'Always Active',
+            input: yearlyDatesInput,
+            stored: yearlyDatesToStore,
+            isArray: Array.isArray(yearlyDatesToStore),
           },
           'Processing yearly dates for POST'
         );
@@ -442,6 +433,8 @@ export function registerGoalRoutes(app: App) {
       monthlyDates?: number[];
       monthlyWeekdayRules?: Array<{ week: number; day: number }>;
       yearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+      scheduleDatesOfYear?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
+      scheduleYearlyDates?: Array<{ month: number; day: number; endMonth?: number; endDay?: number }>;
       scheduleRecurrenceType?: string;
       scheduleTimesPerDayDetails?: Array<{ hour: number; minute: number; conditions?: string }>;
       scheduleWeekendsOnly?: boolean;
@@ -514,34 +507,38 @@ export function registerGoalRoutes(app: App) {
       }
       if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
       if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.monthlyWeekdayRules);
-      if (body.yearlyDates !== undefined) {
-        // Detailed logging of yearlyDates processing
-        console.log('[PUT /api/goals/:id] yearlyDates received:', body.yearlyDates);
-        console.log('[PUT /api/goals/:id] yearlyDates type:', typeof body.yearlyDates);
-        console.log('[PUT /api/goals/:id] yearlyDates isArray:', Array.isArray(body.yearlyDates));
 
-        const parsedYearlyDates = parseJsonbField(body.yearlyDates);
-
-        console.log('[PUT /api/goals/:id] After parseJsonbField:', parsedYearlyDates);
-        console.log('[PUT /api/goals/:id] After parsing type:', typeof parsedYearlyDates);
-        console.log('[PUT /api/goals/:id] After parsing isArray:', Array.isArray(parsedYearlyDates));
+      // Handle yearly dates - check for all three possible field names
+      const yearlyDatesInput = body.yearlyDates || body.scheduleDatesOfYear || body.scheduleYearlyDates;
+      if (yearlyDatesInput !== undefined) {
+        const parsedYearlyDates = parseJsonbField(yearlyDatesInput);
 
         app.logger.info(
           {
             userId: session.user.id,
             goalId: id,
-            originalYearlyDates: body.yearlyDates,
-            originalType: typeof body.yearlyDates,
-            isArray: Array.isArray(body.yearlyDates),
-            parsedYearlyDates,
+            input: yearlyDatesInput,
+            inputType: typeof yearlyDatesInput,
+            parsed: parsedYearlyDates,
             parsedType: typeof parsedYearlyDates,
-            parsedIsArray: Array.isArray(parsedYearlyDates),
+            isArray: Array.isArray(parsedYearlyDates),
           },
           'Processing yearly dates for update'
         );
         updateData.scheduleDatesOfYear = parsedYearlyDates;
+      }
 
-        console.log('[PUT /api/goals/:id] updateData.scheduleDatesOfYear:', updateData.scheduleDatesOfYear);
+      // CRITICAL: When scheduleType is NOT "Yearly", clear any stale yearly dates
+      const newScheduleType = body.scheduleType !== undefined ? body.scheduleType : existingGoal[0].scheduleType;
+      if (newScheduleType !== 'Yearly' && updateData.scheduleDatesOfYear === undefined) {
+        // Only clear if we're not explicitly setting yearly dates in this request
+        if (body.yearlyDates === undefined && body.scheduleDatesOfYear === undefined && body.scheduleYearlyDates === undefined) {
+          updateData.scheduleDatesOfYear = null;
+          app.logger.info(
+            { userId: session.user.id, goalId: id, scheduleType: newScheduleType },
+            'Clearing yearly dates - schedule type is not Yearly'
+          );
+        }
       }
       if (body.calendarType !== undefined) {
         const newCalendarType = body.calendarType || null;
