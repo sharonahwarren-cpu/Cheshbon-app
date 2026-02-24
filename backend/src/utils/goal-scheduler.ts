@@ -13,6 +13,7 @@ import {
 export interface ScheduleConfig {
   calendarType: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
   recurrenceType: 'daily' | 'weekly' | 'fortnightly' | 'monthly' | 'yearly' | 'custom';
+  scheduleType?: 'Always Active' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly' | 'always_active' | 'weekly' | 'fortnightly' | 'monthly' | 'yearly'; // Priority-based schedule type
   startDate?: Date;
   endDate?: Date;
   timezone: string;
@@ -101,7 +102,26 @@ export function getNextActivations(
  * Check if a specific date matches the schedule criteria
  */
 export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boolean {
-  switch (config.recurrenceType) {
+  // Normalize scheduleType to recurrenceType if provided
+  let recurrenceType = config.recurrenceType;
+
+  if (config.scheduleType) {
+    const scheduleType = config.scheduleType.toLowerCase();
+    if (scheduleType === 'always_active' || scheduleType === 'always active') {
+      return true;
+    }
+    if (scheduleType === 'weekly') {
+      recurrenceType = 'weekly';
+    } else if (scheduleType === 'fortnightly') {
+      recurrenceType = 'fortnightly';
+    } else if (scheduleType === 'monthly') {
+      recurrenceType = 'monthly';
+    } else if (scheduleType === 'yearly') {
+      recurrenceType = 'yearly';
+    }
+  }
+
+  switch (recurrenceType) {
     case 'daily':
       return true;
 

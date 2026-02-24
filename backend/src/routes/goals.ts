@@ -818,19 +818,31 @@ export function registerGoalRoutes(app: App) {
 
       const timezone = prefs[0]?.timezone || 'UTC';
 
-      // Build summary config from goal
+      app.logger.info(
+        { userId: session.user.id, goalId: id, scheduleType: goal.scheduleType },
+        'Fetching goal configuration for schedule summary'
+      );
+
+      // Build summary config from goal with schedule type priority applied
+      const scheduleType = goal.scheduleType || 'Always Active';
+
+      app.logger.info(
+        { userId: session.user.id, goalId: id, scheduleType },
+        'Generating fresh next occurrences based on current config'
+      );
+
       const summaryConfig = {
-        scheduleType: goal.scheduleType,
+        scheduleType,
         scheduleRecurrenceType: goal.scheduleRecurrenceType,
-        scheduleDaysOfWeek: goal.scheduleDaysOfWeek,
-        scheduleDatesOfMonth: goal.scheduleDatesOfMonth,
-        scheduleNthDayOfMonth: goal.scheduleNthDayOfMonth ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth) : undefined,
-        scheduleMonthlyRange: goal.scheduleMonthlyRange ? (typeof goal.scheduleMonthlyRange === 'string' ? JSON.parse(goal.scheduleMonthlyRange) : goal.scheduleMonthlyRange) : undefined,
-        scheduleFortnightEvenOdd: goal.scheduleFortnightEvenOdd,
-        scheduleDatesOfYear: goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear) : undefined,
+        scheduleDaysOfWeek: scheduleType === 'Weekly' || scheduleType === 'Fortnightly' ? goal.scheduleDaysOfWeek : undefined,
+        scheduleDatesOfMonth: scheduleType === 'Monthly' ? goal.scheduleDatesOfMonth : undefined,
+        scheduleNthDayOfMonth: scheduleType === 'Monthly' ? (goal.scheduleNthDayOfMonth ? (typeof goal.scheduleNthDayOfMonth === 'string' ? JSON.parse(goal.scheduleNthDayOfMonth) : goal.scheduleNthDayOfMonth) : undefined) : undefined,
+        scheduleMonthlyRange: scheduleType === 'Monthly' ? (goal.scheduleMonthlyRange ? (typeof goal.scheduleMonthlyRange === 'string' ? JSON.parse(goal.scheduleMonthlyRange) : goal.scheduleMonthlyRange) : undefined) : undefined,
+        scheduleFortnightEvenOdd: scheduleType === 'Fortnightly' ? goal.scheduleFortnightEvenOdd : undefined,
+        scheduleDatesOfYear: scheduleType === 'Yearly' ? (goal.scheduleDatesOfYear ? (typeof goal.scheduleDatesOfYear === 'string' ? JSON.parse(goal.scheduleDatesOfYear) : goal.scheduleDatesOfYear) : undefined) : undefined,
         scheduleTimesPerDayDetails: goal.scheduleTimesPerDayDetails ? (typeof goal.scheduleTimesPerDayDetails === 'string' ? JSON.parse(goal.scheduleTimesPerDayDetails) : goal.scheduleTimesPerDayDetails) : undefined,
-        scheduleWeekendsOnly: goal.scheduleWeekendsOnly,
-        scheduleWeekdaysOnly: goal.scheduleWeekdaysOnly,
+        scheduleWeekendsOnly: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') ? goal.scheduleWeekendsOnly : false,
+        scheduleWeekdaysOnly: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') ? goal.scheduleWeekdaysOnly : false,
         calendarType: goal.calendarType,
         eventType: goal.eventType,
         timezone: timezone,
@@ -838,8 +850,17 @@ export function registerGoalRoutes(app: App) {
         endDate: goal.endDate,
       };
 
-      // Generate summary
+      // Generate fresh summary and next occurrences
       const summary = getScheduleSummaryWithOccurrences(summaryConfig, occurrenceCount);
+
+      app.logger.info(
+        {
+          userId: session.user.id,
+          goalId: id,
+          occurrenceCount: summary.nextOccurrences?.length || 0,
+        },
+        'Generated fresh next occurrences'
+      );
 
       app.logger.info({ userId: session.user.id, goalId: id }, 'Schedule summary generated successfully');
       return {
