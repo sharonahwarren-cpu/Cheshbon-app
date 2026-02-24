@@ -600,9 +600,9 @@ export default function CreateGoalScreen() {
         scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
         scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
         scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
-        // CRITICAL FIX: The database column schedule_dates_of_year is text[] (not jsonb yet).
-        // Stringify each yearly date object so PostgreSQL can store it as a text array element.
-        // The frontend already handles reading these back via JSON.parse in the yearlyDates normalization code.
+        // ✅ CRITICAL FIX: Send yearlyDates as PLAIN OBJECTS (not stringified)
+        // The backend will handle stringification when storing in the text[] column
+        // Previously we were double-stringifying: frontend stringified + backend stringified = malformed array literal
         yearlyDates: scheduleConfig.yearlyDates?.map(d => {
           const result = {
             month: d.month,
@@ -610,8 +610,9 @@ export default function CreateGoalScreen() {
             ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
             ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
           };
-          console.log('🔄 [iOS YEARLY SCHEDULE] Stringifying yearlyDate for text[] column:', JSON.stringify(result));
-          return JSON.stringify(result);
+          console.log('🔄 [iOS YEARLY SCHEDULE FIX] Transforming yearlyDate entry (plain object - backend will stringify):', JSON.stringify(result));
+          // ✅ RETURN PLAIN OBJECT - DO NOT STRINGIFY
+          return result;
         }),
         scheduleYearlyMonths: scheduleConfig.yearlyMonths,
         scheduleYearlyDates: scheduleConfig.yearlyDates?.map(d => {
@@ -621,7 +622,8 @@ export default function CreateGoalScreen() {
             ...(d.endMonth !== undefined && d.endMonth !== null ? { endMonth: d.endMonth } : {}),
             ...(d.endDay !== undefined && d.endDay !== null ? { endDay: d.endDay } : {}),
           };
-          return JSON.stringify(result);
+          // ✅ RETURN PLAIN OBJECT - DO NOT STRINGIFY
+          return result;
         }),
         scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
         scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
