@@ -165,6 +165,12 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   const [addYearlyDateMonth, setAddYearlyDateMonth] = useState(1);
   const [addYearlyDateDay, setAddYearlyDateDay] = useState(1);
   const [showAddYearlyDatePicker, setShowAddYearlyDatePicker] = useState(false);
+  // NEW: State for yearly date range picker
+  const [showAddYearlyRangePicker, setShowAddYearlyRangePicker] = useState(false);
+  const [yearlyRangeStartMonth, setYearlyRangeStartMonth] = useState(1);
+  const [yearlyRangeStartDay, setYearlyRangeStartDay] = useState(1);
+  const [yearlyRangeEndMonth, setYearlyRangeEndMonth] = useState(1);
+  const [yearlyRangeEndDay, setYearlyRangeEndDay] = useState(7);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [showCalendarEventPicker, setShowCalendarEventPicker] = useState(false);
   const [calendarEventContext, setCalendarEventContext] = useState<'monthly' | 'yearly'>('monthly');
@@ -1201,26 +1207,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               Add date ranges that span across months (e.g., December 20 to January 5)
             </Text>
             
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => {
-                console.log('User tapped Add Date Range button');
-                // Add a default range
-                const current = config.yearlyRanges || [];
-                updateConfig({ 
-                  yearlyRanges: [...current, { startMonth: 1, startDay: 1, endMonth: 1, endDay: 7 }] 
-                });
-              }}
-            >
-              <IconSymbol
-                ios_icon_name="plus.circle.fill"
-                android_material_icon_name="add-circle"
-                size={18}
-                color={colors.primary}
-              />
-              <Text style={styles.addButtonText}>Add Date Range</Text>
-            </TouchableOpacity>
-
+            {/* List of added yearly ranges */}
             {config.yearlyRanges && config.yearlyRanges.length > 0 && (
               <View style={styles.yearlyRangesList}>
                 {config.yearlyRanges.map((range, index) => (
@@ -1240,6 +1227,27 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                 ))}
               </View>
             )}
+
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => {
+                console.log('[GoalScheduler] User tapped Add Date Range button');
+                // Open the date range picker modal
+                setYearlyRangeStartMonth(1);
+                setYearlyRangeStartDay(1);
+                setYearlyRangeEndMonth(1);
+                setYearlyRangeEndDay(7);
+                setShowAddYearlyRangePicker(true);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="plus.circle.fill"
+                android_material_icon_name="add-circle"
+                size={18}
+                color={colors.primary}
+              />
+              <Text style={styles.addButtonText}>Add Date Range</Text>
+            </TouchableOpacity>
           </View>
         )}
         
@@ -1585,6 +1593,156 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
         </View>
       </Modal>
 
+      {/* NEW: Yearly Date Range Picker Modal */}
+      <Modal
+        visible={showAddYearlyRangePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddYearlyRangePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Date Range</Text>
+              <TouchableOpacity onPress={() => setShowAddYearlyRangePicker(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalScroll}>
+              {/* Start Date Selection */}
+              <View style={styles.pickerSection}>
+                <Text style={styles.pickerLabel}>Start Date</Text>
+                <Text style={styles.helperText}>Select the start month and day</Text>
+                
+                {/* Start Month */}
+                <Text style={styles.subPickerLabel}>Month</Text>
+                <View style={styles.monthGrid}>
+                  {yearlyMonthNames.map((name, idx) => {
+                    const monthNum = idx + 1;
+                    const isSelected = yearlyRangeStartMonth === monthNum;
+                    return (
+                      <TouchableOpacity
+                        key={monthNum}
+                        style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                        onPress={() => {
+                          setYearlyRangeStartMonth(monthNum);
+                          const maxDay = maxDaysForYearlyMonth(monthNum);
+                          if (yearlyRangeStartDay > maxDay) setYearlyRangeStartDay(maxDay);
+                        }}
+                      >
+                        <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                          {name.substring(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Start Day */}
+                <Text style={styles.subPickerLabel}>Day</Text>
+                <View style={styles.dateGridContainer}>
+                  {Array.from({ length: maxDaysForYearlyMonth(yearlyRangeStartMonth) }, (_, i) => {
+                    const dayNum = i + 1;
+                    const isSelected = yearlyRangeStartDay === dayNum;
+                    return (
+                      <TouchableOpacity
+                        key={dayNum}
+                        style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                        onPress={() => setYearlyRangeStartDay(dayNum)}
+                      >
+                        <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                          {dayNum}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* End Date Selection */}
+              <View style={styles.pickerSection}>
+                <Text style={styles.pickerLabel}>End Date</Text>
+                <Text style={styles.helperText}>Select the end month and day</Text>
+                
+                {/* End Month */}
+                <Text style={styles.subPickerLabel}>Month</Text>
+                <View style={styles.monthGrid}>
+                  {yearlyMonthNames.map((name, idx) => {
+                    const monthNum = idx + 1;
+                    const isSelected = yearlyRangeEndMonth === monthNum;
+                    return (
+                      <TouchableOpacity
+                        key={monthNum}
+                        style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                        onPress={() => {
+                          setYearlyRangeEndMonth(monthNum);
+                          const maxDay = maxDaysForYearlyMonth(monthNum);
+                          if (yearlyRangeEndDay > maxDay) setYearlyRangeEndDay(maxDay);
+                        }}
+                      >
+                        <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                          {name.substring(0, 3)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* End Day */}
+                <Text style={styles.subPickerLabel}>Day</Text>
+                <View style={styles.dateGridContainer}>
+                  {Array.from({ length: maxDaysForYearlyMonth(yearlyRangeEndMonth) }, (_, i) => {
+                    const dayNum = i + 1;
+                    const isSelected = yearlyRangeEndDay === dayNum;
+                    return (
+                      <TouchableOpacity
+                        key={dayNum}
+                        style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                        onPress={() => setYearlyRangeEndDay(dayNum)}
+                      >
+                        <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                          {dayNum}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.confirmButton}
+                onPress={() => {
+                  console.log('[GoalScheduler] User confirmed yearly range:', {
+                    startMonth: yearlyRangeStartMonth,
+                    startDay: yearlyRangeStartDay,
+                    endMonth: yearlyRangeEndMonth,
+                    endDay: yearlyRangeEndDay,
+                  });
+                  const current = config.yearlyRanges || [];
+                  const newRange = {
+                    startMonth: yearlyRangeStartMonth,
+                    startDay: yearlyRangeStartDay,
+                    endMonth: yearlyRangeEndMonth,
+                    endDay: yearlyRangeEndDay,
+                  };
+                  updateConfig({ yearlyRanges: [...current, newRange] });
+                  setShowAddYearlyRangePicker(false);
+                }}
+              >
+                <Text style={styles.confirmButtonText}>
+                  Add Range: {yearlyMonthNames[yearlyRangeStartMonth - 1]} {yearlyRangeStartDay} - {yearlyMonthNames[yearlyRangeEndMonth - 1]} {yearlyRangeEndDay}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Date Picker Modal - Using DatePickerModal component */}
       {showDatePicker && (
         <DatePickerModal
@@ -1676,6 +1834,13 @@ const styles = StyleSheet.create({
   },
   subLabel: {
     fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  subPickerLabel: {
+    fontSize: 13,
     fontWeight: '600',
     color: colors.text,
     marginTop: 12,
@@ -2001,7 +2166,7 @@ const styles = StyleSheet.create({
   },
   yearlyRangesList: {
     gap: 8,
-    marginTop: 16,
+    marginBottom: 16,
   },
   yearlyRangeItem: {
     flexDirection: 'row',
