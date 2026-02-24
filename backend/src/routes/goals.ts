@@ -5,6 +5,19 @@ import * as schema from '../db/schema.js';
 import { getNextActivations, calculateAstronomicalTimes, applyTimeOffset, type ScheduleConfig } from '../utils/goal-scheduler.js';
 import { getScheduleSummaryWithOccurrences } from '../utils/schedule-summary.js';
 
+// Helper function to safely parse JSONB fields
+function parseJsonbField(value: any): any {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
+
 export function registerGoalRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
@@ -321,24 +334,24 @@ export function registerGoalRoutes(app: App) {
           scheduleTimesPerDay: body.scheduleTimesPerDay || null,
           scheduleDaysOfWeek: (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null,
           scheduleDatesOfMonth: (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null,
-          scheduleNthDayOfMonth: body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null,
-          scheduleDatesOfYear: body.yearlyDates?.length ? body.yearlyDates : null,
+          scheduleNthDayOfMonth: parseJsonbField(body.monthlyWeekdayRules),
+          scheduleDatesOfYear: parseJsonbField(body.yearlyDates),
           rewardCurrencyId: body.reward?.currencyId || null,
           rewardSuccesses: body.reward?.successes || null,
           rewardAmount: body.reward?.amount || null,
           consequenceCurrencyId: body.consequence?.currencyId || null,
           consequenceFailures: body.consequence?.failures || null,
           consequenceAmount: body.consequence?.amount || null,
-          alarms: body.alarms ? JSON.stringify(body.alarms) : null,
+          alarms: parseJsonbField(body.alarms),
           calendarType: body.calendarType || null,
           scheduleRecurrenceType: body.scheduleRecurrenceType || 'daily',
-          scheduleTimesPerDayDetails: body.scheduleTimesPerDayDetails ? JSON.stringify(body.scheduleTimesPerDayDetails) : null,
+          scheduleTimesPerDayDetails: parseJsonbField(body.scheduleTimesPerDayDetails),
           scheduleWeekendsOnly: body.scheduleWeekendsOnly || false,
           scheduleWeekdaysOnly: body.scheduleWeekdaysOnly || false,
           scheduleFortnightEvenOdd: body.scheduleFortnightEvenOdd || null,
-          scheduleMonthlyRange: body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null,
+          scheduleMonthlyRange: parseJsonbField(body.scheduleMonthlyRange),
           scheduleMonthlyRandomCount: body.scheduleMonthlyRandomCount || null,
-          scheduleExclusions: body.scheduleExclusions ? JSON.stringify(body.scheduleExclusions) : null,
+          scheduleExclusions: parseJsonbField(body.scheduleExclusions),
           scheduleDateOfYearMonths: (body.selectedWeekdays?.length ? body.selectedWeekdays : null) as number[] | null,
         })
         .returning();
@@ -451,8 +464,8 @@ export function registerGoalRoutes(app: App) {
         updateData.scheduleDaysOfWeek = (body.selectedWeekdays?.length || body.selectedFortnightDays?.length ? (body.selectedWeekdays || body.selectedFortnightDays) : null) as number[] | null;
       }
       if (body.monthlyDates !== undefined) updateData.scheduleDatesOfMonth = (body.monthlyDates?.length ? body.monthlyDates : null) as number[] | null;
-      if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = body.monthlyWeekdayRules ? JSON.stringify(body.monthlyWeekdayRules) : null;
-      if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = body.yearlyDates?.length ? body.yearlyDates : null;
+      if (body.monthlyWeekdayRules !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.monthlyWeekdayRules);
+      if (body.yearlyDates !== undefined) updateData.scheduleDatesOfYear = parseJsonbField(body.yearlyDates);
       if (body.calendarType !== undefined) {
         const newCalendarType = body.calendarType || null;
         const oldCalendarType = existingGoal[0].calendarType;
@@ -506,16 +519,16 @@ export function registerGoalRoutes(app: App) {
         }
       }
       if (body.alarms !== undefined) {
-        updateData.alarms = body.alarms ? JSON.stringify(body.alarms) : null;
+        updateData.alarms = parseJsonbField(body.alarms);
       }
       if (body.scheduleRecurrenceType !== undefined) updateData.scheduleRecurrenceType = body.scheduleRecurrenceType;
-      if (body.scheduleTimesPerDayDetails !== undefined) updateData.scheduleTimesPerDayDetails = body.scheduleTimesPerDayDetails ? JSON.stringify(body.scheduleTimesPerDayDetails) : null;
+      if (body.scheduleTimesPerDayDetails !== undefined) updateData.scheduleTimesPerDayDetails = parseJsonbField(body.scheduleTimesPerDayDetails);
       if (body.scheduleWeekendsOnly !== undefined) updateData.scheduleWeekendsOnly = body.scheduleWeekendsOnly;
       if (body.scheduleWeekdaysOnly !== undefined) updateData.scheduleWeekdaysOnly = body.scheduleWeekdaysOnly;
       if (body.scheduleFortnightEvenOdd !== undefined) updateData.scheduleFortnightEvenOdd = body.scheduleFortnightEvenOdd || null;
-      if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = body.scheduleMonthlyRange ? JSON.stringify(body.scheduleMonthlyRange) : null;
+      if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = parseJsonbField(body.scheduleMonthlyRange);
       if (body.scheduleMonthlyRandomCount !== undefined) updateData.scheduleMonthlyRandomCount = body.scheduleMonthlyRandomCount || null;
-      if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = body.scheduleExclusions ? JSON.stringify(body.scheduleExclusions) : null;
+      if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = parseJsonbField(body.scheduleExclusions);
       updateData.updatedAt = new Date();
 
       const updatedGoals = await app.db

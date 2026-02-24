@@ -4,6 +4,19 @@ import { eq, and, desc, inArray } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { getNextActivations, type ScheduleConfig } from '../utils/goal-scheduler.js';
 
+// Helper function to safely parse JSONB fields
+function parseJsonbField(value: any): any {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
+
 export function registerMitzvotRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
@@ -233,18 +246,18 @@ export function registerMitzvotRoutes(app: App) {
           scheduleType,
           scheduleDaysOfWeek: body.scheduleDaysOfWeek?.length ? body.scheduleDaysOfWeek : null,
           scheduleDatesOfMonth: body.scheduleDatesOfMonth?.length ? body.scheduleDatesOfMonth : null,
-          scheduleNthDayOfMonth: body.scheduleNthDayOfMonth ? (typeof body.scheduleNthDayOfMonth === 'string' ? JSON.parse(body.scheduleNthDayOfMonth) : body.scheduleNthDayOfMonth) : null,
+          scheduleNthDayOfMonth: parseJsonbField(body.scheduleNthDayOfMonth),
           scheduleTimesPerMonth: body.scheduleTimesPerMonth || null,
-          schedulePeriodOfYear: body.schedulePeriodOfYear ? (typeof body.schedulePeriodOfYear === 'string' ? JSON.parse(body.schedulePeriodOfYear) : body.schedulePeriodOfYear) : null,
-          scheduleDatesOfYear: body.scheduleDatesOfYear?.length ? body.scheduleDatesOfYear : null,
+          schedulePeriodOfYear: parseJsonbField(body.schedulePeriodOfYear),
+          scheduleDatesOfYear: parseJsonbField(body.scheduleDatesOfYear),
           scheduleRecurrenceType: body.scheduleRecurrenceType || 'daily',
-          scheduleTimesPerDayDetails: body.scheduleTimesPerDayDetails ? (typeof body.scheduleTimesPerDayDetails === 'string' ? JSON.parse(body.scheduleTimesPerDayDetails) : body.scheduleTimesPerDayDetails) : null,
+          scheduleTimesPerDayDetails: parseJsonbField(body.scheduleTimesPerDayDetails),
           scheduleWeekendsOnly: body.scheduleWeekendsOnly || false,
           scheduleWeekdaysOnly: body.scheduleWeekdaysOnly || false,
           scheduleFortnightEvenOdd: body.scheduleFortnightEvenOdd || null,
-          scheduleMonthlyRange: body.scheduleMonthlyRange ? (typeof body.scheduleMonthlyRange === 'string' ? JSON.parse(body.scheduleMonthlyRange) : body.scheduleMonthlyRange) : null,
+          scheduleMonthlyRange: parseJsonbField(body.scheduleMonthlyRange),
           scheduleMonthlyRandomCount: body.scheduleMonthlyRandomCount || null,
-          scheduleExclusions: body.scheduleExclusions ? (typeof body.scheduleExclusions === 'string' ? JSON.parse(body.scheduleExclusions) : body.scheduleExclusions) : null,
+          scheduleExclusions: parseJsonbField(body.scheduleExclusions),
           scheduleDateOfYearMonths: body.scheduleDateOfYearMonths?.length ? body.scheduleDateOfYearMonths : null,
           calendarType: body.calendarType || null,
           startDate,
@@ -313,18 +326,18 @@ export function registerMitzvotRoutes(app: App) {
       }
       if (body.scheduleDaysOfWeek !== undefined) updateData.scheduleDaysOfWeek = body.scheduleDaysOfWeek?.length ? body.scheduleDaysOfWeek : null;
       if (body.scheduleDatesOfMonth !== undefined) updateData.scheduleDatesOfMonth = body.scheduleDatesOfMonth?.length ? body.scheduleDatesOfMonth : null;
-      if (body.scheduleNthDayOfMonth !== undefined) updateData.scheduleNthDayOfMonth = body.scheduleNthDayOfMonth ? (typeof body.scheduleNthDayOfMonth === 'string' ? JSON.parse(body.scheduleNthDayOfMonth) : body.scheduleNthDayOfMonth) : null;
+      if (body.scheduleNthDayOfMonth !== undefined) updateData.scheduleNthDayOfMonth = parseJsonbField(body.scheduleNthDayOfMonth);
       if (body.scheduleTimesPerMonth !== undefined) updateData.scheduleTimesPerMonth = body.scheduleTimesPerMonth || null;
-      if (body.schedulePeriodOfYear !== undefined) updateData.schedulePeriodOfYear = body.schedulePeriodOfYear ? (typeof body.schedulePeriodOfYear === 'string' ? JSON.parse(body.schedulePeriodOfYear) : body.schedulePeriodOfYear) : null;
-      if (body.scheduleDatesOfYear !== undefined) updateData.scheduleDatesOfYear = body.scheduleDatesOfYear?.length ? body.scheduleDatesOfYear : null;
+      if (body.schedulePeriodOfYear !== undefined) updateData.schedulePeriodOfYear = parseJsonbField(body.schedulePeriodOfYear);
+      if (body.scheduleDatesOfYear !== undefined) updateData.scheduleDatesOfYear = parseJsonbField(body.scheduleDatesOfYear);
       if (body.scheduleRecurrenceType !== undefined) updateData.scheduleRecurrenceType = body.scheduleRecurrenceType;
-      if (body.scheduleTimesPerDayDetails !== undefined) updateData.scheduleTimesPerDayDetails = body.scheduleTimesPerDayDetails ? (typeof body.scheduleTimesPerDayDetails === 'string' ? JSON.parse(body.scheduleTimesPerDayDetails) : body.scheduleTimesPerDayDetails) : null;
+      if (body.scheduleTimesPerDayDetails !== undefined) updateData.scheduleTimesPerDayDetails = parseJsonbField(body.scheduleTimesPerDayDetails);
       if (body.scheduleWeekendsOnly !== undefined) updateData.scheduleWeekendsOnly = body.scheduleWeekendsOnly;
       if (body.scheduleWeekdaysOnly !== undefined) updateData.scheduleWeekdaysOnly = body.scheduleWeekdaysOnly;
       if (body.scheduleFortnightEvenOdd !== undefined) updateData.scheduleFortnightEvenOdd = body.scheduleFortnightEvenOdd || null;
-      if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = body.scheduleMonthlyRange ? (typeof body.scheduleMonthlyRange === 'string' ? JSON.parse(body.scheduleMonthlyRange) : body.scheduleMonthlyRange) : null;
+      if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = parseJsonbField(body.scheduleMonthlyRange);
       if (body.scheduleMonthlyRandomCount !== undefined) updateData.scheduleMonthlyRandomCount = body.scheduleMonthlyRandomCount || null;
-      if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = body.scheduleExclusions ? (typeof body.scheduleExclusions === 'string' ? JSON.parse(body.scheduleExclusions) : body.scheduleExclusions) : null;
+      if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = parseJsonbField(body.scheduleExclusions);
       if (body.scheduleDateOfYearMonths !== undefined) updateData.scheduleDateOfYearMonths = body.scheduleDateOfYearMonths?.length ? body.scheduleDateOfYearMonths : null;
       if (body.calendarType !== undefined) updateData.calendarType = body.calendarType || null;
       if (body.startDate !== undefined) updateData.startDate = body.startDate ? new Date(body.startDate) : null;
