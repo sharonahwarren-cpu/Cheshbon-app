@@ -389,34 +389,83 @@ export default function CreateGoalScreen() {
           goalDetails.schedule_days_of_week
         );
         
+        const fortnightDays = parseJsonField(
+          goalDetails.selectedFortnightDays ||
+          goalDetails.scheduleFortnightDays ||
+          goalDetails.schedule_fortnight_days
+        );
+        
+        const monthlyDates = parseJsonField(
+          goalDetails.monthlyDates ||
+          goalDetails.scheduleDatesOfMonth ||
+          goalDetails.schedule_dates_of_month
+        );
+        
         const monthlyRange = parseJsonField(goalDetails.scheduleMonthlyRange);
         const exclusions = parseJsonField(goalDetails.scheduleExclusions);
 
-        console.log('[CreateGoal] Loading weekdays from backend:', weekdays);
-        console.log('[CreateGoal] Loading monthlyRange from backend:', monthlyRange);
+        console.log('[CreateGoal] Loading schedule data from backend:');
+        console.log('  - weekdays:', weekdays);
+        console.log('  - fortnightDays:', fortnightDays);
+        console.log('  - monthlyDates:', monthlyDates);
+        console.log('  - monthlyRange:', monthlyRange);
+
+        // CRITICAL FIX: Load yearlyDates with proper validation
+        const rawYearlyDates = parseJsonField(
+          goalDetails.yearlyDates ||
+          goalDetails.scheduleYearlyDates ||
+          goalDetails.schedule_yearly_dates
+        );
+        
+        let yearlyDates = undefined;
+        if (rawYearlyDates && Array.isArray(rawYearlyDates)) {
+          // Normalize each entry: handle both object format (new JSONB) and string format (legacy text[])
+          const normalized = rawYearlyDates
+            .map((entry: any) => {
+              if (typeof entry === 'string') {
+                // Legacy string format - try to parse as JSON object
+                try {
+                  const parsed = JSON.parse(entry);
+                  if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
+                    return parsed;
+                  }
+                } catch {
+                  // Not a JSON string - skip invalid legacy entries
+                }
+                console.warn('[CreateGoal] Skipping invalid legacy yearlyDates string entry:', entry);
+                return null;
+              }
+              if (entry && typeof entry === 'object' && typeof entry.month === 'number' && typeof entry.day === 'number') {
+                // Valid object format (new JSONB format)
+                return {
+                  month: entry.month,
+                  day: entry.day,
+                  ...(typeof entry.endMonth === 'number' ? { endMonth: entry.endMonth } : {}),
+                  ...(typeof entry.endDay === 'number' ? { endDay: entry.endDay } : {}),
+                };
+              }
+              console.warn('[CreateGoal] Skipping invalid yearlyDates entry:', entry);
+              return null;
+            })
+            .filter(Boolean);
+          console.log('[CreateGoal] Normalized yearlyDates:', normalized);
+          yearlyDates = normalized.length > 0 ? normalized : undefined;
+        }
 
         setScheduleConfig({
           scheduleType: displayScheduleType,
           // Daily
           timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
           specificTimes: parseJsonField(goalDetails.scheduleTimesPerDayDetails || goalDetails.scheduleSpecificTimes || goalDetails.schedule_specific_times),
-          // Weekly - CRITICAL: read from selectedWeekdays (backend field name)
+          // Weekly
           weekdays,
           weekendsOnly: goalDetails.scheduleWeekendsOnly || goalDetails.schedule_weekends_only || false,
           weekdaysOnly: goalDetails.scheduleWeekdaysOnly || goalDetails.schedule_weekdays_only || false,
-          // Fortnightly - CRITICAL: read from selectedFortnightDays (backend field name)
-          fortnightDays: parseJsonField(
-            goalDetails.selectedFortnightDays ||
-            goalDetails.scheduleFortnightDays ||
-            goalDetails.schedule_fortnight_days
-          ),
+          // Fortnightly
+          fortnightDays,
           fortnightWeek: goalDetails.scheduleFortnightWeek || goalDetails.schedule_fortnight_week,
-          // Monthly - CRITICAL: read from monthlyDates (backend field name)
-          monthlyDates: parseJsonField(
-            goalDetails.monthlyDates ||
-            goalDetails.scheduleMonthlyDates ||
-            goalDetails.schedule_monthly_dates
-          ),
+          // Monthly
+          monthlyDates,
           monthlyNthDay: parseJsonField(
             goalDetails.monthlyWeekdayRules ||
             goalDetails.scheduleMonthlyNthDay ||
@@ -432,56 +481,16 @@ export default function CreateGoalScreen() {
           monthlyCalendarType: goalDetails.scheduleMonthlyCalendarType || goalDetails.schedule_monthly_calendar_type,
           monthlyUseAlternativeCalendar: goalDetails.scheduleMonthlyUseAlternativeCalendar || goalDetails.schedule_monthly_use_alternative_calendar,
           monthlyCalendarEvent: goalDetails.scheduleMonthlyCalendarEvent || goalDetails.schedule_monthly_calendar_event,
-          // Yearly - CRITICAL: read from yearlyDates (backend field name)
-          // The backend now stores yearlyDates as JSONB (array of objects), not text[]
-          // We must parse and validate each entry to ensure it's a proper object with month/day
+          // Yearly
           yearlyMonths: parseJsonField(
             goalDetails.scheduleYearlyMonths ||
             goalDetails.schedule_yearly_months
           ),
-          yearlyDates: (() => {
-            const rawYearlyDates = parseJsonField(
-              goalDetails.yearlyDates ||
-              goalDetails.scheduleYearlyDates ||
-              goalDetails.schedule_yearly_dates
-            );
-            if (!rawYearlyDates || !Array.isArray(rawYearlyDates)) return undefined;
-            // Normalize each entry: handle both object format (new JSONB) and string format (legacy text[])
-            const normalized = rawYearlyDates
-              .map((entry: any) => {
-                if (typeof entry === 'string') {
-                  // Legacy string format - try to parse as JSON object
-                  try {
-                    const parsed = JSON.parse(entry);
-                    if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
-                      return parsed;
-                    }
-                  } catch {
-                    // Not a JSON string - skip invalid legacy entries
-                  }
-                  console.warn('[CreateGoal] Skipping invalid legacy yearlyDates string entry:', entry);
-                  return null;
-                }
-                if (entry && typeof entry === 'object' && typeof entry.month === 'number' && typeof entry.day === 'number') {
-                  // Valid object format (new JSONB format)
-                  return {
-                    month: entry.month,
-                    day: entry.day,
-                    ...(typeof entry.endMonth === 'number' ? { endMonth: entry.endMonth } : {}),
-                    ...(typeof entry.endDay === 'number' ? { endDay: entry.endDay } : {}),
-                  };
-                }
-                console.warn('[CreateGoal] Skipping invalid yearlyDates entry:', entry);
-                return null;
-              })
-              .filter(Boolean);
-            console.log('[CreateGoal] Normalized yearlyDates:', normalized);
-            return normalized.length > 0 ? normalized : undefined;
-          })(),
+          yearlyDates,
           yearlyCalendarType: goalDetails.yearlyCalendarType || goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
           yearlyUseAlternativeCalendar: goalDetails.scheduleYearlyUseAlternativeCalendar || goalDetails.schedule_yearly_use_alternative_calendar,
           yearlyCalendarEvent: goalDetails.scheduleYearlyCalendarEvent || goalDetails.schedule_yearly_calendar_event,
-          // Advanced - CRITICAL: startDate/endDate are direct fields on the goal
+          // Advanced
           calendarType: goalDetails.calendarType || goalDetails.scheduleCalendarType || goalDetails.schedule_calendar_type,
           startDate: parseDateField(goalDetails.startDate || goalDetails.scheduleStartDate || goalDetails.schedule_start_date),
           endDate: parseDateField(goalDetails.endDate || goalDetails.scheduleEndDate || goalDetails.schedule_end_date),
@@ -665,7 +674,7 @@ export default function CreateGoalScreen() {
         scheduleFortnightEvenOdd: scheduleConfig.fortnightWeek === 'week1' ? 'even' : scheduleConfig.fortnightWeek === 'week2' ? 'odd' : undefined,
         // CRITICAL FIX: Backend PUT handler reads 'monthlyDates', not 'scheduleMonthlyDates'.
         monthlyDates: scheduleConfig.monthlyDates,
-        scheduleMonthlyDates: scheduleConfig.monthlyDates,
+        scheduleDatesOfMonth: scheduleConfig.monthlyDates,
         // CRITICAL FIX: Backend PUT handler reads 'monthlyWeekdayRules', not 'scheduleMonthlyWeekdayPositions'.
         monthlyWeekdayRules: scheduleConfig.monthlyWeekdayPositions,
         scheduleMonthlyWeekdayPositions: scheduleConfig.monthlyWeekdayPositions,
@@ -682,6 +691,7 @@ export default function CreateGoalScreen() {
         // ✅ CRITICAL FIX: Send yearlyDates as PLAIN OBJECTS (not stringified)
         // The backend will handle stringification when storing in the text[] column
         yearlyDates: yearlyDatesForBackend,
+        scheduleDatesOfYear: yearlyDatesForBackend,
         scheduleYearlyMonths: scheduleConfig.yearlyMonths,
         scheduleYearlyDates: yearlyDatesForBackend,
         scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
