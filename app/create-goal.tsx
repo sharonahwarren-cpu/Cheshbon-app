@@ -170,7 +170,10 @@ export default function CreateGoalScreen() {
     loadData();
   }, []);
 
-  // Fetch backend schedule summary when editing a goal and schedule type changes
+  // Fetch backend schedule summary when editing a goal and schedule type changes.
+  // The backend now ALWAYS deletes old occurrences and generates fresh ones on every call,
+  // ensuring stale data from previous schedule configurations (e.g., old "daily" occurrences
+  // when the goal is now "weekly") is never shown.
   useEffect(() => {
     if (editingGoalId && scheduleConfig.scheduleType !== 'Always Active') {
       fetchScheduleSummary();
@@ -181,7 +184,8 @@ export default function CreateGoalScreen() {
 
   const fetchScheduleSummary = async () => {
     if (!editingGoalId) return;
-    console.log('[CreateGoal] Fetching schedule summary for goal:', editingGoalId);
+    console.log('[CreateGoal] Fetching fresh schedule summary for goal:', editingGoalId);
+    console.log('[CreateGoal] Backend will delete old occurrences and regenerate based on current config');
     setLoadingScheduleSummary(true);
     try {
       const result = await authenticatedGet<{
@@ -191,7 +195,7 @@ export default function CreateGoalScreen() {
       }>(
         `/api/goals/${editingGoalId}/schedule-summary`
       );
-      console.log('[CreateGoal] Schedule summary received:', result);
+      console.log('[CreateGoal] Fresh schedule summary received:', result);
       if (result?.summary) {
         setScheduleSummaryText(result.summary);
       }
@@ -507,6 +511,15 @@ export default function CreateGoalScreen() {
       
       if (editingGoalId) {
         createdOrUpdatedGoal = await authenticatedPut(`/api/goals/${editingGoalId}`, goalData);
+        // CRITICAL FIX: After updating the goal, immediately refresh the schedule summary.
+        // The backend will delete old occurrences and generate fresh ones based on the
+        // newly saved schedule configuration, ensuring the UI shows current data.
+        if (scheduleConfig.scheduleType !== 'Always Active') {
+          console.log('[CreateGoal] Goal updated - refreshing schedule summary to reflect new config');
+          fetchScheduleSummary();
+        } else {
+          setScheduleSummaryText('');
+        }
         showSuccess('Goal updated successfully!');
       } else {
         createdOrUpdatedGoal = await authenticatedPost('/api/goals', goalData);
@@ -943,7 +956,16 @@ export default function CreateGoalScreen() {
           <Text style={styles.label}>Goal Schedule</Text>
           <TouchableOpacity
             style={styles.picker}
-            onPress={() => setShowScheduleWizard(true)}
+            onPress={() => {
+              setShowScheduleWizard(true);
+              // CRITICAL FIX: Refresh schedule summary when opening the wizard for an existing goal.
+              // The backend now always deletes old occurrences and generates fresh ones,
+              // so we must fetch on every open to show the current schedule (not stale data).
+              if (editingGoalId && scheduleConfig.scheduleType !== 'Always Active') {
+                console.log('[CreateGoal] Opening schedule wizard - triggering fresh schedule summary fetch');
+                fetchScheduleSummary();
+              }
+            }}
           >
             <View style={styles.schedulePickerContent}>
               <View style={{ flex: 1 }}>

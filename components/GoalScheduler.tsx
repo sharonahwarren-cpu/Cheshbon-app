@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -162,24 +162,15 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   // Generate local schedule summary (used as fallback)
   const localScheduleSummary = generateScheduleSummary(config);
 
-  // CRITICAL FIX: Fetch backend schedule summary when goalId is available OR when config changes
-  useEffect(() => {
-    if (goalId && config.scheduleType !== 'Always Active') {
-      console.log('[GoalScheduler] Config changed, fetching fresh schedule summary');
-      fetchBackendScheduleSummary();
-    } else {
-      setBackendSummary(null);
-    }
-  }, [goalId, config.scheduleType, config.weekdays, config.monthlyDates, config.yearlyMonths, config.fortnightDays]);
-
-  const fetchBackendScheduleSummary = async () => {
+  const fetchBackendScheduleSummary = useCallback(async () => {
     if (!goalId) return;
-    console.log('[GoalScheduler] Fetching backend schedule summary for goal:', goalId);
+    console.log('[GoalScheduler] Fetching fresh schedule summary from backend for goal:', goalId);
+    console.log('[GoalScheduler] Backend will delete old occurrences and generate fresh ones based on current config');
     setLoadingBackendSummary(true);
     setBackendSummaryError(null);
     try {
       const result = await authenticatedGet<BackendScheduleSummary>(`/api/goals/${goalId}/schedule-summary`);
-      console.log('[GoalScheduler] Backend schedule summary received:', result);
+      console.log('[GoalScheduler] Fresh schedule summary received:', result);
       setBackendSummary(result);
     } catch (error: any) {
       console.error('[GoalScheduler] Error fetching backend schedule summary:', error);
@@ -188,9 +179,54 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     } finally {
       setLoadingBackendSummary(false);
     }
-  };
+  }, [goalId]);
 
-  // Use backend summary if available, otherwise fall back to local
+  // CRITICAL FIX: Fetch backend schedule summary when goalId is available OR when ANY config field changes
+  // This ensures the summary updates immediately when the user changes ANY schedule setting.
+  // The backend now ALWAYS deletes old occurrences and generates fresh ones on every call,
+  // so we always get up-to-date data reflecting the current schedule configuration.
+  useEffect(() => {
+    if (goalId && config.scheduleType !== 'Always Active') {
+      console.log('[GoalScheduler] Config changed or component mounted, fetching fresh schedule summary from backend');
+      fetchBackendScheduleSummary();
+    } else {
+      setBackendSummary(null);
+    }
+  }, [
+    goalId,
+    config.scheduleType,
+    // Weekly
+    JSON.stringify(config.weekdays), // Use JSON.stringify for array comparison
+    config.weekendsOnly,
+    config.weekdaysOnly,
+    // Fortnightly
+    JSON.stringify(config.fortnightDays),
+    config.fortnightWeek,
+    // Monthly
+    JSON.stringify(config.monthlyDates),
+    JSON.stringify(config.monthlyWeekdayPositions),
+    config.monthlyRangeStart,
+    config.monthlyRangeEnd,
+    config.monthlyRandomCount,
+    config.monthlyCalendarType,
+    config.monthlyUseAlternativeCalendar,
+    config.monthlyCalendarEvent,
+    // Yearly
+    JSON.stringify(config.yearlyMonths),
+    JSON.stringify(config.yearlyDates),
+    config.yearlyCalendarType,
+    config.yearlyUseAlternativeCalendar,
+    config.yearlyCalendarEvent,
+    // Advanced
+    config.startDate?.toISOString(),
+    config.endDate?.toISOString(),
+    JSON.stringify(config.exclusionDates?.map(d => d.toISOString())),
+    fetchBackendScheduleSummary,
+  ]);
+
+  // Use backend summary if available, otherwise fall back to local.
+  // The backend always generates fresh data (deletes old occurrences first),
+  // so the backend summary is always preferred over the local calculation.
   const scheduleSummary = backendSummary?.summary || localScheduleSummary;
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
