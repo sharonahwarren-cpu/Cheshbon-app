@@ -17,7 +17,11 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPost, authenticatedDelete, BACKEND_URL, getBearerToken } from '@/utils/api';
 import { ConfirmModal } from '@/components/ConfirmModal';
+<<<<<<< HEAD
 import { AudioRecorder, AudioRecording } from 'expo-audio';
+=======
+import { AudioRecorder, AudioRecording, RecordingOptions } from 'expo-audio';
+>>>>>>> origin/main
 import * as FileSystem from 'expo-file-system';
 
 interface CheshbonSession {
@@ -133,7 +137,37 @@ export default function CheshbonScreen() {
       }
 
       console.log('[Cheshbon] Starting recording...');
+<<<<<<< HEAD
       const newRecording = await AudioRecorder.recordAsync();
+=======
+      const recordingOptions: RecordingOptions = {
+        android: {
+          extension: '.m4a',
+          outputFormat: 'mpeg4',
+          audioEncoder: 'aac',
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          outputFormat: 'mpeg4aac',
+          audioQuality: 'high',
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      };
+
+      const newRecording = await AudioRecorder.recordAsync(recordingOptions);
+>>>>>>> origin/main
       setRecording(newRecording);
       setIsRecording(true);
       setTranscription('');
