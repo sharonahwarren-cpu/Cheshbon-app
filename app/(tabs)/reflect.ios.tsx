@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Keyboard,
   Image,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
@@ -20,6 +21,7 @@ import { colors } from '@/styles/commonStyles';
 import { AddReflectionModal } from '@/components/AddReflectionModal';
 import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { StreamdownRN } from 'streamdown-rn';
 
 interface JournalEntry {
   id: string;
@@ -102,6 +104,21 @@ interface UserPreferences {
   reflectionCategories?: string[];
 }
 
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
 // Helper function to format date as YYYY-MM-DD in local timezone
 function formatDateLocal(date: Date): string {
   const year = date.getFullYear();
@@ -115,6 +132,7 @@ export default function ReflectScreen() {
   const params = useLocalSearchParams<{ date?: string; reflectionId?: string; openModal?: string; goalId?: string }>();
   const scrollViewRef = useRef<ScrollView>(null);
   const journalInputRef = useRef<TextInput>(null);
+  const chatScrollRef = useRef<FlatList>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -141,6 +159,15 @@ export default function ReflectScreen() {
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [tempJournalContent, setTempJournalContent] = useState('');
+
+  // AI Chat state
+  const [showChatModal, setShowChatModal] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageInput, setMessageInput] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [loadingConversations, setLoadingConversations] = useState(false);
 
   useEffect(() => {
     if (params.date) {
@@ -226,6 +253,158 @@ export default function ReflectScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadConversations = async () => {
+    console.log('[API] Requesting /api/reflection-chat/conversations...');
+    setLoadingConversations(true);
+    try {
+      const response = await authenticatedGet('/api/reflection-chat/conversations');
+      const conversationsData = Array.isArray(response) ? response : (response?.data || []);
+      setConversations(conversationsData);
+      console.log('Loaded conversations:', conversationsData.length);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+      showError('Failed to load conversations');
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  const loadMessages = async (conversationId: string) => {
+    console.log(`[API] Requesting /api/reflection-chat/conversations/${conversationId}/messages...`);
+    try {
+      const response = await authenticatedGet(`/api/reflection-chat/conversations/${conversationId}/messages`);
+      const messagesData = Array.isArray(response) ? response : (response?.data || []);
+      setMessages(messagesData);
+      console.log('Loaded messages:', messagesData.length);
+      
+      // Scroll to bottom after loading messages
+      setTimeout(() => {
+        chatScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      showError('Failed to load messages');
+    }
+  };
+
+  const startNewConversation = async () => {
+    console.log('[API] Requesting POST /api/reflection-chat/conversations...');
+    try {
+      const response = await authenticatedPost('/api/reflection-chat/conversations', {});
+      const newConversation = response?.data || response;
+      
+      setCurrentConversationId(newConversation.id);
+      setMessages([]);
+      setConversations([newConversation, ...conversations]);
+      
+      console.log('New conversation created:', newConversation.id);
+    } catch (error) {
+      console.error('Error creating conversation:', error);
+      showError('Failed to create conversation');
+    }
+  };
+
+  const sendMessage = async () => {
+    const trimmedMessage = messageInput.trim();
+    if (!trimmedMessage || !currentConversationId) {
+      console.log('Cannot send empty message or no conversation selected');
+      return;
+    }
+
+    console.log('Sending message to AI:', trimmedMessage);
+    setSendingMessage(true);
+
+    // Optimistically add user message to UI
+    const tempUserMessage: ChatMessage = {
+      id: 'temp-' + Date.now(),
+      role: 'user',
+      content: trimmedMessage,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, tempUserMessage]);
+    setMessageInput('');
+
+    // Scroll to bottom
+    setTimeout(() => {
+      chatScrollRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+
+    try {
+      console.log(`[API] Requesting POST /api/reflection-chat/conversations/${currentConversationId}/messages...`);
+      const response = await authenticatedPost(
+        `/api/reflection-chat/conversations/${currentConversationId}/messages`,
+        { message: trimmedMessage }
+      );
+      
+      const aiMessage = response?.data || response;
+      
+      // Replace temp message with real messages from backend
+      // The backend returns the AI assistant message; user message was already saved server-side
+      setMessages(prev => {
+        const withoutTemp = prev.filter(m => m.id !== tempUserMessage.id);
+        const updatedUserMessage = { 
+          ...tempUserMessage, 
+          id: aiMessage.userMessageId || tempUserMessage.id 
+        };
+        return [...withoutTemp, updatedUserMessage, aiMessage];
+      });
+
+      // Scroll to bottom after AI response
+      setTimeout(() => {
+        chatScrollRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+
+      console.log('AI response received');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      showError('Failed to send message');
+      // Remove temp message on error
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
+      setMessageInput(trimmedMessage); // Restore message input
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const deleteConversation = async (conversationId: string) => {
+    console.log(`[API] Requesting DELETE /api/reflection-chat/conversations/${conversationId}...`);
+    try {
+      await authenticatedDelete(`/api/reflection-chat/conversations/${conversationId}`);
+      
+      setConversations(prev => prev.filter(c => c.id !== conversationId));
+      
+      if (currentConversationId === conversationId) {
+        setCurrentConversationId(null);
+        setMessages([]);
+      }
+      
+      showSuccess('Conversation deleted');
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      showError('Failed to delete conversation');
+    }
+  };
+
+  const openChatModal = async () => {
+    console.log('Opening AI chat modal');
+    setShowChatModal(true);
+    await loadConversations();
+  };
+
+  const closeChatModal = () => {
+    console.log('Closing AI chat modal');
+    setShowChatModal(false);
+    setCurrentConversationId(null);
+    setMessages([]);
+    setMessageInput('');
+  };
+
+  const selectConversation = async (conversationId: string) => {
+    console.log('Selecting conversation:', conversationId);
+    setCurrentConversationId(conversationId);
+    await loadMessages(conversationId);
   };
 
   const showError = (message: string) => {
@@ -371,6 +550,31 @@ export default function ReflectScreen() {
     return { ios: 'sparkles', android: 'auto-awesome' };
   };
 
+  const renderChatMessage = ({ item }: { item: ChatMessage }) => {
+    const isUser = item.role === 'user';
+    const messageTime = new Date(item.createdAt).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit' 
+    });
+
+    return (
+      <View style={[styles.messageContainer, isUser ? styles.userMessageContainer : styles.aiMessageContainer]}>
+        <View style={[styles.messageBubble, isUser ? styles.userMessageBubble : styles.aiMessageBubble]}>
+          {isUser ? (
+            <Text style={styles.userMessageText}>{item.content}</Text>
+          ) : (
+            <StreamdownRN theme="dark">
+              {item.content}
+            </StreamdownRN>
+          )}
+          <Text style={[styles.messageTime, isUser ? styles.userMessageTime : styles.aiMessageTime]}>
+            {messageTime}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
   const dateDisplay = formatDate(selectedDate);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
@@ -446,6 +650,36 @@ export default function ReflectScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* AI Chat Card */}
+          <TouchableOpacity 
+            style={styles.aiChatCard}
+            onPress={openChatModal}
+            activeOpacity={0.7}
+          >
+            <View style={styles.aiChatHeader}>
+              <View style={styles.aiChatIconContainer}>
+                <IconSymbol
+                  ios_icon_name="brain.head.profile"
+                  android_material_icon_name="psychology"
+                  size={32}
+                  color="#9B59B6"
+                />
+              </View>
+              <View style={styles.aiChatTextContainer}>
+                <Text style={styles.aiChatTitle}>AI Reflection Coach</Text>
+                <Text style={styles.aiChatSubtitle}>
+                  Chat about your goals, successes, and growth
+                </Text>
+              </View>
+              <IconSymbol
+                ios_icon_name="chevron.right"
+                android_material_icon_name="arrow-forward"
+                size={20}
+                color={colors.textSecondary}
+              />
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={styles.journalCard}
             onPress={handleOpenJournalModal}
@@ -732,6 +966,182 @@ export default function ReflectScreen() {
         </ScrollView>
       </View>
 
+      {/* AI Chat Modal */}
+      <Modal
+        visible={showChatModal}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={closeChatModal}
+      >
+        <SafeAreaView style={styles.chatModalContainer} edges={['top', 'bottom']}>
+          <View style={styles.chatModalHeader}>
+            <TouchableOpacity onPress={closeChatModal} style={styles.chatBackButton}>
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={24}
+                color={colors.text}
+              />
+            </TouchableOpacity>
+            <View style={styles.chatModalTitleContainer}>
+              <IconSymbol
+                ios_icon_name="brain.head.profile"
+                android_material_icon_name="psychology"
+                size={24}
+                color="#9B59B6"
+              />
+              <Text style={styles.chatModalTitle}>AI Reflection Coach</Text>
+            </View>
+            <TouchableOpacity onPress={startNewConversation} style={styles.newChatButton}>
+              <IconSymbol
+                ios_icon_name="plus.circle.fill"
+                android_material_icon_name="add-circle"
+                size={28}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {!currentConversationId ? (
+            <View style={styles.conversationsListContainer}>
+              {loadingConversations ? (
+                <ActivityIndicator size="large" color={colors.primary} style={styles.loadingIndicator} />
+              ) : conversations.length === 0 ? (
+                <View style={styles.emptyConversationsState}>
+                  <IconSymbol
+                    ios_icon_name="brain.head.profile"
+                    android_material_icon_name="psychology"
+                    size={64}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={styles.emptyConversationsTitle}>Start Your First Conversation</Text>
+                  <Text style={styles.emptyConversationsText}>
+                    Chat with your AI reflection coach about your goals, successes, and personal growth journey.
+                  </Text>
+                  <TouchableOpacity style={styles.startChatButton} onPress={startNewConversation}>
+                    <IconSymbol
+                      ios_icon_name="plus.circle.fill"
+                      android_material_icon_name="add-circle"
+                      size={24}
+                      color={colors.background}
+                    />
+                    <Text style={styles.startChatButtonText}>Start Conversation</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <ScrollView style={styles.conversationsList} contentContainerStyle={styles.conversationsListContent}>
+                  {conversations.map((conversation, index) => {
+                    const conversationDate = new Date(conversation.updatedAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric'
+                    });
+                    const conversationTime = new Date(conversation.updatedAt).toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit'
+                    });
+
+                    return (
+                      <React.Fragment key={index}>
+                        <TouchableOpacity
+                          style={styles.conversationItem}
+                          onPress={() => selectConversation(conversation.id)}
+                        >
+                          <View style={styles.conversationIconContainer}>
+                            <IconSymbol
+                              ios_icon_name="bubble.left.and.bubble.right.fill"
+                              android_material_icon_name="chat"
+                              size={24}
+                              color={colors.primary}
+                            />
+                          </View>
+                          <View style={styles.conversationInfo}>
+                            <Text style={styles.conversationTitle} numberOfLines={1}>
+                              {conversation.title || 'Reflection Chat'}
+                            </Text>
+                            <Text style={styles.conversationMeta}>
+                              {conversation.messageCount} messages • {conversationDate} at {conversationTime}
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.deleteConversationButton}
+                            onPress={() => deleteConversation(conversation.id)}
+                          >
+                            <IconSymbol
+                              ios_icon_name="trash"
+                              android_material_icon_name="delete"
+                              size={20}
+                              color={colors.error}
+                            />
+                          </TouchableOpacity>
+                        </TouchableOpacity>
+                      </React.Fragment>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+          ) : (
+            <KeyboardAvoidingView 
+              style={styles.chatContainer}
+              behavior="padding"
+              keyboardVerticalOffset={90}
+            >
+              <FlatList
+                ref={chatScrollRef}
+                data={messages}
+                renderItem={renderChatMessage}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.messagesContainer}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={
+                  <View style={styles.emptyChatState}>
+                    <IconSymbol
+                      ios_icon_name="brain.head.profile"
+                      android_material_icon_name="psychology"
+                      size={48}
+                      color={colors.textSecondary}
+                    />
+                    <Text style={styles.emptyChatText}>
+                      Start the conversation! Ask about your goals, reflect on your progress, or discuss challenges.
+                    </Text>
+                  </View>
+                }
+              />
+
+              <View style={styles.chatInputContainer}>
+                <TextInput
+                  style={styles.chatInput}
+                  value={messageInput}
+                  onChangeText={setMessageInput}
+                  placeholder="Type your message..."
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                  maxLength={1000}
+                  editable={!sendingMessage}
+                />
+                <TouchableOpacity
+                  style={[styles.sendButton, (!messageInput.trim() || sendingMessage) && styles.sendButtonDisabled]}
+                  onPress={sendMessage}
+                  disabled={!messageInput.trim() || sendingMessage}
+                >
+                  {sendingMessage ? (
+                    <ActivityIndicator size="small" color={colors.background} />
+                  ) : (
+                    <IconSymbol
+                      ios_icon_name="arrow.up.circle.fill"
+                      android_material_icon_name="send"
+                      size={32}
+                      color={colors.background}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          )}
+        </SafeAreaView>
+      </Modal>
+
       <Modal
         visible={showJournalModal}
         animationType="slide"
@@ -908,6 +1318,43 @@ const styles = StyleSheet.create({
   contentContainer: {
     paddingHorizontal: 20,
     paddingBottom: 40,
+  },
+  aiChatCard: {
+    backgroundColor: '#9B59B6',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#9B59B6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  aiChatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  aiChatIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiChatTextContainer: {
+    flex: 1,
+  },
+  aiChatTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  aiChatSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
   },
   journalCard: {
     backgroundColor: colors.card,
@@ -1249,6 +1696,215 @@ const styles = StyleSheet.create({
   },
   strategyDidntWorkDot: {
     backgroundColor: colors.error,
+  },
+  chatModalContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  chatModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  chatBackButton: {
+    padding: 4,
+  },
+  chatModalTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  chatModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  newChatButton: {
+    padding: 4,
+  },
+  conversationsListContainer: {
+    flex: 1,
+  },
+  loadingIndicator: {
+    marginTop: 40,
+  },
+  emptyConversationsState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyConversationsTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.text,
+    marginTop: 24,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyConversationsText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  startChatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  startChatButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.background,
+  },
+  conversationsList: {
+    flex: 1,
+  },
+  conversationsListContent: {
+    padding: 16,
+  },
+  conversationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  conversationIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  conversationInfo: {
+    flex: 1,
+  },
+  conversationTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  conversationMeta: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  deleteConversationButton: {
+    padding: 8,
+  },
+  chatContainer: {
+    flex: 1,
+  },
+  messagesContainer: {
+    padding: 16,
+    flexGrow: 1,
+  },
+  emptyChatState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyChatText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 24,
+  },
+  messageContainer: {
+    marginBottom: 16,
+  },
+  userMessageContainer: {
+    alignItems: 'flex-end',
+  },
+  aiMessageContainer: {
+    alignItems: 'flex-start',
+  },
+  messageBubble: {
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 16,
+  },
+  userMessageBubble: {
+    backgroundColor: colors.primary,
+    borderBottomRightRadius: 4,
+  },
+  aiMessageBubble: {
+    backgroundColor: colors.card,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  userMessageText: {
+    fontSize: 15,
+    color: colors.background,
+    lineHeight: 22,
+  },
+  messageTime: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  userMessageTime: {
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  aiMessageTime: {
+    color: colors.textSecondary,
+  },
+  chatInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  chatInput: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: colors.text,
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
   journalModalContainer: {
     flex: 1,
