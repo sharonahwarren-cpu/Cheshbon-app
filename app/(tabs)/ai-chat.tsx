@@ -9,7 +9,7 @@ export default function AIChatTabRedirect() {
     // Redirect to standalone chat screen
     console.log('[AI Chat Tab] Redirecting to standalone chat screen...');
     router.replace('/ai-chat');
-  }, []);
+  }, [router]);
 
   return null;
 }
