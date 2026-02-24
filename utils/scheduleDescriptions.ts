@@ -11,6 +11,29 @@ const CALENDAR_NAMES = {
   islamic: 'Islamic',
 };
 
+// Hebrew month names (1-indexed, matching @hebcal/core month numbering)
+// Tishrei=1, Cheshvan=2, Kislev=3, Tevet=4, Shevat=5, Adar=6,
+// Nissan=7, Iyar=8, Sivan=9, Tammuz=10, Av=11, Elul=12
+const HEBREW_MONTH_NAMES = [
+  'Tishrei',   // 1
+  'Cheshvan',  // 2
+  'Kislev',    // 3
+  'Tevet',     // 4
+  'Shevat',    // 5
+  'Adar',      // 6
+  'Nissan',    // 7
+  'Iyar',      // 8
+  'Sivan',     // 9
+  'Tammuz',    // 10
+  'Av',        // 11
+  'Elul',      // 12
+];
+
+const GREGORIAN_MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 /**
  * Generate a human-readable summary of a goal schedule configuration
  */
@@ -158,32 +181,18 @@ export function generateScheduleSummary(config: ScheduleConfig): string {
       return `Scheduled on ${config.yearlyCalendarEvent} every year${calendarLabel}`;
     }
 
-    // Specific months
-    if (config.yearlyMonths && config.yearlyMonths.length > 0) {
-      const monthNames = config.yearlyMonths.map(m => {
-        const date = new Date(2024, m - 1, 1);
-        return date.toLocaleDateString('en-US', { month: 'long' });
-      });
-
-      if (monthNames.length === 1) {
-        return `Every ${monthNames[0]}${calendarLabel}`;
-      }
-
-      if (monthNames.length === 2) {
-        return `Every ${monthNames[0]} and ${monthNames[1]}${calendarLabel}`;
-      }
-
-      const lastMonth = monthNames.pop();
-      return `Every ${monthNames.join(', ')}, and ${lastMonth}${calendarLabel}`;
-    }
-
     // Specific dates
     if (config.yearlyDates && config.yearlyDates.length > 0) {
+      const isHebrew = calendarType === 'hebrew';
       const dateStrings = config.yearlyDates.map(dateRange => {
-        const monthName = new Date(2024, dateRange.month - 1, 1).toLocaleDateString('en-US', { month: 'long' });
+        const monthName = isHebrew
+          ? (HEBREW_MONTH_NAMES[dateRange.month - 1] || `Month ${dateRange.month}`)
+          : (GREGORIAN_MONTH_NAMES[dateRange.month - 1] || new Date(2024, dateRange.month - 1, 1).toLocaleDateString('en-US', { month: 'long' }));
         
         if (dateRange.endMonth && dateRange.endDay) {
-          const endMonthName = new Date(2024, dateRange.endMonth - 1, 1).toLocaleDateString('en-US', { month: 'long' });
+          const endMonthName = isHebrew
+            ? (HEBREW_MONTH_NAMES[dateRange.endMonth - 1] || `Month ${dateRange.endMonth}`)
+            : (GREGORIAN_MONTH_NAMES[dateRange.endMonth - 1] || new Date(2024, dateRange.endMonth - 1, 1).toLocaleDateString('en-US', { month: 'long' }));
           return `${monthName} ${formatOrdinal(dateRange.day)} to ${endMonthName} ${formatOrdinal(dateRange.endDay)}`;
         }
         
@@ -254,9 +263,7 @@ export function generateShortScheduleSummary(config: ScheduleConfig): string {
     if (config.yearlyCalendarEvent) {
       return config.yearlyCalendarEvent;
     }
-    const monthCount = config.yearlyMonths?.length || 0;
     const dateCount = config.yearlyDates?.length || 0;
-    if (monthCount > 0) return `${monthCount} month${monthCount > 1 ? 's' : ''}/year`;
     if (dateCount > 0) return `${dateCount} date${dateCount > 1 ? 's' : ''}/year`;
     return 'Yearly';
   }

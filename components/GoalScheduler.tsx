@@ -28,6 +28,13 @@ export interface WeekdayPosition {
   position: number; // 1-4 for 1st-4th, 5 for last
 }
 
+export interface YearlyDateSelection {
+  month: number; // 1-12
+  day: number; // 1-31
+  endMonth?: number; // For date ranges
+  endDay?: number; // For date ranges
+}
+
 export interface ScheduleConfig {
   scheduleType: ScheduleType;
   
@@ -55,12 +62,12 @@ export interface ScheduleConfig {
   monthlyUseAlternativeCalendar?: boolean; // NEW: Flag to show calendar type selector
   monthlyCalendarEvent?: string; // NEW: Hebrew calendar event
   
-  // Yearly
-  yearlyMonths?: number[]; // [1, 6, 12]
-  yearlyDates?: { month: number; day: number; endMonth?: number; endDay?: number }[];
+  // Yearly - REDESIGNED
+  yearlyMonths?: number[]; // Legacy: array of month numbers (kept for backward compatibility)
+  yearlyDates?: YearlyDateSelection[]; // Array of single dates or date ranges
   yearlyCalendarType?: CalendarType;
-  yearlyUseAlternativeCalendar?: boolean; // NEW: Flag to show calendar type selector
-  yearlyCalendarEvent?: string; // NEW: Hebrew calendar event
+  yearlyUseAlternativeCalendar?: boolean;
+  yearlyCalendarEvent?: string; // Hebrew calendar event
   
   // Advanced
   calendarType?: CalendarType;
@@ -113,9 +120,23 @@ const CALENDAR_MAX_DAYS = {
 };
 
 const GREGORIAN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const HEBREW_MONTHS = ['Nisan', 'Iyar', 'Sivan', 'Tammuz', 'Av', 'Elul', 'Tishrei', 'Cheshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar'];
+const GREGORIAN_MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const HEBREW_MONTHS = ['Tishrei', 'Cheshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar', 'Nissan', 'Iyar', 'Sivan', 'Tammuz', 'Av', 'Elul'];
 const CHINESE_MONTHS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 const ISLAMIC_MONTHS = ['Muharram', 'Safar', 'Rabi I', 'Rabi II', 'Jumada I', 'Jumada II', 'Rajab', 'Shaban', 'Ramadan', 'Shawwal', 'Dhul-Qidah', 'Dhul-Hijjah'];
+
+/**
+ * Get ordinal suffix for a number (1st, 2nd, 3rd, etc.)
+ */
+function getOrdinalSuffix(num: number): string {
+  const lastTwoDigits = num % 100;
+  if (lastTwoDigits >= 11 && lastTwoDigits <= 13) return 'th';
+  const lastDigit = num % 10;
+  if (lastDigit === 1) return 'st';
+  if (lastDigit === 2) return 'nd';
+  if (lastDigit === 3) return 'rd';
+  return 'th';
+}
 
 // Hebrew Calendar Events (same as in Alarm section)
 const HEBREW_EVENTS = [
@@ -131,7 +152,7 @@ const HEBREW_EVENTS = [
   'Lag BaOmer',
   'Shavuot',
   'Tisha BAv',
-  'Rosh Chodesh', // NEW: Added Rosh Chodesh
+  'Rosh Chodesh',
 ];
 
 export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }: GoalSchedulerProps) {
@@ -139,7 +160,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   const [showDatePicker, setShowDatePicker] = useState<'end' | 'exclusion' | null>(null);
   const [tempDate, setTempDate] = useState(new Date());
   const [showMonthlyAdvanced, setShowMonthlyAdvanced] = useState(false);
-  const [showYearlyAdvanced, setShowYearlyAdvanced] = useState(false);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [showCalendarEventPicker, setShowCalendarEventPicker] = useState(false);
   const [calendarEventContext, setCalendarEventContext] = useState<'monthly' | 'yearly'>('monthly');
@@ -151,9 +171,13 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   const [selectedWeekday, setSelectedWeekday] = useState<number>(0);
   const [selectedPosition, setSelectedPosition] = useState<number>(1);
   
-  // State for yearly date range inputs
-  const [yearlyRangeStart, setYearlyRangeStart] = useState('');
-  const [yearlyRangeEnd, setYearlyRangeEnd] = useState('');
+  // State for yearly date selection modal
+  const [showYearlyDateModal, setShowYearlyDateModal] = useState(false);
+  const [yearlyDateMode, setYearlyDateMode] = useState<'single' | 'range'>('single');
+  const [yearlyStartMonth, setYearlyStartMonth] = useState<number>(1);
+  const [yearlyStartDay, setYearlyStartDay] = useState<number | null>(null);
+  const [yearlyEndMonth, setYearlyEndMonth] = useState<number>(1);
+  const [yearlyEndDay, setYearlyEndDay] = useState<number | null>(null);
 
   // Backend schedule summary state
   const [backendSummary, setBackendSummary] = useState<BackendScheduleSummary | null>(null);
@@ -186,11 +210,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   }, [goalId]);
 
   // Fetch backend schedule summary ONLY on initial mount (when goalId is first available).
-  // We do NOT re-fetch when config changes because the config changes happen in the UI
-  // BEFORE the goal is saved. The backend still has the OLD saved data, so fetching on
-  // config change would show stale/incorrect dates.
-  // The local summary (generateScheduleSummary) is used as the live preview while editing.
-  // The backend summary is fetched on mount to show the last-saved schedule state.
   useEffect(() => {
     if (goalId && config.scheduleType !== 'Always Active') {
       console.log('[GoalScheduler] Component mounted, fetching saved schedule summary from backend');
@@ -199,7 +218,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       setBackendSummary(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goalId]); // Only re-fetch when goalId changes, NOT when config changes
+  }, [goalId]);
 
   // Generate local next occurrences from current config (live preview while editing)
   useEffect(() => {
@@ -229,10 +248,9 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               ? { start: config.monthlyRangeStart, end: config.monthlyRangeEnd }
               : undefined,
             randomCount: config.monthlyRandomCount,
-            months: config.yearlyMonths,
             datesOrRanges: config.yearlyDates?.map(d => ({
               month: d.month,
-              days: [d.day],
+              days: d.endMonth ? undefined : [d.day],
               start: d.day,
               end: d.endDay || d.day,
             })),
@@ -270,16 +288,12 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     config.monthlyRangeStart,
     config.monthlyRangeEnd,
     config.monthlyRandomCount,
-    JSON.stringify(config.yearlyMonths),
     JSON.stringify(config.yearlyDates),
     config.startDate?.toISOString(),
     config.endDate?.toISOString(),
   ]);
 
   // CRITICAL FIX: Always use the LOCAL summary as the live preview while editing.
-  // The backend summary is based on SAVED data and would show stale information
-  // when the user is actively changing the schedule in the wizard.
-  // The local next occurrences are generated from the current UI state.
   const scheduleSummary = localScheduleSummary;
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
@@ -326,11 +340,11 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
         updateConfig({
           monthlyUseAlternativeCalendar: true,
           monthlyCalendarType: alternativeCalendar || 'hebrew',
-          monthlyDates: undefined, // Clear selected dates
-          monthlyWeekdayPositions: undefined, // Clear weekday positions
-          monthlyRangeStart: undefined, // Clear range
+          monthlyDates: undefined,
+          monthlyWeekdayPositions: undefined,
+          monthlyRangeStart: undefined,
           monthlyRangeEnd: undefined,
-          monthlyRandomCount: undefined, // Clear random count
+          monthlyRandomCount: undefined,
         });
       } else {
         // Turning OFF alternative calendar - NULLIFY alternative calendar dates
@@ -338,7 +352,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
         updateConfig({
           monthlyUseAlternativeCalendar: false,
           monthlyCalendarType: 'gregorian',
-          monthlyCalendarEvent: undefined, // Clear calendar event
+          monthlyCalendarEvent: undefined,
         });
       }
     } else if (context === 'yearly') {
@@ -348,8 +362,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
         updateConfig({
           yearlyUseAlternativeCalendar: true,
           yearlyCalendarType: alternativeCalendar || 'hebrew',
-          yearlyMonths: undefined, // Clear selected months
-          yearlyDates: undefined, // Clear specific dates
+          yearlyDates: undefined,
         });
       } else {
         // Turning OFF alternative calendar - NULLIFY alternative calendar dates
@@ -357,7 +370,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
         updateConfig({
           yearlyUseAlternativeCalendar: false,
           yearlyCalendarType: 'gregorian',
-          yearlyCalendarEvent: undefined, // Clear calendar event
+          yearlyCalendarEvent: undefined,
         });
       }
     }
@@ -368,24 +381,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     console.log('[GoalScheduler] User tapped occurrence:', occurrence);
     setSelectedOccurrence(occurrence);
     setShowSourceModal(true);
-  };
-
-  // NEW: Scroll to and highlight the relevant section
-  const navigateToSection = (section: string) => {
-    console.log('[GoalScheduler] Navigating to section:', section);
-    setShowSourceModal(false);
-    
-    // Expand the relevant advanced section if needed
-    if (section.includes('Date Range') || section.includes('Random')) {
-      if (config.scheduleType === 'Monthly') {
-        setShowMonthlyAdvanced(true);
-      } else if (config.scheduleType === 'Yearly') {
-        setShowYearlyAdvanced(true);
-      }
-    }
-    
-    // TODO: Could add scroll-to-section logic here if needed
-    // For now, just expanding the section is sufficient
   };
 
   const renderScheduleTypeSelector = () => {
@@ -419,7 +414,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
 
   const renderScheduleSummary = () => {
     if (config.scheduleType === 'Always Active') {
-      return null; // No summary needed for "Always Active"
+      return null;
     }
 
     return (
@@ -464,8 +459,6 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       </View>
     );
   };
-
-  // Daily view removed per user request
 
   const renderWeeklyOptions = () => {
     if (config.scheduleType !== 'Weekly') return null;
@@ -1020,38 +1013,64 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
 
     const useAlternativeCalendar = config.yearlyUseAlternativeCalendar || false;
     const selectedCalendar = useAlternativeCalendar ? (config.yearlyCalendarType || alternativeCalendar || 'gregorian') : 'gregorian';
-    const monthNames = selectedCalendar === 'gregorian' ? GREGORIAN_MONTHS :
+    const monthNames = selectedCalendar === 'gregorian' ? GREGORIAN_MONTHS_FULL :
                        selectedCalendar === 'hebrew' ? HEBREW_MONTHS :
                        selectedCalendar === 'chinese' ? CHINESE_MONTHS :
                        ISLAMIC_MONTHS;
 
-    const toggleMonth = (month: number) => {
-      console.log('[GoalScheduler] Toggling yearly month:', month);
-      const current = config.yearlyMonths || [];
-      const updated = current.includes(month)
-        ? current.filter(m => m !== month)
-        : [...current, month].sort((a, b) => a - b);
-      updateConfig({ yearlyMonths: updated });
-    };
-
-    const addYearlyDate = () => {
-      const current = config.yearlyDates || [];
-      updateConfig({ yearlyDates: [...current, { month: 1, day: 1 }] });
-    };
+    const hasCalendarEvent = useAlternativeCalendar && selectedCalendar === 'hebrew' && config.yearlyCalendarEvent;
 
     const removeYearlyDate = (index: number) => {
       const current = config.yearlyDates || [];
       updateConfig({ yearlyDates: current.filter((_, i) => i !== index) });
     };
 
-    const updateYearlyDate = (index: number, updates: Partial<{ month: number; day: number; endMonth?: number; endDay?: number }>) => {
-      const current = config.yearlyDates || [];
-      const updated = [...current];
-      updated[index] = { ...updated[index], ...updates };
-      updateConfig({ yearlyDates: updated });
+    const formatYearlyDate = (dateSelection: YearlyDateSelection) => {
+      const startMonthName = monthNames[dateSelection.month - 1] || `Month ${dateSelection.month}`;
+      
+      if (dateSelection.endMonth && dateSelection.endDay) {
+        const endMonthName = monthNames[dateSelection.endMonth - 1] || `Month ${dateSelection.endMonth}`;
+        return `${startMonthName} ${dateSelection.day} - ${endMonthName} ${dateSelection.endDay}`;
+      }
+      
+      return `${startMonthName} ${dateSelection.day}`;
     };
 
-    const hasCalendarEvent = useAlternativeCalendar && selectedCalendar === 'hebrew' && config.yearlyCalendarEvent;
+    const handleAddYearlyDate = () => {
+      if (!yearlyStartDay) {
+        console.warn('[GoalScheduler] No start day selected');
+        return;
+      }
+
+      const current = config.yearlyDates || [];
+      
+      if (yearlyDateMode === 'range') {
+        if (!yearlyEndDay) {
+          console.warn('[GoalScheduler] No end day selected for range');
+          return;
+        }
+        
+        const newDate: YearlyDateSelection = {
+          month: yearlyStartMonth,
+          day: yearlyStartDay,
+          endMonth: yearlyEndMonth,
+          endDay: yearlyEndDay,
+        };
+        updateConfig({ yearlyDates: [...current, newDate] });
+      } else {
+        const newDate: YearlyDateSelection = {
+          month: yearlyStartMonth,
+          day: yearlyStartDay,
+        };
+        updateConfig({ yearlyDates: [...current, newDate] });
+      }
+      
+      // Reset inputs
+      setYearlyStartDay(null);
+      setYearlyEndDay(null);
+      setYearlyStartMonth(1);
+      setYearlyEndMonth(1);
+    };
 
     return (
       <View style={styles.optionsContainer}>
@@ -1107,128 +1126,299 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
           </View>
         )}
 
-        {/* Selected Months - HIDDEN if Calendar Event is chosen */}
+        {/* REDESIGNED: Simple date/range selection - HIDDEN if Calendar Event is chosen */}
         {!hasCalendarEvent && (
           <>
-            <Text style={styles.subLabel}>Select Months</Text>
-            <View style={styles.monthGrid}>
-              {monthNames.map((month, index) => {
-                const monthNum = index + 1;
-                const isSelected = config.yearlyMonths?.includes(monthNum) || false;
-                return (
-                  <TouchableOpacity
-                    key={monthNum}
-                    style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
-                    onPress={() => toggleMonth(monthNum)}
-                  >
-                    <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
-                      {month}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
-        )}
-
-        <TouchableOpacity
-          style={styles.advancedOptionButton}
-          onPress={() => setShowYearlyAdvanced(!showYearlyAdvanced)}
-        >
-          <IconSymbol
-            ios_icon_name="slider.horizontal.3"
-            android_material_icon_name="tune"
-            size={16}
-            color={colors.primary}
-          />
-          <Text style={styles.advancedOptionText}>Specific Dates & Ranges</Text>
-        </TouchableOpacity>
-
-        {showYearlyAdvanced && (
-          <View style={styles.advancedSection}>
-            <Text style={styles.subLabel}>Specific Dates or Date Ranges</Text>
+            <Text style={styles.subLabel}>Add Dates or Date Ranges</Text>
             <Text style={styles.helperText}>
-              Add specific dates (e.g., Feb 1st) or date ranges (e.g., Jan 31 - Feb 2)
+              Select a single date (e.g., 1st January) or a date range (e.g., 30 Jan to 2 March)
             </Text>
 
-            {config.yearlyDates && config.yearlyDates.length > 0 && (
-              <View style={styles.yearlyDatesList}>
-                {config.yearlyDates.map((dateRange, index) => {
-                  const startMonthName = monthNames[dateRange.month - 1] || dateRange.month;
-                  const endMonthName = dateRange.endMonth ? (monthNames[dateRange.endMonth - 1] || dateRange.endMonth) : '';
-                  const displayText = dateRange.endMonth && dateRange.endDay
-                    ? `${startMonthName} ${dateRange.day} - ${endMonthName} ${dateRange.endDay}`
-                    : `${startMonthName} ${dateRange.day}`;
-                  
-                  return (
-                    <View key={index} style={styles.yearlyDateItem}>
-                      <Text style={styles.yearlyDateText}>{displayText}</Text>
-                      <TouchableOpacity onPress={() => removeYearlyDate(index)}>
-                        <IconSymbol
-                          ios_icon_name="xmark.circle.fill"
-                          android_material_icon_name="cancel"
-                          size={20}
-                          color={colors.error}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  );
-                })}
-              </View>
-            )}
-            
-            {/* Add Date or Range Input */}
-            <View style={styles.dateRangeInputSection}>
-              <Text style={styles.subLabel}>Add Date or Range</Text>
-              <Text style={styles.helperText}>
-                Enter start date (e.g., 1st) and optionally end date (e.g., 4th) for a range
-              </Text>
-              <View style={styles.dateRangeInputRow}>
-                <TextInput
-                  style={styles.dateRangeInput}
-                  value={yearlyRangeStart}
-                  onChangeText={setYearlyRangeStart}
-                  placeholder="1st"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="number-pad"
-                />
-                <Text style={styles.rangeText}>-</Text>
-                <TextInput
-                  style={styles.dateRangeInput}
-                  value={yearlyRangeEnd}
-                  onChangeText={setYearlyRangeEnd}
-                  placeholder="4th (optional)"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="number-pad"
-                />
-              </View>
-              <TouchableOpacity 
-                style={styles.addButton} 
+            {/* Mode Toggle */}
+            <View style={styles.toggleRow}>
+              <TouchableOpacity
+                style={[styles.toggleButton, yearlyDateMode === 'single' && styles.toggleButtonActive]}
                 onPress={() => {
-                  const startDay = parseInt(yearlyRangeStart);
-                  const endDay = yearlyRangeEnd ? parseInt(yearlyRangeEnd) : undefined;
-                  
-                  if (startDay && !isNaN(startDay)) {
-                    const current = config.yearlyDates || [];
-                    const newDate = endDay && !isNaN(endDay)
-                      ? { month: 1, day: startDay, endMonth: 1, endDay }
-                      : { month: 1, day: startDay };
-                    updateConfig({ yearlyDates: [...current, newDate] });
-                    setYearlyRangeStart('');
-                    setYearlyRangeEnd('');
-                  }
+                  setYearlyDateMode('single');
+                  setYearlyStartDay(null);
+                  setYearlyEndDay(null);
                 }}
               >
-                <IconSymbol
-                  ios_icon_name="plus.circle.fill"
-                  android_material_icon_name="add-circle"
-                  size={18}
-                  color={colors.primary}
-                />
-                <Text style={styles.addButtonText}>Add Date or Range</Text>
+                <Text style={[styles.toggleButtonText, yearlyDateMode === 'single' && styles.toggleButtonTextActive]}>
+                  Single Date
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleButton, yearlyDateMode === 'range' && styles.toggleButtonActive]}
+                onPress={() => {
+                  setYearlyDateMode('range');
+                  setYearlyStartDay(null);
+                  setYearlyEndDay(null);
+                }}
+              >
+                <Text style={[styles.toggleButtonText, yearlyDateMode === 'range' && styles.toggleButtonTextActive]}>
+                  Date Range
+                </Text>
               </TouchableOpacity>
             </View>
-          </View>
+
+            {/* Single Date Mode */}
+            {yearlyDateMode === 'single' && (
+              <View style={styles.yearlyDateInputSection}>
+                {/* Month Selector */}
+                <Text style={styles.pickerLabel}>Month</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScrollView}>
+                  <View style={styles.monthGrid}>
+                    {monthNames.map((month, index) => {
+                      const monthNum = index + 1;
+                      const isSelected = yearlyStartMonth === monthNum;
+                      return (
+                        <TouchableOpacity
+                          key={monthNum}
+                          style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                          onPress={() => {
+                            setYearlyStartMonth(monthNum);
+                            setYearlyStartDay(null);
+                          }}
+                        >
+                          <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                            {month}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+
+                {/* Day Grid */}
+                <Text style={styles.pickerLabel}>Day</Text>
+                <View style={styles.dateGridContainer}>
+                  {Array.from({ length: 31 }, (_, i) => {
+                    const day = i + 1;
+                    const isSelected = yearlyStartDay === day;
+                    return (
+                      <TouchableOpacity
+                        key={day}
+                        style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                        onPress={() => setYearlyStartDay(isSelected ? null : day)}
+                      >
+                        <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                          {day}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Preview of selected date */}
+                {yearlyStartDay && (
+                  <View style={styles.yearlyPreviewBox}>
+                    <IconSymbol
+                      ios_icon_name="calendar.badge.checkmark"
+                      android_material_icon_name="event-available"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.yearlyPreviewText}>
+                      {monthNames[yearlyStartMonth - 1]} {yearlyStartDay}{getOrdinalSuffix(yearlyStartDay)}
+                    </Text>
+                  </View>
+                )}
+
+                <TouchableOpacity 
+                  style={[styles.confirmButton, !yearlyStartDay && styles.confirmButtonDisabled]} 
+                  onPress={handleAddYearlyDate}
+                  disabled={!yearlyStartDay}
+                >
+                  <IconSymbol
+                    ios_icon_name="plus.circle.fill"
+                    android_material_icon_name="add-circle"
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.confirmButtonText}>Add Date</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Date Range Mode */}
+            {yearlyDateMode === 'range' && (
+              <View style={styles.yearlyDateInputSection}>
+                {/* Start Date */}
+                <View style={styles.yearlyRangeSection}>
+                  <View style={styles.yearlyRangeLabelRow}>
+                    <View style={[styles.yearlyRangeDot, { backgroundColor: colors.primary }]} />
+                    <Text style={styles.yearlyRangeLabel}>Start Date</Text>
+                  </View>
+                  
+                  <Text style={styles.pickerLabel}>Month</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScrollView}>
+                    <View style={styles.monthGrid}>
+                      {monthNames.map((month, index) => {
+                        const monthNum = index + 1;
+                        const isSelected = yearlyStartMonth === monthNum;
+                        return (
+                          <TouchableOpacity
+                            key={monthNum}
+                            style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                            onPress={() => {
+                              setYearlyStartMonth(monthNum);
+                              setYearlyStartDay(null);
+                            }}
+                          >
+                            <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                              {month}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+
+                  <Text style={styles.pickerLabel}>Day</Text>
+                  <View style={styles.dateGridContainer}>
+                    {Array.from({ length: 31 }, (_, i) => {
+                      const day = i + 1;
+                      const isSelected = yearlyStartDay === day;
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                          onPress={() => setYearlyStartDay(isSelected ? null : day)}
+                        >
+                          <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                            {day}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Arrow between start and end */}
+                <View style={styles.yearlyRangeArrow}>
+                  <View style={styles.yearlyRangeArrowLine} />
+                  <IconSymbol
+                    ios_icon_name="arrow.down"
+                    android_material_icon_name="arrow-downward"
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                  <View style={styles.yearlyRangeArrowLine} />
+                </View>
+
+                {/* End Date */}
+                <View style={styles.yearlyRangeSection}>
+                  <View style={styles.yearlyRangeLabelRow}>
+                    <View style={[styles.yearlyRangeDot, { backgroundColor: colors.success || '#4CAF50' }]} />
+                    <Text style={styles.yearlyRangeLabel}>End Date</Text>
+                  </View>
+
+                  <Text style={styles.pickerLabel}>Month</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScrollView}>
+                    <View style={styles.monthGrid}>
+                      {monthNames.map((month, index) => {
+                        const monthNum = index + 1;
+                        const isSelected = yearlyEndMonth === monthNum;
+                        return (
+                          <TouchableOpacity
+                            key={monthNum}
+                            style={[styles.monthButton, isSelected && styles.monthButtonSelected]}
+                            onPress={() => {
+                              setYearlyEndMonth(monthNum);
+                              setYearlyEndDay(null);
+                            }}
+                          >
+                            <Text style={[styles.monthButtonText, isSelected && styles.monthButtonTextSelected]}>
+                              {month}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+
+                  <Text style={styles.pickerLabel}>Day</Text>
+                  <View style={styles.dateGridContainer}>
+                    {Array.from({ length: 31 }, (_, i) => {
+                      const day = i + 1;
+                      const isSelected = yearlyEndDay === day;
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          style={[styles.dateButton, isSelected && styles.dateButtonSelected]}
+                          onPress={() => setYearlyEndDay(isSelected ? null : day)}
+                        >
+                          <Text style={[styles.dateButtonText, isSelected && styles.dateButtonTextSelected]}>
+                            {day}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Preview of selected range */}
+                {yearlyStartDay && yearlyEndDay && (
+                  <View style={styles.yearlyPreviewBox}>
+                    <IconSymbol
+                      ios_icon_name="calendar.badge.checkmark"
+                      android_material_icon_name="event-available"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.yearlyPreviewText}>
+                      {monthNames[yearlyStartMonth - 1]} {yearlyStartDay}{getOrdinalSuffix(yearlyStartDay)} → {monthNames[yearlyEndMonth - 1]} {yearlyEndDay}{getOrdinalSuffix(yearlyEndDay)}
+                    </Text>
+                  </View>
+                )}
+
+                <TouchableOpacity 
+                  style={[styles.confirmButton, (!yearlyStartDay || !yearlyEndDay) && styles.confirmButtonDisabled]} 
+                  onPress={handleAddYearlyDate}
+                  disabled={!yearlyStartDay || !yearlyEndDay}
+                >
+                  <IconSymbol
+                    ios_icon_name="plus.circle.fill"
+                    android_material_icon_name="add-circle"
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.confirmButtonText}>Add Date Range</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Display Added Dates */}
+            {config.yearlyDates && config.yearlyDates.length > 0 && (
+              <View style={styles.yearlyDatesList}>
+                <Text style={styles.subLabel}>Selected Dates</Text>
+                {config.yearlyDates.map((dateSelection, index) => (
+                  <View key={index} style={styles.yearlyDateItem}>
+                    <View style={styles.yearlyDateItemContent}>
+                      <IconSymbol
+                        ios_icon_name={dateSelection.endMonth ? 'calendar' : 'calendar.badge.checkmark'}
+                        android_material_icon_name={dateSelection.endMonth ? 'date-range' : 'event-available'}
+                        size={16}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.yearlyDateText}>
+                        {formatYearlyDate(dateSelection)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => removeYearlyDate(index)}>
+                      <IconSymbol
+                        ios_icon_name="xmark.circle.fill"
+                        android_material_icon_name="cancel"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
         )}
         
         {/* End Date & Exclusions */}
@@ -1838,6 +2028,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  monthScrollView: {
+    marginBottom: 12,
+  },
   monthButton: {
     paddingVertical: 10,
     paddingHorizontal: 16,
@@ -1878,7 +2071,7 @@ const styles = StyleSheet.create({
   },
   yearlyDatesList: {
     gap: 8,
-    marginBottom: 12,
+    marginTop: 16,
   },
   yearlyDateItem: {
     flexDirection: 'row',
@@ -1895,27 +2088,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '500',
   },
-  dateRangeInputSection: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  dateRangeInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  yearlyDateInputSection: {
+    marginTop: 12,
     gap: 12,
-    marginBottom: 12,
-  },
-  dateRangeInput: {
-    flex: 1,
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: colors.border,
   },
   rangeRow: {
     flexDirection: 'row',
@@ -2123,10 +2298,13 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   confirmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: colors.primary,
     borderRadius: 8,
     padding: 16,
-    alignItems: 'center',
     marginTop: 16,
   },
   confirmButtonText: {
@@ -2177,5 +2355,69 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  confirmButtonDisabled: {
+    backgroundColor: colors.border,
+    opacity: 0.6,
+  },
+  yearlyPreviewBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginTop: 4,
+  },
+  yearlyPreviewText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  yearlyRangeSection: {
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 4,
+  },
+  yearlyRangeLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  yearlyRangeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  yearlyRangeLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  yearlyRangeArrow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  yearlyRangeArrowLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  yearlyDateItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
   },
 });
