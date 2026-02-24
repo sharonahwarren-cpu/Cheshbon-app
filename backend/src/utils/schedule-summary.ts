@@ -2,7 +2,7 @@
  * Schedule summary generation for human-readable goal schedule descriptions
  */
 
-import { HEBREW_MONTHS, ISLAMIC_MONTHS, CHINESE_MONTHS, GREGORIAN_MONTHS, gregorianToHebrew, isHebrewLeapYear } from './calendar.js';
+import { HEBREW_MONTHS, ISLAMIC_MONTHS, CHINESE_MONTHS, GREGORIAN_MONTHS, gregorianToHebrew, hebrewToGregorian, isHebrewLeapYear, getHebrewDateOccurrences } from './calendar.js';
 import { getNextActivations, type ScheduleConfig } from './goal-scheduler.js';
 
 export interface ScheduleSummaryRequest {

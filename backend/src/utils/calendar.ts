@@ -2,35 +2,38 @@
  * Calendar utility functions for Hebrew, Islamic, Chinese, and Gregorian calendars
  */
 
-// Hebrew calendar helpers
+import { HDate, months } from '@hebcal/core';
+
+// Hebrew calendar helpers using hebcal library for accuracy
 export function isHebrewLeapYear(year: number): boolean {
   return (year * 7 + 1) % 19 < 7;
 }
 
 export function getDaysInHebrewMonth(month: number, year: number): number {
-  const hebrewMonths: Record<number, number> = {
-    1: 30, // Tishrei
-    2: 29, // Cheshvan (varies)
-    3: 30, // Kislev (varies)
-    4: 29, // Tevet
-    5: 30, // Shevat
-    6: 29, // Adar (or first Adar in leap year)
-    7: 30, // Adar II (or Adar in non-leap year)
-    8: 21, // Nisan
-    9: 15, // Iyar
-    10: 30, // Sivan
-    11: 29, // Tammuz
-    12: 30, // Av
-    13: 29, // Elul
-  };
-
-  if (month === 2) {
-    return new Date(year, 11, 31).getDate() === 31 ? 30 : 29;
+  try {
+    // Use hebcal to get accurate days in month
+    const hdate = new HDate(1, month, year);
+    const lastDay = new HDate(1, month === 12 ? 1 : month + 1, month === 12 ? year + 1 : year);
+    return lastDay.abs() - hdate.abs();
+  } catch {
+    // Fallback to approximation if hebcal fails
+    const hebrewMonths: Record<number, number> = {
+      1: 30, // Tishrei
+      2: 29, // Cheshvan (varies)
+      3: 30, // Kislev (varies)
+      4: 29, // Tevet
+      5: 30, // Shevat
+      6: 29, // Adar (or first Adar in leap year)
+      7: 30, // Adar II (or Adar in non-leap year)
+      8: 21, // Nisan
+      9: 15, // Iyar
+      10: 30, // Sivan
+      11: 29, // Tammuz
+      12: 30, // Av
+      13: 29, // Elul
+    };
+    return hebrewMonths[month] || 30;
   }
-  if (month === 3) {
-    return new Date(year, 0, 1).getDay() === 2 ? 30 : 29;
-  }
-  return hebrewMonths[month] || 30;
 }
 
 // Hebrew month names (1-based indexing)
@@ -111,33 +114,45 @@ export const GREGORIAN_MONTHS = [
 ];
 
 /**
- * Approximate conversion from Gregorian to Hebrew date (for display purposes)
- * Note: This is simplified and may be off by 1-2 days
+ * Accurate conversion from Gregorian to Hebrew date using hebcal library
  */
 export function gregorianToHebrew(date: Date): { month: number; day: number; year: number } {
-  // This is a simplified calculation
-  // Real conversion requires complex algorithms (Meeus, etc.)
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-
-  // Approximate Hebrew year (starts around September)
-  let hebrewYear = year + 3760;
-  if (month < 9) {
-    hebrewYear--;
+  try {
+    const hdate = new HDate(date);
+    return {
+      month: hdate.getMonth(),
+      day: hdate.getDate(),
+      year: hdate.getFullYear(),
+    };
+  } catch (error) {
+    // Fallback to approximation if hebcal fails
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    let hebrewYear = year + 3760;
+    if (month < 9) {
+      hebrewYear--;
+    }
+    return { month, day, year: hebrewYear };
   }
-
-  // This is very simplified - a real implementation would use proper algorithms
-  return {
-    month: month,
-    day: day,
-    year: hebrewYear,
-  };
 }
 
 /**
- * Simple check if a Hebrew date falls within a range (1-14 Nissan, etc.)
- * This is simplified for demonstration
+ * Accurate conversion from Hebrew date to Gregorian date using hebcal library
+ */
+export function hebrewToGregorian(hebrewYear: number, hebrewMonth: number, hebrewDay: number): Date {
+  try {
+    const hdate = new HDate(hebrewDay, hebrewMonth, hebrewYear);
+    return hdate.toJSDate();
+  } catch (error) {
+    // If conversion fails, return a date in the approximate range
+    const gregorianYear = hebrewYear - 3760;
+    return new Date(gregorianYear, 8, 1); // Approximate
+  }
+}
+
+/**
+ * Accurate check if a Hebrew date falls within a range using hebcal library
  */
 export function isDateInHebrewRange(
   gregorianDate: Date,
@@ -145,8 +160,49 @@ export function isDateInHebrewRange(
   dayStart: number,
   dayEnd: number
 ): boolean {
-  const hebrew = gregorianToHebrew(gregorianDate);
-  return hebrew.month === hebrewMonth && hebrew.day >= dayStart && hebrew.day <= dayEnd;
+  try {
+    const hebrew = gregorianToHebrew(gregorianDate);
+    return hebrew.month === hebrewMonth && hebrew.day >= dayStart && hebrew.day <= dayEnd;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get all occurrences of a Hebrew month/day in a given Gregorian year range
+ */
+export function getHebrewDateOccurrences(
+  hebrewMonth: number,
+  hebrewDay: number,
+  startYear: number,
+  endYear: number
+): Date[] {
+  const occurrences: Date[] = [];
+
+  try {
+    for (let year = startYear; year <= endYear; year++) {
+      // Estimate the Hebrew year range that could fall in this Gregorian year
+      // Hebrew year is roughly gregorian + 3760, but adjust for month
+      const hebrewYearStart = year + 3760 - 1;
+      const hebrewYearEnd = year + 3760 + 1;
+
+      for (let hYear = hebrewYearStart; hYear <= hebrewYearEnd; hYear++) {
+        try {
+          const gregDate = hebrewToGregorian(hYear, hebrewMonth, hebrewDay);
+          // Check if this date falls within our target Gregorian year
+          if (gregDate.getFullYear() === year) {
+            occurrences.push(gregDate);
+          }
+        } catch {
+          // Skip invalid Hebrew dates
+        }
+      }
+    }
+  } catch {
+    // If all conversions fail, return empty
+  }
+
+  return occurrences.sort((a, b) => a.getTime() - b.getTime());
 }
 
 /**

@@ -8,6 +8,8 @@ import {
   calculateSunsetTime,
   calculateSunriseTime,
   isDateInHebrewRange,
+  hebrewToGregorian,
+  getHebrewDateOccurrences,
 } from './calendar.js';
 
 export interface ScheduleConfig {
@@ -179,20 +181,36 @@ export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boole
       return true;
 
     case 'yearly':
+      // For Hebrew calendar, use proper date conversion
+      if (config.calendarType === 'hebrew') {
+        if (!config.yearlyDatesOrRanges) return true;
+
+        return config.yearlyDatesOrRanges.some(range => {
+          try {
+            // range.month is the Hebrew month number
+            if (!range.month) return false;
+
+            if (range.days) {
+              // Check if date matches any of the specified Hebrew days in this month
+              return range.days.some(day => {
+                return isDateInHebrewRange(date, range.month, day, day);
+              });
+            }
+            if (range.start && range.end) {
+              // Check if date falls within Hebrew day range in this month
+              return isDateInHebrewRange(date, range.month, range.start, range.end);
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        });
+      }
+
+      // For Gregorian calendar
       const month = date.getMonth() + 1; // JavaScript months are 0-based
       if (config.yearlyMonths && !config.yearlyMonths.includes(month)) {
         return false;
-      }
-      if (config.calendarType === 'hebrew' && config.yearlyDatesOrRanges) {
-        return config.yearlyDatesOrRanges.some(range => {
-          if (range.days?.includes(date.getDate())) {
-            return isDateInHebrewRange(date, range.month, range.days[0], range.days[range.days.length - 1]);
-          }
-          if (range.start && range.end) {
-            return isDateInHebrewRange(date, range.month, range.start, range.end);
-          }
-          return false;
-        });
       }
       if (config.yearlyDatesOrRanges) {
         return config.yearlyDatesOrRanges.some(range => {
