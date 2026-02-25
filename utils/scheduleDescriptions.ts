@@ -11,22 +11,24 @@ const CALENDAR_NAMES = {
   islamic: 'Islamic',
 };
 
-// Hebrew month names (1-indexed, matching @hebcal/core month numbering)
-// Tishrei=1, Cheshvan=2, Kislev=3, Tevet=4, Shevat=5, Adar=6,
-// Nissan=7, Iyar=8, Sivan=9, Tammuz=10, Av=11, Elul=12
+// Hebrew month names (0-indexed array, but @hebcal uses 1-based numbering)
+// @hebcal numbering: Nisan=1, Iyar=2, Sivan=3, Tammuz=4, Av=5, Elul=6,
+//                    Tishrei=7, Cheshvan=8, Kislev=9, Tevet=10, Shevat=11, Adar=12
+// Array index 0 = placeholder, index 1 = Nisan, ..., index 7 = Tishrei, ..., index 12 = Adar
 const HEBREW_MONTH_NAMES = [
-  'Tishrei',   // 1
-  'Cheshvan',  // 2
-  'Kislev',    // 3
-  'Tevet',     // 4
-  'Shevat',    // 5
-  'Adar',      // 6
-  'Nissan',    // 7
-  'Iyar',      // 8
-  'Sivan',     // 9
-  'Tammuz',    // 10
-  'Av',        // 11
-  'Elul',      // 12
+  '',          // 0 - placeholder (not used)
+  'Nissan',    // 1
+  'Iyar',      // 2
+  'Sivan',     // 3
+  'Tammuz',    // 4
+  'Av',        // 5
+  'Elul',      // 6
+  'Tishrei',   // 7
+  'Cheshvan',  // 8
+  'Kislev',    // 9
+  'Tevet',     // 10
+  'Shevat',    // 11
+  'Adar',      // 12
 ];
 
 const GREGORIAN_MONTH_NAMES = [
@@ -196,7 +198,11 @@ export function generateScheduleSummary(config: ScheduleConfig): string {
         a.month !== b.month ? a.month - b.month : a.day - b.day
       );
       const dateStrings = sortedDates.map(d => {
-        const monthName = monthNames[d.month - 1] || `Month ${d.month}`;
+        // For Hebrew calendar, d.month is @hebcal month number (1-12), use directly as index
+        // For Gregorian, d.month is 1-12, so subtract 1 for 0-indexed array
+        const monthName = calendarType === 'hebrew' 
+          ? (monthNames[d.month] || `Month ${d.month}`)
+          : (monthNames[d.month - 1] || `Month ${d.month}`);
         return `${monthName} ${formatOrdinal(d.day)}`;
       });
 
@@ -213,8 +219,14 @@ export function generateScheduleSummary(config: ScheduleConfig): string {
     // Date ranges
     if (config.yearlyRanges && config.yearlyRanges.length > 0) {
       const rangeStrings = config.yearlyRanges.map(range => {
-        const startMonthName = monthNames[range.startMonth - 1] || `Month ${range.startMonth}`;
-        const endMonthName = monthNames[range.endMonth - 1] || `Month ${range.endMonth}`;
+        // For Hebrew calendar, use @hebcal month number directly as index
+        // For Gregorian, subtract 1 for 0-indexed array
+        const startMonthName = calendarType === 'hebrew'
+          ? (monthNames[range.startMonth] || `Month ${range.startMonth}`)
+          : (monthNames[range.startMonth - 1] || `Month ${range.startMonth}`);
+        const endMonthName = calendarType === 'hebrew'
+          ? (monthNames[range.endMonth] || `Month ${range.endMonth}`)
+          : (monthNames[range.endMonth - 1] || `Month ${range.endMonth}`);
         return `${startMonthName} ${formatOrdinal(range.startDay)} to ${endMonthName} ${formatOrdinal(range.endDay)}`;
       });
 
