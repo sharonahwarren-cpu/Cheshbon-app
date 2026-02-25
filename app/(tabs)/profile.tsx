@@ -166,29 +166,6 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        {/* Alarms Button */}
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => {
-            console.log('Navigating to Alarms');
-            router.push('/alarms');
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="bell.fill"
-            android_material_icon_name="notifications"
-            size={20}
-            color={colors.primary}
-          />
-          <Text style={styles.menuButtonText}>Alarms</Text>
-          <IconSymbol
-            ios_icon_name="chevron.right"
-            android_material_icon_name="chevron-right"
-            size={20}
-            color={colors.textSecondary}
-          />
-        </TouchableOpacity>
-
         {/* Preferences Button */}
         <TouchableOpacity
           style={styles.menuButton}
