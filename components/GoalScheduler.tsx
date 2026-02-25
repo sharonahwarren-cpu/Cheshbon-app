@@ -121,7 +121,13 @@ const CALENDAR_MAX_DAYS = {
 
 const GREGORIAN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const GREGORIAN_MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const HEBREW_MONTHS = ['Tishrei', 'Cheshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar', 'Nissan', 'Iyar', 'Sivan', 'Tammuz', 'Av', 'Elul'];
+// CRITICAL FIX: Hebrew months in @hebcal/core use Nisan-based numbering (Nisan=1, not Tishrei=1)
+// Nisan=1, Iyar=2, Sivan=3, Tammuz=4, Av=5, Elul=6, Tishrei=7, Cheshvan=8, Kislev=9, Tevet=10, Shevat=11, Adar=12 (Adar I=13 in leap years)
+// We display them in Tishrei-first order for the UI, but map to correct @hebcal month numbers
+const HEBREW_MONTHS_DISPLAY = ['Tishrei', 'Cheshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar', 'Nissan', 'Iyar', 'Sivan', 'Tammuz', 'Av', 'Elul'];
+// Mapping from display index (0-11) to @hebcal month number
+const HEBREW_MONTH_TO_HEBCAL = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6]; // Tishrei=7, Cheshvan=8, ..., Elul=6
+const HEBCAL_TO_HEBREW_MONTH = [0, 6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5]; // Reverse mapping (index is @hebcal month, value is display index)
 const CHINESE_MONTHS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 const ISLAMIC_MONTHS = ['Muharram', 'Safar', 'Rabi I', 'Rabi II', 'Jumada I', 'Jumada II', 'Rajab', 'Shaban', 'Ramadan', 'Shawwal', 'Dhul-Qidah', 'Dhul-Hijjah'];
 
@@ -1129,13 +1135,29 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     };
 
     const formatYearlyDate = (entry: { month: number; day: number }) => {
-      const monthName = monthNames[entry.month - 1] || `Month ${entry.month}`;
+      // CRITICAL FIX: Convert @hebcal month number back to display index for Hebrew calendar
+      let displayMonthIndex = entry.month - 1;
+      if (selectedCalendar === 'hebrew' && entry.month >= 1 && entry.month <= 13) {
+        displayMonthIndex = HEBCAL_TO_HEBREW_MONTH[entry.month];
+      }
+      const monthName = monthNames[displayMonthIndex] || `Month ${entry.month}`;
       return `${monthName} ${entry.day}`;
     };
 
     const formatYearlyRange = (range: { startMonth: number; startDay: number; endMonth: number; endDay: number }) => {
-      const startMonthName = monthNames[range.startMonth - 1] || `Month ${range.startMonth}`;
-      const endMonthName = monthNames[range.endMonth - 1] || `Month ${range.endMonth}`;
+      // CRITICAL FIX: Convert @hebcal month numbers back to display indices for Hebrew calendar
+      let startDisplayIndex = range.startMonth - 1;
+      let endDisplayIndex = range.endMonth - 1;
+      if (selectedCalendar === 'hebrew') {
+        if (range.startMonth >= 1 && range.startMonth <= 13) {
+          startDisplayIndex = HEBCAL_TO_HEBREW_MONTH[range.startMonth];
+        }
+        if (range.endMonth >= 1 && range.endMonth <= 13) {
+          endDisplayIndex = HEBCAL_TO_HEBREW_MONTH[range.endMonth];
+        }
+      }
+      const startMonthName = monthNames[startDisplayIndex] || `Month ${range.startMonth}`;
+      const endMonthName = monthNames[endDisplayIndex] || `Month ${range.endMonth}`;
       return `${startMonthName} ${range.startDay} - ${endMonthName} ${range.endDay}`;
     };
 
@@ -1546,7 +1568,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     ? config.yearlyCalendarType
     : 'gregorian';
   const yearlyMonthNames = yearlyCalendarType === 'gregorian' ? GREGORIAN_MONTHS_FULL :
-                           yearlyCalendarType === 'hebrew' ? HEBREW_MONTHS :
+                           yearlyCalendarType === 'hebrew' ? HEBREW_MONTHS_DISPLAY :
                            yearlyCalendarType === 'chinese' ? CHINESE_MONTHS :
                            ISLAMIC_MONTHS;
 
@@ -1633,11 +1655,17 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                 style={styles.confirmButton}
                 onPress={() => {
                   console.log('[GoalScheduler] User confirmed yearly date:', { month: addYearlyDateMonth, day: addYearlyDateDay });
+                  // CRITICAL FIX: Convert display month index to @hebcal month number for Hebrew calendar
+                  const hebcalMonth = yearlyCalendarType === 'hebrew' 
+                    ? HEBREW_MONTH_TO_HEBCAL[addYearlyDateMonth - 1]
+                    : addYearlyDateMonth;
+                  console.log('[GoalScheduler] Converting display month to @hebcal month:', { displayMonth: addYearlyDateMonth, hebcalMonth });
+                  
                   // Add the {month, day} entry to yearlyDates
                   const current = config.yearlyDates || [];
-                  const exists = current.some(d => d.month === addYearlyDateMonth && d.day === addYearlyDateDay);
+                  const exists = current.some(d => d.month === hebcalMonth && d.day === addYearlyDateDay);
                   if (!exists) {
-                    const updated = [...current, { month: addYearlyDateMonth, day: addYearlyDateDay }]
+                    const updated = [...current, { month: hebcalMonth, day: addYearlyDateDay }]
                       .sort((a, b) => a.month !== b.month ? a.month - b.month : a.day - b.day);
                     updateConfig({ yearlyDates: updated });
                   }
@@ -1783,11 +1811,27 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                     endMonth: yearlyRangeEndMonth,
                     endDay: yearlyRangeEndDay,
                   });
+                  
+                  // CRITICAL FIX: Convert display month indices to @hebcal month numbers for Hebrew calendar
+                  const hebcalStartMonth = yearlyCalendarType === 'hebrew'
+                    ? HEBREW_MONTH_TO_HEBCAL[yearlyRangeStartMonth - 1]
+                    : yearlyRangeStartMonth;
+                  const hebcalEndMonth = yearlyCalendarType === 'hebrew'
+                    ? HEBREW_MONTH_TO_HEBCAL[yearlyRangeEndMonth - 1]
+                    : yearlyRangeEndMonth;
+                  
+                  console.log('[GoalScheduler] Converting display months to @hebcal months:', {
+                    displayStart: yearlyRangeStartMonth,
+                    hebcalStart: hebcalStartMonth,
+                    displayEnd: yearlyRangeEndMonth,
+                    hebcalEnd: hebcalEndMonth,
+                  });
+                  
                   const current = config.yearlyRanges || [];
                   const newRange = {
-                    startMonth: yearlyRangeStartMonth,
+                    startMonth: hebcalStartMonth,
                     startDay: yearlyRangeStartDay,
-                    endMonth: yearlyRangeEndMonth,
+                    endMonth: hebcalEndMonth,
                     endDay: yearlyRangeEndDay,
                   };
                   updateConfig({ yearlyRanges: [...current, newRange] });

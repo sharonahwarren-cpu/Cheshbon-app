@@ -95,6 +95,17 @@ function isHebrewLeapYear(hebrewYear: number): boolean {
 }
 
 /**
+ * CRITICAL: @hebcal/core month numbering reference
+ * @hebcal uses Nisan-based numbering: Nisan=1, Iyar=2, Sivan=3, Tammuz=4, Av=5, Elul=6, 
+ * Tishrei=7, Cheshvan=8, Kislev=9, Tevet=10, Shevat=11, Adar=12 (Adar I=13 in leap years)
+ * 
+ * The frontend displays months in Tishrei-first order (civil year), so we need to convert:
+ * Display order: [Tishrei, Cheshvan, Kislev, Tevet, Shevat, Adar, Nisan, Iyar, Sivan, Tammuz, Av, Elul]
+ * @hebcal numbers: [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
+ */
+const HEBREW_MONTH_NAMES_HEBCAL = ['', 'Nisan', 'Iyar', 'Sivan', 'Tammuz', 'Av', 'Elul', 'Tishrei', 'Cheshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar'];
+
+/**
  * Get the next N activation dates for a goal
  * 
  * @param schedule - Goal schedule configuration
@@ -599,19 +610,19 @@ function generateYearlyActivations(
   // Elul (month 12) falls in Aug/Sep, NOT December
   if (isHebrew) {
     console.log('[ScheduleCalc] ✅ Generating Hebrew yearly activations using HebCal');
-    console.log('[ScheduleCalc] Hebrew Calendar Month Reference:');
-    console.log('  1 = Tishrei (Sep/Oct) - Rosh Hashana, Yom Kippur');
-    console.log('  2 = Cheshvan (Oct/Nov)');
-    console.log('  3 = Kislev (Nov/Dec) - Chanukah');
-    console.log('  4 = Tevet (Dec/Jan)');
-    console.log('  5 = Shevat (Jan/Feb) - Tu BiShvat');
-    console.log('  6 = Adar (Feb/Mar) - Purim');
-    console.log('  7 = Nissan (Mar/Apr) - Pesach');
-    console.log('  8 = Iyar (Apr/May) - Lag BaOmer');
-    console.log('  9 = Sivan (May/Jun) - Shavuot');
-    console.log('  10 = Tammuz (Jun/Jul)');
-    console.log('  11 = Av (Jul/Aug) - Tisha BAv');
-    console.log('  12 = Elul (Aug/Sep)');
+    console.log('[ScheduleCalc] CRITICAL: @hebcal/core uses Nisan-based month numbering (NOT Tishrei-based):');
+    console.log('  1 = Nisan (Mar/Apr) - Pesach');
+    console.log('  2 = Iyar (Apr/May) - Lag BaOmer');
+    console.log('  3 = Sivan (May/Jun) - Shavuot');
+    console.log('  4 = Tammuz (Jun/Jul)');
+    console.log('  5 = Av (Jul/Aug) - Tisha BAv');
+    console.log('  6 = Elul (Aug/Sep) ← ELUL IS MONTH 6, NOT 12!');
+    console.log('  7 = Tishrei (Sep/Oct) - Rosh Hashana, Yom Kippur');
+    console.log('  8 = Cheshvan (Oct/Nov)');
+    console.log('  9 = Kislev (Nov/Dec) - Chanukah');
+    console.log('  10 = Tevet (Dec/Jan)');
+    console.log('  11 = Shevat (Jan/Feb) - Tu BiShvat');
+    console.log('  12 = Adar (Feb/Mar) - Purim');
     console.log('[ScheduleCalc] HebCal will convert these to correct Gregorian dates');
     
     try {
@@ -635,16 +646,15 @@ function generateYearlyActivations(
           for (const entry of yearlyDates) {
             if (activations.length >= count) break;
             try {
-              // entry.month is Hebrew month: 1=Tishrei, 2=Cheshvan, 3=Kislev, 4=Tevet, 5=Shevat, 6=Adar, 7=Nissan, etc.
+              // CRITICAL: entry.month is @hebcal month number (Nisan=1, Iyar=2, ..., Elul=6, Tishrei=7, ..., Adar=12)
               // entry.day is Hebrew day of month
-              const hebrewMonthNames = ['', 'Tishrei', 'Cheshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar', 'Nissan', 'Iyar', 'Sivan', 'Tammuz', 'Av', 'Elul'];
-              const monthName = hebrewMonthNames[entry.month] || `Month ${entry.month}`;
+              const monthName = HEBREW_MONTH_NAMES_HEBCAL[entry.month] || `Month ${entry.month}`;
               
               // ✅ Create Hebrew date and let HebCal convert it to Gregorian
               const hdate = new HDate(entry.day, entry.month, currentHebrewYear);
               const gregDate = hdate.greg();
               
-              console.log(`[ScheduleCalc] ✅ Hebrew date: ${monthName} ${entry.day}, ${currentHebrewYear} → Gregorian: ${gregDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
+              console.log(`[ScheduleCalc] ✅ Hebrew date: ${monthName} ${entry.day}, ${currentHebrewYear} (month=${entry.month}) → Gregorian: ${gregDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
               
               const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
               if (activation > now && activation <= end) {
