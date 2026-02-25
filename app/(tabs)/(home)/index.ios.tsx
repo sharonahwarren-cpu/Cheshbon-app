@@ -999,14 +999,18 @@ export default function HomeScreen() {
   };
 
   const renderLifeAreaNode = (area: LifeAreaNode, depth: number = 0): React.ReactNode => {
-    const isCollapsed = collapsedAreas[area.id];
-    const goalsForThisArea = getGoalsForArea(area.id);
-    const hasChildren = area.children.length > 0;
-    const hasGoals = goalsForThisArea.length > 0;
-    
+    // Check if this area or any of its children have goals scheduled for today
     if (!hasActiveGoalsInHierarchy(area)) {
       return null;
     }
+    
+    const isCollapsed = collapsedAreas[area.id];
+    const goalsForThisArea = getGoalsForArea(area.id);
+    const hasGoals = goalsForThisArea.length > 0;
+    
+    // Filter children to only include those with active goals
+    const childrenWithGoals = area.children.filter(child => hasActiveGoalsInHierarchy(child));
+    const hasChildren = childrenWithGoals.length > 0;
     
     const areaIconName = area.icon;
     const areaColor = area.color || colors.primary;
@@ -1039,7 +1043,7 @@ export default function HomeScreen() {
               expressViewMode === 'detailed' ? renderGoalCard(goal) : renderConciseGoalCard(goal)
             )}
             
-            {hasChildren && area.children.map(child => renderLifeAreaNode(child, depth + 1))}
+            {hasChildren && childrenWithGoals.map(child => renderLifeAreaNode(child, depth + 1))}
           </>
         )}
       </View>
@@ -1468,7 +1472,7 @@ export default function HomeScreen() {
                 <>
                   {lifeAreaHierarchy.map(area => renderLifeAreaNode(area))}
                   
-                  {uncategorizedGoals.length > 0 && (
+                  {uncategorizedGoals.length > 0 && lifeAreaHierarchy.length > 0 && (
                     <View style={styles.lifeAreaSection}>
                       <View style={styles.lifeAreaHeader}>
                         <View style={styles.lifeAreaTitleRow}>
@@ -1479,6 +1483,14 @@ export default function HomeScreen() {
                         expressViewMode === 'detailed' ? renderGoalCard(goal) : renderConciseGoalCard(goal)
                       )}
                     </View>
+                  )}
+                  
+                  {uncategorizedGoals.length > 0 && lifeAreaHierarchy.length === 0 && (
+                    <>
+                      {uncategorizedGoals.map(goal => 
+                        expressViewMode === 'detailed' ? renderGoalCard(goal) : renderConciseGoalCard(goal)
+                      )}
+                    </>
                   )}
                 </>
               )}
