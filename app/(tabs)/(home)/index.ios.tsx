@@ -999,8 +999,10 @@ export default function HomeScreen() {
   };
 
   const renderLifeAreaNode = (area: LifeAreaNode, depth: number = 0): React.ReactNode => {
-    // Check if this area or any of its children have goals scheduled for today
+    // CRITICAL FIX: Check if this area or any of its children have goals scheduled for today
+    // If not, don't render anything (not even the header)
     if (!hasActiveGoalsInHierarchy(area)) {
+      console.log(`[Home iOS] Skipping life area "${area.name}" - no active goals in hierarchy`);
       return null;
     }
     
