@@ -718,7 +718,43 @@ export function registerMitzvotRoutes(app: App) {
   });
 
   // POST /api/mitzvot/import-csv - Import mitzvot from CSV file
-  app.fastify.post('/api/mitzvot/import-csv', async (
+  app.fastify.post('/api/mitzvot/import-csv', {
+    schema: {
+      description: 'Import mitzvot from a CSV file',
+      tags: ['mitzvot'],
+      consumes: ['multipart/form-data'],
+      response: {
+        200: {
+          description: 'Import successful with summary of results',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            imported: { type: 'integer', description: 'Number of successfully imported mitzvot' },
+            skipped: { type: 'integer', description: 'Number of rows skipped' },
+            errors: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'List of error messages for problematic rows',
+            },
+          },
+        },
+        400: {
+          description: 'Invalid file or CSV format',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+        401: {
+          description: 'Unauthorized',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
@@ -895,6 +931,113 @@ export function registerMitzvotRoutes(app: App) {
       return { totalSystemMitzvot, userHasImported };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch import status');
+      throw error;
+    }
+  });
+
+  // GET /api/mitzvot/template-csv - Get CSV template for importing mitzvot
+  app.fastify.get('/api/mitzvot/template-csv', {
+    schema: {
+      description: 'Download a CSV template file for importing mitzvot',
+      tags: ['mitzvot'],
+      response: {
+        200: {
+          description: 'CSV template file',
+          type: 'string',
+          format: 'binary',
+        },
+        401: {
+          description: 'Unauthorized',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Downloading mitzvot CSV template');
+
+    try {
+      // CSV headers for the template
+      const headers = [
+        'title',
+        'description',
+        'mitzvah_number',
+        'source',
+        'hebrew_name',
+        'type',
+        'applies_to',
+        'location',
+        'time_period',
+        'category_name',
+        'schedule_type',
+      ];
+
+      // Create sample rows for the template
+      const sampleRows = [
+        [
+          'Shabbat Observance',
+          'Keep the Sabbath day holy',
+          '4',
+          'Torah',
+          'שמירת השבת',
+          'PROACTIVE',
+          'All Jews',
+          'Home',
+          'Weekly - Friday to Saturday',
+          'Observances',
+          'weekly',
+        ],
+        [
+          'Tefillin',
+          'Bind phylacteries on arm and head during morning prayers',
+          '12',
+          'Torah',
+          'תפילין',
+          'PROACTIVE',
+          'Jewish men',
+          'Synagogue/Home',
+          'Daily morning',
+          'Prayer/Blessings',
+          'daily',
+        ],
+        [
+          'Tzedakah',
+          'Give charity to the poor',
+          '195',
+          'Torah',
+          'צדקה',
+          'PROACTIVE',
+          'All Jews',
+          'Community',
+          'Year-round',
+          'Charity',
+          'always',
+        ],
+      ];
+
+      // Build CSV content
+      const csvContent = [
+        headers.join(','),
+        ...sampleRows.map(row => row.map(cell => `"${cell}"`).join(',')),
+      ].join('\n');
+
+      // Set response headers for file download
+      reply.header('Content-Type', 'text/csv');
+      reply.header('Content-Disposition', 'attachment; filename="mitzvot_template.csv"');
+      reply.header('Content-Length', Buffer.byteLength(csvContent));
+
+      app.logger.info({ userId: session.user.id }, 'CSV template downloaded successfully');
+      return csvContent;
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to generate CSV template');
       throw error;
     }
   });
