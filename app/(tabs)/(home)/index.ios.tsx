@@ -1014,6 +1014,13 @@ export default function HomeScreen() {
     const childrenWithGoals = area.children.filter(child => hasActiveGoalsInHierarchy(child));
     const hasChildren = childrenWithGoals.length > 0;
     
+    // CRITICAL FIX: If this area has no direct goals AND no children with goals, don't render it
+    // This prevents empty life area headers from showing
+    if (!hasGoals && !hasChildren) {
+      console.log(`[Home iOS] Skipping life area "${area.name}" - no direct goals and no children with goals`);
+      return null;
+    }
+    
     const areaIconName = area.icon;
     const areaColor = area.color || colors.primary;
     
