@@ -56,8 +56,9 @@ export default function MitzvotScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'all' | 'ACTIVE' | 'DEACTIVATED'>('ACTIVE');
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importStatus, setImportStatus] = useState<{ totalSystemMitzvot: number; userHasImported: boolean } | null>(null);
+  const [importStatus, setImportStatus] = useState<{ totalSystemMitzvot: number; userHasImported: boolean; systemMitzvotAvailable: boolean } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [initializingSystem, setInitializingSystem] = useState(false);
 
   useFocusEffect(useCallback(() => { loadData(); loadImportStatus(); }, []));
 
@@ -81,10 +82,17 @@ export default function MitzvotScreen() {
   const loadImportStatus = async () => {
     try {
       console.log('[Mitzvot] Loading import status...');
-      const status = await authenticatedGet<{ totalSystemMitzvot: number; userHasImported: boolean }>('/api/mitzvot/import-status');
-      setImportStatus(status);
+      const status = await authenticatedGet<{ totalSystemMitzvot: number; userHasImported: boolean; systemMitzvotAvailable?: boolean }>('/api/mitzvot/import-status');
+      // Ensure systemMitzvotAvailable is always a boolean (handle older backend versions)
+      setImportStatus({
+        totalSystemMitzvot: status.totalSystemMitzvot ?? 0,
+        userHasImported: status.userHasImported ?? false,
+        systemMitzvotAvailable: status.systemMitzvotAvailable ?? true,
+      });
     } catch (error) {
       console.log('[Mitzvot] Failed to load import status:', error);
+      // Default to showing the initialize option if status check fails
+      setImportStatus({ totalSystemMitzvot: 0, userHasImported: false, systemMitzvotAvailable: true });
     }
   };
 
@@ -180,6 +188,44 @@ export default function MitzvotScreen() {
     } catch (error: any) {
       console.error('[Mitzvot] Template download error:', error);
       showError(error.message || 'Failed to download template');
+    }
+  };
+
+  const handleInitializeSystemMitzvot = async () => {
+    try {
+      console.log('[Mitzvot] Initializing system mitzvot from pre-uploaded CSV...');
+      setInitializingSystem(true);
+      setShowImportModal(false);
+
+      const result = await authenticatedPost('/api/mitzvot/initialize-system', {});
+      console.log('[Mitzvot] Initialize result:', result);
+
+      const importedCount = result.imported || 0;
+      const skippedCount = result.skipped || 0;
+      const errors = result.errors || [];
+
+      let message = '';
+      if (importedCount > 0) {
+        message = `Successfully initialized ${importedCount} system mitzvot!`;
+      } else if (skippedCount > 0) {
+        message = `System mitzvot already initialized (${skippedCount} existing)`;
+      }
+
+      if (errors.length > 0) {
+        message += `\n\nWarnings:\n${errors.slice(0, 3).join('\n')}`;
+        if (errors.length > 3) {
+          message += `\n...and ${errors.length - 3} more`;
+        }
+      }
+
+      showSuccess(message);
+      await loadData();
+      await loadImportStatus();
+    } catch (error: any) {
+      console.error('[Mitzvot] Initialize system mitzvot error:', error);
+      showError(error.message || 'Failed to initialize system mitzvot');
+    } finally {
+      setInitializingSystem(false);
     }
   };
 
@@ -469,46 +515,109 @@ export default function MitzvotScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.importModalBody}>
-              <View style={styles.importInfoCard}>
-                <IconSymbol ios_icon_name="info.circle.fill" android_material_icon_name="info" size={32} color={colors.accent} />
-                <Text style={styles.importInfoTitle}>Import 613 Mitzvot</Text>
-                <Text style={styles.importInfoText}>
-                  Upload a CSV file containing the mitzvot data. The file should include columns for mitzvah details such as number, title, description, category, type, and more.
-                </Text>
-                {importStatus && importStatus.userHasImported && (
-                  <View style={styles.importWarning}>
-                    <IconSymbol ios_icon_name="exclamationmark.triangle.fill" android_material_icon_name="warning" size={20} color={colors.warning} />
-                    <Text style={styles.importWarningText}>
-                      You have already imported {importStatus.totalSystemMitzvot} system mitzvot. Importing again will skip duplicates.
+              {/* System Mitzvot Section - shown when available */}
+              {importStatus?.systemMitzvotAvailable && (
+                <View style={[styles.systemImportCard, importStatus.userHasImported && styles.systemImportCardDone]}>
+                  <View style={styles.systemImportHeader}>
+                    <IconSymbol
+                      ios_icon_name={importStatus.userHasImported ? 'checkmark.seal.fill' : 'star.fill'}
+                      android_material_icon_name={importStatus.userHasImported ? 'verified' : 'star'}
+                      size={24}
+                      color={importStatus.userHasImported ? colors.success : colors.primary}
+                    />
+                    <Text style={styles.systemImportTitle}>
+                      {importStatus.userHasImported ? 'System Mitzvot Initialized' : 'Initialize System Mitzvot'}
                     </Text>
                   </View>
-                )}
+                  {importStatus.userHasImported ? (
+                    <>
+                      <Text style={styles.systemImportText}>
+                        You have {importStatus.totalSystemMitzvot} system mitzvot loaded. You can edit, delete, or add more mitzvot from the main list.
+                      </Text>
+                      <View style={styles.importWarning}>
+                        <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={18} color={colors.success} />
+                        <Text style={styles.importWarningText}>
+                          {importStatus.totalSystemMitzvot} system mitzvot are active in your account
+                        </Text>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.systemImportText}>
+                        Load the pre-configured Mitzvot from the system database. These will be added to your account and you can edit, delete, or add to them.
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.systemImportButton}
+                        onPress={handleInitializeSystemMitzvot}
+                        disabled={initializingSystem}
+                      >
+                        {initializingSystem ? (
+                          <ActivityIndicator color={colors.background} />
+                        ) : (
+                          <>
+                            <IconSymbol ios_icon_name="sparkles" android_material_icon_name="auto-awesome" size={20} color={colors.background} />
+                            <Text style={styles.systemImportButtonText}>Initialize System Mitzvot</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              )}
+
+              {/* Show info card when system mitzvot not available and user hasn't imported */}
+              {!importStatus?.systemMitzvotAvailable && !importStatus?.userHasImported && (
+                <View style={styles.importInfoCard}>
+                  <IconSymbol ios_icon_name="info.circle.fill" android_material_icon_name="info" size={32} color={colors.accent} />
+                  <Text style={styles.importInfoTitle}>Import Mitzvot</Text>
+                  <Text style={styles.importInfoText}>
+                    Upload your own CSV file with mitzvot data, or contact your administrator to set up system mitzvot.
+                  </Text>
+                </View>
+              )}
+
+              {/* Divider between system and custom import */}
+              {importStatus?.systemMitzvotAvailable && (
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+              )}
+
+              <View style={styles.customImportSection}>
+                <Text style={styles.customImportTitle}>Import Custom CSV</Text>
+                <Text style={styles.customImportText}>
+                  Upload your own CSV file with mitzvot data. Download the template to see the required format.
+                </Text>
+                <TouchableOpacity style={styles.templateButton} onPress={handleDownloadTemplate}>
+                  <IconSymbol ios_icon_name="arrow.down.circle.fill" android_material_icon_name="download" size={20} color={colors.accent} />
+                  <Text style={styles.templateButtonText}>Download CSV Template</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.importButton} onPress={handleImportCSV} disabled={importing}>
+                  {importing ? (
+                    <ActivityIndicator color={colors.background} />
+                  ) : (
+                    <>
+                      <IconSymbol ios_icon_name="doc.badge.plus" android_material_icon_name="note-add" size={24} color={colors.background} />
+                      <Text style={styles.importButtonText}>Select CSV File</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <Text style={styles.importNote}>Maximum file size: 5MB</Text>
               </View>
-              <TouchableOpacity style={styles.templateButton} onPress={handleDownloadTemplate}>
-                <IconSymbol ios_icon_name="arrow.down.circle.fill" android_material_icon_name="download" size={20} color={colors.accent} />
-                <Text style={styles.templateButtonText}>Download CSV Template</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.importButton} onPress={handleImportCSV} disabled={importing}>
-                {importing ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <>
-                    <IconSymbol ios_icon_name="doc.badge.plus" android_material_icon_name="note-add" size={24} color={colors.background} />
-                    <Text style={styles.importButtonText}>Select CSV File</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.importNote}>Maximum file size: 5MB</Text>
             </View>
           </View>
         </View>
       </Modal>
 
-      {importing && (
+      {(importing || initializingSystem) && (
         <View style={styles.importingOverlay}>
           <View style={styles.importingCard}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.importingText}>Importing mitzvot...</Text>
+            <Text style={styles.importingText}>
+              {initializingSystem ? 'Initializing system mitzvot...' : 'Importing mitzvot...'}
+            </Text>
             <Text style={styles.importingSubtext}>This may take a moment</Text>
           </View>
         </View>
@@ -601,4 +710,17 @@ const styles = StyleSheet.create({
   importingCard: { backgroundColor: colors.background, borderRadius: 16, padding: 32, alignItems: 'center', gap: 16, minWidth: 200 },
   importingText: { fontSize: 18, fontWeight: '600', color: colors.text },
   importingSubtext: { fontSize: 14, color: colors.textSecondary },
+  systemImportCard: { backgroundColor: colors.primary + '15', borderRadius: 12, padding: 20, marginBottom: 20, borderWidth: 2, borderColor: colors.primary + '40' },
+  systemImportCardDone: { backgroundColor: colors.success + '15', borderColor: colors.success + '40' },
+  systemImportHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  systemImportTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text },
+  systemImportText: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: 16 },
+  systemImportButton: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 14, borderRadius: 10 },
+  systemImportButtonText: { fontSize: 15, fontWeight: '600', color: colors.background },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { marginHorizontal: 12, fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  customImportSection: { marginTop: 8 },
+  customImportTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  customImportText: { fontSize: 14, color: colors.textSecondary, lineHeight: 20, marginBottom: 16 },
 });
