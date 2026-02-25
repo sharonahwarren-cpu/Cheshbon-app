@@ -7,8 +7,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Switch,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -112,9 +113,11 @@ export function formatDualDate(date: Date, calendarType: CalendarType): string {
 }
 
 export default function AlternativeCalendarsScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedCalendar, setSelectedCalendar] = useState<CalendarType>('gregorian');
+  const [mitzvotGoalsEnabled, setMitzvotGoalsEnabled] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -132,6 +135,7 @@ export default function AlternativeCalendarsScreen() {
       console.log('[AlternativeCalendars] Preferences loaded:', data);
       const prefs = (data as any)?.data || data;
       setSelectedCalendar((prefs.alternativeCalendar as CalendarType) ?? 'gregorian');
+      setMitzvotGoalsEnabled(prefs.mitzvotGoalsEnabled ?? false);
     } catch (error) {
       console.error('[AlternativeCalendars] Error loading preferences:', error);
       setErrorMessage('Failed to load preferences');
@@ -163,6 +167,31 @@ export default function AlternativeCalendarsScreen() {
     await saveCalendar(calendar);
   };
 
+  const toggleMitzvotGoals = async (enabled: boolean) => {
+    console.log('[AlternativeCalendars] Toggling Mitzvot goals:', enabled);
+    setMitzvotGoalsEnabled(enabled);
+    setSaving(true);
+    try {
+      await authenticatedPut('/api/user-preferences', { mitzvotGoalsEnabled: enabled });
+      console.log('[AlternativeCalendars] Mitzvot goals preference saved');
+      setSuccessMessage(enabled ? 'Mitzvot goals activated' : 'Mitzvot goals deactivated');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.error('[AlternativeCalendars] Error saving Mitzvot preference:', error);
+      setErrorMessage('Failed to save preference');
+      setTimeout(() => setErrorMessage(''), 3000);
+      // Revert on error
+      setMitzvotGoalsEnabled(!enabled);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleManageMitzvot = () => {
+    console.log('[AlternativeCalendars] Navigating to Mitzvot screen');
+    router.push('/mitzvot' as any);
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -173,6 +202,8 @@ export default function AlternativeCalendarsScreen() {
       </SafeAreaView>
     );
   }
+
+  const showMitzvotSection = selectedCalendar === 'hebrew';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -226,6 +257,52 @@ export default function AlternativeCalendarsScreen() {
             </TouchableOpacity>
           );
         })}
+
+        {showMitzvotSection && (
+          <View style={styles.mitzvotSection}>
+            <View style={styles.mitzvotHeader}>
+              <View style={styles.mitzvotTitleRow}>
+                <IconSymbol
+                  ios_icon_name="star.fill"
+                  android_material_icon_name="star"
+                  size={24}
+                  color={colors.accent}
+                />
+                <Text style={styles.mitzvotTitle}>Mitzvot Goals</Text>
+              </View>
+              <Switch
+                value={mitzvotGoalsEnabled}
+                onValueChange={toggleMitzvotGoals}
+                disabled={saving}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor={colors.background}
+              />
+            </View>
+            <Text style={styles.mitzvotDescription}>
+              Enable Mitzvot goals to track the 613 commandments from Jewish tradition. You can manage and import Mitzvot from a CSV file.
+            </Text>
+            {mitzvotGoalsEnabled && (
+              <TouchableOpacity
+                style={styles.manageMitzvotButton}
+                onPress={handleManageMitzvot}
+              >
+                <IconSymbol
+                  ios_icon_name="list.bullet"
+                  android_material_icon_name="list"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.manageMitzvotButtonText}>Manage Mitzvot & Import CSV</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="arrow-forward"
+                  size={18}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {selectedCalendar !== 'gregorian' && (
           <View style={styles.previewCard}>
@@ -350,6 +427,52 @@ const styles = StyleSheet.create({
   optionDescriptionSelected: {
     color: colors.primary,
     opacity: 0.8,
+  },
+  mitzvotSection: {
+    backgroundColor: `${colors.accent}10`,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: `${colors.accent}30`,
+  },
+  mitzvotHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  mitzvotTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  mitzvotTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  mitzvotDescription: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  manageMitzvotButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: colors.card,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  manageMitzvotButtonText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
   },
   previewCard: {
     backgroundColor: colors.card,
