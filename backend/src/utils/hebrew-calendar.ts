@@ -91,6 +91,35 @@ export function isHebrewDateMatch(gregorianDate: Date, hebrewMonth: number, hebr
 }
 
 /**
+ * Normalize event names for comparison
+ * Removes spaces, hyphens, and apostrophes and converts to lowercase
+ */
+function normalizeEventName(name: string): string {
+  return name.toLowerCase().replace(/[\s\-']/g, '');
+}
+
+/**
+ * Check if a normalized event description matches the normalized search term
+ * Handles multi-day events like "Rosh Hashana", "Rosh Hashana II", "Rosh Hashana 5786"
+ */
+function eventNameMatches(eventDesc: string, normalizedSearchTerm: string): boolean {
+  const normalizedDesc = normalizeEventName(eventDesc);
+
+  // Handle "Rosh Hashana" / "Rosh Hashanah" - match variations but not "Rosh Chodesh"
+  if (normalizedSearchTerm === 'roshhashana' || normalizedSearchTerm === 'roshhashanah') {
+    return normalizedDesc.startsWith('roshhashana') || normalizedDesc.startsWith('roshhashanah');
+  }
+
+  // Handle "Rosh Chodesh" - match only Rosh Chodesh variations
+  if (normalizedSearchTerm === 'roshchodesh') {
+    return normalizedDesc.startsWith('roshchodesh');
+  }
+
+  // For other events, use startsWith to catch multi-day events
+  return normalizedDesc.startsWith(normalizedSearchTerm);
+}
+
+/**
  * Get all occurrences of a Hebrew calendar event (e.g., "Rosh Hashana", "Rosh Chodesh") within a date range
  * Uses EXACT string matching to prevent confusion between similar event names
  * (e.g., "Rosh Hashana" should NOT match "Rosh Chodesh")
@@ -103,25 +132,26 @@ export function getHebrewCalendarEventDates(
   const dates: Date[] = [];
 
   try {
-    // Create a Hebrew calendar instance for the range
-    const hcal = new HebrewCalendar({
+    // Normalize the search term once
+    const normalizedSearch = normalizeEventName(eventName);
+
+    // Get all events in the range using the correct HebrewCalendar.calendar() method
+    const events = HebrewCalendar.calendar({
+      start: startDate,
+      end: endDate,
       isHebrewYear: false,
-      noModern: false,
-      noMinorFast: true,
-      noMinorHoliday: false,
-      noHolidays: false,
       sedrot: false,
+      omer: false,
+      shabbat: false,
+      noHolidays: false,
     });
 
-    // Get all events in the range
-    const events = hcal.between(startDate, endDate);
-
-    // Filter for exact event name match (case-insensitive comparison)
+    // Filter for matching event names
     for (const event of events) {
       const eventDesc = event.getDesc();
-      // Use EXACT matching with === comparison (case-insensitive)
-      if (eventDesc && eventDesc.toLowerCase() === eventName.toLowerCase()) {
+      if (eventDesc && eventNameMatches(eventDesc, normalizedSearch)) {
         const eventDate = event.getDate().toJSDate();
+        // Ensure the date is within the requested range
         if (eventDate >= startDate && eventDate <= endDate) {
           dates.push(eventDate);
         }
@@ -140,26 +170,38 @@ export function getHebrewCalendarEventDates(
  */
 export function isHebrewEventMatch(gregorianDate: Date, eventName: string): boolean {
   try {
-    // Create a Hebrew calendar instance for just this date
-    const hcal = new HebrewCalendar({
-      isHebrewYear: false,
-      noModern: false,
-      noMinorFast: true,
-      noMinorHoliday: false,
-      noHolidays: false,
-      sedrot: false,
-    });
+    // Normalize the search term once
+    const normalizedSearch = normalizeEventName(eventName);
 
-    // Get events for this specific date
+    // Check a range from day before to day after to catch multi-day events
+    const startDate = new Date(gregorianDate);
+    startDate.setDate(startDate.getDate() - 1);
+
     const endDate = new Date(gregorianDate);
     endDate.setDate(endDate.getDate() + 1);
 
-    const events = hcal.between(gregorianDate, endDate);
+    // Get events in the range using the correct HebrewCalendar.calendar() method
+    const events = HebrewCalendar.calendar({
+      start: startDate,
+      end: endDate,
+      isHebrewYear: false,
+      sedrot: false,
+      omer: false,
+      shabbat: false,
+      noHolidays: false,
+    });
 
-    // Check for exact event name match (case-insensitive)
+    // Check for exact event name match on the specific date
     for (const event of events) {
       const eventDesc = event.getDesc();
-      if (eventDesc && eventDesc.toLowerCase() === eventName.toLowerCase()) {
+      const eventDate = event.getDate().toJSDate();
+
+      // Only match if the event matches AND falls on the exact date being checked
+      if (
+        eventDesc &&
+        eventNameMatches(eventDesc, normalizedSearch) &&
+        eventDate.toDateString() === gregorianDate.toDateString()
+      ) {
         return true;
       }
     }
