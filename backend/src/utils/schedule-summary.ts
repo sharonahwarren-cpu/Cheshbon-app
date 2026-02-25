@@ -4,6 +4,7 @@
 
 import { HEBREW_MONTHS, ISLAMIC_MONTHS, CHINESE_MONTHS, GREGORIAN_MONTHS, gregorianToHebrew, hebrewToGregorian, isHebrewLeapYear, getHebrewDateOccurrences } from './calendar.js';
 import { getNextActivations, type ScheduleConfig } from './goal-scheduler.js';
+import { getHebrewDate } from './hebrew-calendar.js';
 
 export interface ScheduleSummaryRequest {
   scheduleType?: string;
@@ -18,6 +19,9 @@ export interface ScheduleSummaryRequest {
   scheduleWeekendsOnly?: boolean;
   scheduleWeekdaysOnly?: boolean;
   calendarType?: string;
+  monthlyUseAlternativeCalendar?: boolean;
+  monthlyCalendarType?: string;
+  monthlyCalendarEvent?: string;
   eventType?: string;
   timezone?: string;
   startDate?: Date;
@@ -150,8 +154,20 @@ function summarizeFortnightly(config: ScheduleSummaryRequest): string {
 function summarizeMonthly(config: ScheduleSummaryRequest): string {
   const parts: string[] = [];
 
-  // Specific dates
-  if (config.scheduleDatesOfMonth && config.scheduleDatesOfMonth.length > 0) {
+  // Check if using Hebrew calendar
+  const isHebrewCalendar = config.monthlyUseAlternativeCalendar && config.monthlyCalendarType === 'hebrew';
+
+  // Hebrew calendar event
+  if (isHebrewCalendar && config.monthlyCalendarEvent) {
+    parts.push(`on Hebrew calendar event: ${config.monthlyCalendarEvent}`);
+  }
+  // Hebrew calendar specific dates
+  else if (isHebrewCalendar && config.scheduleDatesOfMonth && config.scheduleDatesOfMonth.length > 0) {
+    const dates = config.scheduleDatesOfMonth.map(d => formatOrdinal(d));
+    parts.push(`the ${dates.join(' and ')} of every Hebrew month`);
+  }
+  // Gregorian calendar specific dates
+  else if (config.scheduleDatesOfMonth && config.scheduleDatesOfMonth.length > 0) {
     const dates = config.scheduleDatesOfMonth.map(d => formatOrdinal(d));
     parts.push(`the ${dates.join(' and ')} of every month`);
   }
@@ -168,7 +184,8 @@ function summarizeMonthly(config: ScheduleSummaryRequest): string {
     const range = config.scheduleMonthlyRange as any;
     const startOrdinal = formatOrdinal(range.start);
     const endOrdinal = formatOrdinal(range.end);
-    parts.push(`between the ${startOrdinal} and ${endOrdinal} of every month`);
+    const calendarLabel = isHebrewCalendar ? ' Hebrew' : '';
+    parts.push(`between the ${startOrdinal} and ${endOrdinal} of every${calendarLabel} month`);
   }
 
   if (parts.length === 0) {
@@ -384,7 +401,28 @@ function determineOccurrenceSource(
       };
 
     case 'monthly':
-      // Check if it's a selected date
+      // Check if it's a Hebrew calendar event
+      const isHebrewCalendar = config.monthlyUseAlternativeCalendar && config.monthlyCalendarType === 'hebrew';
+
+      if (isHebrewCalendar && config.monthlyCalendarEvent) {
+        return {
+          section: 'Monthly - Hebrew Calendar Event',
+          details: config.monthlyCalendarEvent,
+        };
+      }
+
+      // Check if it's a Hebrew calendar selected date
+      if (isHebrewCalendar && config.scheduleDatesOfMonth) {
+        const hebrewDate = getHebrewDate(date);
+        if (config.scheduleDatesOfMonth.includes(hebrewDate.day)) {
+          return {
+            section: 'Monthly - Hebrew Calendar Selected Dates',
+            details: `${formatOrdinal(hebrewDate.day)} of Hebrew month`,
+          };
+        }
+      }
+
+      // Check if it's a selected date (Gregorian)
       if (config.scheduleDatesOfMonth?.includes(dayOfMonth)) {
         return {
           section: 'Monthly - Selected Dates',
@@ -492,6 +530,9 @@ export function getNextOccurrencesForDisplay(
       monthlyDates: config.scheduleDatesOfMonth,
       nthDayOfMonth: config.scheduleNthDayOfMonth,
       monthlyRange: config.scheduleMonthlyRange,
+      monthlyUseAlternativeCalendar: config.monthlyUseAlternativeCalendar,
+      monthlyCalendarType: config.monthlyCalendarType,
+      monthlyCalendarEvent: config.monthlyCalendarEvent,
       fortnightEvenOdd: config.scheduleFortnightEvenOdd as any,
       yearlyMonths: config.scheduleDatesOfYear ? config.scheduleDatesOfYear.map((r: any) => r.month) : undefined,
       yearlyDatesOrRanges: config.scheduleDatesOfYear,

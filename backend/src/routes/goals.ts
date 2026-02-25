@@ -172,6 +172,9 @@ export function registerGoalRoutes(app: App) {
         scheduleMonthlyRange,
         scheduleMonthlyRandomCount: goal.scheduleMonthlyRandomCount,
         scheduleExclusions,
+        monthlyUseAlternativeCalendar: goal.monthlyUseAlternativeCalendar,
+        monthlyCalendarType: goal.monthlyCalendarType,
+        monthlyCalendarEvent: goal.monthlyCalendarEvent,
       };
 
       app.logger.info({ userId: session.user.id, goalId: id }, 'Goal retrieved successfully');
@@ -299,6 +302,9 @@ export function registerGoalRoutes(app: App) {
       scheduleMonthlyRange?: { start: number; end: number };
       scheduleMonthlyRandomCount?: number;
       scheduleExclusions?: string[];
+      monthlyUseAlternativeCalendar?: boolean;
+      monthlyCalendarType?: string;
+      monthlyCalendarEvent?: string;
     };
 
 
@@ -443,6 +449,9 @@ export function registerGoalRoutes(app: App) {
       scheduleMonthlyRange?: { start: number; end: number };
       scheduleMonthlyRandomCount?: number;
       scheduleExclusions?: string[];
+      monthlyUseAlternativeCalendar?: boolean;
+      monthlyCalendarType?: string;
+      monthlyCalendarEvent?: string;
     };
 
     // Log raw request details
@@ -603,6 +612,12 @@ export function registerGoalRoutes(app: App) {
       if (body.scheduleMonthlyRange !== undefined) updateData.scheduleMonthlyRange = parseJsonbField(body.scheduleMonthlyRange);
       if (body.scheduleMonthlyRandomCount !== undefined) updateData.scheduleMonthlyRandomCount = body.scheduleMonthlyRandomCount || null;
       if (body.scheduleExclusions !== undefined) updateData.scheduleExclusions = parseJsonbField(body.scheduleExclusions);
+
+      // Handle monthly calendar fields for Hebrew calendar support
+      if (body.monthlyUseAlternativeCalendar !== undefined) updateData.monthlyUseAlternativeCalendar = body.monthlyUseAlternativeCalendar;
+      if (body.monthlyCalendarType !== undefined) updateData.monthlyCalendarType = body.monthlyCalendarType || null;
+      if (body.monthlyCalendarEvent !== undefined) updateData.monthlyCalendarEvent = body.monthlyCalendarEvent || null;
+
       updateData.updatedAt = new Date();
 
       // Log what's being sent to the database
@@ -877,7 +892,68 @@ export function registerGoalRoutes(app: App) {
   });
 
   // GET /api/goals/:id/schedule-summary - Get human-readable schedule summary
-  app.fastify.get('/api/goals/:id/schedule-summary', async (
+  app.fastify.get('/api/goals/:id/schedule-summary', {
+    schema: {
+      description: 'Get human-readable schedule summary with next occurrences for a goal',
+      tags: ['goals'],
+      params: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string', format: 'uuid', description: 'Goal ID' },
+        },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          occurrences: { type: 'string', description: 'Number of next occurrences to return (max 10)' },
+        },
+      },
+      response: {
+        200: {
+          description: 'Schedule summary with next occurrences',
+          type: 'object',
+          properties: {
+            goalId: { type: 'string' },
+            goalTitle: { type: 'string' },
+            summary: { type: 'string' },
+            nextOccurrences: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  date: { type: 'string' },
+                  source: {
+                    type: 'object',
+                    properties: {
+                      section: { type: 'string' },
+                      details: { type: 'string' },
+                    },
+                  },
+                },
+              },
+            },
+            calendarType: { type: 'string' },
+            recurrenceType: { type: 'string' },
+          },
+        },
+        404: {
+          description: 'Goal not found',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+        403: {
+          description: 'Unauthorized access to goal',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
@@ -948,6 +1024,9 @@ export function registerGoalRoutes(app: App) {
         scheduleTimesPerDayDetails: goal.scheduleTimesPerDayDetails ? (typeof goal.scheduleTimesPerDayDetails === 'string' ? JSON.parse(goal.scheduleTimesPerDayDetails) : goal.scheduleTimesPerDayDetails) : undefined,
         scheduleWeekendsOnly: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') ? goal.scheduleWeekendsOnly : false,
         scheduleWeekdaysOnly: (scheduleType === 'Weekly' || scheduleType === 'Fortnightly') ? goal.scheduleWeekdaysOnly : false,
+        monthlyUseAlternativeCalendar: scheduleType === 'Monthly' ? goal.monthlyUseAlternativeCalendar : undefined,
+        monthlyCalendarType: scheduleType === 'Monthly' ? goal.monthlyCalendarType : undefined,
+        monthlyCalendarEvent: scheduleType === 'Monthly' ? goal.monthlyCalendarEvent : undefined,
         calendarType: goal.calendarType,
         eventType: goal.eventType,
         timezone: timezone,
