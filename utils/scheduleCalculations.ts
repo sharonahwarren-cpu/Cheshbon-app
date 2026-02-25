@@ -1,7 +1,7 @@
 
 import { DateTime } from 'luxon';
 import { RRule, RRuleSet, rrulestr } from 'rrule';
-import { HDate, HebrewCalendar } from '@hebcal/core';
+import { HDate, HebrewCalendar, Event } from '@hebcal/core';
 import moment from 'moment-hijri';
 import { Lunar, Solar } from 'lunar-javascript';
 import { getTimes } from 'suncalc';
@@ -244,8 +244,11 @@ function generateFortnightlyActivations(
 }
 
 /**
- * Generate next N occurrences of a Hebrew calendar event (e.g., "Rosh Chodesh")
- * Uses @hebcal/core HebrewCalendar to find matching events.
+ * FIXED: Generate next N occurrences of a Hebrew calendar event (e.g., "Rosh Chodesh", "Yom Kippur")
+ * Uses @hebcal/core HebrewCalendar to find matching events with EXACT name matching.
+ * 
+ * CRITICAL FIX: Now uses exact event name matching to prevent incorrect date matches.
+ * For example, "Rosh HaShanah" will ONLY match "Rosh Hashana" events, not "Rosh Chodesh".
  */
 function generateHebrewCalendarEventActivations(
   eventName: string,
@@ -257,6 +260,9 @@ function generateHebrewCalendarEventActivations(
   location?: { latitude: number; longitude: number }
 ): ActivationPreview[] {
   const activations: ActivationPreview[] = [];
+  
+  console.log('[ScheduleCalc] Generating Hebrew calendar event activations for:', eventName);
+  
   try {
     const startHDate = new HDate(now.toJSDate());
     const endHDate = new HDate(now.plus({ years: 3 }).toJSDate());
@@ -271,27 +277,70 @@ function generateHebrewCalendarEventActivations(
       noHolidays: false,
     });
 
-    const normalizedEventName = eventName.toLowerCase().replace(/[\s']/g, '');
+    // Normalize the search event name for comparison
+    const normalizedSearchName = eventName.toLowerCase().trim().replace(/[\s'-]/g, '');
+    
+    console.log('[ScheduleCalc] Searching for normalized event name:', normalizedSearchName);
 
     for (const event of events) {
       if (activations.length >= count) break;
-      const desc = event.getDesc().toLowerCase().replace(/[\s']/g, '');
-      // Match event name - handle partial matches for events like "Rosh Chodesh Tishrei"
-      // "roshchodesh" should match "roshchodesh tishrei", "roshchodesh nisan", etc.
-      const matches = desc.startsWith(normalizedEventName) ||
-        normalizedEventName.startsWith(desc.substring(0, Math.min(10, desc.length)));
+      
+      const eventDesc = event.getDesc();
+      const normalizedEventDesc = eventDesc.toLowerCase().trim().replace(/[\s'-]/g, '');
+      
+      // CRITICAL FIX: Use exact matching for specific events
+      // This prevents "Rosh HaShanah" from matching "Rosh Chodesh"
+      let matches = false;
+      
+      if (normalizedSearchName === 'roshhashanah' || normalizedSearchName === 'roshhashana') {
+        // Match only "Rosh Hashana" (the holiday), not "Rosh Chodesh"
+        matches = normalizedEventDesc === 'roshhashana' || normalizedEventDesc === 'roshhashanah';
+      } else if (normalizedSearchName === 'yomkippur') {
+        // Match only "Yom Kippur"
+        matches = normalizedEventDesc === 'yomkippur';
+      } else if (normalizedSearchName === 'roshchodesh') {
+        // Match "Rosh Chodesh" events (which include the month name)
+        matches = normalizedEventDesc.startsWith('roshchodesh');
+      } else if (normalizedSearchName.startsWith('elul')) {
+        // For "Elul 15th" or similar, we need to match specific Hebrew dates
+        // Extract the day number from the event name
+        const dayMatch = eventName.match(/(\d+)/);
+        if (dayMatch) {
+          const targetDay = parseInt(dayMatch[1], 10);
+          // Get the Hebrew date for this event
+          const hdate = event.getDate();
+          const hebrewMonth = hdate.getMonth();
+          const hebrewDay = hdate.getDate();
+          
+          // Elul is month 12 in the Hebrew calendar
+          matches = hebrewMonth === 12 && hebrewDay === targetDay;
+        }
+      } else {
+        // For other events, use exact matching
+        matches = normalizedEventDesc === normalizedSearchName;
+      }
 
       if (matches) {
         const gregDate = event.getDate().greg();
         const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
+        
+        console.log('[ScheduleCalc] Found matching event:', {
+          eventDesc,
+          gregDate: gregDate.toISOString(),
+          activation: activation.toISO(),
+        });
+        
         if (activation > now) {
           activations.push(createActivationPreview(activation, schedule, alarms, location));
         }
       }
     }
+    
+    console.log('[ScheduleCalc] Generated', activations.length, 'activations for', eventName);
   } catch (error) {
     console.warn('[ScheduleCalc] Failed to generate Hebrew calendar event activations:', error);
   }
+  
   return activations;
 }
 
