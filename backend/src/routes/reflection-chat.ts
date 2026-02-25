@@ -27,6 +27,13 @@ function getGeminiClient(): GoogleGenerativeAI {
 
 const SYSTEM_PROMPT = `You are a supportive AI reflection coach helping users with goal setting, tracking, and reflection. Keep responses concise (2-3 sentences max) and conversational. Ask thoughtful questions to help users reflect on their progress, struggles, and wins. Use the provided context about their goals and reflections to give personalized guidance.`;
 
+const GREETING_STARTERS = ['Hi!', 'Hello!', 'Hey there!', 'Greetings!', 'Welcome!'];
+
+function getRandomGreeting(): string {
+  const starter = GREETING_STARTERS[Math.floor(Math.random() * GREETING_STARTERS.length)];
+  return `${starter} What would you like to reflect about today?`;
+}
+
 export function registerReflectionChatRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
@@ -67,15 +74,39 @@ export function registerReflectionChatRoutes(app: App) {
         'Reflection conversation created successfully'
       );
 
-      // Return conversation with initial greeting message (not saved to DB)
+      // Generate random greeting
+      const greetingContent = getRandomGreeting();
+
+      // Save greeting as first message in conversation
+      try {
+        await app.db
+          .insert(schema.reflectionMessages)
+          .values({
+            conversationId: conversation.id,
+            role: 'assistant',
+            content: greetingContent,
+          });
+
+        app.logger.info(
+          { userId, conversationId: conversation.id },
+          'Initial greeting saved to conversation'
+        );
+      } catch (error) {
+        app.logger.error(
+          { err: error, userId, conversationId: conversation.id },
+          'Failed to save initial greeting message'
+        );
+        // Don't fail the request if greeting save fails - return the greeting anyway
+      }
+
+      // Return conversation with initial greeting message
       return {
         id: conversation.id,
         title: conversation.title,
         createdAt: conversation.createdAt.toISOString(),
         updatedAt: conversation.updatedAt.toISOString(),
         initialMessage: {
-          role: 'assistant',
-          content: "Hello! I'm your AI reflection coach. How was your day? What would you like to reflect on?",
+          content: greetingContent,
         },
       };
     } catch (error) {
@@ -206,6 +237,17 @@ export function registerReflectionChatRoutes(app: App) {
       let userMessage = messageText;
 
       if (audioBase64 && !messageText) {
+        // Check if AI is configured
+        if (!process.env.GOOGLE_API_KEY) {
+          app.logger.warn(
+            { userId, conversationId: id },
+            'Voice transcription requested but AI is not configured'
+          );
+          return reply.status(400).send({
+            error: 'Voice transcription requires AI configuration. Please use text mode instead.',
+          });
+        }
+
         try {
           app.logger.info({ userId, conversationId: id }, 'Transcribing audio message');
 
@@ -236,7 +278,7 @@ export function registerReflectionChatRoutes(app: App) {
             'Failed to transcribe audio'
           );
           return reply.status(400).send({
-            error: 'Failed to process audio. Please try again or send a text message.',
+            error: 'Voice transcription requires AI configuration. Please use text mode instead.',
           });
         }
       }
