@@ -281,10 +281,6 @@ export default function AIChatScreen() {
       const messagesData = Array.isArray(response) ? response : (response?.data || []);
       console.log('[AI Chat] Loaded messages:', messagesData.length);
       setMessages(messagesData);
-      // Auto-speak the last assistant message if it's the greeting (only 1 message)
-      if (messagesData.length === 1 && messagesData[0].role === 'assistant') {
-        setTimeout(() => speakText(messagesData[0].content), 600);
-      }
     } catch (error) {
       console.error('[AI Chat] Error loading messages:', error);
       showError('Failed to load messages');
@@ -524,10 +520,12 @@ export default function AIChatScreen() {
           setConversations(data);
         })
         .catch(err => console.warn('[AI Chat] Failed to refresh conversations:', err));
-    } catch (error) {
+    } catch (error: any) {
       console.error('[AI Chat] Error sending audio message:', error);
       setMessages(prev => prev.filter(m => m.id !== tempMsg.id));
-      showError('Failed to process voice message. Try typing instead.');
+      // Show the specific error message from the backend if available
+      const errorMsg = error?.message || 'Failed to process voice message. Try typing instead.';
+      showError(errorMsg);
     } finally {
       setSending(false);
     }
@@ -617,9 +615,10 @@ export default function AIChatScreen() {
           setConversations(data);
         })
         .catch(err => console.warn('[AI Chat] Failed to refresh conversations:', err));
-    } catch (error) {
+    } catch (error: any) {
       console.error('[AI Chat] Error sending message:', error);
-      showError('Failed to send message');
+      const errorMsg = error?.message || 'Failed to send message. Please try again.';
+      showError(errorMsg);
       setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
     } finally {
       setSending(false);
