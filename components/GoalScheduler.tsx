@@ -1102,7 +1102,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     const hasCalendarEvent = config.yearlyCalendarEvent;
 
     const monthNames = selectedCalendar === 'gregorian' ? GREGORIAN_MONTHS_FULL :
-                       selectedCalendar === 'hebrew' ? HEBREW_MONTHS :
+                       selectedCalendar === 'hebrew' ? HEBREW_MONTHS_DISPLAY :
                        selectedCalendar === 'chinese' ? CHINESE_MONTHS :
                        ISLAMIC_MONTHS;
 
