@@ -267,6 +267,10 @@ export const mitzvot = pgTable('mitzvot', {
   source: text('source'),
   hebrewName: text('hebrew_name'),
   appliesToCat: text('applies_to'),
+  primaryDomain: text('primary_domain'),
+  subdomain: text('subdomain'),
+  tags: jsonb('tags'), // Array of strings for search functionality
+  mode: jsonb('mode'), // Can be array of strings or single string
   location: text('location'),
   timePeriod: text('time_period'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
