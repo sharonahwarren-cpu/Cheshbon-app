@@ -34,18 +34,19 @@ interface Mitzvah {
   description?: string;
   categoryId?: string;
   categoryName?: string;
-  type: 'RESTRAINING' | 'PROACTIVE';
+  type: 'RESTRAINING' | 'PROACTIVE'; // Column 3: Level (proactive or restrain mitzvah)
   status: 'ACTIVE' | 'DEACTIVATED';
   isSystem: boolean;
-  mitzvahNumber?: number;
-  source?: string;
+  mitzvahNumber?: number; // Column 1: Ch. Chaim Mitzvah #
+  source?: string; // Column 6: Torah Verse Source
   // Backend field name is appliesToCat (column: applies_to)
-  appliesToCat?: string;
+  appliesToCat?: string; // Column 7: Who (Who the mitzvah applies to)
   appliesTo?: string; // alias for display
-  primaryDomain?: string;
-  subdomain?: string;
-  tags?: string[] | null;
-  mode?: string;
+  location?: string; // Column 4: Place it applies (where this mitzvah applies)
+  primaryDomain?: string; // Column 8: Primary_Domain (Level 1 Category)
+  subdomain?: string; // Column 9: Subdomain (Child Category)
+  tags?: string[] | null; // Column 10: Tags
+  mode?: string; // Column 11: Mode (Behaviour categories)
   // Schedule fields (goal-like)
   scheduleType?: string;
   scheduleDaysOfWeek?: number[];
@@ -146,6 +147,7 @@ export default function MitzvotScreen() {
       mitzvahNumber: '',
       source: '',
       appliesTo: '',
+      location: '',
       primaryDomain: '',
       subdomain: '',
       tags: '',
@@ -179,6 +181,7 @@ export default function MitzvotScreen() {
       mitzvahNumber: item.mitzvahNumber?.toString() || '',
       source: item.source || '',
       appliesTo: appliesToValue,
+      location: item.location || '',
       primaryDomain: item.primaryDomain || '',
       subdomain: item.subdomain || '',
       tags: tagsValue,
@@ -212,6 +215,7 @@ export default function MitzvotScreen() {
         source: formData.source?.trim() || undefined,
         // Backend uses appliesToCat as field name (column: applies_to)
         appliesToCat: formData.appliesTo?.trim() || undefined,
+        location: formData.location?.trim() || undefined,
         primaryDomain: formData.primaryDomain?.trim() || undefined,
         subdomain: formData.subdomain?.trim() || undefined,
         tags: tagsArray.length > 0 ? tagsArray : undefined,
@@ -291,8 +295,8 @@ export default function MitzvotScreen() {
       if (!response.ok) {
         // Fall back to local template generation if backend fails
         console.warn('[Mitzvot] Backend template failed, using local template');
-        const templateHeaders = 'mitzvah_number,title,description,source,applies_to,primary_domain,subdomain,tags,mode,type,schedule_type';
-        const templateExample = '1,Love your neighbor as yourself,Treat others with kindness and respect,Leviticus 19:18,All Jews,Interpersonal Mitzvot,Kindness,"kindness,love,respect",Positive Action,PROACTIVE,always_active';
+        const templateHeaders = 'mitzvah_number,title,type,location,description,source,applies_to,primary_domain,subdomain,tags,mode';
+        const templateExample = '1,Love your neighbor as yourself,PROACTIVE,Everywhere,Treat others with kindness and respect,Leviticus 19:18,All Jews,Interpersonal Mitzvot,Kindness,"kindness,love,respect",Positive Action';
         const csvContent = `${templateHeaders}\n${templateExample}\n`;
 
         if (Platform.OS === 'web') {
@@ -558,6 +562,7 @@ export default function MitzvotScreen() {
                       {item.description ? <Text style={styles.mitzvahDescription}>{item.description}</Text> : null}
                       {item.source ? <Text style={styles.mitzvahSource}>Source: {item.source}</Text> : null}
                       {(item.appliesToCat || item.appliesTo) ? <Text style={styles.mitzvahAppliesTo}>Applies to: {item.appliesToCat || item.appliesTo}</Text> : null}
+                      {item.location ? <Text style={styles.mitzvahLocation}>Place: {item.location}</Text> : null}
                       {item.primaryDomain ? <Text style={styles.mitzvahSubdomain}>Domain: {item.primaryDomain}</Text> : null}
                       {item.subdomain ? <Text style={styles.mitzvahSubdomain}>Subdomain: {item.subdomain}</Text> : null}
                       {item.tags && item.tags.length > 0 ? (
@@ -626,6 +631,10 @@ export default function MitzvotScreen() {
                 <TextInput style={styles.input} value={formData.appliesTo || ''} onChangeText={(t) => setFormData({ ...formData, appliesTo: t })} placeholder="e.g., All Jews, Jewish men, etc." placeholderTextColor={colors.textSecondary} />
               </View>
               <View style={styles.formGroup}>
+                <Text style={styles.label}>Place it Applies (Location)</Text>
+                <TextInput style={styles.input} value={formData.location || ''} onChangeText={(t) => setFormData({ ...formData, location: t })} placeholder="e.g., Home, Synagogue, Israel, etc." placeholderTextColor={colors.textSecondary} />
+              </View>
+              <View style={styles.formGroup}>
                 <Text style={styles.label}>Primary Domain (Level 1 Category)</Text>
                 <TextInput style={styles.input} value={formData.primaryDomain || ''} onChangeText={(t) => setFormData({ ...formData, primaryDomain: t })} placeholder="e.g., Prayer, Charity, etc." placeholderTextColor={colors.textSecondary} />
               </View>
@@ -655,7 +664,8 @@ export default function MitzvotScreen() {
                 </ScrollView>
               </View>
               <View style={styles.formGroup}>
-                <Text style={styles.label}>Type *</Text>
+                <Text style={styles.label}>Level (Type) *</Text>
+                <Text style={styles.labelSubtext}>Is this a proactive mitzvah or a restraining mitzvah?</Text>
                 <View style={styles.typeSelector}>
                   <TouchableOpacity style={[styles.typeButton, formData.type === 'PROACTIVE' && styles.typeButtonProactive]} onPress={() => setFormData({ ...formData, type: 'PROACTIVE' })}>
                     <IconSymbol ios_icon_name="checkmark.circle.fill" android_material_icon_name="check-circle" size={18} color={formData.type === 'PROACTIVE' ? colors.background : colors.success} />
@@ -853,7 +863,9 @@ const styles = StyleSheet.create({
   mitzvahDescription: { fontSize: 13, color: colors.textSecondary, marginBottom: 6, lineHeight: 18 },
   mitzvahSource: { fontSize: 12, color: colors.primary, marginBottom: 4, fontStyle: 'italic' },
   mitzvahAppliesTo: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
+  mitzvahLocation: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
   mitzvahSubdomain: { fontSize: 12, color: colors.textSecondary, marginBottom: 6 },
+  labelSubtext: { fontSize: 12, color: colors.textSecondary, marginTop: 2, marginBottom: 6 },
   tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   tag: { backgroundColor: colors.primary + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   tagText: { fontSize: 11, color: colors.primary, fontWeight: '600' },
