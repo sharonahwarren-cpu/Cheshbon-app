@@ -37,6 +37,44 @@ interface Mitzvah {
   type: 'RESTRAINING' | 'PROACTIVE';
   status: 'ACTIVE' | 'DEACTIVATED';
   isSystem: boolean;
+  mitzvahNumber?: number;
+  source?: string;
+  // Backend field name is appliesToCat (column: applies_to)
+  appliesToCat?: string;
+  appliesTo?: string; // alias for display
+  primaryDomain?: string;
+  subdomain?: string;
+  tags?: string[] | null;
+  mode?: string;
+  // Schedule fields (goal-like)
+  scheduleType?: string;
+  scheduleDaysOfWeek?: number[];
+  scheduleDatesOfMonth?: number[];
+  scheduleNthDayOfMonth?: any;
+  scheduleTimesPerMonth?: number;
+  schedulePeriodOfYear?: any;
+  scheduleDatesOfYear?: any;
+  scheduleRecurrenceType?: string;
+  scheduleTimesPerDayDetails?: any;
+  scheduleWeekendsOnly?: boolean;
+  scheduleWeekdaysOnly?: boolean;
+  scheduleFortnightEvenOdd?: string;
+  scheduleMonthlyRange?: any;
+  scheduleMonthlyRandomCount?: number;
+  scheduleExclusions?: any;
+  scheduleDateOfYearMonths?: string[];
+  monthlyUseAlternativeCalendar?: boolean;
+  monthlyCalendarType?: string;
+  monthlyCalendarEvent?: string;
+  calendarType?: string;
+  startDate?: string;
+  endDate?: string;
+  rewardCurrencyId?: string;
+  rewardSuccesses?: number;
+  rewardAmount?: number;
+  consequenceCurrencyId?: string;
+  consequenceFailures?: number;
+  consequenceAmount?: number;
 }
 
 export default function MitzvotScreen() {
@@ -83,7 +121,6 @@ export default function MitzvotScreen() {
     try {
       console.log('[Mitzvot] Loading import status...');
       const status = await authenticatedGet<{ totalSystemMitzvot: number; userHasImported: boolean; systemMitzvotAvailable?: boolean }>('/api/mitzvot/import-status');
-      // Ensure systemMitzvotAvailable is always a boolean (handle older backend versions)
       setImportStatus({
         totalSystemMitzvot: status.totalSystemMitzvot ?? 0,
         userHasImported: status.userHasImported ?? false,
@@ -91,7 +128,6 @@ export default function MitzvotScreen() {
       });
     } catch (error) {
       console.log('[Mitzvot] Failed to load import status:', error);
-      // Default to showing the initialize option if status check fails
       setImportStatus({ totalSystemMitzvot: 0, userHasImported: false, systemMitzvotAvailable: true });
     }
   };
@@ -101,13 +137,63 @@ export default function MitzvotScreen() {
 
   const openAddModal = () => {
     setEditingItem(null);
-    setFormData({ title: '', description: '', categoryId: '', type: 'PROACTIVE', status: 'ACTIVE' });
+    setFormData({ 
+      title: '', 
+      description: '', 
+      categoryId: '', 
+      type: 'PROACTIVE', 
+      status: 'ACTIVE',
+      mitzvahNumber: '',
+      source: '',
+      appliesTo: '',
+      primaryDomain: '',
+      subdomain: '',
+      tags: '',
+      mode: '',
+      scheduleType: 'always_active',
+      calendarType: '',
+      startDate: '',
+      endDate: '',
+      rewardCurrencyId: '',
+      rewardSuccesses: '',
+      rewardAmount: '',
+      consequenceCurrencyId: '',
+      consequenceFailures: '',
+      consequenceAmount: '',
+    });
     setShowModal(true);
   };
 
   const openEditModal = (item: Mitzvah) => {
     setEditingItem(item);
-    setFormData({ title: item.title, description: item.description || '', categoryId: item.categoryId || '', type: item.type, status: item.status });
+    // Backend returns appliesToCat (column: applies_to), support both field names
+    const appliesToValue = item.appliesToCat || item.appliesTo || '';
+    // Tags can be an array or null from backend
+    const tagsValue = Array.isArray(item.tags) ? item.tags.join(', ') : (item.tags || '');
+    setFormData({ 
+      title: item.title, 
+      description: item.description || '', 
+      categoryId: item.categoryId || '', 
+      type: item.type, 
+      status: item.status,
+      mitzvahNumber: item.mitzvahNumber?.toString() || '',
+      source: item.source || '',
+      appliesTo: appliesToValue,
+      primaryDomain: item.primaryDomain || '',
+      subdomain: item.subdomain || '',
+      tags: tagsValue,
+      mode: item.mode || '',
+      scheduleType: item.scheduleType || 'always_active',
+      calendarType: item.calendarType || '',
+      startDate: item.startDate || '',
+      endDate: item.endDate || '',
+      rewardCurrencyId: item.rewardCurrencyId || '',
+      rewardSuccesses: item.rewardSuccesses?.toString() || '',
+      rewardAmount: item.rewardAmount?.toString() || '',
+      consequenceCurrencyId: item.consequenceCurrencyId || '',
+      consequenceFailures: item.consequenceFailures?.toString() || '',
+      consequenceAmount: item.consequenceAmount?.toString() || '',
+    });
     setShowModal(true);
   };
 
@@ -115,7 +201,35 @@ export default function MitzvotScreen() {
     if (!formData.title?.trim()) { showError('Title is required'); return; }
     try {
       setLoading(true);
-      const payload = { title: formData.title.trim(), description: formData.description?.trim() || undefined, categoryId: formData.categoryId || undefined, type: formData.type || 'PROACTIVE', status: formData.status || 'ACTIVE' };
+      const tagsArray = formData.tags ? formData.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [];
+      const payload: Record<string, any> = { 
+        title: formData.title.trim(), 
+        description: formData.description?.trim() || undefined, 
+        categoryId: formData.categoryId || undefined, 
+        type: formData.type || 'PROACTIVE', 
+        status: formData.status || 'ACTIVE',
+        mitzvahNumber: formData.mitzvahNumber ? parseInt(formData.mitzvahNumber) : undefined,
+        source: formData.source?.trim() || undefined,
+        // Backend uses appliesToCat as field name (column: applies_to)
+        appliesToCat: formData.appliesTo?.trim() || undefined,
+        primaryDomain: formData.primaryDomain?.trim() || undefined,
+        subdomain: formData.subdomain?.trim() || undefined,
+        tags: tagsArray.length > 0 ? tagsArray : undefined,
+        mode: formData.mode?.trim() || undefined,
+      };
+      // Include schedule/goal fields if set
+      if (formData.scheduleType) payload.scheduleType = formData.scheduleType;
+      if (formData.calendarType) payload.calendarType = formData.calendarType;
+      if (formData.startDate) payload.startDate = formData.startDate;
+      if (formData.endDate) payload.endDate = formData.endDate;
+      if (formData.rewardCurrencyId) payload.rewardCurrencyId = formData.rewardCurrencyId;
+      if (formData.rewardSuccesses) payload.rewardSuccesses = parseInt(formData.rewardSuccesses);
+      if (formData.rewardAmount) payload.rewardAmount = parseInt(formData.rewardAmount);
+      if (formData.consequenceCurrencyId) payload.consequenceCurrencyId = formData.consequenceCurrencyId;
+      if (formData.consequenceFailures) payload.consequenceFailures = parseInt(formData.consequenceFailures);
+      if (formData.consequenceAmount) payload.consequenceAmount = parseInt(formData.consequenceAmount);
+
+      console.log('[Mitzvot] Saving mitzvah payload:', payload);
       if (editingItem) {
         await authenticatedPut(`/api/mitzvot/${editingItem.id}`, payload);
         showSuccess('Mitzvah updated');
@@ -161,14 +275,48 @@ export default function MitzvotScreen() {
 
   const handleDownloadTemplate = async () => {
     try {
-      console.log('[Mitzvot] Downloading CSV template...');
-      const templateHeaders = 'title,description,mitzvah_number,source,hebrew_name,type,applies_to,location,time_period,category_name,schedule_type';
-      const templateExample = 'Love your neighbor as yourself,Treat others with kindness and respect,1,Leviticus 19:18,ואהבת לרעך כמוך,PROACTIVE,All Jews,Everywhere,Always,Interpersonal Mitzvot,always';
+      console.log('[Mitzvot] Downloading CSV template from backend...');
+      const token = await getBearerToken();
+      if (!token) {
+        throw new Error('Authentication token not found. Please sign in.');
+      }
 
-      const csvContent = `${templateHeaders}\n${templateExample}\n`;
+      const response = await fetch(`${BACKEND_URL}/api/mitzvot/template-csv`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        // Fall back to local template generation if backend fails
+        console.warn('[Mitzvot] Backend template failed, using local template');
+        const templateHeaders = 'mitzvah_number,title,description,source,applies_to,primary_domain,subdomain,tags,mode,type,schedule_type';
+        const templateExample = '1,Love your neighbor as yourself,Treat others with kindness and respect,Leviticus 19:18,All Jews,Interpersonal Mitzvot,Kindness,"kindness,love,respect",Positive Action,PROACTIVE,always_active';
+        const csvContent = `${templateHeaders}\n${templateExample}\n`;
+
+        if (Platform.OS === 'web') {
+          const blob = new Blob([csvContent], { type: 'text/csv' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'mitzvot_template.csv';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        } else {
+          const fileUri = `${FileSystem.cacheDirectory}mitzvot_template.csv`;
+          await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+        }
+        showSuccess('Template downloaded!');
+        return;
+      }
+
+      const csvContent = await response.text();
+      console.log('[Mitzvot] Template received, length:', csvContent.length);
 
       if (Platform.OS === 'web') {
-        // Web: trigger download via anchor element
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -180,10 +328,9 @@ export default function MitzvotScreen() {
         URL.revokeObjectURL(url);
         showSuccess('Template downloaded!');
       } else {
-        // Native: write to cache directory
         const fileUri = `${FileSystem.cacheDirectory}mitzvot_template.csv`;
         await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
-        showSuccess(`Template saved to: ${fileUri}`);
+        showSuccess(`Template saved to cache directory`);
       }
     } catch (error: any) {
       console.error('[Mitzvot] Template download error:', error);
@@ -250,7 +397,6 @@ export default function MitzvotScreen() {
         return;
       }
 
-      // Check file size (max 5MB)
       if (file.size && file.size > 5 * 1024 * 1024) {
         showError('File is too large. Maximum size is 5MB.');
         return;
@@ -259,19 +405,15 @@ export default function MitzvotScreen() {
       setImporting(true);
       setShowImportModal(false);
 
-      // Read file content
       const fileContent = await FileSystem.readAsStringAsync(file.uri);
       console.log('[Mitzvot] File content length:', fileContent.length);
 
-      // Create FormData for multipart upload
       const formData = new FormData();
       
-      // For web, we need to create a Blob
       if (Platform.OS === 'web') {
         const blob = new Blob([fileContent], { type: 'text/csv' });
         formData.append('file', blob, file.name);
       } else {
-        // For native, use the file URI
         formData.append('file', {
           uri: file.uri,
           type: 'text/csv',
@@ -288,7 +430,6 @@ export default function MitzvotScreen() {
       const response = await fetch(`${BACKEND_URL}/api/mitzvot/import-csv`, {
         method: 'POST',
         headers: {
-          // Note: Don't set Content-Type for FormData — browser/fetch sets it with boundary automatically
           Authorization: `Bearer ${token}`,
         },
         body: formData,
@@ -332,7 +473,8 @@ export default function MitzvotScreen() {
 
   const groupedByCategory: Record<string, Mitzvah[]> = {};
   filteredMitzvot.forEach(m => {
-    const catName = m.categoryName || 'Uncategorized';
+    // Group by category name, then primary domain, then 'Uncategorized'
+    const catName = m.categoryName || m.primaryDomain || 'Uncategorized';
     if (!groupedByCategory[catName]) groupedByCategory[catName] = [];
     groupedByCategory[catName].push(m);
   });
@@ -389,6 +531,7 @@ export default function MitzvotScreen() {
                     <View key={item.id} style={[styles.mitzvahCard, item.status === 'DEACTIVATED' && styles.mitzvahCardDeactivated]}>
                       <View style={styles.mitzvahHeader}>
                         <View style={styles.mitzvahTitleRow}>
+                          {item.mitzvahNumber && <Text style={styles.mitzvahNumber}>#{item.mitzvahNumber}</Text>}
                           <IconSymbol
                             ios_icon_name={item.type === 'PROACTIVE' ? 'checkmark.circle.fill' : 'xmark.circle.fill'}
                             android_material_icon_name={item.type === 'PROACTIVE' ? 'check-circle' : 'cancel'}
@@ -413,10 +556,28 @@ export default function MitzvotScreen() {
                         </View>
                       </View>
                       {item.description ? <Text style={styles.mitzvahDescription}>{item.description}</Text> : null}
+                      {item.source ? <Text style={styles.mitzvahSource}>Source: {item.source}</Text> : null}
+                      {(item.appliesToCat || item.appliesTo) ? <Text style={styles.mitzvahAppliesTo}>Applies to: {item.appliesToCat || item.appliesTo}</Text> : null}
+                      {item.primaryDomain ? <Text style={styles.mitzvahSubdomain}>Domain: {item.primaryDomain}</Text> : null}
+                      {item.subdomain ? <Text style={styles.mitzvahSubdomain}>Subdomain: {item.subdomain}</Text> : null}
+                      {item.tags && item.tags.length > 0 ? (
+                        <View style={styles.tagsContainer}>
+                          {item.tags.map((tag, idx) => (
+                            <View key={idx} style={styles.tag}>
+                              <Text style={styles.tagText}>{tag}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
                       <View style={styles.mitzvahMeta}>
                         <View style={[styles.typeBadge, item.type === 'PROACTIVE' ? styles.typeBadgeProactive : styles.typeBadgeRestraining]}>
                           <Text style={styles.typeBadgeText}>{item.type === 'PROACTIVE' ? 'Proactive' : 'Restraining'}</Text>
                         </View>
+                        {item.mode ? (
+                          <View style={styles.modeBadge}>
+                            <Text style={styles.modeBadgeText}>{item.mode}</Text>
+                          </View>
+                        ) : null}
                       </View>
                     </View>
                   ))}
@@ -438,12 +599,47 @@ export default function MitzvotScreen() {
             </View>
             <ScrollView style={styles.modalBody}>
               <View style={styles.formGroup}>
+                <Text style={styles.label}>Mitzvah Number</Text>
+                <TextInput 
+                  style={styles.input} 
+                  value={formData.mitzvahNumber || ''} 
+                  onChangeText={(t) => setFormData({ ...formData, mitzvahNumber: t })} 
+                  placeholder="e.g., 1, 2, 3..." 
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="numeric"
+                />
+              </View>
+              <View style={styles.formGroup}>
                 <Text style={styles.label}>Title *</Text>
                 <TextInput style={styles.input} value={formData.title || ''} onChangeText={(t) => setFormData({ ...formData, title: t })} placeholder="Mitzvah title" placeholderTextColor={colors.textSecondary} />
               </View>
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Description</Text>
                 <TextInput style={[styles.input, styles.textArea]} value={formData.description || ''} onChangeText={(t) => setFormData({ ...formData, description: t })} placeholder="Describe this mitzvah..." placeholderTextColor={colors.textSecondary} multiline numberOfLines={3} />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Torah Verse Source</Text>
+                <TextInput style={styles.input} value={formData.source || ''} onChangeText={(t) => setFormData({ ...formData, source: t })} placeholder="e.g., Leviticus 19:18" placeholderTextColor={colors.textSecondary} />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Who the Mitzvah Applies To</Text>
+                <TextInput style={styles.input} value={formData.appliesTo || ''} onChangeText={(t) => setFormData({ ...formData, appliesTo: t })} placeholder="e.g., All Jews, Jewish men, etc." placeholderTextColor={colors.textSecondary} />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Primary Domain (Level 1 Category)</Text>
+                <TextInput style={styles.input} value={formData.primaryDomain || ''} onChangeText={(t) => setFormData({ ...formData, primaryDomain: t })} placeholder="e.g., Prayer, Charity, etc." placeholderTextColor={colors.textSecondary} />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Subdomain (Child Category)</Text>
+                <TextInput style={styles.input} value={formData.subdomain || ''} onChangeText={(t) => setFormData({ ...formData, subdomain: t })} placeholder="e.g., Morning prayers, etc." placeholderTextColor={colors.textSecondary} />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Tags (comma-separated for search)</Text>
+                <TextInput style={styles.input} value={formData.tags || ''} onChangeText={(t) => setFormData({ ...formData, tags: t })} placeholder="e.g., prayer, daily, morning" placeholderTextColor={colors.textSecondary} />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Mode (Behavior Category)</Text>
+                <TextInput style={styles.input} value={formData.mode || ''} onChangeText={(t) => setFormData({ ...formData, mode: t })} placeholder="e.g., Positive Action, Restraint, etc." placeholderTextColor={colors.textSecondary} />
               </View>
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Category</Text>
@@ -515,7 +711,6 @@ export default function MitzvotScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.importModalBody}>
-              {/* System Mitzvot Section - shown when available */}
               {importStatus?.systemMitzvotAvailable && (
                 <View style={[styles.systemImportCard, importStatus.userHasImported && styles.systemImportCardDone]}>
                   <View style={styles.systemImportHeader}>
@@ -565,7 +760,6 @@ export default function MitzvotScreen() {
                 </View>
               )}
 
-              {/* Show info card when system mitzvot not available and user hasn't imported */}
               {!importStatus?.systemMitzvotAvailable && !importStatus?.userHasImported && (
                 <View style={styles.importInfoCard}>
                   <IconSymbol ios_icon_name="info.circle.fill" android_material_icon_name="info" size={32} color={colors.accent} />
@@ -576,7 +770,6 @@ export default function MitzvotScreen() {
                 </View>
               )}
 
-              {/* Divider between system and custom import */}
               {importStatus?.systemMitzvotAvailable && (
                 <View style={styles.divider}>
                   <View style={styles.dividerLine} />
@@ -588,7 +781,7 @@ export default function MitzvotScreen() {
               <View style={styles.customImportSection}>
                 <Text style={styles.customImportTitle}>Import Custom CSV</Text>
                 <Text style={styles.customImportText}>
-                  Upload your own CSV file with mitzvot data. Download the template to see the required format.
+                  Upload your own CSV file with mitzvot data. Download the template to see the required format with all fields.
                 </Text>
                 <TouchableOpacity style={styles.templateButton} onPress={handleDownloadTemplate}>
                   <IconSymbol ios_icon_name="arrow.down.circle.fill" android_material_icon_name="download" size={20} color={colors.accent} />
@@ -651,22 +844,31 @@ const styles = StyleSheet.create({
   mitzvahCardDeactivated: { opacity: 0.5 },
   mitzvahHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 },
   mitzvahTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  mitzvahNumber: { fontSize: 12, fontWeight: '700', color: colors.accent, backgroundColor: colors.accent + '20', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   mitzvahTitle: { fontSize: 15, fontWeight: '600', color: colors.text, flex: 1 },
   systemBadge: { backgroundColor: colors.accent + '30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   systemBadgeText: { fontSize: 10, color: colors.accent, fontWeight: '600' },
   mitzvahActions: { flexDirection: 'row', gap: 4 },
   iconButton: { padding: 6 },
-  mitzvahDescription: { fontSize: 13, color: colors.textSecondary, marginBottom: 8, lineHeight: 18 },
+  mitzvahDescription: { fontSize: 13, color: colors.textSecondary, marginBottom: 6, lineHeight: 18 },
+  mitzvahSource: { fontSize: 12, color: colors.primary, marginBottom: 4, fontStyle: 'italic' },
+  mitzvahAppliesTo: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
+  mitzvahSubdomain: { fontSize: 12, color: colors.textSecondary, marginBottom: 6 },
+  tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  tag: { backgroundColor: colors.primary + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  tagText: { fontSize: 11, color: colors.primary, fontWeight: '600' },
   mitzvahMeta: { flexDirection: 'row', gap: 6 },
   typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   typeBadgeProactive: { backgroundColor: colors.success + '20' },
   typeBadgeRestraining: { backgroundColor: colors.error + '20' },
   typeBadgeText: { fontSize: 11, fontWeight: '600', color: colors.text },
+  modeBadge: { backgroundColor: colors.accent + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  modeBadgeText: { fontSize: 11, fontWeight: '600', color: colors.accent },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: colors.background, borderRadius: 16, width: '100%', maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: colors.text },
-  modalBody: { padding: 20 },
+  modalBody: { padding: 20, maxHeight: 500 },
   modalFooter: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1, borderTopColor: colors.border },
   formGroup: { marginBottom: 20 },
   label: { fontSize: 15, fontWeight: '600', color: colors.text, marginBottom: 8 },
@@ -699,7 +901,7 @@ const styles = StyleSheet.create({
   importInfoCard: { backgroundColor: colors.card, borderRadius: 12, padding: 20, alignItems: 'center', marginBottom: 20, borderWidth: 1, borderColor: colors.border },
   importInfoTitle: { fontSize: 18, fontWeight: 'bold', color: colors.text, marginTop: 12, marginBottom: 8 },
   importInfoText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-  importWarning: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.warning + '20', padding: 12, borderRadius: 8, marginTop: 12 },
+  importWarning: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.success + '20', padding: 12, borderRadius: 8, marginTop: 12 },
   importWarningText: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 18 },
   templateButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.accent + '50', marginBottom: 12 },
   templateButtonText: { fontSize: 14, fontWeight: '600', color: colors.accent },
