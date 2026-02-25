@@ -286,6 +286,7 @@ export default function HomeScreen() {
       
       console.log('[Home] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home] Loaded currencies for modal:', currenciesData.length, 'currencies');
+      console.log('[Home] Loaded goals from backend:', goalsData.length, 'goals for date:', dateString);
       
       setActivatedGoals(goalsData);
       setLifeAreaHierarchy(lifeAreasData);

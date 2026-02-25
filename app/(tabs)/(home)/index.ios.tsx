@@ -272,6 +272,7 @@ export default function HomeScreen() {
       
       console.log('[Home iOS] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
+      console.log('[Home iOS] Loaded goals from backend:', goalsData.length, 'goals for date:', dateString);
       
       setActivatedGoals(goalsData);
       setLifeAreaHierarchy(lifeAreasData);
