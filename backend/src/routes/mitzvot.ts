@@ -797,12 +797,16 @@ export function registerMitzvotRoutes(app: App) {
       const columnMap = {
         number: headers.findIndex(h => ['number', 'mitzvah number', 'mitzvah_number', 'num', 'id'].includes(h)),
         title: headers.findIndex(h => ['title', 'name', 'mitzvah', 'mitzvah name', 'mitzvah_name'].includes(h)),
-        description: headers.findIndex(h => ['description', 'desc', 'details', 'detail'].includes(h)),
+        description: headers.findIndex(h => ['description', 'desc', 'details', 'detail', 'mitzvah description', 'mitzvah_description'].includes(h)),
         type: headers.findIndex(h => ['type', 'category type', 'category_type'].includes(h)),
         category: headers.findIndex(h => ['category', 'category name', 'category_name'].includes(h)),
-        source: headers.findIndex(h => ['source', 'reference', 'source reference', 'source_reference'].includes(h)),
+        source: headers.findIndex(h => ['source', 'reference', 'torah verse source', 'torah_verse_source', 'torah source'].includes(h)),
         hebrew: headers.findIndex(h => ['hebrew', 'hebrew name', 'hebrew_name', 'hebrew text', 'hebrew_text'].includes(h)),
-        appliesTo: headers.findIndex(h => ['applies to', 'applies_to', 'who', 'applicable to', 'applicable_to'].includes(h)),
+        appliesTo: headers.findIndex(h => ['applies to', 'applies_to', 'who', 'applicable to', 'applicable_to', 'who applies to', 'who_applies_to'].includes(h)),
+        primaryDomain: headers.findIndex(h => ['primary domain', 'primary_domain', 'primary_category', 'primary category', 'domain', 'level 1 category'].includes(h)),
+        subdomain: headers.findIndex(h => ['subdomain', 'sub domain', 'sub_domain', 'sub_category', 'sub category', 'level 2 category'].includes(h)),
+        tags: headers.findIndex(h => ['tags', 'tag', 'keywords', 'keyword', 'search tags'].includes(h)),
+        mode: headers.findIndex(h => ['mode', 'behavior', 'behavior mode', 'behavior_mode'].includes(h)),
         location: headers.findIndex(h => ['location', 'place', 'where', 'location type', 'location_type'].includes(h)),
         timePeriod: headers.findIndex(h => ['time', 'time period', 'time_period', 'when', 'period'].includes(h)),
       };
@@ -859,8 +863,24 @@ export function registerMitzvotRoutes(app: App) {
           const source = columnMap.source !== -1 ? values[columnMap.source] || null : null;
           const hebrewName = columnMap.hebrew !== -1 ? values[columnMap.hebrew] || null : null;
           const appliesToCat = columnMap.appliesTo !== -1 ? values[columnMap.appliesTo] || null : null;
+          const primaryDomain = columnMap.primaryDomain !== -1 ? values[columnMap.primaryDomain] || null : null;
+          const subdomain = columnMap.subdomain !== -1 ? values[columnMap.subdomain] || null : null;
           const location = columnMap.location !== -1 ? values[columnMap.location] || null : null;
           const timePeriod = columnMap.timePeriod !== -1 ? values[columnMap.timePeriod] || null : null;
+
+          // Parse tags (comma-separated string to array)
+          let tags = null;
+          if (columnMap.tags !== -1 && values[columnMap.tags]) {
+            const tagsStr = values[columnMap.tags];
+            tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          }
+
+          // Parse mode (comma-separated string to array)
+          let mode = null;
+          if (columnMap.mode !== -1 && values[columnMap.mode]) {
+            const modeStr = values[columnMap.mode];
+            mode = modeStr.split(',').map(m => m.trim()).filter(m => m.length > 0);
+          }
 
           // Find or use category
           let categoryId = null;
@@ -882,6 +902,10 @@ export function registerMitzvotRoutes(app: App) {
             source,
             hebrewName,
             appliesToCat,
+            primaryDomain,
+            subdomain,
+            tags,
+            mode,
             location,
             timePeriod,
           };
@@ -1000,13 +1024,17 @@ export function registerMitzvotRoutes(app: App) {
     try {
       // CSV headers for the template
       const headers = [
+        'mitzvah_number',
         'title',
         'description',
-        'mitzvah_number',
         'source',
+        'applies_to',
+        'primary_domain',
+        'subdomain',
+        'tags',
+        'mode',
         'hebrew_name',
         'type',
-        'applies_to',
         'location',
         'time_period',
         'category_name',
@@ -1016,39 +1044,51 @@ export function registerMitzvotRoutes(app: App) {
       // Create sample rows for the template
       const sampleRows = [
         [
+          '4',
           'Shabbat Observance',
           'Keep the Sabbath day holy',
-          '4',
           'Torah',
+          'All Jews',
+          'Observances',
+          'Sabbath Laws',
+          'religious, observance',
+          'Positive, Proactive',
           'שמירת השבת',
           'PROACTIVE',
-          'All Jews',
           'Home',
           'Weekly - Friday to Saturday',
           'Observances',
           'weekly',
         ],
         [
+          '12',
           'Tefillin',
           'Bind phylacteries on arm and head during morning prayers',
-          '12',
           'Torah',
+          'Jewish men',
+          'Prayer & Spirituality',
+          'Daily Practices',
+          'prayer, phylacteries, morning',
+          'Positive, Proactive',
           'תפילין',
           'PROACTIVE',
-          'Jewish men',
           'Synagogue/Home',
           'Daily morning',
           'Prayer/Blessings',
           'daily',
         ],
         [
+          '195',
           'Tzedakah',
           'Give charity to the poor',
-          '195',
           'Torah',
+          'All Jews',
+          'Social & Ethics',
+          'Charity',
+          'charity, kindness, generosity',
+          'Positive, Proactive',
           'צדקה',
           'PROACTIVE',
-          'All Jews',
           'Community',
           'Year-round',
           'Charity',
@@ -1167,12 +1207,16 @@ export function registerMitzvotRoutes(app: App) {
       const columnMap = {
         number: headers.findIndex(h => ['number', 'mitzvah number', 'mitzvah_number', 'num', 'id'].includes(h)),
         title: headers.findIndex(h => ['title', 'name', 'mitzvah', 'mitzvah name', 'mitzvah_name'].includes(h)),
-        description: headers.findIndex(h => ['description', 'desc', 'details', 'detail'].includes(h)),
+        description: headers.findIndex(h => ['description', 'desc', 'details', 'detail', 'mitzvah description', 'mitzvah_description'].includes(h)),
         type: headers.findIndex(h => ['type', 'category type', 'category_type'].includes(h)),
         category: headers.findIndex(h => ['category', 'category name', 'category_name'].includes(h)),
-        source: headers.findIndex(h => ['source', 'reference', 'source reference', 'source_reference'].includes(h)),
+        source: headers.findIndex(h => ['source', 'reference', 'torah verse source', 'torah_verse_source', 'torah source'].includes(h)),
         hebrew: headers.findIndex(h => ['hebrew', 'hebrew name', 'hebrew_name', 'hebrew text', 'hebrew_text'].includes(h)),
-        appliesTo: headers.findIndex(h => ['applies to', 'applies_to', 'who', 'applicable to', 'applicable_to'].includes(h)),
+        appliesTo: headers.findIndex(h => ['applies to', 'applies_to', 'who', 'applicable to', 'applicable_to', 'who applies to', 'who_applies_to'].includes(h)),
+        primaryDomain: headers.findIndex(h => ['primary domain', 'primary_domain', 'primary_category', 'primary category', 'domain', 'level 1 category'].includes(h)),
+        subdomain: headers.findIndex(h => ['subdomain', 'sub domain', 'sub_domain', 'sub_category', 'sub category', 'level 2 category'].includes(h)),
+        tags: headers.findIndex(h => ['tags', 'tag', 'keywords', 'keyword', 'search tags'].includes(h)),
+        mode: headers.findIndex(h => ['mode', 'behavior', 'behavior mode', 'behavior_mode'].includes(h)),
         location: headers.findIndex(h => ['location', 'place', 'where', 'location type', 'location_type'].includes(h)),
         timePeriod: headers.findIndex(h => ['time', 'time period', 'time_period', 'when', 'period'].includes(h)),
         scheduleType: headers.findIndex(h => ['schedule', 'schedule type', 'schedule_type', 'frequency', 'recurrence'].includes(h)),
@@ -1213,9 +1257,25 @@ export function registerMitzvotRoutes(app: App) {
           const source = columnMap.source !== -1 ? values[columnMap.source] || null : null;
           const hebrewName = columnMap.hebrew !== -1 ? values[columnMap.hebrew] || null : null;
           const appliesToCat = columnMap.appliesTo !== -1 ? values[columnMap.appliesTo] || null : null;
+          const primaryDomain = columnMap.primaryDomain !== -1 ? values[columnMap.primaryDomain] || null : null;
+          const subdomain = columnMap.subdomain !== -1 ? values[columnMap.subdomain] || null : null;
           const location = columnMap.location !== -1 ? values[columnMap.location] || null : null;
           const timePeriod = columnMap.timePeriod !== -1 ? values[columnMap.timePeriod] || null : null;
           const scheduleType = columnMap.scheduleType !== -1 ? values[columnMap.scheduleType] || 'always_active' : 'always_active';
+
+          // Parse tags (comma-separated string to array)
+          let tags = null;
+          if (columnMap.tags !== -1 && values[columnMap.tags]) {
+            const tagsStr = values[columnMap.tags];
+            tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          }
+
+          // Parse mode (comma-separated string to array)
+          let mode = null;
+          if (columnMap.mode !== -1 && values[columnMap.mode]) {
+            const modeStr = values[columnMap.mode];
+            mode = modeStr.split(',').map(m => m.trim()).filter(m => m.length > 0);
+          }
 
           // Find or use category
           let categoryId = null;
@@ -1253,6 +1313,10 @@ export function registerMitzvotRoutes(app: App) {
             source,
             hebrewName,
             appliesToCat,
+            primaryDomain,
+            subdomain,
+            tags,
+            mode,
             location,
             timePeriod,
           };

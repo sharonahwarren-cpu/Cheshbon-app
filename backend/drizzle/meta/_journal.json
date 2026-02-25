@@ -148,6 +148,13 @@
       "when": 1771983406975,
       "tag": "20260225013646_sparkling_hedge_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1772016589224,
+      "tag": "20260225104949_solid_terrax",
+      "breakpoints": true
     }
   ]
 }
