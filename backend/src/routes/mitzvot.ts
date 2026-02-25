@@ -189,6 +189,7 @@ export function registerMitzvotRoutes(app: App) {
       categoryId?: string;
       type: string;
       status?: string;
+      location?: string;
       scheduleType?: string;
       scheduleDaysOfWeek?: number[];
       scheduleDatesOfMonth?: number[];
@@ -249,6 +250,7 @@ export function registerMitzvotRoutes(app: App) {
           type: mitzvahType,
           status: body.status || 'ACTIVE',
           isSystem: false,
+          location: body.location || null,
           scheduleType,
           scheduleDaysOfWeek: body.scheduleDaysOfWeek?.length ? body.scheduleDaysOfWeek : null,
           scheduleDatesOfMonth: body.scheduleDatesOfMonth?.length ? body.scheduleDatesOfMonth : null,
@@ -323,6 +325,7 @@ export function registerMitzvotRoutes(app: App) {
       if (body.categoryId !== undefined) updateData.categoryId = body.categoryId || null;
       if (body.type !== undefined) updateData.type = body.type;
       if (body.status !== undefined) updateData.status = body.status;
+      if (body.location !== undefined) updateData.location = body.location || null;
       if (body.scheduleType !== undefined) {
         const validScheduleTypes = ['always_active', 'weekly', 'fortnightly', 'monthly', 'yearly'];
         if (!validScheduleTypes.includes(body.scheduleType.toLowerCase())) {
@@ -807,7 +810,7 @@ export function registerMitzvotRoutes(app: App) {
         subdomain: headers.findIndex(h => ['subdomain', 'sub domain', 'sub_domain', 'sub_category', 'sub category', 'level 2 category'].includes(h)),
         tags: headers.findIndex(h => ['tags', 'tag', 'keywords', 'keyword', 'search tags'].includes(h)),
         mode: headers.findIndex(h => ['mode', 'behavior', 'behavior mode', 'behavior_mode'].includes(h)),
-        location: headers.findIndex(h => ['location', 'place', 'where', 'location type', 'location_type'].includes(h)),
+        location: headers.findIndex(h => ['location', 'place', 'where', 'location type', 'location_type', 'place it applies', 'place_it_applies'].includes(h)),
         timePeriod: headers.findIndex(h => ['time', 'time period', 'time_period', 'when', 'period'].includes(h)),
       };
 
@@ -1023,9 +1026,12 @@ export function registerMitzvotRoutes(app: App) {
 
     try {
       // CSV headers for the template
+      // CSV column order: mitzvah_number, title, type, location, description, source, applies_to, primary_domain, subdomain, tags, mode
       const headers = [
         'mitzvah_number',
         'title',
+        'type',
+        'location',
         'description',
         'source',
         'applies_to',
@@ -1034,18 +1040,19 @@ export function registerMitzvotRoutes(app: App) {
         'tags',
         'mode',
         'hebrew_name',
-        'type',
-        'location',
         'time_period',
         'category_name',
         'schedule_type',
       ];
 
       // Create sample rows for the template
+      // Column order: mitzvah_number, title, type, location, description, source, applies_to, primary_domain, subdomain, tags, mode, hebrew_name, time_period, category_name, schedule_type
       const sampleRows = [
         [
           '4',
           'Shabbat Observance',
+          'PROACTIVE',
+          'Home',
           'Keep the Sabbath day holy',
           'Torah',
           'All Jews',
@@ -1054,8 +1061,6 @@ export function registerMitzvotRoutes(app: App) {
           'religious, observance',
           'Positive, Proactive',
           'שמירת השבת',
-          'PROACTIVE',
-          'Home',
           'Weekly - Friday to Saturday',
           'Observances',
           'weekly',
@@ -1063,6 +1068,8 @@ export function registerMitzvotRoutes(app: App) {
         [
           '12',
           'Tefillin',
+          'PROACTIVE',
+          'Synagogue/Home',
           'Bind phylacteries on arm and head during morning prayers',
           'Torah',
           'Jewish men',
@@ -1071,8 +1078,6 @@ export function registerMitzvotRoutes(app: App) {
           'prayer, phylacteries, morning',
           'Positive, Proactive',
           'תפילין',
-          'PROACTIVE',
-          'Synagogue/Home',
           'Daily morning',
           'Prayer/Blessings',
           'daily',
@@ -1080,6 +1085,8 @@ export function registerMitzvotRoutes(app: App) {
         [
           '195',
           'Tzedakah',
+          'PROACTIVE',
+          'Community',
           'Give charity to the poor',
           'Torah',
           'All Jews',
@@ -1088,8 +1095,6 @@ export function registerMitzvotRoutes(app: App) {
           'charity, kindness, generosity',
           'Positive, Proactive',
           'צדקה',
-          'PROACTIVE',
-          'Community',
           'Year-round',
           'Charity',
           'always',
@@ -1217,7 +1222,7 @@ export function registerMitzvotRoutes(app: App) {
         subdomain: headers.findIndex(h => ['subdomain', 'sub domain', 'sub_domain', 'sub_category', 'sub category', 'level 2 category'].includes(h)),
         tags: headers.findIndex(h => ['tags', 'tag', 'keywords', 'keyword', 'search tags'].includes(h)),
         mode: headers.findIndex(h => ['mode', 'behavior', 'behavior mode', 'behavior_mode'].includes(h)),
-        location: headers.findIndex(h => ['location', 'place', 'where', 'location type', 'location_type'].includes(h)),
+        location: headers.findIndex(h => ['location', 'place', 'where', 'location type', 'location_type', 'place it applies', 'place_it_applies'].includes(h)),
         timePeriod: headers.findIndex(h => ['time', 'time period', 'time_period', 'when', 'period'].includes(h)),
         scheduleType: headers.findIndex(h => ['schedule', 'schedule type', 'schedule_type', 'frequency', 'recurrence'].includes(h)),
       };
