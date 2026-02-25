@@ -237,17 +237,27 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
           ? 'always_active'
           : config.scheduleType.toLowerCase() as any;
 
-        // Determine the effective calendar type for monthly schedules
-        // If using alternative calendar for monthly, use that; otherwise use the global calendarType
+        // CRITICAL FIX: Determine the effective calendar type for BOTH monthly AND yearly schedules
+        // If using alternative calendar, use that; otherwise use the global calendarType
         let effectiveCalendarType = config.calendarType || 'Gregorian';
+        
         if (recurrenceType === 'monthly' && config.monthlyUseAlternativeCalendar && config.monthlyCalendarType) {
           effectiveCalendarType = config.monthlyCalendarType.charAt(0).toUpperCase() + config.monthlyCalendarType.slice(1) as any;
         }
+        
+        // CRITICAL FIX: Also handle yearly schedules with alternative calendar
+        if (recurrenceType === 'yearly' && config.yearlyUseAlternativeCalendar && config.yearlyCalendarType) {
+          effectiveCalendarType = config.yearlyCalendarType.charAt(0).toUpperCase() + config.yearlyCalendarType.slice(1) as any;
+        }
 
         console.log('[GoalScheduler] Effective calendar type for schedule:', effectiveCalendarType, {
+          recurrenceType,
           monthlyUseAlternativeCalendar: config.monthlyUseAlternativeCalendar,
           monthlyCalendarType: config.monthlyCalendarType,
           monthlyCalendarEvent: config.monthlyCalendarEvent,
+          yearlyUseAlternativeCalendar: config.yearlyUseAlternativeCalendar,
+          yearlyCalendarType: config.yearlyCalendarType,
+          yearlyCalendarEvent: config.yearlyCalendarEvent,
         });
 
         const goalSchedule: GoalSchedule = {

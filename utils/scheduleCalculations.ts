@@ -577,12 +577,27 @@ function generateYearlyActivations(
 
   // FIXED: For Hebrew calendar, use the same iteration pattern as monthly
   if (isHebrew) {
-    console.log('[ScheduleCalc] Generating Hebrew yearly activations');
+    console.log('[ScheduleCalc] ✅ Generating Hebrew yearly activations');
+    console.log('[ScheduleCalc] Hebrew Calendar Month Mapping:');
+    console.log('  1 = Tishrei (Sep/Oct)');
+    console.log('  2 = Cheshvan (Oct/Nov)');
+    console.log('  3 = Kislev (Nov/Dec)');
+    console.log('  4 = Tevet (Dec/Jan)');
+    console.log('  5 = Shevat (Jan/Feb)');
+    console.log('  6 = Adar (Feb/Mar)');
+    console.log('  7 = Nissan (Mar/Apr)');
+    console.log('  8 = Iyar (Apr/May)');
+    console.log('  9 = Sivan (May/Jun)');
+    console.log('  10 = Tammuz (Jun/Jul)');
+    console.log('  11 = Av (Jul/Aug)');
+    console.log('  12 = Elul (Aug/Sep)');
     
     try {
       // Get the current Hebrew date to start from
       const currentHDate = new HDate(now.toJSDate());
       let currentHebrewYear = currentHDate.getFullYear();
+
+      console.log(`[ScheduleCalc] Starting from Hebrew year ${currentHebrewYear} (Gregorian: ${now.year})`);
 
       // Iterate through Hebrew years to find next occurrences
       let yearsChecked = 0;
@@ -592,18 +607,31 @@ function generateYearlyActivations(
         yearsChecked++;
 
         // Process new format: yearlyDates (Array<{month, day}>)
+        // CRITICAL: entry.month is the HEBREW month number (1=Tishrei, 2=Cheshvan, etc.)
+        // NOT the Gregorian month number
         if (yearlyDates && yearlyDates.length > 0) {
           for (const entry of yearlyDates) {
             if (activations.length >= count) break;
             try {
+              // entry.month is Hebrew month: 1=Tishrei, 2=Cheshvan, 3=Kislev, 4=Tevet, 5=Shevat, 6=Adar, 7=Nissan, etc.
+              // entry.day is Hebrew day of month
+              const hebrewMonthNames = ['', 'Tishrei', 'Cheshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar', 'Nissan', 'Iyar', 'Sivan', 'Tammuz', 'Av', 'Elul'];
+              const monthName = hebrewMonthNames[entry.month] || `Month ${entry.month}`;
+              console.log(`[ScheduleCalc] ✅ Creating Hebrew date: ${monthName} ${entry.day}, ${currentHebrewYear} (Hebrew month ${entry.month})`);
+              
               const hdate = new HDate(entry.day, entry.month, currentHebrewYear);
               const gregDate = hdate.greg();
+              const gregDateStr = `${gregDate.getFullYear()}-${(gregDate.getMonth() + 1).toString().padStart(2, '0')}-${gregDate.getDate().toString().padStart(2, '0')}`;
+              console.log(`[ScheduleCalc] ✅ Converts to Gregorian: ${gregDateStr}`);
+              
               const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
               if (activation > now && activation <= end) {
                 activations.push(createActivationPreview(activation, schedule, alarms, location));
+                console.log(`[ScheduleCalc] ✅ Added activation: ${activation.toFormat('MMMM d, yyyy')}`);
               }
-            } catch {
+            } catch (error) {
               // Invalid Hebrew date (e.g., day 30 in a 29-day month), skip
+              console.warn(`[ScheduleCalc] ❌ Invalid Hebrew date: day=${entry.day}, month=${entry.month}, year=${currentHebrewYear}`, error);
             }
           }
         }
