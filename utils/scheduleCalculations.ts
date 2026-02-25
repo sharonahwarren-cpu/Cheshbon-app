@@ -1,7 +1,7 @@
 
 import { DateTime } from 'luxon';
 import { RRule, RRuleSet, rrulestr } from 'rrule';
-import { HDate, HebrewCalendar, months as hebrewMonths } from '@hebcal/core';
+import { HDate, HebrewCalendar } from '@hebcal/core';
 import moment from 'moment-hijri';
 import { Lunar, Solar } from 'lunar-javascript';
 import { getTimes } from 'suncalc';
@@ -46,6 +46,7 @@ export interface ScheduleDetails {
   nthDay?: Array<{ day: string; nth: number }>; // e.g., {day: 'Tuesday', nth: 2}
   range?: { start: number; end: number };
   randomCount?: number; // e.g., 3; shuffle/select
+  calendarEvent?: string; // Hebrew calendar event name (e.g., "Rosh Chodesh")
 
   // Yearly - REBUILT FROM SCRATCH (following Monthly pattern)
   months?: number[]; // 1-12 (Gregorian) or specific Hebrew/Chinese/Islamic month indices
@@ -242,7 +243,95 @@ function generateFortnightlyActivations(
 }
 
 /**
- * Generate monthly activations
+ * Generate next N occurrences of a Hebrew calendar event (e.g., "Rosh Chodesh")
+ * Uses @hebcal/core HebrewCalendar to find matching events.
+ */
+function generateHebrewCalendarEventActivations(
+  eventName: string,
+  now: DateTime,
+  count: number,
+  timezone: string,
+  schedule: GoalSchedule,
+  alarms?: GoalAlarm[],
+  location?: { latitude: number; longitude: number }
+): ActivationPreview[] {
+  const activations: ActivationPreview[] = [];
+  try {
+    const startHDate = new HDate(now.toJSDate());
+    const endHDate = new HDate(now.plus({ years: 3 }).toJSDate());
+
+    const events = HebrewCalendar.calendar({
+      start: startHDate,
+      end: endHDate,
+      isHebrewYear: false,
+      sedrot: false,
+      omer: false,
+      shabbat: false,
+      noHolidays: false,
+    });
+
+    const normalizedEventName = eventName.toLowerCase().replace(/[\s']/g, '');
+
+    for (const event of events) {
+      if (activations.length >= count) break;
+      const desc = event.getDesc().toLowerCase().replace(/[\s']/g, '');
+      // Match event name - handle partial matches for events like "Rosh Chodesh Tishrei"
+      // "roshchodesh" should match "roshchodesh tishrei", "roshchodesh nisan", etc.
+      const matches = desc.startsWith(normalizedEventName) ||
+        normalizedEventName.startsWith(desc.substring(0, Math.min(10, desc.length)));
+
+      if (matches) {
+        const gregDate = event.getDate().greg();
+        const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
+        if (activation > now) {
+          activations.push(createActivationPreview(activation, schedule, alarms, location));
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[ScheduleCalc] Failed to generate Hebrew calendar event activations:', error);
+  }
+  return activations;
+}
+
+/**
+ * Convert a Hebrew month/day in a given Hebrew year to a Gregorian DateTime.
+ * @internal
+ */
+function getGregorianDateForHebrewMonthDay(
+  hebrewMonth: number,
+  hebrewDay: number,
+  afterDate: DateTime,
+  timezone: string
+): DateTime | null {
+  try {
+    // Try Hebrew years that could contain this month/day after the given date
+    // Hebrew year starts in Tishrei (around Sep/Oct)
+    // We need to try a range of Hebrew years
+    const approxHebrewYear = afterDate.year + 3760;
+
+    for (let yearOffset = -1; yearOffset <= 3; yearOffset++) {
+      const hebrewYear = approxHebrewYear + yearOffset;
+      try {
+        const hdate = new HDate(hebrewDay, hebrewMonth, hebrewYear);
+        const gregDate = hdate.greg();
+        const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
+        if (activation > afterDate) {
+          return activation;
+        }
+      } catch {
+        // Invalid Hebrew date (e.g., day 30 in a month with only 29 days), skip
+      }
+    }
+    return null;
+  } catch (error) {
+    console.warn('[ScheduleCalc] Failed to convert Hebrew month/day to Gregorian:', error);
+    return null;
+  }
+}
+
+/**
+ * Generate monthly activations with Hebrew calendar support
  */
 function generateMonthlyActivations(
   schedule: GoalSchedule,
@@ -258,6 +347,72 @@ function generateMonthlyActivations(
   const start = startDate ? DateTime.fromISO(startDate, { zone: 'UTC' }).setZone(timezone) : now;
   const end = endDate ? DateTime.fromISO(endDate, { zone: 'UTC' }).setZone(timezone) : now.plus({ years: 1 });
 
+  // Check if this is a Hebrew calendar monthly schedule
+  const isHebrew = schedule.calendarType === 'Hebrew';
+
+  // Handle Hebrew calendar event (e.g., "Rosh Chodesh")
+  // These are stored in the schedule details as a special marker
+  const calendarEvent = (schedule.details as any).calendarEvent;
+  if (isHebrew && calendarEvent) {
+    console.log('[ScheduleCalc] Generating Hebrew calendar event activations for:', calendarEvent);
+    return generateHebrewCalendarEventActivations(calendarEvent, now, count, timezone, schedule, alarms, location);
+  }
+
+  // Handle Hebrew calendar with specific day numbers (e.g., 21st of each Hebrew month)
+  if (isHebrew && dates && dates.length > 0) {
+    console.log('[ScheduleCalc] Generating Hebrew monthly activations for days:', dates);
+
+    try {
+      // Get the current Hebrew date to start from
+      const currentHDate = new HDate(now.toJSDate());
+      let currentHebrewMonth = currentHDate.getMonth();
+      let currentHebrewYear = currentHDate.getFullYear();
+
+      // Iterate through Hebrew months to find next occurrences
+      let monthsChecked = 0;
+      const maxMonthsToCheck = count * 15 + 24; // Safety limit
+
+      while (activations.length < count && monthsChecked < maxMonthsToCheck) {
+        monthsChecked++;
+
+        // Handle Adar in non-leap years (skip Adar II = month 7 in non-leap years)
+        const isLeap = isHebrewLeapYear(currentHebrewYear);
+        if (!isLeap && currentHebrewMonth === 7) {
+          // Skip Adar II in non-leap years, go to Nisan (month 8 in leap = month 7 in non-leap)
+          currentHebrewMonth = 8;
+        }
+
+        for (const hebrewDay of dates) {
+          if (activations.length >= count) break;
+          try {
+            const hdate = new HDate(hebrewDay, currentHebrewMonth, currentHebrewYear);
+            const gregDate = hdate.greg();
+            const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
+            if (activation > now && activation <= end) {
+              activations.push(createActivationPreview(activation, schedule, alarms, location));
+            }
+          } catch {
+            // Invalid Hebrew date (e.g., day 30 in a 29-day month), skip
+          }
+        }
+
+        // Advance to next Hebrew month
+        currentHebrewMonth++;
+        // Hebrew year has 12 months (non-leap) or 13 months (leap)
+        const monthsInYear = isHebrewLeapYear(currentHebrewYear) ? 13 : 12;
+        if (currentHebrewMonth > monthsInYear) {
+          currentHebrewMonth = 1;
+          currentHebrewYear++;
+        }
+      }
+    } catch (error) {
+      console.warn('[ScheduleCalc] Error in Hebrew monthly calculation:', error);
+    }
+
+    return activations.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  // Standard Gregorian monthly calculation
   let currentMonth = start.startOf('month');
   if (currentMonth < now.startOf('month')) {
     currentMonth = now.startOf('month');

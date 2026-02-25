@@ -237,8 +237,21 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
           ? 'always_active'
           : config.scheduleType.toLowerCase() as any;
 
+        // Determine the effective calendar type for monthly schedules
+        // If using alternative calendar for monthly, use that; otherwise use the global calendarType
+        let effectiveCalendarType = config.calendarType || 'Gregorian';
+        if (recurrenceType === 'monthly' && config.monthlyUseAlternativeCalendar && config.monthlyCalendarType) {
+          effectiveCalendarType = config.monthlyCalendarType.charAt(0).toUpperCase() + config.monthlyCalendarType.slice(1) as any;
+        }
+
+        console.log('[GoalScheduler] Effective calendar type for schedule:', effectiveCalendarType, {
+          monthlyUseAlternativeCalendar: config.monthlyUseAlternativeCalendar,
+          monthlyCalendarType: config.monthlyCalendarType,
+          monthlyCalendarEvent: config.monthlyCalendarEvent,
+        });
+
         const goalSchedule: GoalSchedule = {
-          calendarType: (config.calendarType || 'Gregorian') as any,
+          calendarType: effectiveCalendarType as any,
           recurrenceType,
           details: {
             daysOfWeek: config.weekdays,
@@ -251,6 +264,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               ? { start: config.monthlyRangeStart, end: config.monthlyRangeEnd }
               : undefined,
             randomCount: config.monthlyRandomCount,
+            // Pass Hebrew calendar event for monthly schedules
+            calendarEvent: (recurrenceType === 'monthly' && config.monthlyUseAlternativeCalendar)
+              ? config.monthlyCalendarEvent
+              : undefined,
             // NEW: Yearly dates and ranges (following monthly pattern)
             // yearlyDates is now Array<{month, day}> - convert to datesOrRanges format
             datesOrRanges: [
@@ -302,8 +319,14 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     config.monthlyRangeStart,
     config.monthlyRangeEnd,
     config.monthlyRandomCount,
+    config.monthlyCalendarType,
+    config.monthlyUseAlternativeCalendar,
+    config.monthlyCalendarEvent,
     JSON.stringify(config.yearlyDates),
     JSON.stringify(config.yearlyRanges),
+    config.yearlyCalendarType,
+    config.yearlyUseAlternativeCalendar,
+    config.yearlyCalendarEvent,
     config.startDate?.toISOString(),
     config.endDate?.toISOString(),
     config.calendarType,
@@ -315,6 +338,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
     console.log('[GoalScheduler] Updating config:', updates);
+    // Clear backend summary when user makes changes - local preview will take over
+    if (backendSummary) {
+      setBackendSummary(null);
+    }
     onChange({ ...config, ...updates });
   };
 
@@ -435,6 +462,14 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       return null;
     }
 
+    // Use backend occurrences when available (they use proper Hebrew calendar calculations)
+    // Fall back to local occurrences for live preview while editing
+    const displayOccurrences = (backendSummary?.nextOccurrences && backendSummary.nextOccurrences.length > 0)
+      ? backendSummary.nextOccurrences
+      : localNextOccurrences;
+
+    const isShowingBackendOccurrences = backendSummary?.nextOccurrences && backendSummary.nextOccurrences.length > 0;
+
     return (
       <View style={styles.summaryContainer}>
         <View style={styles.summaryHeader}>
@@ -445,12 +480,17 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
             color={colors.primary}
           />
           <Text style={styles.summaryTitle}>Schedule Summary</Text>
+          {loadingBackendSummary && (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: 8 }} />
+          )}
         </View>
         <Text style={styles.summaryText}>{scheduleSummary}</Text>
-        {localNextOccurrences.length > 0 && (
+        {displayOccurrences.length > 0 && (
           <View style={styles.nextOccurrencesContainer}>
-            <Text style={styles.nextOccurrencesTitle}>Next Occurrences (preview):</Text>
-            {localNextOccurrences.map((occurrence, index) => {
+            <Text style={styles.nextOccurrencesTitle}>
+              {isShowingBackendOccurrences ? 'Next Occurrences (saved):' : 'Next Occurrences (preview):'}
+            </Text>
+            {displayOccurrences.map((occurrence, index) => {
               const dateText = occurrence.date;
               return (
                 <View
@@ -473,6 +513,11 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               );
             })}
           </View>
+        )}
+        {backendSummaryError && (
+          <Text style={styles.summaryFallbackNote}>
+            ⚠️ Could not load saved schedule: {backendSummaryError}
+          </Text>
         )}
       </View>
     );
