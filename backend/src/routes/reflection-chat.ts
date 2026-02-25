@@ -7,6 +7,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // Initialize Gemini client lazily - only when needed
 let genAI: GoogleGenerativeAI | null = null;
 let geminiInitError: string | null = null;
+export let isAIConfigured = false;
 
 function getGeminiClient(): GoogleGenerativeAI {
   if (geminiInitError) {
@@ -39,10 +40,12 @@ export function registerReflectionChatRoutes(app: App) {
 
   // Validate Gemini API configuration on startup
   if (!process.env.GOOGLE_API_KEY) {
+    isAIConfigured = false;
     app.logger.warn(
-      'GOOGLE_API_KEY environment variable is not set. AI reflection chat features will not be available.'
+      '⚠️ AI provider not configured. Voice transcription and AI chat features will be disabled.'
     );
   } else {
+    isAIConfigured = true;
     app.logger.info('Reflection chat routes registered - AI service available');
   }
 
@@ -57,6 +60,14 @@ export function registerReflectionChatRoutes(app: App) {
     const userId = session.user.id;
 
     app.logger.info({ userId }, 'Creating new reflection conversation');
+
+    // Check if AI is configured
+    if (!isAIConfigured) {
+      app.logger.warn({ userId }, 'AI chat requested but AI is not configured');
+      return reply.status(400).send({
+        error: 'AI chat requires configuration. Please contact the administrator to enable this feature.',
+      });
+    }
 
     try {
       const conversations = await app.db
@@ -233,20 +244,31 @@ export function registerReflectionChatRoutes(app: App) {
         'Processing reflection message'
       );
 
-      // Transcribe audio if provided
-      let userMessage = messageText;
-
-      if (audioBase64 && !messageText) {
-        // Check if AI is configured
-        if (!process.env.GOOGLE_API_KEY) {
+      // Check if AI is configured
+      if (!isAIConfigured) {
+        if (audioBase64 && !messageText) {
           app.logger.warn(
             { userId, conversationId: id },
             'Voice transcription requested but AI is not configured'
           );
           return reply.status(400).send({
-            error: 'Voice transcription requires AI configuration. Please use text mode instead.',
+            error: 'Voice transcription requires AI configuration. Please contact the administrator to enable this feature.',
+          });
+        } else if (messageText) {
+          app.logger.warn(
+            { userId, conversationId: id },
+            'AI chat requested but AI is not configured'
+          );
+          return reply.status(400).send({
+            error: 'AI chat requires configuration. Please contact the administrator to enable this feature.',
           });
         }
+      }
+
+      // Transcribe audio if provided
+      let userMessage = messageText;
+
+      if (audioBase64 && !messageText) {
 
         try {
           app.logger.info({ userId, conversationId: id }, 'Transcribing audio message');
