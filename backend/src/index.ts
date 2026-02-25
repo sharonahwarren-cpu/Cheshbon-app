@@ -16,6 +16,8 @@ import { registerGainsLossesRoutes } from './routes/gains-losses.js';
 import { registerAlarmsRoutes } from './routes/alarms.js';
 import { registerReflectionChatRoutes } from './routes/reflection-chat.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerMitzvotRoutes } from './routes/mitzvot.js';
+import { registerMitzvotCategoryRoutes } from './routes/mitzvot-categories.js';
 
 // Combine both schemas
 const schema = { ...appSchema, ...authSchema };
@@ -28,6 +30,9 @@ export type App = typeof app;
 
 // Enable authentication with Better Auth
 app.withAuth();
+
+// Enable storage for file uploads and management
+app.withStorage();
 
 // Register routes - add your route modules here
 // IMPORTANT: Always use registration functions to avoid circular dependency issues
@@ -46,6 +51,8 @@ registerGainsLossesRoutes(app);
 registerAlarmsRoutes(app);
 registerReflectionChatRoutes(app);
 registerHealthRoutes(app);
+registerMitzvotCategoryRoutes(app);
+registerMitzvotRoutes(app);
 
 await app.run();
 app.logger.info('Application running');

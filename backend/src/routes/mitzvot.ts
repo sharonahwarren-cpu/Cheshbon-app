@@ -906,7 +906,30 @@ export function registerMitzvotRoutes(app: App) {
   });
 
   // GET /api/mitzvot/import-status - Get CSV import status
-  app.fastify.get('/api/mitzvot/import-status', async (
+  app.fastify.get('/api/mitzvot/import-status', {
+    schema: {
+      description: 'Get mitzvot import status and availability',
+      tags: ['mitzvot'],
+      response: {
+        200: {
+          description: 'Import status information',
+          type: 'object',
+          properties: {
+            totalSystemMitzvot: { type: 'integer', description: 'Number of system mitzvot for user' },
+            userHasImported: { type: 'boolean', description: 'Whether user has imported system mitzvot' },
+            systemMitzvotAvailable: { type: 'boolean', description: 'Whether system mitzvot CSV is available' },
+          },
+        },
+        401: {
+          description: 'Unauthorized',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
@@ -927,8 +950,18 @@ export function registerMitzvotRoutes(app: App) {
       const totalSystemMitzvot = systemMitzvot.length;
       const userHasImported = totalSystemMitzvot > 0;
 
-      app.logger.info({ userId: session.user.id, totalSystemMitzvot, userHasImported }, 'Import status fetched successfully');
-      return { totalSystemMitzvot, userHasImported };
+      // Check if the CSV file exists in storage
+      let systemMitzvotAvailable = false;
+      try {
+        const buffer = await app.storage.download('Mitzvot 01.csv');
+        systemMitzvotAvailable = buffer && buffer.length > 0;
+      } catch (error) {
+        app.logger.debug({ error }, 'Mitzvot 01.csv not found in storage');
+        systemMitzvotAvailable = false;
+      }
+
+      app.logger.info({ userId: session.user.id, totalSystemMitzvot, userHasImported, systemMitzvotAvailable }, 'Import status fetched successfully');
+      return { totalSystemMitzvot, userHasImported, systemMitzvotAvailable };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch import status');
       throw error;
@@ -1038,6 +1071,207 @@ export function registerMitzvotRoutes(app: App) {
       return csvContent;
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id }, 'Failed to generate CSV template');
+      throw error;
+    }
+  });
+
+  // POST /api/mitzvot/initialize-system - Initialize system mitzvot from CSV file
+  app.fastify.post('/api/mitzvot/initialize-system', {
+    schema: {
+      description: 'Initialize system mitzvot from pre-uploaded CSV file (Mitzvot 01.csv)',
+      tags: ['mitzvot'],
+      response: {
+        200: {
+          description: 'System mitzvot initialization result',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            imported: { type: 'integer', description: 'Number of mitzvot imported' },
+            skipped: { type: 'integer', description: 'Number of rows skipped' },
+            errors: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Error messages from processing',
+            },
+            message: { type: 'string', description: 'Status message' },
+          },
+        },
+        400: {
+          description: 'CSV file not found or invalid format',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+        401: {
+          description: 'Unauthorized',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Initializing system mitzvot');
+
+    try {
+      // Check if user already has system mitzvot
+      const existingSystemMitzvot = await app.db
+        .select()
+        .from(schema.mitzvot)
+        .where(and(
+          eq(schema.mitzvot.userId, session.user.id),
+          eq(schema.mitzvot.isSystem, true)
+        ));
+
+      if (existingSystemMitzvot.length > 0) {
+        app.logger.info({ userId: session.user.id, existingCount: existingSystemMitzvot.length }, 'User already has system mitzvot');
+        return {
+          success: true,
+          imported: 0,
+          skipped: existingSystemMitzvot.length,
+          errors: [],
+          message: 'System mitzvot already initialized',
+        };
+      }
+
+      // Read the CSV file from storage
+      let csvBuffer: Buffer;
+      try {
+        csvBuffer = await app.storage.download('Mitzvot 01.csv');
+      } catch (error) {
+        app.logger.error({ error }, 'Failed to download Mitzvot 01.csv from storage');
+        return reply.status(400).send({ error: 'System mitzvot CSV file not found in storage' });
+      }
+
+      const csvContent = csvBuffer.toString('utf-8');
+      const lines = csvContent.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+      if (lines.length < 2) {
+        app.logger.warn({ userId: session.user.id }, 'CSV file has no data rows');
+        return reply.status(400).send({ error: 'CSV file must have header row and at least one data row' });
+      }
+
+      // Parse CSV headers (flexible matching)
+      const headerLine = lines[0];
+      const headers = headerLine.split(',').map(h => h.trim().toLowerCase());
+
+      // Map common column names
+      const columnMap = {
+        number: headers.findIndex(h => ['number', 'mitzvah number', 'mitzvah_number', 'num', 'id'].includes(h)),
+        title: headers.findIndex(h => ['title', 'name', 'mitzvah', 'mitzvah name', 'mitzvah_name'].includes(h)),
+        description: headers.findIndex(h => ['description', 'desc', 'details', 'detail'].includes(h)),
+        type: headers.findIndex(h => ['type', 'category type', 'category_type'].includes(h)),
+        category: headers.findIndex(h => ['category', 'category name', 'category_name'].includes(h)),
+        source: headers.findIndex(h => ['source', 'reference', 'source reference', 'source_reference'].includes(h)),
+        hebrew: headers.findIndex(h => ['hebrew', 'hebrew name', 'hebrew_name', 'hebrew text', 'hebrew_text'].includes(h)),
+        appliesTo: headers.findIndex(h => ['applies to', 'applies_to', 'who', 'applicable to', 'applicable_to'].includes(h)),
+        location: headers.findIndex(h => ['location', 'place', 'where', 'location type', 'location_type'].includes(h)),
+        timePeriod: headers.findIndex(h => ['time', 'time period', 'time_period', 'when', 'period'].includes(h)),
+        scheduleType: headers.findIndex(h => ['schedule', 'schedule type', 'schedule_type', 'frequency', 'recurrence'].includes(h)),
+      };
+
+      // Validate required columns
+      if (columnMap.title === -1) {
+        app.logger.warn({ userId: session.user.id }, 'CSV missing title column');
+        return reply.status(400).send({ error: 'CSV must have a "title" or "name" column' });
+      }
+
+      const errors: string[] = [];
+      let imported = 0;
+      let skipped = 0;
+
+      // Get all categories for the user
+      const categories = await app.db
+        .select()
+        .from(schema.mitzvotCategories)
+        .where(eq(schema.mitzvotCategories.userId, session.user.id));
+
+      const categoryMap = new Map(categories.map(c => [c.name.toLowerCase(), c.id]));
+
+      // Process each row
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          const values = lines[i].split(',').map(v => v.trim());
+
+          if (values.length < columnMap.title + 1 || !values[columnMap.title]) {
+            skipped++;
+            continue;
+          }
+
+          const mitzvahNumber = columnMap.number !== -1 && values[columnMap.number] ? parseInt(values[columnMap.number]) : null;
+          const title = values[columnMap.title];
+          const description = columnMap.description !== -1 ? values[columnMap.description] || null : null;
+          const type = columnMap.type !== -1 ? values[columnMap.type] || 'PROACTIVE' : 'PROACTIVE';
+          const source = columnMap.source !== -1 ? values[columnMap.source] || null : null;
+          const hebrewName = columnMap.hebrew !== -1 ? values[columnMap.hebrew] || null : null;
+          const appliesToCat = columnMap.appliesTo !== -1 ? values[columnMap.appliesTo] || null : null;
+          const location = columnMap.location !== -1 ? values[columnMap.location] || null : null;
+          const timePeriod = columnMap.timePeriod !== -1 ? values[columnMap.timePeriod] || null : null;
+          const scheduleType = columnMap.scheduleType !== -1 ? values[columnMap.scheduleType] || 'always_active' : 'always_active';
+
+          // Find or use category
+          let categoryId = null;
+          if (columnMap.category !== -1 && values[columnMap.category]) {
+            const categoryName = values[columnMap.category];
+            const existingCategoryId = categoryMap.get(categoryName.toLowerCase());
+            if (existingCategoryId) {
+              categoryId = existingCategoryId;
+            } else {
+              // Create new category
+              const newCategory = await app.db
+                .insert(schema.mitzvotCategories)
+                .values({
+                  userId: session.user.id,
+                  name: categoryName,
+                  isSystem: true,
+                  displayOrder: 0,
+                })
+                .returning();
+              categoryId = newCategory[0].id;
+              categoryMap.set(categoryName.toLowerCase(), categoryId);
+            }
+          }
+
+          const mitzvahValues = {
+            userId: session.user.id,
+            title,
+            description,
+            categoryId,
+            type,
+            status: 'ACTIVE',
+            isSystem: true,
+            scheduleType,
+            mitzvahNumber,
+            source,
+            hebrewName,
+            appliesToCat,
+            location,
+            timePeriod,
+          };
+
+          await app.db
+            .insert(schema.mitzvot)
+            .values(mitzvahValues as any);
+
+          imported++;
+        } catch (error) {
+          app.logger.warn({ userId: session.user.id, rowIndex: i, error }, 'Failed to import mitzvah row');
+          errors.push(`Row ${i + 1}: ${(error as Error).message}`);
+        }
+      }
+
+      app.logger.info({ userId: session.user.id, imported, skipped, errors: errors.length }, 'System mitzvot initialized successfully');
+      return { success: true, imported, skipped, errors };
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to initialize system mitzvot');
       throw error;
     }
   });
