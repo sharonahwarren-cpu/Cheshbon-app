@@ -49,13 +49,14 @@ export interface ScheduleDetails {
   calendarEvent?: string; // Hebrew calendar event name (e.g., "Rosh Chodesh")
 
   // Yearly - REBUILT FROM SCRATCH (following Monthly pattern)
-  months?: number[]; // 1-12 (Gregorian) or specific Hebrew/Chinese/Islamic month indices
-  // datesOrRanges: each entry can be a specific date (days array) or a range (start/end)
-  datesOrRanges?: Array<{ month: number; days?: number[]; start?: number; end?: number; endMonth?: number }>;
-  // yearlyDates: new {month, day} format from backend jsonb (alternative to datesOrRanges)
+  // yearlyDates: Array of {month, day} objects stored as jsonb in backend
   yearlyDates?: Array<{ month: number; day: number }>;
   // yearlyRanges: new range format from backend jsonb
   yearlyRanges?: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }>;
+  // yearlyCalendarEvent: Hebrew calendar event for yearly schedules (e.g., "Yom Kippur")
+  yearlyCalendarEvent?: string;
+  // datesOrRanges: legacy format (kept for backward compatibility)
+  datesOrRanges?: Array<{ month: number; days?: number[]; start?: number; end?: number; endMonth?: number }>;
 }
 
 export interface GoalSchedule {
@@ -486,11 +487,10 @@ function hebrewToGregorianDate(hebrewYear: number, hebrewMonth: number, hebrewDa
 }
 
 /**
- * REBUILT FROM SCRATCH: Generate yearly activations (following Monthly pattern)
+ * FIXED: Generate yearly activations with proper Hebrew calendar event support
  * Supports both new {month, day} format (yearlyDates/yearlyRanges) and legacy datesOrRanges format
  * 
- * FIXED: Hebrew calendar yearly calculation now properly iterates through Hebrew years
- * like the working monthly section does.
+ * CRITICAL FIX: Now properly handles yearlyCalendarEvent (like "Yom Kippur") for Hebrew calendar
  */
 function generateYearlyActivations(
   schedule: GoalSchedule,
@@ -501,16 +501,17 @@ function generateYearlyActivations(
   location?: { latitude: number; longitude: number }
 ): ActivationPreview[] {
   const activations: ActivationPreview[] = [];
-  const { datesOrRanges, yearlyDates, yearlyRanges, startDate, endDate } = schedule.details;
+  const { datesOrRanges, yearlyDates, yearlyRanges, startDate, endDate, yearlyCalendarEvent } = schedule.details;
 
   // Build a unified list of date entries from all sources
   // New format: yearlyDates (Array<{month, day}>) and yearlyRanges (Array<{startMonth, startDay, endMonth, endDay}>)
   // Legacy format: datesOrRanges (Array<{month, days?, start?, end?, endMonth?}>)
   const hasNewFormat = (yearlyDates && yearlyDates.length > 0) || (yearlyRanges && yearlyRanges.length > 0);
   const hasLegacyFormat = datesOrRanges && datesOrRanges.length > 0;
+  const hasCalendarEvent = yearlyCalendarEvent;
 
-  if (!hasNewFormat && !hasLegacyFormat) {
-    console.warn('[ScheduleCalc] No dates or ranges specified for yearly schedule');
+  if (!hasNewFormat && !hasLegacyFormat && !hasCalendarEvent) {
+    console.warn('[ScheduleCalc] No dates, ranges, or calendar event specified for yearly schedule');
     return [];
   }
 
@@ -518,6 +519,12 @@ function generateYearlyActivations(
   const end = endDate ? DateTime.fromISO(endDate, { zone: 'UTC' }).setZone(timezone) : now.plus({ years: 10 });
 
   const isHebrew = schedule.calendarType === 'Hebrew';
+
+  // CRITICAL FIX: Handle Hebrew calendar event (e.g., "Yom Kippur") for yearly schedules
+  if (isHebrew && hasCalendarEvent) {
+    console.log('[ScheduleCalc] Generating yearly Hebrew calendar event activations for:', yearlyCalendarEvent);
+    return generateHebrewCalendarEventActivations(yearlyCalendarEvent, now, count, timezone, schedule, alarms, location);
+  }
 
   // FIXED: For Hebrew calendar, use the same iteration pattern as monthly
   if (isHebrew) {

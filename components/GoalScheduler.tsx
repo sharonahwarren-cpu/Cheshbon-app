@@ -270,6 +270,11 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
               : undefined,
             // NEW: Yearly dates and ranges (following monthly pattern)
             // yearlyDates is now Array<{month, day}> - convert to datesOrRanges format
+            yearlyDates: config.yearlyDates,
+            yearlyRanges: config.yearlyRanges,
+            yearlyCalendarEvent: (recurrenceType === 'yearly' && config.yearlyUseAlternativeCalendar)
+              ? config.yearlyCalendarEvent
+              : undefined,
             datesOrRanges: [
               // Convert yearlyDates {month, day} entries to datesOrRanges format
               ...(config.yearlyDates?.map(d => ({
