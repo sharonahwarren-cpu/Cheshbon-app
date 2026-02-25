@@ -312,10 +312,41 @@ function generateHebrewCalendarEventActivations(
       
       if (normalizedSearchName === 'roshhashanah' || normalizedSearchName === 'roshhashana') {
         // Match only "Rosh Hashana" (the holiday), not "Rosh Chodesh"
-        matches = normalizedEventDesc === 'roshhashana' || normalizedEventDesc === 'roshhashanah';
+        // HebCal returns "Rosh Hashana 5786" or "Rosh Hashana II"
+        matches = normalizedEventDesc.startsWith('roshhashana') || normalizedEventDesc.startsWith('roshhashanah');
       } else if (normalizedSearchName === 'yomkippur') {
         // Match only "Yom Kippur"
-        matches = normalizedEventDesc === 'yomkippur';
+        matches = normalizedEventDesc.startsWith('yomkippur');
+      } else if (normalizedSearchName === 'sukkot') {
+        // Match "Sukkot" events
+        matches = normalizedEventDesc.startsWith('sukkot');
+      } else if (normalizedSearchName === 'sheminiatzeret') {
+        // Match "Shemini Atzeret"
+        matches = normalizedEventDesc.startsWith('sheminiatzeret');
+      } else if (normalizedSearchName === 'simchattorah') {
+        // Match "Simchat Torah"
+        matches = normalizedEventDesc.startsWith('simchattorah');
+      } else if (normalizedSearchName === 'chanukah' || normalizedSearchName === 'hanukkah') {
+        // Match "Chanukah" events
+        matches = normalizedEventDesc.startsWith('chanukah') || normalizedEventDesc.startsWith('hanukkah');
+      } else if (normalizedSearchName === 'tubishvat') {
+        // Match "Tu BiShvat"
+        matches = normalizedEventDesc.startsWith('tubishvat');
+      } else if (normalizedSearchName === 'purim') {
+        // Match "Purim" events
+        matches = normalizedEventDesc.startsWith('purim');
+      } else if (normalizedSearchName === 'pesach' || normalizedSearchName === 'passover') {
+        // Match "Pesach" events
+        matches = normalizedEventDesc.startsWith('pesach') || normalizedEventDesc.startsWith('passover');
+      } else if (normalizedSearchName === 'lagbaomer') {
+        // Match "Lag BaOmer"
+        matches = normalizedEventDesc.startsWith('lagbaomer');
+      } else if (normalizedSearchName === 'shavuot') {
+        // Match "Shavuot"
+        matches = normalizedEventDesc.startsWith('shavuot');
+      } else if (normalizedSearchName === 'tishab\'av' || normalizedSearchName === 'tishabav') {
+        // Match "Tisha B'Av"
+        matches = normalizedEventDesc.startsWith('tishabav');
       } else if (normalizedSearchName === 'roshchodesh') {
         // Match "Rosh Chodesh" events (which include the month name)
         matches = normalizedEventDesc.startsWith('roshchodesh');
@@ -329,13 +360,13 @@ function generateHebrewCalendarEventActivations(
           const hebrewMonth = hdate.getMonth();
           const hebrewDay = hdate.getDate();
           
-          // Elul is month 12 in the Hebrew calendar
+          // Elul is month 6 in @hebcal/core (Nisan-based numbering)
           // HebCal will convert this to the correct Gregorian date (Aug/Sep)
-          matches = hebrewMonth === 12 && hebrewDay === targetDay;
+          matches = hebrewMonth === 6 && hebrewDay === targetDay;
         }
       } else {
-        // For other events, use exact matching
-        matches = normalizedEventDesc === normalizedSearchName;
+        // For other events, use startsWith matching to catch multi-day events
+        matches = normalizedEventDesc.startsWith(normalizedSearchName);
       }
 
       if (matches) {

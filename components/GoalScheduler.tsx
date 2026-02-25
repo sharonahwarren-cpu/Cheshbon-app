@@ -144,9 +144,9 @@ function getOrdinalSuffix(num: number): string {
   return 'th';
 }
 
-// Hebrew Calendar Events (same as in Alarm section)
+// Hebrew Calendar Events (matching HebCal event names)
 const HEBREW_EVENTS = [
-  'Rosh Hashanah',
+  'Rosh Hashana',
   'Yom Kippur',
   'Sukkot',
   'Shemini Atzeret',
@@ -157,7 +157,7 @@ const HEBREW_EVENTS = [
   'Pesach',
   'Lag BaOmer',
   'Shavuot',
-  'Tisha BAv',
+  'Tisha B\'Av',
   'Rosh Chodesh',
 ];
 
