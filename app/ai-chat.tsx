@@ -18,7 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedDelete } from '@/utils/api';
+import { authenticatedGet, authenticatedPost, authenticatedDelete, apiGet } from '@/utils/api';
 import * as Speech from 'expo-speech';
 import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -42,6 +42,14 @@ interface VoiceSettings {
   voice: string;
   rate: number;
   pitch: number;
+}
+
+interface HealthStatus {
+  status: string;
+  features: {
+    aiChat: boolean;
+    voiceTranscription: boolean;
+  };
 }
 
 const AVAILABLE_VOICES: { id: string; name: string; language: string }[] = [
@@ -74,6 +82,10 @@ export default function AIChatScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [showErrorModal, setShowErrorModal] = useState(false);
 
+  // Health check state
+  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
+  const [showConfigWarning, setShowConfigWarning] = useState(false);
+
   // Voice settings
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
     voice: 'default',
@@ -92,7 +104,8 @@ export default function AIChatScreen() {
   const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    console.log('[AI Chat] Screen mounted, loading conversations and settings...');
+    console.log('[AI Chat] Screen mounted, checking health and loading data...');
+    checkHealth();
     loadConversations();
     loadVoiceSettings();
     loadContinuousMode();
@@ -102,6 +115,25 @@ export default function AIChatScreen() {
       if (continuousModeTimeout.current) clearTimeout(continuousModeTimeout.current);
     };
   }, []);
+
+  // Check backend health to see if AI features are available
+  const checkHealth = async () => {
+    try {
+      console.log('[AI Chat] Checking backend health...');
+      const health = await apiGet<HealthStatus>('/api/health');
+      console.log('[AI Chat] Health status:', health);
+      setHealthStatus(health);
+      
+      // Show warning if AI features are not available
+      if (!health.features.aiChat || !health.features.voiceTranscription) {
+        setShowConfigWarning(true);
+      }
+    } catch (error) {
+      console.error('[AI Chat] Health check failed:', error);
+      // If health endpoint doesn't exist yet, assume features are unavailable
+      setShowConfigWarning(true);
+    }
+  };
 
   // Track if we just created a new conversation (to avoid reloading messages)
   const justCreatedConversation = useRef<string | null>(null);
@@ -336,6 +368,12 @@ export default function AIChatScreen() {
   const createNewConversation = () => createNewConversationInternal(false);
 
   const startRecording = async () => {
+    // Check if voice transcription is available
+    if (healthStatus && !healthStatus.features.voiceTranscription) {
+      showError('Voice transcription is not available. The administrator needs to configure the Google API key. Please use text mode instead.');
+      return;
+    }
+
     try {
       console.log('[Voice] Requesting audio permissions...');
       const permission = await requestRecordingPermissionsAsync();
@@ -534,6 +572,12 @@ export default function AIChatScreen() {
   const sendMessage = async () => {
     if (!message.trim()) return;
 
+    // Check if AI chat is available
+    if (healthStatus && !healthStatus.features.aiChat) {
+      showError('AI chat is not available. The administrator needs to configure the Google API key.');
+      return;
+    }
+
     const userMessage = message.trim();
     setMessage('');
 
@@ -635,7 +679,7 @@ export default function AIChatScreen() {
   const showError = (message: string) => {
     setErrorMessage(message);
     setShowErrorModal(true);
-    setTimeout(() => setShowErrorModal(false), 3500);
+    setTimeout(() => setShowErrorModal(false), 4500);
   };
 
   const currentConversation = conversations.find(c => c.id === currentConversationId);
@@ -643,6 +687,9 @@ export default function AIChatScreen() {
 
   const ratePercentage = Math.round(voiceSettings.rate * 100);
   const pitchPercentage = Math.round(voiceSettings.pitch * 100);
+
+  const aiChatAvailable = healthStatus?.features.aiChat !== false;
+  const voiceAvailable = healthStatus?.features.voiceTranscription !== false;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -716,6 +763,36 @@ export default function AIChatScreen() {
       />
 
       <View style={styles.container}>
+        {/* Configuration Warning Banner */}
+        {showConfigWarning && (!aiChatAvailable || !voiceAvailable) && (
+          <View style={styles.warningBanner}>
+            <IconSymbol
+              ios_icon_name="exclamationmark.triangle.fill"
+              android_material_icon_name="warning"
+              size={20}
+              color={colors.warning}
+            />
+            <View style={styles.warningContent}>
+              <Text style={styles.warningTitle}>AI Features Not Configured</Text>
+              <Text style={styles.warningText}>
+                {!aiChatAvailable && !voiceAvailable
+                  ? 'AI chat and voice transcription require configuration. Please contact the administrator to enable these features.'
+                  : !aiChatAvailable
+                  ? 'AI chat requires configuration. Please contact the administrator.'
+                  : 'Voice transcription requires configuration. Please use text mode.'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowConfigWarning(false)}>
+              <IconSymbol
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {showConversations && (
           <View style={styles.conversationsPanel}>
             <View style={styles.conversationsPanelHeader}>
@@ -783,7 +860,9 @@ export default function AIChatScreen() {
                 </View>
                 <Text style={styles.welcomeTitle}>AI Reflection Coach</Text>
                 <Text style={styles.welcomeMessage}>
-                  {continuousMode 
+                  {!aiChatAvailable
+                    ? 'AI chat is currently unavailable. Please contact the administrator to enable this feature.'
+                    : continuousMode 
                     ? 'Continuous mode enabled - I\'ll listen automatically after speaking'
                     : 'Tap the mic to start a voice conversation, or switch to text mode below'}
                 </Text>
@@ -862,6 +941,7 @@ export default function AIChatScreen() {
               <TouchableOpacity
                 style={[styles.modeButton, inputMode === 'voice' && styles.modeButtonActive]}
                 onPress={() => setInputMode('voice')}
+                disabled={!voiceAvailable}
               >
                 <IconSymbol
                   ios_icon_name="mic.fill"
@@ -872,6 +952,14 @@ export default function AIChatScreen() {
                 <Text style={[styles.modeButtonText, inputMode === 'voice' && styles.modeButtonTextActive]}>
                   Voice
                 </Text>
+                {!voiceAvailable && (
+                  <IconSymbol
+                    ios_icon_name="exclamationmark.circle"
+                    android_material_icon_name="error"
+                    size={12}
+                    color={colors.error}
+                  />
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modeButton, inputMode === 'text' && styles.modeButtonActive]}
@@ -890,6 +978,7 @@ export default function AIChatScreen() {
               <TouchableOpacity
                 style={[styles.modeButton, continuousMode && styles.modeButtonActive]}
                 onPress={() => saveContinuousMode(!continuousMode)}
+                disabled={!voiceAvailable}
               >
                 <IconSymbol
                   ios_icon_name={continuousMode ? 'infinity' : 'infinity.circle'}
@@ -935,10 +1024,10 @@ export default function AIChatScreen() {
                     style={[
                       styles.micButton,
                       isRecording && styles.micButtonRecording,
-                      sending && styles.micButtonDisabled,
+                      (sending || !voiceAvailable) && styles.micButtonDisabled,
                     ]}
                     onPress={isRecording ? stopRecordingAndSend : startRecording}
-                    disabled={sending}
+                    disabled={sending || !voiceAvailable}
                     activeOpacity={0.8}
                   >
                     {sending ? (
@@ -955,7 +1044,9 @@ export default function AIChatScreen() {
                 </Animated.View>
 
                 <Text style={styles.micHint}>
-                  {sending
+                  {!voiceAvailable
+                    ? 'Voice unavailable - use text mode'
+                    : sending
                     ? 'Processing...'
                     : isRecording
                     ? 'Tap to send'
@@ -971,16 +1062,16 @@ export default function AIChatScreen() {
                   style={styles.input}
                   value={message}
                   onChangeText={setMessage}
-                  placeholder="Ask about your goals, reflections, or progress..."
+                  placeholder={aiChatAvailable ? "Ask about your goals, reflections, or progress..." : "AI chat is currently unavailable"}
                   placeholderTextColor={colors.textSecondary}
                   multiline
                   maxLength={1000}
-                  editable={!sending}
+                  editable={!sending && aiChatAvailable}
                 />
                 <TouchableOpacity
-                  style={[styles.sendButton, (!message.trim() || sending) && styles.sendButtonDisabled]}
+                  style={[styles.sendButton, (!message.trim() || sending || !aiChatAvailable) && styles.sendButtonDisabled]}
                   onPress={sendMessage}
-                  disabled={!message.trim() || sending}
+                  disabled={!message.trim() || sending || !aiChatAvailable}
                 >
                   {sending ? (
                     <ActivityIndicator size="small" color={colors.background} />
@@ -1182,6 +1273,30 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: colors.warning + '15',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.warning + '30',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  warningContent: {
+    flex: 1,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.warning,
+    marginBottom: 4,
+  },
+  warningText: {
+    fontSize: 12,
+    color: colors.text,
+    lineHeight: 16,
   },
   conversationsPanel: {
     position: 'absolute',
