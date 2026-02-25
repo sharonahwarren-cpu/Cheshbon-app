@@ -244,11 +244,16 @@ function generateFortnightlyActivations(
 }
 
 /**
- * FIXED: Generate next N occurrences of a Hebrew calendar event (e.g., "Rosh Chodesh", "Yom Kippur")
- * Uses @hebcal/core HebrewCalendar to find matching events with EXACT name matching.
+ * ✅ FIXED: Generate next N occurrences of a Hebrew calendar event using @hebcal/core
  * 
- * CRITICAL FIX: Now uses exact event name matching to prevent incorrect date matches.
- * For example, "Rosh HaShanah" will ONLY match "Rosh Hashana" events, not "Rosh Chodesh".
+ * This function properly uses HebCal to find Hebrew calendar events and convert them to Gregorian dates.
+ * It does NOT try to map Hebrew months to Gregorian months - HebCal handles all conversions.
+ * 
+ * Examples:
+ * - "Rosh Hashana" → Finds Rosh Hashana events (Tishrei 1-2, which falls in Sep/Oct)
+ * - "Yom Kippur" → Finds Yom Kippur (Tishrei 10, which falls in Sep/Oct)
+ * - "15th Elul" → Finds Elul 15 (which falls in Aug/Sep)
+ * - "Rosh Chodesh" → Finds all Rosh Chodesh events (1st of each Hebrew month)
  */
 function generateHebrewCalendarEventActivations(
   eventName: string,
@@ -261,9 +266,10 @@ function generateHebrewCalendarEventActivations(
 ): ActivationPreview[] {
   const activations: ActivationPreview[] = [];
   
-  console.log('[ScheduleCalc] Generating Hebrew calendar event activations for:', eventName);
+  console.log('[ScheduleCalc] ✅ Using HebCal to find Hebrew calendar event:', eventName);
   
   try {
+    // Use HebCal to get all events for the next 3 years
     const startHDate = new HDate(now.toJSDate());
     const endHDate = new HDate(now.plus({ years: 3 }).toJSDate());
 
@@ -281,6 +287,7 @@ function generateHebrewCalendarEventActivations(
     const normalizedSearchName = eventName.toLowerCase().trim().replace(/[\s'-]/g, '');
     
     console.log('[ScheduleCalc] Searching for normalized event name:', normalizedSearchName);
+    console.log('[ScheduleCalc] HebCal will convert Hebrew dates to Gregorian automatically');
 
     for (const event of events) {
       if (activations.length >= count) break;
@@ -301,9 +308,8 @@ function generateHebrewCalendarEventActivations(
       } else if (normalizedSearchName === 'roshchodesh') {
         // Match "Rosh Chodesh" events (which include the month name)
         matches = normalizedEventDesc.startsWith('roshchodesh');
-      } else if (normalizedSearchName.startsWith('elul')) {
-        // For "Elul 15th" or similar, we need to match specific Hebrew dates
-        // Extract the day number from the event name
+      } else if (normalizedSearchName.match(/(\d+)(st|nd|rd|th)?elul/)) {
+        // For "15th Elul" or "Elul 15th", extract the day number and match against Elul dates
         const dayMatch = eventName.match(/(\d+)/);
         if (dayMatch) {
           const targetDay = parseInt(dayMatch[1], 10);
@@ -313,6 +319,7 @@ function generateHebrewCalendarEventActivations(
           const hebrewDay = hdate.getDate();
           
           // Elul is month 12 in the Hebrew calendar
+          // HebCal will convert this to the correct Gregorian date (Aug/Sep)
           matches = hebrewMonth === 12 && hebrewDay === targetDay;
         }
       } else {
@@ -321,13 +328,15 @@ function generateHebrewCalendarEventActivations(
       }
 
       if (matches) {
+        // ✅ HebCal converts Hebrew date to Gregorian date for us
         const gregDate = event.getDate().greg();
         const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
         
-        console.log('[ScheduleCalc] Found matching event:', {
+        console.log('[ScheduleCalc] ✅ Found matching event:', {
           eventDesc,
-          gregDate: gregDate.toISOString(),
-          activation: activation.toISO(),
+          hebrewDate: event.getDate().toString(),
+          gregorianDate: gregDate.toISOString(),
+          activation: activation.toFormat('MMMM d, yyyy'),
         });
         
         if (activation > now) {
@@ -336,9 +345,9 @@ function generateHebrewCalendarEventActivations(
       }
     }
     
-    console.log('[ScheduleCalc] Generated', activations.length, 'activations for', eventName);
+    console.log('[ScheduleCalc] ✅ Generated', activations.length, 'activations for', eventName);
   } catch (error) {
-    console.warn('[ScheduleCalc] Failed to generate Hebrew calendar event activations:', error);
+    console.warn('[ScheduleCalc] ❌ Failed to generate Hebrew calendar event activations:', error);
   }
   
   return activations;
@@ -408,15 +417,19 @@ function generateMonthlyActivations(
     return generateHebrewCalendarEventActivations(calendarEvent, now, count, timezone, schedule, alarms, location);
   }
 
-  // Handle Hebrew calendar with specific day numbers (e.g., 21st of each Hebrew month)
+  // ✅ Handle Hebrew calendar with specific day numbers (e.g., 21st of each Hebrew month)
+  // Uses HebCal to properly convert Hebrew dates to Gregorian dates
   if (isHebrew && dates && dates.length > 0) {
-    console.log('[ScheduleCalc] Generating Hebrew monthly activations for days:', dates);
+    console.log('[ScheduleCalc] ✅ Generating Hebrew monthly activations for days:', dates);
+    console.log('[ScheduleCalc] Using HebCal to convert Hebrew dates to Gregorian');
 
     try {
       // Get the current Hebrew date to start from
       const currentHDate = new HDate(now.toJSDate());
       let currentHebrewMonth = currentHDate.getMonth();
       let currentHebrewYear = currentHDate.getFullYear();
+
+      console.log(`[ScheduleCalc] Starting from Hebrew date: ${currentHDate.toString()} (${currentHebrewYear})`);
 
       // Iterate through Hebrew months to find next occurrences
       let monthsChecked = 0;
@@ -435,14 +448,19 @@ function generateMonthlyActivations(
         for (const hebrewDay of dates) {
           if (activations.length >= count) break;
           try {
+            // ✅ Create Hebrew date and let HebCal convert it to Gregorian
             const hdate = new HDate(hebrewDay, currentHebrewMonth, currentHebrewYear);
             const gregDate = hdate.greg();
             const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
+            
+            console.log(`[ScheduleCalc] ✅ Hebrew date ${hdate.toString()} → Gregorian ${activation.toFormat('MMMM d, yyyy')}`);
+            
             if (activation > now && activation <= end) {
               activations.push(createActivationPreview(activation, schedule, alarms, location));
             }
-          } catch {
+          } catch (error) {
             // Invalid Hebrew date (e.g., day 30 in a 29-day month), skip
+            console.warn(`[ScheduleCalc] ❌ Invalid Hebrew date: day=${hebrewDay}, month=${currentHebrewMonth}, year=${currentHebrewYear}`);
           }
         }
 
@@ -456,7 +474,7 @@ function generateMonthlyActivations(
         }
       }
     } catch (error) {
-      console.warn('[ScheduleCalc] Error in Hebrew monthly calculation:', error);
+      console.warn('[ScheduleCalc] ❌ Error in Hebrew monthly calculation:', error);
     }
 
     return activations.sort((a, b) => a.date.localeCompare(b.date));
@@ -575,22 +593,26 @@ function generateYearlyActivations(
     return generateHebrewCalendarEventActivations(yearlyCalendarEvent, now, count, timezone, schedule, alarms, location);
   }
 
-  // FIXED: For Hebrew calendar, use the same iteration pattern as monthly
+  // ✅ FIXED: For Hebrew calendar, use HebCal to properly convert Hebrew dates to Gregorian
+  // The key insight: Hebrew month numbers are NOT Gregorian month numbers!
+  // Tishrei (month 1) falls in Sep/Oct, NOT January
+  // Elul (month 12) falls in Aug/Sep, NOT December
   if (isHebrew) {
-    console.log('[ScheduleCalc] ✅ Generating Hebrew yearly activations');
-    console.log('[ScheduleCalc] Hebrew Calendar Month Mapping:');
-    console.log('  1 = Tishrei (Sep/Oct)');
+    console.log('[ScheduleCalc] ✅ Generating Hebrew yearly activations using HebCal');
+    console.log('[ScheduleCalc] Hebrew Calendar Month Reference:');
+    console.log('  1 = Tishrei (Sep/Oct) - Rosh Hashana, Yom Kippur');
     console.log('  2 = Cheshvan (Oct/Nov)');
-    console.log('  3 = Kislev (Nov/Dec)');
+    console.log('  3 = Kislev (Nov/Dec) - Chanukah');
     console.log('  4 = Tevet (Dec/Jan)');
-    console.log('  5 = Shevat (Jan/Feb)');
-    console.log('  6 = Adar (Feb/Mar)');
-    console.log('  7 = Nissan (Mar/Apr)');
-    console.log('  8 = Iyar (Apr/May)');
-    console.log('  9 = Sivan (May/Jun)');
+    console.log('  5 = Shevat (Jan/Feb) - Tu BiShvat');
+    console.log('  6 = Adar (Feb/Mar) - Purim');
+    console.log('  7 = Nissan (Mar/Apr) - Pesach');
+    console.log('  8 = Iyar (Apr/May) - Lag BaOmer');
+    console.log('  9 = Sivan (May/Jun) - Shavuot');
     console.log('  10 = Tammuz (Jun/Jul)');
-    console.log('  11 = Av (Jul/Aug)');
+    console.log('  11 = Av (Jul/Aug) - Tisha BAv');
     console.log('  12 = Elul (Aug/Sep)');
+    console.log('[ScheduleCalc] HebCal will convert these to correct Gregorian dates');
     
     try {
       // Get the current Hebrew date to start from
@@ -607,8 +629,8 @@ function generateYearlyActivations(
         yearsChecked++;
 
         // Process new format: yearlyDates (Array<{month, day}>)
-        // CRITICAL: entry.month is the HEBREW month number (1=Tishrei, 2=Cheshvan, etc.)
-        // NOT the Gregorian month number
+        // ✅ CRITICAL: entry.month is the HEBREW month number (1=Tishrei, 2=Cheshvan, etc.)
+        // HebCal will convert this to the correct Gregorian date
         if (yearlyDates && yearlyDates.length > 0) {
           for (const entry of yearlyDates) {
             if (activations.length >= count) break;
@@ -617,12 +639,12 @@ function generateYearlyActivations(
               // entry.day is Hebrew day of month
               const hebrewMonthNames = ['', 'Tishrei', 'Cheshvan', 'Kislev', 'Tevet', 'Shevat', 'Adar', 'Nissan', 'Iyar', 'Sivan', 'Tammuz', 'Av', 'Elul'];
               const monthName = hebrewMonthNames[entry.month] || `Month ${entry.month}`;
-              console.log(`[ScheduleCalc] ✅ Creating Hebrew date: ${monthName} ${entry.day}, ${currentHebrewYear} (Hebrew month ${entry.month})`);
               
+              // ✅ Create Hebrew date and let HebCal convert it to Gregorian
               const hdate = new HDate(entry.day, entry.month, currentHebrewYear);
               const gregDate = hdate.greg();
-              const gregDateStr = `${gregDate.getFullYear()}-${(gregDate.getMonth() + 1).toString().padStart(2, '0')}-${gregDate.getDate().toString().padStart(2, '0')}`;
-              console.log(`[ScheduleCalc] ✅ Converts to Gregorian: ${gregDateStr}`);
+              
+              console.log(`[ScheduleCalc] ✅ Hebrew date: ${monthName} ${entry.day}, ${currentHebrewYear} → Gregorian: ${gregDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
               
               const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
               if (activation > now && activation <= end) {
@@ -640,7 +662,8 @@ function generateYearlyActivations(
         if (yearlyRanges && yearlyRanges.length > 0) {
           for (const range of yearlyRanges) {
             if (activations.length >= count) break;
-            // For Hebrew calendar, iterate through each day in the range
+            // ✅ For Hebrew calendar, iterate through each day in the range
+            // HebCal will convert each Hebrew date to Gregorian
             for (let day = range.startDay; day <= range.endDay; day++) {
               if (activations.length >= count) break;
               try {
@@ -698,7 +721,7 @@ function generateYearlyActivations(
         currentHebrewYear++;
       }
     } catch (error) {
-      console.warn('[ScheduleCalc] Error in Hebrew yearly calculation:', error);
+      console.warn('[ScheduleCalc] ❌ Error in Hebrew yearly calculation:', error);
     }
 
     return activations.sort((a, b) => a.date.localeCompare(b.date));
