@@ -640,7 +640,7 @@ function generateYearlyActivations(
         yearsChecked++;
 
         // Process new format: yearlyDates (Array<{month, day}>)
-        // ✅ CRITICAL: entry.month is the HEBREW month number (1=Tishrei, 2=Cheshvan, etc.)
+        // ✅ CRITICAL: entry.month is the HEBREW month number (@hebcal numbering: Nisan=1, ..., Elul=6, Tishrei=7, ..., Adar=12)
         // HebCal will convert this to the correct Gregorian date
         if (yearlyDates && yearlyDates.length > 0) {
           for (const entry of yearlyDates) {
@@ -657,9 +657,20 @@ function generateYearlyActivations(
               console.log(`[ScheduleCalc] ✅ Hebrew date: ${monthName} ${entry.day}, ${currentHebrewYear} (month=${entry.month}) → Gregorian: ${gregDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`);
               
               const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
-              if (activation > now && activation <= end) {
+              
+              // CRITICAL FIX: Check for duplicates before adding
+              // This prevents the same Gregorian date from being added multiple times
+              const activationDateStr = activation.toISODate();
+              const isDuplicate = activations.some(a => {
+                const existingDate = DateTime.fromISO(a.date, { zone: 'UTC' }).setZone(timezone).toISODate();
+                return existingDate === activationDateStr;
+              });
+              
+              if (!isDuplicate && activation > now && activation <= end) {
                 activations.push(createActivationPreview(activation, schedule, alarms, location));
                 console.log(`[ScheduleCalc] ✅ Added activation: ${activation.toFormat('MMMM d, yyyy')}`);
+              } else if (isDuplicate) {
+                console.log(`[ScheduleCalc] ⚠️ Skipping duplicate activation: ${activation.toFormat('MMMM d, yyyy')}`);
               }
             } catch (error) {
               // Invalid Hebrew date (e.g., day 30 in a 29-day month), skip
@@ -680,7 +691,15 @@ function generateYearlyActivations(
                 const hdate = new HDate(day, range.startMonth, currentHebrewYear);
                 const gregDate = hdate.greg();
                 const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
-                if (activation > now && activation <= end) {
+                
+                // CRITICAL FIX: Check for duplicates before adding
+                const activationDateStr = activation.toISODate();
+                const isDuplicate = activations.some(a => {
+                  const existingDate = DateTime.fromISO(a.date, { zone: 'UTC' }).setZone(timezone).toISODate();
+                  return existingDate === activationDateStr;
+                });
+                
+                if (!isDuplicate && activation > now && activation <= end) {
                   activations.push(createActivationPreview(activation, schedule, alarms, location));
                 }
               } catch {
@@ -702,7 +721,15 @@ function generateYearlyActivations(
                   const hdate = new HDate(day, dateRange.month, currentHebrewYear);
                   const gregDate = hdate.greg();
                   const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
-                  if (activation > now && activation <= end) {
+                  
+                  // CRITICAL FIX: Check for duplicates before adding
+                  const activationDateStr = activation.toISODate();
+                  const isDuplicate = activations.some(a => {
+                    const existingDate = DateTime.fromISO(a.date, { zone: 'UTC' }).setZone(timezone).toISODate();
+                    return existingDate === activationDateStr;
+                  });
+                  
+                  if (!isDuplicate && activation > now && activation <= end) {
                     activations.push(createActivationPreview(activation, schedule, alarms, location));
                   }
                 } catch {
@@ -716,7 +743,15 @@ function generateYearlyActivations(
                   const hdate = new HDate(day, dateRange.month, currentHebrewYear);
                   const gregDate = hdate.greg();
                   const activation = DateTime.fromJSDate(gregDate, { zone: timezone }).set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
-                  if (activation > now && activation <= end) {
+                  
+                  // CRITICAL FIX: Check for duplicates before adding
+                  const activationDateStr = activation.toISODate();
+                  const isDuplicate = activations.some(a => {
+                    const existingDate = DateTime.fromISO(a.date, { zone: 'UTC' }).setZone(timezone).toISODate();
+                    return existingDate === activationDateStr;
+                  });
+                  
+                  if (!isDuplicate && activation > now && activation <= end) {
                     activations.push(createActivationPreview(activation, schedule, alarms, location));
                   }
                 } catch {

@@ -1135,10 +1135,28 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     };
 
     const formatYearlyDate = (entry: { month: number; day: number }) => {
-      // CRITICAL FIX: Convert @hebcal month number back to display index for Hebrew calendar
+      // CRITICAL FIX: entry.month is stored as @hebcal month number (Nisan=1, ..., Elul=6, Tishrei=7, ..., Adar=12)
+      // We need to convert it back to display index (Tishrei=0, Cheshvan=1, ..., Elul=11)
       let displayMonthIndex = entry.month - 1;
       if (selectedCalendar === 'hebrew' && entry.month >= 1 && entry.month <= 13) {
-        displayMonthIndex = HEBCAL_TO_HEBREW_MONTH[entry.month];
+        // Map @hebcal month number to display index
+        // Nisan (1) → 6, Iyar (2) → 7, ..., Elul (6) → 11, Tishrei (7) → 0, ..., Adar (12) → 5
+        const hebcalToDisplayMap: { [key: number]: number } = {
+          1: 6,   // Nisan → index 6
+          2: 7,   // Iyar → index 7
+          3: 8,   // Sivan → index 8
+          4: 9,   // Tammuz → index 9
+          5: 10,  // Av → index 10
+          6: 11,  // Elul → index 11
+          7: 0,   // Tishrei → index 0
+          8: 1,   // Cheshvan → index 1
+          9: 2,   // Kislev → index 2
+          10: 3,  // Tevet → index 3
+          11: 4,  // Shevat → index 4
+          12: 5,  // Adar → index 5
+          13: 5,  // Adar II → index 5 (maps to Adar)
+        };
+        displayMonthIndex = hebcalToDisplayMap[entry.month] ?? 0;
       }
       const monthName = monthNames[displayMonthIndex] || `Month ${entry.month}`;
       return `${monthName} ${entry.day}`;
@@ -1149,11 +1167,27 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
       let startDisplayIndex = range.startMonth - 1;
       let endDisplayIndex = range.endMonth - 1;
       if (selectedCalendar === 'hebrew') {
+        // Map @hebcal month number to display index
+        const hebcalToDisplayMap: { [key: number]: number } = {
+          1: 6,   // Nisan → index 6
+          2: 7,   // Iyar → index 7
+          3: 8,   // Sivan → index 8
+          4: 9,   // Tammuz → index 9
+          5: 10,  // Av → index 10
+          6: 11,  // Elul → index 11
+          7: 0,   // Tishrei → index 0
+          8: 1,   // Cheshvan → index 1
+          9: 2,   // Kislev → index 2
+          10: 3,  // Tevet → index 3
+          11: 4,  // Shevat → index 4
+          12: 5,  // Adar → index 5
+          13: 5,  // Adar II → index 5 (maps to Adar)
+        };
         if (range.startMonth >= 1 && range.startMonth <= 13) {
-          startDisplayIndex = HEBCAL_TO_HEBREW_MONTH[range.startMonth];
+          startDisplayIndex = hebcalToDisplayMap[range.startMonth] ?? 0;
         }
         if (range.endMonth >= 1 && range.endMonth <= 13) {
-          endDisplayIndex = HEBCAL_TO_HEBREW_MONTH[range.endMonth];
+          endDisplayIndex = hebcalToDisplayMap[range.endMonth] ?? 0;
         }
       }
       const startMonthName = monthNames[startDisplayIndex] || `Month ${range.startMonth}`;
