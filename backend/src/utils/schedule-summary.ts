@@ -4,7 +4,7 @@
 
 import { HEBREW_MONTHS, ISLAMIC_MONTHS, CHINESE_MONTHS, GREGORIAN_MONTHS, gregorianToHebrew, hebrewToGregorian, isHebrewLeapYear, getHebrewDateOccurrences } from './calendar.js';
 import { getNextActivations, type ScheduleConfig } from './goal-scheduler.js';
-import { getHebrewDate } from './hebrew-calendar.js';
+import { getHebrewDate, isHebrewEventMatch, getHebrewCalendarEventDates } from './hebrew-calendar.js';
 
 export interface ScheduleSummaryRequest {
   scheduleType?: string;
@@ -405,10 +405,13 @@ function determineOccurrenceSource(
       const isHebrewCalendar = config.monthlyUseAlternativeCalendar && config.monthlyCalendarType === 'hebrew';
 
       if (isHebrewCalendar && config.monthlyCalendarEvent) {
-        return {
-          section: 'Monthly - Hebrew Calendar Event',
-          details: config.monthlyCalendarEvent,
-        };
+        // Verify this date actually matches the Hebrew calendar event using exact matching
+        if (isHebrewEventMatch(date, config.monthlyCalendarEvent)) {
+          return {
+            section: 'Monthly - Hebrew Calendar Event',
+            details: config.monthlyCalendarEvent,
+          };
+        }
       }
 
       // Check if it's a Hebrew calendar selected date

@@ -1,4 +1,4 @@
-import { HDate, Locale } from '@hebcal/core';
+import { HDate, Locale, HebrewCalendar } from '@hebcal/core';
 
 /**
  * Hebrew calendar month names (transliterated)
@@ -88,4 +88,84 @@ export function generateHebrewDatesForRange(
 export function isHebrewDateMatch(gregorianDate: Date, hebrewMonth: number, hebrewDay: number): boolean {
   const hdate = getHebrewDate(gregorianDate);
   return hdate.month === hebrewMonth && hdate.day === hebrewDay;
+}
+
+/**
+ * Get all occurrences of a Hebrew calendar event (e.g., "Rosh Hashana", "Rosh Chodesh") within a date range
+ * Uses EXACT string matching to prevent confusion between similar event names
+ * (e.g., "Rosh Hashana" should NOT match "Rosh Chodesh")
+ */
+export function getHebrewCalendarEventDates(
+  eventName: string,
+  startDate: Date,
+  endDate: Date
+): Date[] {
+  const dates: Date[] = [];
+
+  try {
+    // Create a Hebrew calendar instance for the range
+    const hcal = new HebrewCalendar({
+      isHebrewYear: false,
+      noModern: false,
+      noMinorFast: true,
+      noMinorHoliday: false,
+      noHolidays: false,
+      sedrot: false,
+    });
+
+    // Get all events in the range
+    const events = hcal.between(startDate, endDate);
+
+    // Filter for exact event name match (case-insensitive comparison)
+    for (const event of events) {
+      const eventDesc = event.getDesc();
+      // Use EXACT matching with === comparison (case-insensitive)
+      if (eventDesc && eventDesc.toLowerCase() === eventName.toLowerCase()) {
+        const eventDate = event.getDate().toJSDate();
+        if (eventDate >= startDate && eventDate <= endDate) {
+          dates.push(eventDate);
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`Error getting Hebrew calendar events for "${eventName}":`, error);
+  }
+
+  return dates.sort((a, b) => a.getTime() - b.getTime());
+}
+
+/**
+ * Check if a Gregorian date matches a specific Hebrew calendar event name
+ * Uses EXACT string matching to prevent confusion between similar event names
+ */
+export function isHebrewEventMatch(gregorianDate: Date, eventName: string): boolean {
+  try {
+    // Create a Hebrew calendar instance for just this date
+    const hcal = new HebrewCalendar({
+      isHebrewYear: false,
+      noModern: false,
+      noMinorFast: true,
+      noMinorHoliday: false,
+      noHolidays: false,
+      sedrot: false,
+    });
+
+    // Get events for this specific date
+    const endDate = new Date(gregorianDate);
+    endDate.setDate(endDate.getDate() + 1);
+
+    const events = hcal.between(gregorianDate, endDate);
+
+    // Check for exact event name match (case-insensitive)
+    for (const event of events) {
+      const eventDesc = event.getDesc();
+      if (eventDesc && eventDesc.toLowerCase() === eventName.toLowerCase()) {
+        return true;
+      }
+    }
+  } catch (error) {
+    console.error(`Error checking Hebrew calendar event match for "${eventName}":`, error);
+  }
+
+  return false;
 }

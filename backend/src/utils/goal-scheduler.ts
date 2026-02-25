@@ -11,7 +11,7 @@ import {
   hebrewToGregorian,
   getHebrewDateOccurrences,
 } from './calendar.js';
-import { generateHebrewDatesForRange, isHebrewDateMatch, getHebrewDate } from './hebrew-calendar.js';
+import { generateHebrewDatesForRange, isHebrewDateMatch, getHebrewDate, isHebrewEventMatch, getHebrewCalendarEventDates } from './hebrew-calendar.js';
 
 export interface ScheduleConfig {
   calendarType: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
@@ -174,6 +174,11 @@ export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boole
     case 'monthly':
       // Handle Hebrew calendar monthly schedules
       if (config.monthlyUseAlternativeCalendar && config.monthlyCalendarType === 'hebrew') {
+        // For Hebrew calendar events (e.g., "Rosh Hashana"), use exact event matching
+        if (config.monthlyCalendarEvent) {
+          return isHebrewEventMatch(date, config.monthlyCalendarEvent);
+        }
+
         // For Hebrew calendar monthly dates, check if the Hebrew day of month matches
         if (config.monthlyDates && config.monthlyDates.length > 0) {
           // Get the Hebrew date for this Gregorian date
@@ -181,7 +186,7 @@ export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boole
           // Check if the Hebrew day matches any of the specified Hebrew days
           return config.monthlyDates.includes(hebrewDate.day);
         }
-        // If no specific dates, allow all
+        // If no specific dates or events, allow all
         return true;
       }
 
