@@ -151,6 +151,38 @@ export default function MitzvotScreen() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      console.log('[Mitzvot] Downloading CSV template...');
+      const templateHeaders = 'title,description,mitzvah_number,source,hebrew_name,type,applies_to,location,time_period,category_name,schedule_type';
+      const templateExample = 'Love your neighbor as yourself,Treat others with kindness and respect,1,Leviticus 19:18,ואהבת לרעך כמוך,PROACTIVE,All Jews,Everywhere,Always,Interpersonal Mitzvot,always';
+
+      const csvContent = `${templateHeaders}\n${templateExample}\n`;
+
+      if (Platform.OS === 'web') {
+        // Web: trigger download via anchor element
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mitzvot_template.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showSuccess('Template downloaded!');
+      } else {
+        // Native: write to cache directory
+        const fileUri = `${FileSystem.cacheDirectory}mitzvot_template.csv`;
+        await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+        showSuccess(`Template saved to: ${fileUri}`);
+      }
+    } catch (error: any) {
+      console.error('[Mitzvot] Template download error:', error);
+      showError(error.message || 'Failed to download template');
+    }
+  };
+
   const handleImportCSV = async () => {
     try {
       console.log('[Mitzvot] Opening document picker...');
@@ -452,6 +484,10 @@ export default function MitzvotScreen() {
                   </View>
                 )}
               </View>
+              <TouchableOpacity style={styles.templateButton} onPress={handleDownloadTemplate}>
+                <IconSymbol ios_icon_name="arrow.down.circle.fill" android_material_icon_name="download" size={20} color={colors.accent} />
+                <Text style={styles.templateButtonText}>Download CSV Template</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.importButton} onPress={handleImportCSV} disabled={importing}>
                 {importing ? (
                   <ActivityIndicator color={colors.background} />
@@ -556,6 +592,8 @@ const styles = StyleSheet.create({
   importInfoText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
   importWarning: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.warning + '20', padding: 12, borderRadius: 8, marginTop: 12 },
   importWarningText: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 18 },
+  templateButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.accent + '50', marginBottom: 12 },
+  templateButtonText: { fontSize: 14, fontWeight: '600', color: colors.accent },
   importButton: { backgroundColor: colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 16, borderRadius: 12, marginBottom: 8 },
   importButtonText: { fontSize: 16, fontWeight: '600', color: colors.background },
   importNote: { fontSize: 12, color: colors.textSecondary, textAlign: 'center' },
