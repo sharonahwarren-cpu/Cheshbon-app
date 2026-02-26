@@ -77,6 +77,9 @@ app.withAuth({
     "http://localhost:5173",
     // Allow production origin from env
     ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+    // Allow wildcard domains for deployments
+    "https://*.newly.dev",
+    "https://*.app.specular.dev",
   ],
 });
 
