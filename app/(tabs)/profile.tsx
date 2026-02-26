@@ -6,90 +6,19 @@ import { IconSymbol } from "@/components/IconSymbol";
 import { colors } from "@/styles/commonStyles";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
-import { authenticatedGet } from "@/utils/api";
-import { useFocusEffect } from "@react-navigation/native";
-
-interface JournalEntry {
-  id: string;
-  content: string;
-  mood?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Goal {
-  id: string;
-  title: string;
-  description?: string;
-  targetDate?: string;
-  completed: boolean;
-  progress: number;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const [signOutModalVisible, setSignOutModalVisible] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
-    journalCount: 0,
-    goalCount: 0,
-    completedCount: 0,
-  });
 
   useEffect(() => {
     console.log('[Profile] Screen mounted, user:', user ? user.email : 'not logged in');
-    loadStats();
   }, []);
 
   useEffect(() => {
     console.log('[Profile] User state changed:', user ? user.email : 'not logged in');
   }, [user]);
-
-  // Reload stats when screen comes into focus
-  useFocusEffect(
-    React.useCallback(() => {
-      loadStats();
-    }, [])
-  );
-
-  const loadStats = async () => {
-    console.log("Loading user stats");
-    setLoading(true);
-    try {
-      // Fetch journal entries
-      console.log("[API] Fetching journal entries for stats");
-      const journalData = await authenticatedGet<any>("/api/journal");
-      
-      // Fetch goals
-      console.log("[API] Fetching goals for stats");
-      const goalsData = await authenticatedGet<any>("/api/goals");
-      
-      // Handle both direct array and { data: array } response formats
-      const entries = Array.isArray(journalData) ? journalData : (journalData?.data || []);
-      const goals = Array.isArray(goalsData) ? goalsData : (goalsData?.data || []);
-      
-      const completedGoals = goals.filter((g: Goal) => g.completed).length;
-      
-      setStats({
-        journalCount: entries.length,
-        goalCount: goals.length,
-        completedCount: completedGoals,
-      });
-      
-      console.log("[API] Stats loaded:", {
-        journalCount: entries.length,
-        goalCount: goals.length,
-        completedCount: completedGoals,
-      });
-    } catch (error: any) {
-      console.error("[API] Error loading stats:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleSignOut = async () => {
     console.log("User signing out");
@@ -137,51 +66,6 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.userName}>{userName}</Text>
           <Text style={styles.userEmail}>{userEmail}</Text>
-        </View>
-
-        {/* Stats Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Your Progress</Text>
-          {loading ? (
-            <View style={styles.statsLoading}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : (
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <IconSymbol
-                  ios_icon_name="book.fill"
-                  android_material_icon_name="menu-book"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.statValue}>{stats.journalCount}</Text>
-                <Text style={styles.statLabel}>Journal Entries</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <IconSymbol
-                  ios_icon_name="target"
-                  android_material_icon_name="flag"
-                  size={24}
-                  color={colors.accent}
-                />
-                <Text style={styles.statValue}>{stats.goalCount}</Text>
-                <Text style={styles.statLabel}>Goals</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <IconSymbol
-                  ios_icon_name="checkmark.circle.fill"
-                  android_material_icon_name="check-circle"
-                  size={24}
-                  color={colors.success}
-                />
-                <Text style={styles.statValue}>{stats.completedCount}</Text>
-                <Text style={styles.statLabel}>Completed</Text>
-              </View>
-            </View>
-          )}
         </View>
 
         {/* Preferences Button */}
@@ -368,37 +252,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
     marginBottom: 16,
-  },
-  statsLoading: {
-    paddingVertical: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statDivider: {
-    width: 1,
-    height: 60,
-    backgroundColor: colors.cardBorder,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    textAlign: 'center',
   },
   aboutLogoContainer: {
     alignItems: 'center',
