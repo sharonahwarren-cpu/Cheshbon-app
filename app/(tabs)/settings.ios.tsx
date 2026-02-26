@@ -859,7 +859,10 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings iOS] Back button pressed from Life Areas, returning to main');
+            setCurrentSection('main');
+          }}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -916,7 +919,10 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings iOS] Back button pressed from Strategies, returning to main');
+            setCurrentSection('main');
+          }}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1009,7 +1015,10 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings iOS] Back button pressed from Currencies, returning to main');
+            setCurrentSection('main');
+          }}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1107,7 +1116,10 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings iOS] Back button pressed from Gains and Losses, returning to main');
+            setCurrentSection('main');
+          }}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1243,7 +1255,10 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings iOS] Back button pressed from Notifications, returning to main');
+            setCurrentSection('main');
+          }}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1372,7 +1387,10 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings iOS] Back button pressed from Reflection Preferences, returning to main');
+            setCurrentSection('main');
+          }}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1461,7 +1479,10 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings iOS] Back button pressed from Goals, returning to main');
+            setCurrentSection('main');
+          }}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1668,7 +1689,10 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={() => {
+            console.log('[Settings iOS] Back button pressed from Reports, returning to main');
+            setCurrentSection('main');
+          }}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1804,7 +1828,12 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen 
+        options={{ 
+          headerShown: false,
+          headerBackTitle: 'Settings',
+        }} 
+      />
       
       {loading && currentSection === 'main' ? (
         <View style={styles.loadingContainer}>

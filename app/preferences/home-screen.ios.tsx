@@ -64,7 +64,13 @@ export default function HomeScreenPreferencesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Stack.Screen options={{ title: 'Home Screen', headerShown: true }} />
+      <Stack.Screen 
+        options={{ 
+          title: 'Home Screen', 
+          headerShown: true,
+          headerBackTitle: 'Preferences',
+        }} 
+      />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {successMessage ? (

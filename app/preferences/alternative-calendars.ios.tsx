@@ -195,7 +195,13 @@ export default function AlternativeCalendarsScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <Stack.Screen options={{ title: 'Alternative Calendars', headerShown: true }} />
+        <Stack.Screen 
+          options={{ 
+            title: 'Alternative Calendars', 
+            headerShown: true,
+            headerBackTitle: 'Preferences',
+          }} 
+        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -207,7 +213,13 @@ export default function AlternativeCalendarsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Stack.Screen options={{ title: 'Alternative Calendars', headerShown: true }} />
+      <Stack.Screen 
+        options={{ 
+          title: 'Alternative Calendars', 
+          headerShown: true,
+          headerBackTitle: 'Preferences',
+        }} 
+      />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {successMessage ? (
