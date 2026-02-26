@@ -1,6 +1,8 @@
+
 import React, { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { Platform } from "react-native";
+import { authClient, setBearerToken, API_URL } from "@/lib/auth";
 
 type Status = "processing" | "success" | "error";
 
@@ -8,7 +10,7 @@ type Status = "processing" | "success" | "error";
  * Web OAuth callback page.
  * This page is opened inside the popup window (from auth-popup.tsx).
  * After Better Auth completes the OAuth flow it redirects here with a token.
- * We extract the token and post it back to the opener window, then close.
+ * We extract the token, establish the session, and post it back to the opener window.
  */
 export default function AuthCallbackScreen() {
   const [status, setStatus] = useState<Status>("processing");
@@ -19,12 +21,12 @@ export default function AuthCallbackScreen() {
     handleCallback();
   }, []);
 
-  const handleCallback = () => {
+  const handleCallback = async () => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
 
       // Better Auth may use different parameter names
-      const token =
+      const betterAuthToken =
         urlParams.get("token") ||
         urlParams.get("better_auth_token") ||
         urlParams.get("session_token");
@@ -33,30 +35,92 @@ export default function AuthCallbackScreen() {
         urlParams.get("error") || urlParams.get("error_description");
 
       console.log("[AuthCallback] URL:", window.location.href);
-      console.log("[AuthCallback] Token present:", !!token);
+      console.log("[AuthCallback] Token present:", !!betterAuthToken);
       console.log("[AuthCallback] Error:", error);
 
       if (error) {
         setStatus("error");
         setMessage(`Authentication failed: ${error}`);
         if (window.opener) {
-          window.opener.postMessage({ type: "oauth-error", error }, "*");
+          window.opener.postMessage({ type: "oauth-error", error }, window.location.origin);
         }
         return;
       }
 
-      if (token) {
+      if (betterAuthToken) {
+        console.log("[AuthCallback] Token found, establishing session...");
+        
+        // Try to exchange the token for a session using Better Auth client
+        try {
+          await setBearerToken(betterAuthToken);
+          const session = await authClient.getSession();
+          
+          if (session?.data?.user) {
+            console.log("[AuthCallback] Session established via authClient");
+            setStatus("success");
+            setMessage("Authentication successful! Closing...");
+            
+            if (window.opener) {
+              window.opener.postMessage({
+                type: "oauth-success",
+                token: session.data.session?.token || betterAuthToken,
+                user: session.data.user
+              }, window.location.origin);
+              setTimeout(() => window.close(), 1000);
+            }
+            return;
+          }
+        } catch (err) {
+          console.warn("[AuthCallback] authClient.getSession failed:", err);
+        }
+
+        // Fallback: Try direct API call to /api/auth/me
+        try {
+          console.log("[AuthCallback] Trying direct API call...");
+          const response = await fetch(`${API_URL}/api/auth/me`, {
+            headers: {
+              "Authorization": `Bearer ${betterAuthToken}`,
+            },
+            credentials: "include",
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data?.user) {
+              console.log("[AuthCallback] Session established via direct API");
+              setStatus("success");
+              setMessage("Authentication successful! Closing...");
+              
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: "oauth-success",
+                  token: data.session?.token || betterAuthToken,
+                  user: data.user
+                }, window.location.origin);
+                setTimeout(() => window.close(), 1000);
+              }
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn("[AuthCallback] Direct API call failed:", err);
+        }
+
+        // Final fallback: Send the raw token to parent
+        console.log("[AuthCallback] Sending raw token to parent");
         setStatus("success");
         setMessage("Authentication successful! Closing...");
-        console.log("[AuthCallback] Sending token to opener...");
+        
         if (window.opener) {
-          window.opener.postMessage({ type: "oauth-success", token }, "*");
+          window.opener.postMessage({
+            type: "oauth-success",
+            token: betterAuthToken
+          }, window.location.origin);
           setTimeout(() => window.close(), 1000);
         } else {
-          // No opener - this might be a direct navigation (not a popup)
-          // Store the token and redirect to home
+          // No opener - store token and redirect
           try {
-            localStorage.setItem("cheshbon_bearer_token", token);
+            localStorage.setItem("cheshbon_bearer_token", betterAuthToken);
           } catch {}
           setTimeout(() => {
             window.location.href = "/";
@@ -64,18 +128,41 @@ export default function AuthCallbackScreen() {
         }
       } else {
         // No token in query params - check if Better Auth set a cookie session
-        // In this case we can just close the popup and let the parent refresh
         console.log("[AuthCallback] No token in URL, checking for session cookie...");
-        setStatus("success");
-        setMessage("Authentication complete! Closing...");
+        
+        try {
+          const session = await authClient.getSession();
+          if (session?.data?.user) {
+            console.log("[AuthCallback] Session found via cookie");
+            setStatus("success");
+            setMessage("Authentication complete! Closing...");
+            
+            if (window.opener) {
+              window.opener.postMessage({
+                type: "oauth-success",
+                token: session.data.session?.token || "cookie-auth",
+                user: session.data.user
+              }, window.location.origin);
+              setTimeout(() => window.close(), 1000);
+            } else {
+              setTimeout(() => {
+                window.location.href = "/";
+              }, 1000);
+            }
+            return;
+          }
+        } catch (err) {
+          console.warn("[AuthCallback] Cookie session check failed:", err);
+        }
+
+        // No token and no session
+        setStatus("error");
+        setMessage("No authentication token received");
         if (window.opener) {
-          // Signal success without a token - parent will call getSession()
-          window.opener.postMessage({ type: "oauth-success-cookie" }, "*");
-          setTimeout(() => window.close(), 1000);
-        } else {
-          setTimeout(() => {
-            window.location.href = "/";
-          }, 1000);
+          window.opener.postMessage({
+            type: "oauth-error",
+            error: "No token received"
+          }, window.location.origin);
         }
       }
     } catch (err) {
@@ -85,7 +172,7 @@ export default function AuthCallbackScreen() {
       if (window.opener) {
         window.opener.postMessage(
           { type: "oauth-error", error: "Processing failed" },
-          "*"
+          window.location.origin
         );
       }
     }

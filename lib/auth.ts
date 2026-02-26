@@ -19,15 +19,38 @@ const storage =
       }
     : SecureStore;
 
+// Helper to get bearer token from storage
+async function getBearerToken(): Promise<string | null> {
+  if (Platform.OS === "web") {
+    return typeof localStorage !== "undefined"
+      ? localStorage.getItem(BEARER_TOKEN_KEY)
+      : null;
+  } else {
+    try {
+      return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+    } catch (error) {
+      console.warn("[Auth] Failed to get bearer token:", error);
+      return null;
+    }
+  }
+}
+
 // Build auth client configuration
-// On native we use the expoClient plugin which:
-//   1. Opens an in-app browser for OAuth
-//   2. Intercepts the cheshbon:// deep link redirect
-//   3. Extracts and stores the session token automatically
 const authClientConfig: any = {
   baseURL: API_URL,
+  fetchOptions: {
+    credentials: "include" as const,
+    onRequest: async (context: any) => {
+      // Dynamically add bearer token to all requests
+      const token = await getBearerToken();
+      if (token) {
+        context.headers.set("Authorization", `Bearer ${token}`);
+      }
+    },
+  },
 };
 
+// Add expoClient plugin for native platforms
 if (Platform.OS !== "web") {
   authClientConfig.plugins = [
     expoClient({
@@ -36,18 +59,6 @@ if (Platform.OS !== "web") {
       storage,
     }),
   ];
-} else {
-  // Web: use cookies + bearer token fallback
-  authClientConfig.fetchOptions = {
-    credentials: "include" as const,
-    auth: {
-      type: "Bearer" as const,
-      token: () =>
-        typeof localStorage !== "undefined"
-          ? localStorage.getItem(BEARER_TOKEN_KEY) || ""
-          : "",
-    },
-  };
 }
 
 export const authClient = createAuthClient(authClientConfig);
@@ -84,12 +95,20 @@ export async function clearAuthTokens() {
 
 export async function getSessionWithBearerToken() {
   try {
-    const token =
-      Platform.OS === "web"
-        ? typeof localStorage !== "undefined"
-          ? localStorage.getItem(BEARER_TOKEN_KEY)
-          : null
-        : await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+    let token: string | null = null;
+    
+    if (Platform.OS === "web") {
+      token = typeof localStorage !== "undefined"
+        ? localStorage.getItem(BEARER_TOKEN_KEY)
+        : null;
+    } else {
+      try {
+        token = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+      } catch (secureStoreErr) {
+        console.warn("[Auth] SecureStore.getItemAsync failed:", secureStoreErr);
+        return null;
+      }
+    }
 
     if (!token) {
       return null;
@@ -99,15 +118,18 @@ export async function getSessionWithBearerToken() {
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      credentials: "include",
     });
 
     if (!response.ok) {
+      console.warn("[Auth] get-session returned:", response.status);
       return null;
     }
 
-    return await response.json();
+    const data = await response.json();
+    return data;
   } catch (error) {
-    console.error("❌ Failed to get session with bearer token:", error);
+    console.warn("[Auth] getSessionWithBearerToken failed:", error);
     return null;
   }
 }

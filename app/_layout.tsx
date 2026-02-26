@@ -19,10 +19,8 @@ import "react-native-reanimated";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-// Required for expo-web-browser OAuth sessions to complete properly on web
-if (Platform.OS === "web") {
-  WebBrowser.maybeCompleteAuthSession();
-}
+// Complete auth session for OAuth flows (must be called early)
+WebBrowser.maybeCompleteAuthSession();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,7 +40,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (isConnected === false) {
-      console.log("Network disconnected - user is offline");
+      console.log("⚠️ Network disconnected - user is offline");
     }
   }, [isConnected]);
 
