@@ -134,24 +134,24 @@ export function doesDateMatchSchedule(date: Date, config: ScheduleConfig): boole
     case 'weekly':
       const dayOfWeek = date.getDay();
 
-      // For weekly schedules, daysOfWeek should be specified
-      // If it's not specified, default to allowing all days (backward compatibility)
+      // For weekly schedules, enforce strict filtering
       if (config.daysOfWeek && config.daysOfWeek.length > 0) {
         // If daysOfWeek is specified, only allow those days
-        if (!config.daysOfWeek.includes(dayOfWeek)) {
-          return false;
-        }
-      } else if (config.weekendsOnly || config.weekdaysOnly) {
-        // If no daysOfWeek but weekendsOnly/weekdaysOnly is set, use those
-        if (config.weekendsOnly && ![0, 6].includes(dayOfWeek)) {
-          return false;
-        }
-        if (config.weekdaysOnly && [0, 6].includes(dayOfWeek)) {
-          return false;
-        }
+        return config.daysOfWeek.includes(dayOfWeek);
       }
-      // If neither daysOfWeek nor weekendsOnly/weekdaysOnly is set, allow all days
-      return true;
+
+      if (config.weekendsOnly) {
+        // Only allow Saturday (6) and Sunday (0)
+        return [0, 6].includes(dayOfWeek);
+      }
+
+      if (config.weekdaysOnly) {
+        // Only allow Monday (1) through Friday (5)
+        return ![0, 6].includes(dayOfWeek);
+      }
+
+      // If no criteria are specified, default to NOT showing the goal
+      return false;
 
     case 'fortnightly':
       if (!config.daysOfWeek) return false;
