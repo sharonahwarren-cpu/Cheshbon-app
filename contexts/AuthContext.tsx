@@ -235,9 +235,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Prevent rapid successive attempts (debounce)
-    if (now - lastOAuthAttempt.current < 2000) {
-      console.log(`⏸️ Too soon after last OAuth attempt, ignoring ${provider} sign in request`);
+    // Prevent rapid successive attempts (debounce) - longer on Android
+    const debounceTime = Platform.OS === "android" ? 3000 : 2000;
+    if (now - lastOAuthAttempt.current < debounceTime) {
+      console.log(`⏸️ Too soon after last OAuth attempt (${now - lastOAuthAttempt.current}ms), ignoring ${provider} sign in request`);
+      Toast.show({
+        type: "info",
+        text1: "Please wait",
+        text2: "Please wait a moment before trying again.",
+      });
       return;
     }
 
@@ -284,15 +290,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         // Native (iOS / Android): Use WebBrowser for OAuth
         // CRITICAL: Ensure any previous browser session is dismissed first
+        // Android requires more aggressive cleanup
+        const isAndroid = Platform.OS === "android";
+        
         try {
           console.log("🧹 Attempting to dismiss any previous browser session...");
           await WebBrowser.dismissBrowser();
           console.log("✅ Previous browser session dismissed successfully");
-          // Wait a moment for cleanup
-          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Android needs longer wait time for cleanup
+          const cleanupDelay = isAndroid ? 800 : 300;
+          console.log(`⏳ Waiting ${cleanupDelay}ms for cleanup...`);
+          await new Promise(resolve => setTimeout(resolve, cleanupDelay));
         } catch (dismissError: any) {
           // This is expected if no browser was open
           console.log("ℹ️ No previous browser session to dismiss:", dismissError.message);
+          
+          // On Android, still wait a bit to ensure state is clean
+          if (isAndroid) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
         }
 
         const nativeCallbackURL = Linking.createURL("");
@@ -324,10 +341,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         console.log(`📱 Opening OAuth URL in browser...`);
-        const browserResult = await WebBrowser.openAuthSessionAsync(
-          oauthUrl,
-          nativeCallbackURL
-        );
+        
+        // Android-specific: Add extra safeguard with try-catch
+        let browserResult;
+        try {
+          browserResult = await WebBrowser.openAuthSessionAsync(
+            oauthUrl,
+            nativeCallbackURL
+          );
+        } catch (browserError: any) {
+          // Check if it's the "already open" error
+          if (
+            browserError.message?.toLowerCase().includes("webbrowser") && 
+            browserError.message?.toLowerCase().includes("already open")
+          ) {
+            console.error("❌ WebBrowser already open - forcing cleanup and retry");
+            
+            // Force dismiss and retry once
+            try {
+              await WebBrowser.dismissBrowser();
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              console.log("🔄 Retrying browser open after cleanup...");
+              browserResult = await WebBrowser.openAuthSessionAsync(
+                oauthUrl,
+                nativeCallbackURL
+              );
+            } catch (retryError: any) {
+              console.error("❌ Retry failed:", retryError);
+              throw new Error("Browser is busy. Please close any open browser windows and try again.");
+            }
+          } else {
+            throw browserError;
+          }
+        }
 
         console.log(`📱 Browser result type: ${browserResult.type}`);
 
@@ -421,15 +468,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         Toast.show({
           type: "error",
           text1: "Browser Busy",
-          text2: "Closing previous session. Please try again in a moment.",
+          text2: "Please close any open browser windows and try again.",
         });
         // Force dismiss any lingering browser
         try {
           await WebBrowser.dismissBrowser();
           console.log("✅ Force dismissed lingering browser");
+          // Wait longer on Android
+          if (Platform.OS === "android") {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
         } catch (dismissErr) {
           console.log("⚠️ Could not force dismiss browser:", dismissErr);
         }
+        return;
+      }
+
+      // Check for "Browser is busy" error from our retry logic
+      if (error.message?.toLowerCase().includes("browser is busy")) {
+        Toast.show({
+          type: "error",
+          text1: "Browser Busy",
+          text2: error.message,
+        });
         return;
       }
 
