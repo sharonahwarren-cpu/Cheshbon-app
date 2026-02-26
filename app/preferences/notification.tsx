@@ -116,6 +116,7 @@ export default function NotificationPreferencesScreen() {
   };
 
   const openEditAlarmModal = (alarm: NotificationAlarm) => {
+    console.log('Opening edit alarm modal for:', alarm);
     setEditingAlarm(alarm);
     setAlarmName(alarm.name);
     const [hours, minutes] = alarm.time.split(':');
@@ -124,6 +125,7 @@ export default function NotificationPreferencesScreen() {
     setAlarmTime(time);
     setAlarmFrequency(alarm.frequency);
     setAlarmModalVisible(true);
+    console.log('Modal opened with time:', formatTime12Hour(time));
   };
 
   const handleSaveAlarm = async () => {
@@ -170,12 +172,19 @@ export default function NotificationPreferencesScreen() {
   };
 
   const onTimeChange = (event: any, selectedDate?: Date) => {
+    console.log('Time picker changed:', event, selectedDate);
     if (Platform.OS === 'android') {
       setShowTimePicker(false);
     }
     if (selectedDate) {
       setAlarmTime(selectedDate);
+      console.log('Alarm time updated to:', formatTime12Hour(selectedDate));
     }
+  };
+
+  const handleTimeButtonPress = () => {
+    console.log('Time button pressed - opening time picker');
+    setShowTimePicker(true);
   };
 
   if (loading) {
@@ -306,9 +315,16 @@ export default function NotificationPreferencesScreen() {
               <>
                 <TouchableOpacity
                   style={styles.timeButton}
-                  onPress={() => setShowTimePicker(true)}
+                  onPress={handleTimeButtonPress}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.timeButtonText}>{timeDisplayText}</Text>
+                  <IconSymbol
+                    ios_icon_name="clock"
+                    android_material_icon_name="access-time"
+                    size={20}
+                    color={colors.primary}
+                  />
                 </TouchableOpacity>
                 {showTimePicker && (
                   <DateTimePicker
@@ -510,11 +526,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder,
     marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   timeButtonText: {
     fontSize: 16,
     color: colors.text,
-    textAlign: 'center',
+    fontWeight: '600',
   },
   iosTimePickerContainer: {
     backgroundColor: colors.card,
