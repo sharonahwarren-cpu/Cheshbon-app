@@ -359,6 +359,23 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
 
   const updateConfig = (updates: Partial<ScheduleConfig>) => {
     console.log('[GoalScheduler] Updating config:', updates);
+    
+    // Validate and clean weekdays array to prevent corruption
+    if (updates.weekdays !== undefined) {
+      updates.weekdays = updates.weekdays.filter(day => 
+        day !== undefined && day !== null && typeof day === 'number' && day >= 0 && day <= 6
+      );
+      console.log('[GoalScheduler] Cleaned weekdays array:', updates.weekdays);
+    }
+    
+    // Validate and clean fortnightDays array
+    if (updates.fortnightDays !== undefined) {
+      updates.fortnightDays = updates.fortnightDays.filter(day => 
+        day !== undefined && day !== null && typeof day === 'number' && day >= 0 && day <= 13
+      );
+      console.log('[GoalScheduler] Cleaned fortnightDays array:', updates.fortnightDays);
+    }
+    
     // Clear backend summary when user makes changes - local preview will take over
     if (backendSummary) {
       setBackendSummary(null);

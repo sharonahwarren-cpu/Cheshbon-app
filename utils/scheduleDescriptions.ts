@@ -59,8 +59,15 @@ export function generateScheduleSummary(config: ScheduleConfig): string {
       return 'Every weekday (Monday through Friday)';
     }
 
-    const sortedDays = [...config.weekdays].sort((a, b) => a - b);
-    const dayNames = sortedDays.map(day => WEEKDAY_NAMES[day]);
+    // Filter out any undefined or invalid values and ensure valid day indices (0-6)
+    const validDays = config.weekdays.filter(day => day !== undefined && day !== null && day >= 0 && day <= 6);
+    
+    if (validDays.length === 0) {
+      return 'Weekly (no valid days selected)';
+    }
+
+    const sortedDays = [...validDays].sort((a, b) => a - b);
+    const dayNames = sortedDays.map(day => WEEKDAY_NAMES[day]).filter(name => name !== undefined);
 
     if (dayNames.length === 7) {
       return 'Every day of the week';
