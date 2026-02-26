@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
+import Toast from 'react-native-toast-message';
 import {
   View,
   Text,
@@ -14,7 +15,6 @@ import {
   ScrollView,
   Image,
   Modal,
-  Alert,
 } from "react-native";
 import { colors } from "@/styles/commonStyles";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -33,120 +33,226 @@ export default function AuthScreen() {
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
 
+  // Track which button was pressed for better debugging
+  const [activeAuthMethod, setActiveAuthMethod] = useState<string | null>(null);
+
   // Redirect if already authenticated
   useEffect(() => {
     if (!loading && user) {
-      console.log("[Auth] User authenticated, redirecting to home");
+      console.log("[Auth Screen] ✅ User authenticated, redirecting to home. User:", user.email);
+      Toast.show({
+        type: 'success',
+        text1: 'Welcome back!',
+        text2: `Signed in as ${user.email}`,
+        position: 'top',
+        visibilityTime: 2000,
+      });
       router.replace("/");
     }
   }, [user, loading]);
 
+  const showErrorToast = (title: string, message: string) => {
+    console.error(`[Auth Screen] ❌ ${title}: ${message}`);
+    setError(message);
+    Toast.show({
+      type: 'error',
+      text1: title,
+      text2: message,
+      position: 'top',
+      visibilityTime: 4000,
+    });
+  };
+
+  const showSuccessToast = (title: string, message: string) => {
+    console.log(`[Auth Screen] ✅ ${title}: ${message}`);
+    Toast.show({
+      type: 'success',
+      text1: title,
+      text2: message,
+      position: 'top',
+      visibilityTime: 3000,
+    });
+  };
+
   const handleSubmit = async () => {
-    console.log("[Auth] Email/password submit button pressed");
+    console.log("[Auth Screen] 📧 Email/password submit button pressed");
+    console.log("[Auth Screen] Platform:", Platform.OS);
+    console.log("[Auth Screen] Is Sign Up:", isSignUp);
+    console.log("[Auth Screen] Email:", email);
+    
     if (!email || !password) {
-      setError("Please fill in all fields");
+      showErrorToast("Missing Information", "Please fill in all fields");
       return;
     }
 
     if (isSignUp && !name) {
-      setError("Please enter your name");
+      showErrorToast("Missing Information", "Please enter your name");
       return;
     }
 
     setSubmitting(true);
+    setActiveAuthMethod('email');
     setError("");
 
     try {
       if (isSignUp) {
-        console.log("[Auth] Attempting sign up with email:", email);
+        console.log("[Auth Screen] 🔐 Attempting sign up with email:", email);
         await signUpWithEmail(email, password, name);
+        console.log("[Auth Screen] ✅ Email sign up successful");
+        showSuccessToast("Account Created", "Welcome to Cheshbon!");
       } else {
-        console.log("[Auth] Attempting sign in with email:", email);
+        console.log("[Auth Screen] 🔐 Attempting sign in with email:", email);
         await signInWithEmail(email, password);
+        console.log("[Auth Screen] ✅ Email sign in successful");
+        showSuccessToast("Signed In", "Welcome back!");
       }
-      console.log("[Auth] Email auth successful");
       // Navigation will happen automatically via useEffect when user state updates
     } catch (err: any) {
-      console.error("[Auth] Email auth error:", err);
-      setError(err.message || "Authentication failed. Please try again.");
+      console.error("[Auth Screen] ❌ Email auth error:", err);
+      console.error("[Auth Screen] Error details:", {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+      });
+      showErrorToast(
+        "Authentication Failed",
+        err.message || "Failed to authenticate. Please check your credentials and try again."
+      );
     } finally {
       setSubmitting(false);
+      setActiveAuthMethod(null);
     }
   };
 
   const handleGoogleSignIn = async () => {
-    console.log("[Auth] Google sign-in button pressed, Platform:", Platform.OS);
+    console.log("[Auth Screen] 🔵 Google sign-in button pressed");
+    console.log("[Auth Screen] Platform:", Platform.OS);
+    console.log("[Auth Screen] Device info:", {
+      os: Platform.OS,
+      version: Platform.Version,
+    });
+    
     setSubmitting(true);
+    setActiveAuthMethod('google');
     setError("");
 
     try {
-      console.log("[Auth] Calling signInWithGoogle()...");
+      console.log("[Auth Screen] 🔐 Calling signInWithGoogle()...");
+      const startTime = Date.now();
+      
       await signInWithGoogle();
-      console.log("[Auth] Google sign-in completed successfully");
+      
+      const duration = Date.now() - startTime;
+      console.log("[Auth Screen] ✅ Google sign-in completed successfully in", duration, "ms");
+      showSuccessToast("Signed In", "Welcome back!");
       // Navigation will happen automatically via useEffect when user state updates
     } catch (err: any) {
-      console.error("[Auth] Google sign in error:", err);
+      console.error("[Auth Screen] ❌ Google sign in error:", err);
+      console.error("[Auth Screen] Error details:", {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+        cause: err.cause,
+      });
       
       // Show user-friendly error message
+      let errorTitle = "Google Sign-In Failed";
       let errorMessage = "Failed to sign in with Google. Please try again.";
       
       if (err.message?.includes("popup")) {
+        errorTitle = "Popup Blocked";
         errorMessage = "Please allow popups for this site and try again.";
       } else if (err.message?.includes("closed")) {
+        errorTitle = "Sign-In Cancelled";
         errorMessage = "Sign-in was cancelled. Please try again.";
       } else if (err.message?.includes("session") || err.message?.includes("establish")) {
-        // Session establishment failed - try redirect approach
-        console.log("[Auth] Popup OAuth failed, trying redirect approach...");
+        errorTitle = "Session Error";
+        errorMessage = "Failed to establish session. Trying alternative method...";
+        
+        // Try redirect approach
+        console.log("[Auth Screen] 🔄 Popup OAuth failed, trying redirect approach...");
         setSubmitting(false);
+        setActiveAuthMethod(null);
         setError("");
         try {
           await signInWithGoogleRedirect();
           // This will navigate away from the page
           return;
         } catch (redirectErr: any) {
-          errorMessage = "Failed to sign in with Google. Please try again or use email/password.";
+          console.error("[Auth Screen] ❌ Redirect OAuth also failed:", redirectErr);
+          errorMessage = "Failed to sign in with Google. Please try email/password instead.";
         }
-      }
-      
-      setError(errorMessage);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleAppleSignIn = async () => {
-    console.log("[Auth] Apple sign-in button pressed, Platform:", Platform.OS);
-    setSubmitting(true);
-    setError("");
-
-    try {
-      console.log("[Auth] Calling signInWithApple()...");
-      await signInWithApple();
-      console.log("[Auth] Apple sign-in completed successfully");
-      // Navigation will happen automatically via useEffect when user state updates
-    } catch (err: any) {
-      console.error("[Auth] Apple sign in error:", err);
-      
-      // Show user-friendly error message
-      let errorMessage = "Failed to sign in with Apple. Please try again.";
-      
-      if (err.message?.includes("popup")) {
-        errorMessage = "Please allow popups for this site and try again.";
-      } else if (err.message?.includes("closed")) {
-        errorMessage = "Sign-in was cancelled. Please try again.";
       } else if (err.message) {
         errorMessage = err.message;
       }
       
-      setError(errorMessage);
+      showErrorToast(errorTitle, errorMessage);
     } finally {
       setSubmitting(false);
+      setActiveAuthMethod(null);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    console.log("[Auth Screen] 🍎 Apple sign-in button pressed");
+    console.log("[Auth Screen] Platform:", Platform.OS);
+    console.log("[Auth Screen] Device info:", {
+      os: Platform.OS,
+      version: Platform.Version,
+    });
+    
+    setSubmitting(true);
+    setActiveAuthMethod('apple');
+    setError("");
+
+    try {
+      console.log("[Auth Screen] 🔐 Calling signInWithApple()...");
+      const startTime = Date.now();
+      
+      await signInWithApple();
+      
+      const duration = Date.now() - startTime;
+      console.log("[Auth Screen] ✅ Apple sign-in completed successfully in", duration, "ms");
+      showSuccessToast("Signed In", "Welcome back!");
+      // Navigation will happen automatically via useEffect when user state updates
+    } catch (err: any) {
+      console.error("[Auth Screen] ❌ Apple sign in error:", err);
+      console.error("[Auth Screen] Error details:", {
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+        cause: err.cause,
+      });
+      
+      // Show user-friendly error message
+      let errorTitle = "Apple Sign-In Failed";
+      let errorMessage = "Failed to sign in with Apple. Please try again.";
+      
+      if (err.message?.includes("popup")) {
+        errorTitle = "Popup Blocked";
+        errorMessage = "Please allow popups for this site and try again.";
+      } else if (err.message?.includes("closed")) {
+        errorTitle = "Sign-In Cancelled";
+        errorMessage = "Sign-in was cancelled. Please try again.";
+      } else if (err.message?.includes("not available")) {
+        errorTitle = "Not Available";
+        errorMessage = "Apple Sign-In is not available on this device.";
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      showErrorToast(errorTitle, errorMessage);
+    } finally {
+      setSubmitting(false);
+      setActiveAuthMethod(null);
     }
   };
 
   const handleForgotPassword = async () => {
+    console.log("[Auth Screen] 🔑 Forgot password requested for:", resetEmail);
+    
     if (!resetEmail) {
-      setError("Please enter your email address");
+      showErrorToast("Missing Email", "Please enter your email address");
       return;
     }
 
@@ -154,22 +260,33 @@ export default function AuthScreen() {
     setError("");
 
     try {
+      console.log("[Auth Screen] 📧 Requesting password reset...");
       await requestPasswordReset(resetEmail);
+      console.log("[Auth Screen] ✅ Password reset email sent");
       setResetSuccess(true);
+      showSuccessToast("Email Sent", "Check your inbox for reset instructions");
       setTimeout(() => {
         setShowForgotPassword(false);
         setResetSuccess(false);
         setResetEmail("");
       }, 3000);
     } catch (err: any) {
-      console.error("[Auth] Password reset error:", err);
-      setError(err.message || "Failed to send reset email. Please try again.");
+      console.error("[Auth Screen] ❌ Password reset error:", err);
+      console.error("[Auth Screen] Error details:", {
+        message: err.message,
+        stack: err.stack,
+      });
+      showErrorToast(
+        "Reset Failed",
+        err.message || "Failed to send reset email. Please try again."
+      );
     } finally {
       setResetSubmitting(false);
     }
   };
 
   if (loading) {
+    console.log("[Auth Screen] ⏳ Loading authentication state...");
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -177,6 +294,8 @@ export default function AuthScreen() {
       </View>
     );
   }
+
+  const isButtonLoading = (method: string) => submitting && activeAuthMethod === method;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -254,7 +373,7 @@ export default function AuthScreen() {
               onPress={handleSubmit}
               disabled={submitting}
             >
-              {submitting ? (
+              {isButtonLoading('email') ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={styles.buttonText}>{isSignUp ? "Sign Up" : "Sign In"}</Text>
@@ -284,7 +403,7 @@ export default function AuthScreen() {
               onPress={handleGoogleSignIn}
               disabled={submitting}
             >
-              {submitting ? (
+              {isButtonLoading('google') ? (
                 <ActivityIndicator color={colors.text} />
               ) : (
                 <Text style={styles.socialButtonText}>Continue with Google</Text>
@@ -297,12 +416,24 @@ export default function AuthScreen() {
                 onPress={handleAppleSignIn}
                 disabled={submitting}
               >
-                {submitting ? (
+                {isButtonLoading('apple') ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={styles.appleButtonText}>Continue with Apple</Text>
                 )}
               </TouchableOpacity>
+            )}
+
+            {/* Debug Info (only visible in development) */}
+            {__DEV__ && (
+              <View style={styles.debugContainer}>
+                <Text style={styles.debugText}>Debug Info:</Text>
+                <Text style={styles.debugText}>Platform: {Platform.OS}</Text>
+                <Text style={styles.debugText}>Loading: {loading ? 'Yes' : 'No'}</Text>
+                <Text style={styles.debugText}>User: {user ? user.email : 'None'}</Text>
+                <Text style={styles.debugText}>Submitting: {submitting ? 'Yes' : 'No'}</Text>
+                <Text style={styles.debugText}>Active Method: {activeAuthMethod || 'None'}</Text>
+              </View>
             )}
           </View>
         </ScrollView>
@@ -376,6 +507,9 @@ export default function AuthScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Toast Message Component */}
+      <Toast />
     </SafeAreaView>
   );
 }
@@ -580,5 +714,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     textAlign: "center",
+  },
+  debugContainer: {
+    marginTop: 32,
+    padding: 16,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  debugText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

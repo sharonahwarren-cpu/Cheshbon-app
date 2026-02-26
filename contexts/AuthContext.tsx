@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Platform } from "react-native";
 import * as Linking from "expo-linking";
+import Toast from 'react-native-toast-message';
 import { authClient, setBearerToken, clearAuthTokens, getSessionWithBearerToken } from "@/lib/auth";
 
 interface User {
@@ -36,7 +37,7 @@ function openOAuthPopup(provider: string): Promise<{ token: string; user: any | 
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
 
-    console.log("[Auth] Opening OAuth popup:", popupUrl);
+    console.log("[AuthContext] 🪟 Opening OAuth popup:", popupUrl);
 
     const popup = window.open(
       popupUrl,
@@ -45,6 +46,7 @@ function openOAuthPopup(provider: string): Promise<{ token: string; user: any | 
     );
 
     if (!popup) {
+      console.error("[AuthContext] ❌ Failed to open popup window");
       reject(new Error("Failed to open popup. Please allow popups for this site and try again."));
       return;
     }
@@ -54,17 +56,23 @@ function openOAuthPopup(provider: string): Promise<{ token: string; user: any | 
     const handleMessage = (event: MessageEvent) => {
       // Accept messages from same origin only
       if (event.origin !== window.location.origin) {
-        console.log("[Auth] Ignoring message from different origin:", event.origin);
+        console.log("[AuthContext] ⚠️ Ignoring message from different origin:", event.origin);
         return;
       }
 
-      console.log("[Auth] Received message from popup:", event.data?.type, event.data?.error || "");
+      console.log("[AuthContext] 📨 Received message from popup:", {
+        type: event.data?.type,
+        hasToken: !!event.data?.token,
+        hasUser: !!event.data?.user,
+        error: event.data?.error || "none",
+      });
 
       if (event.data?.type === "oauth-success") {
         if (!resolved) {
           resolved = true;
           window.removeEventListener("message", handleMessage);
           clearInterval(checkClosed);
+          console.log("[AuthContext] ✅ OAuth popup success");
           // Resolve with both token and user data if available
           resolve({ token: event.data.token || "", user: event.data.user || null });
         }
@@ -74,7 +82,7 @@ function openOAuthPopup(provider: string): Promise<{ token: string; user: any | 
           window.removeEventListener("message", handleMessage);
           clearInterval(checkClosed);
           const errorMsg = event.data.error || "OAuth failed";
-          console.error("[Auth] OAuth error from popup:", errorMsg);
+          console.error("[AuthContext] ❌ OAuth error from popup:", errorMsg);
           reject(new Error(errorMsg));
         }
       }
@@ -88,7 +96,7 @@ function openOAuthPopup(provider: string): Promise<{ token: string; user: any | 
         window.removeEventListener("message", handleMessage);
         if (!resolved) {
           resolved = true;
-          console.log("[Auth] Popup closed without message");
+          console.log("[AuthContext] ⚠️ Popup closed without message");
           reject(new Error("Authentication window was closed"));
         }
       }
@@ -102,36 +110,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const oauthInProgress = React.useRef(false);
 
   useEffect(() => {
+    console.log("[AuthContext] 🚀 AuthProvider mounted");
+    console.log("[AuthContext] Platform:", Platform.OS);
+    
     // Don't auto-fetch user on auth-callback page to avoid consuming better_auth_token
     // The auth-callback page handles its own token exchange
     if (Platform.OS === "web" && typeof window !== "undefined") {
       const pathname = window.location.pathname;
+      console.log("[AuthContext] Current pathname:", pathname);
+      
       if (pathname === "/auth-callback" || pathname.includes("auth-callback") || pathname.includes("auth-popup")) {
-        console.log("[Auth] Skipping auto-fetchUser on auth callback/popup page");
+        console.log("[AuthContext] ⏭️ Skipping auto-fetchUser on auth callback/popup page");
         setLoading(false);
         return;
       }
     }
     
+    console.log("[AuthContext] 🔄 Starting initial fetchUser...");
     fetchUser();
 
     // Listen for deep links (e.g. from social auth redirects on native)
     const subscription = Linking.addEventListener("url", (event) => {
-      console.log("[Auth] Deep link received:", event.url);
+      console.log("[AuthContext] 🔗 Deep link received:", event.url);
       if (!oauthInProgress.current) {
-        setTimeout(() => fetchUser(), 500);
+        setTimeout(() => {
+          console.log("[AuthContext] 🔄 Fetching user after deep link...");
+          fetchUser();
+        }, 500);
       }
     });
 
     // POLLING: Refresh session every 5 minutes to keep SecureStore token in sync
     const intervalId = setInterval(() => {
       if (!oauthInProgress.current) {
-        console.log("[Auth] Auto-refreshing user session to sync token...");
+        console.log("[AuthContext] 🔄 Auto-refreshing user session (5min interval)...");
         fetchUser();
       }
     }, 5 * 60 * 1000);
 
     return () => {
+      console.log("[AuthContext] 🛑 AuthProvider unmounting");
       subscription.remove();
       clearInterval(intervalId);
     };
@@ -139,21 +157,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUser = async () => {
     try {
+      console.log("[AuthContext] 🔍 fetchUser() called");
       setLoading(true);
       
       // First try the authClient.getSession() which handles cookies/native storage
       let session: any = null;
       try {
+        console.log("[AuthContext] 📞 Calling authClient.getSession()...");
         session = await authClient.getSession();
-      } catch (sessionErr) {
-        console.warn("[Auth] authClient.getSession() threw error:", sessionErr);
+        console.log("[AuthContext] 📊 authClient.getSession() result:", {
+          hasUser: !!session?.data?.user,
+          hasSession: !!session?.data?.session,
+          hasError: !!session?.error,
+          errorMessage: session?.error?.message || "none",
+        });
+      } catch (sessionErr: any) {
+        console.warn("[AuthContext] ⚠️ authClient.getSession() threw error:", {
+          message: sessionErr.message,
+          name: sessionErr.name,
+        });
       }
       
-      console.log("[Auth] Session fetched:", session?.data?.user ? "User found" : "No user");
-      
       if (session?.data?.user) {
+        console.log("[AuthContext] ✅ User found via authClient.getSession():", session.data.user.email);
         setUser(session.data.user as User);
         if (session.data.session?.token) {
+          console.log("[AuthContext] 💾 Storing session token from authClient");
           await setBearerToken(session.data.session.token);
         }
         return;
@@ -161,128 +190,168 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Fallback: Try using stored Bearer token to fetch session from /api/auth/me
       // This handles the case where OAuth set a Bearer token but no cookie
-      console.log("[Auth] No cookie session, trying Bearer token from storage...");
+      console.log("[AuthContext] 🔄 No cookie session, trying Bearer token from storage...");
       try {
         const bearerSession = await getSessionWithBearerToken();
+        console.log("[AuthContext] 📊 Bearer token session result:", {
+          hasUser: !!bearerSession?.user,
+          userEmail: bearerSession?.user?.email || "none",
+        });
+        
         if (bearerSession?.user) {
-          console.log("[Auth] User found via Bearer token:", bearerSession.user.email);
+          console.log("[AuthContext] ✅ User found via Bearer token:", bearerSession.user.email);
           setUser(bearerSession.user as User);
           // Update stored token if a newer one is provided
           if (bearerSession?.session?.token) {
+            console.log("[AuthContext] 💾 Updating stored token from Bearer session");
             await setBearerToken(bearerSession.session.token);
           }
           return;
         }
-      } catch (err) {
-        console.warn("[Auth] Bearer token fallback failed:", err);
+      } catch (err: any) {
+        console.warn("[AuthContext] ⚠️ Bearer token fallback failed:", {
+          message: err.message,
+          name: err.name,
+        });
       }
       
+      console.log("[AuthContext] ❌ No user found, clearing state");
       setUser(null);
       if (!oauthInProgress.current) {
+        console.log("[AuthContext] 🧹 Clearing auth tokens");
         await clearAuthTokens();
       }
-    } catch (error) {
-      console.error("[Auth] Failed to fetch user:", error);
+    } catch (error: any) {
+      console.error("[AuthContext] ❌ Failed to fetch user:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       setUser(null);
     } finally {
       setLoading(false);
+      console.log("[AuthContext] ✅ fetchUser() completed");
     }
   };
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
-      console.log("[Auth] Signing in with email:", email);
+      console.log("[AuthContext] 📧 signInWithEmail() called for:", email);
       await authClient.signIn.email({ email, password });
+      console.log("[AuthContext] ✅ Email sign-in successful");
       await fetchUser();
-    } catch (error) {
-      console.error("[Auth] Email sign in failed:", error);
+    } catch (error: any) {
+      console.error("[AuthContext] ❌ Email sign in failed:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       throw error;
     }
   };
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
     try {
-      console.log("[Auth] Signing up with email:", email);
+      console.log("[AuthContext] 📧 signUpWithEmail() called for:", email);
       await authClient.signUp.email({
         email,
         password,
         name,
       });
+      console.log("[AuthContext] ✅ Email sign-up successful");
       await fetchUser();
-    } catch (error) {
-      console.error("[Auth] Email sign up failed:", error);
+    } catch (error: any) {
+      console.error("[AuthContext] ❌ Email sign up failed:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       throw error;
     }
   };
 
   const signInWithSocial = async (provider: "google" | "apple" | "github") => {
     try {
-      console.log(`[Auth] Starting ${provider} sign in on platform:`, Platform.OS);
+      console.log(`[AuthContext] 🔐 signInWithSocial(${provider}) called`);
+      console.log("[AuthContext] Platform:", Platform.OS);
       
       if (Platform.OS === "web") {
         // WEB: Use popup-based OAuth flow
+        console.log("[AuthContext] 🌐 Using web popup OAuth flow");
         oauthInProgress.current = true;
         
         try {
-          console.log("[Auth] Opening OAuth popup for provider:", provider);
+          console.log("[AuthContext] 🪟 Opening OAuth popup for provider:", provider);
+          const startTime = Date.now();
           const popupResult = await openOAuthPopup(provider);
+          const duration = Date.now() - startTime;
+          
           const betterAuthToken = popupResult.token;
           const popupUser = popupResult.user;
+          
+          console.log("[AuthContext] 📊 Popup result:", {
+            duration: `${duration}ms`,
+            hasToken: !!betterAuthToken,
+            tokenLength: betterAuthToken?.length || 0,
+            hasUser: !!popupUser,
+            userEmail: popupUser?.email || "none",
+          });
           
           if (!betterAuthToken) {
             throw new Error("No authentication token received from OAuth");
           }
           
-          console.log("[Auth] Received token from popup (length:", betterAuthToken.length, "), user from popup:", popupUser ? "yes" : "no");
-          
           // If the popup already resolved the user (exchanged the token successfully), use it directly
           if (popupUser) {
-            console.log("[Auth] Using user data from popup:", popupUser.email);
+            console.log("[AuthContext] ✅ Using user data from popup:", popupUser.email);
             await setBearerToken(betterAuthToken);
             setUser(popupUser as User);
-            console.log("[Auth] OAuth sign-in successful (from popup):", popupUser.email);
+            console.log("[AuthContext] ✅ OAuth sign-in successful (from popup)");
             return;
           }
           
           const { BACKEND_URL } = await import("@/utils/api");
+          console.log("[AuthContext] 🔄 Exchanging better_auth_token for session...");
+          console.log("[AuthContext] Backend URL:", BACKEND_URL);
           
           // Exchange better_auth_token for a session
-          // Better Auth's better_auth_token is a one-time token that must be exchanged
-          // via the /api/auth/get-session endpoint with the token in the Authorization header
-          console.log("[Auth] Exchanging better_auth_token for session...");
-          
           let sessionData: any = null;
           
-          // The correct Better Auth flow:
-          // 1. Store the better_auth_token as Bearer token
-          // 2. Call authClient.getSession() which sends it in Authorization header
-          // 3. Better Auth exchanges it for a real session and returns user data
+          // Store the better_auth_token as Bearer token
           await setBearerToken(betterAuthToken);
+          console.log("[AuthContext] 💾 Stored better_auth_token");
           
           // Wait a brief moment to ensure token is stored
           await new Promise(resolve => setTimeout(resolve, 100));
           
           // Try authClient.getSession() first - it uses the stored Bearer token
           try {
+            console.log("[AuthContext] 📞 Trying authClient.getSession() with stored token...");
             const clientSession = await authClient.getSession();
-            console.log("[Auth] authClient.getSession() result:", 
-              clientSession?.data?.user ? "user found" : "no user",
-              "error:", clientSession?.error?.message || "none"
-            );
+            console.log("[AuthContext] 📊 authClient.getSession() result:", {
+              hasUser: !!clientSession?.data?.user,
+              hasError: !!clientSession?.error,
+              errorMessage: clientSession?.error?.message || "none",
+            });
             
             if (clientSession?.data?.user) {
               sessionData = {
                 user: clientSession.data.user,
                 session: clientSession.data.session,
               };
+              console.log("[AuthContext] ✅ Got session from authClient.getSession()");
             }
-          } catch (err) {
-            console.warn("[Auth] authClient.getSession() threw error:", err);
+          } catch (err: any) {
+            console.warn("[AuthContext] ⚠️ authClient.getSession() threw error:", {
+              message: err.message,
+              name: err.name,
+            });
           }
           
           // Fallback: Direct fetch to /api/auth/get-session with Bearer token
           if (!sessionData?.user) {
             try {
+              console.log("[AuthContext] 📞 Trying direct fetch to /api/auth/get-session...");
               const sessionResponse = await fetch(
                 `${BACKEND_URL}/api/auth/get-session`,
                 {
@@ -295,30 +364,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               );
               
               const rawText = await sessionResponse.text();
-              console.log("[Auth] /api/auth/get-session status:", sessionResponse.status, "body:", rawText.substring(0, 300));
+              console.log("[AuthContext] 📊 /api/auth/get-session response:", {
+                status: sessionResponse.status,
+                ok: sessionResponse.ok,
+                bodyLength: rawText.length,
+                bodyPreview: rawText.substring(0, 200),
+              });
               
               if (sessionResponse.ok && rawText) {
                 try {
                   const parsed = JSON.parse(rawText);
-                  // Better Auth returns { session: {...}, user: {...} }
                   if (parsed?.user) {
                     sessionData = parsed;
-                  } else if (parsed?.session?.token) {
-                    // Session exists but user might be nested differently
-                    sessionData = parsed;
+                    console.log("[AuthContext] ✅ Got session from /api/auth/get-session");
                   }
-                } catch (parseErr) {
-                  console.warn("[Auth] Failed to parse get-session response:", parseErr);
+                } catch (parseErr: any) {
+                  console.warn("[AuthContext] ⚠️ Failed to parse get-session response:", parseErr.message);
                 }
               }
-            } catch (err) {
-              console.warn("[Auth] /api/auth/get-session fetch threw error:", err);
+            } catch (err: any) {
+              console.warn("[AuthContext] ⚠️ /api/auth/get-session fetch threw error:", {
+                message: err.message,
+                name: err.name,
+              });
             }
           }
           
           // Fallback: Try /api/auth/me with Bearer token
           if (!sessionData?.user) {
             try {
+              console.log("[AuthContext] 📞 Trying /api/auth/me as final fallback...");
               const meResponse = await fetch(
                 `${BACKEND_URL}/api/auth/me`,
                 {
@@ -331,24 +406,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               );
               
               const rawText = await meResponse.text();
-              console.log("[Auth] /api/auth/me status:", meResponse.status, "body:", rawText.substring(0, 300));
+              console.log("[AuthContext] 📊 /api/auth/me response:", {
+                status: meResponse.status,
+                ok: meResponse.ok,
+                bodyLength: rawText.length,
+                bodyPreview: rawText.substring(0, 200),
+              });
               
               if (meResponse.ok && rawText) {
                 try {
                   const parsed = JSON.parse(rawText);
                   if (parsed?.user) {
                     sessionData = parsed;
+                    console.log("[AuthContext] ✅ Got session from /api/auth/me");
                   }
-                } catch (parseErr) {
-                  console.warn("[Auth] Failed to parse /api/auth/me response:", parseErr);
+                } catch (parseErr: any) {
+                  console.warn("[AuthContext] ⚠️ Failed to parse /api/auth/me response:", parseErr.message);
                 }
               }
-            } catch (err) {
-              console.warn("[Auth] /api/auth/me fetch threw error:", err);
+            } catch (err: any) {
+              console.warn("[AuthContext] ⚠️ /api/auth/me fetch threw error:", {
+                message: err.message,
+                name: err.name,
+              });
             }
           }
           
           if (!sessionData?.user) {
+            console.error("[AuthContext] ❌ All session exchange attempts failed");
             // Clear the invalid token we stored
             await clearAuthTokens();
             throw new Error("Failed to establish session after OAuth. Please try signing in again.");
@@ -356,50 +441,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           // Store the real session token (prefer session.token over better_auth_token)
           const tokenToStore = sessionData?.session?.token || betterAuthToken;
-          console.log("[Auth] Storing final session token (length:", tokenToStore.length, ")");
+          console.log("[AuthContext] 💾 Storing final session token (length:", tokenToStore.length, ")");
           await setBearerToken(tokenToStore);
           
           // Update user state directly
           setUser(sessionData.user as User);
-          console.log("[Auth] OAuth sign-in successful:", sessionData.user.email);
+          console.log("[AuthContext] ✅ OAuth sign-in successful:", sessionData.user.email);
           
         } finally {
           oauthInProgress.current = false;
         }
       } else {
         // NATIVE (iOS/Android): Use Better Auth's native OAuth flow
-        console.log("[Auth] Starting native OAuth flow for", provider);
+        console.log("[AuthContext] 📱 Using native OAuth flow for", provider);
         oauthInProgress.current = true;
         
         try {
           // Generate the callback URL for deep linking
           const callbackURL = Linking.createURL("/");
-          console.log("[Auth] Native OAuth callback URL:", callbackURL);
+          console.log("[AuthContext] 🔗 Native OAuth callback URL:", callbackURL);
           
           // Call Better Auth's social sign-in which will open the browser
+          console.log("[AuthContext] 📞 Calling authClient.signIn.social()...");
+          const startTime = Date.now();
           const result = await authClient.signIn.social({
             provider,
             callbackURL,
           });
+          const duration = Date.now() - startTime;
           
-          console.log("[Auth] Native OAuth result:", result ? "success" : "no result");
+          console.log("[AuthContext] 📊 Native OAuth result:", {
+            duration: `${duration}ms`,
+            hasResult: !!result,
+          });
           
           // Wait a moment for the deep link to be processed
           await new Promise(resolve => setTimeout(resolve, 2000));
           
           // Fetch the user session
+          console.log("[AuthContext] 🔄 Fetching user after native OAuth...");
           await fetchUser();
           
-          console.log("[Auth] Native OAuth completed, user:", user ? "authenticated" : "not authenticated");
+          console.log("[AuthContext] ✅ Native OAuth completed, user:", user ? "authenticated" : "not authenticated");
         } catch (nativeErr: any) {
-          console.error("[Auth] Native OAuth failed:", nativeErr);
+          console.error("[AuthContext] ❌ Native OAuth failed:", {
+            message: nativeErr.message,
+            name: nativeErr.name,
+            stack: nativeErr.stack,
+          });
           throw new Error(nativeErr.message || `Failed to sign in with ${provider}. Please try again.`);
         } finally {
           oauthInProgress.current = false;
         }
       }
-    } catch (error) {
-      console.error(`[Auth] ${provider} sign in failed:`, error);
+    } catch (error: any) {
+      console.error(`[AuthContext] ❌ ${provider} sign in failed:`, {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       oauthInProgress.current = false;
       throw error;
     }
@@ -410,31 +510,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGitHub = () => signInWithSocial("github");
 
   // Redirect-based OAuth (fallback for when popup fails)
-  // This navigates away from the current page
   const signInWithGoogleRedirect = async (): Promise<void> => {
+    console.log("[AuthContext] 🔄 signInWithGoogleRedirect() called");
     if (Platform.OS !== "web") {
       return signInWithSocial("google");
     }
     const { BACKEND_URL } = await import("@/utils/api");
     const callbackURL = `${window.location.origin}/auth-callback`;
-    window.location.href = `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackURL)}`;
+    const redirectUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackURL)}`;
+    console.log("[AuthContext] 🌐 Redirecting to:", redirectUrl);
+    window.location.href = redirectUrl;
   };
 
   const signOut = async () => {
     try {
-      console.log("[Auth] Signing out...");
+      console.log("[AuthContext] 🚪 signOut() called");
       await authClient.signOut();
-    } catch (error) {
-      console.error("[Auth] Sign out failed (API):", error);
+      console.log("[AuthContext] ✅ Sign out API call successful");
+    } catch (error: any) {
+      console.error("[AuthContext] ⚠️ Sign out API failed:", {
+        message: error.message,
+        name: error.name,
+      });
     } finally {
-       setUser(null);
-       await clearAuthTokens();
+      console.log("[AuthContext] 🧹 Clearing local user state and tokens");
+      setUser(null);
+      await clearAuthTokens();
+      console.log("[AuthContext] ✅ Sign out completed");
     }
   };
 
   const requestPasswordReset = async (email: string) => {
     try {
-      console.log("[Auth] Requesting password reset for:", email);
+      console.log("[AuthContext] 🔑 requestPasswordReset() called for:", email);
       const emailString = String(email).trim();
       if (!emailString) {
         throw new Error("Email address is required");
@@ -446,23 +554,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ? `${window.location.origin}/reset-password`
         : `${BACKEND_URL}/reset-password`;
 
-      console.log("[Auth] Calling Better Auth forget-password endpoint, redirectTo:", redirectTo);
+      console.log("[AuthContext] 📧 Calling Better Auth forget-password endpoint");
+      console.log("[AuthContext] Redirect URL:", redirectTo);
       
       try {
         const result = await authClient.forgetPassword({
           email: emailString,
           redirectTo,
         });
-        console.log("[Auth] Better Auth forgetPassword result:", result);
+        console.log("[AuthContext] 📊 Better Auth forgetPassword result:", {
+          hasError: !!result?.error,
+          errorMessage: result?.error?.message || "none",
+        });
+        
         if (!result?.error) {
-          console.log("[Auth] Password reset email sent successfully via Better Auth client");
+          console.log("[AuthContext] ✅ Password reset email sent successfully");
           return;
         }
-        console.warn("[Auth] Better Auth forgetPassword returned error:", result.error);
-      } catch (clientErr) {
-        console.warn("[Auth] Better Auth client forgetPassword failed, trying direct fetch:", clientErr);
+        console.warn("[AuthContext] ⚠️ Better Auth forgetPassword returned error:", result.error);
+      } catch (clientErr: any) {
+        console.warn("[AuthContext] ⚠️ Better Auth client forgetPassword failed:", {
+          message: clientErr.message,
+          name: clientErr.name,
+        });
       }
       
+      console.log("[AuthContext] 🔄 Trying direct fetch to /api/auth/forget-password...");
       const response = await fetch(`${BACKEND_URL}/api/auth/forget-password`, {
         method: "POST",
         headers: {
@@ -479,34 +596,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore parse errors
       }
 
-      console.log("[Auth] forget-password response:", response.status, data);
+      console.log("[AuthContext] 📊 forget-password response:", {
+        status: response.status,
+        ok: response.ok,
+        data,
+      });
 
       if (!response.ok) {
         throw new Error(data.error || data.message || "Failed to send reset email");
       }
 
-      console.log("[Auth] Password reset email sent successfully");
-    } catch (error) {
-      console.error("[Auth] Password reset request failed:", error);
+      console.log("[AuthContext] ✅ Password reset email sent successfully");
+    } catch (error: any) {
+      console.error("[AuthContext] ❌ Password reset request failed:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       throw error;
     }
   };
 
   const resetPassword = async (token: string, newPassword: string) => {
     try {
-      console.log("[Auth] Resetting password with token");
+      console.log("[AuthContext] 🔑 resetPassword() called");
       
       try {
         const result = await authClient.resetPassword({
           newPassword,
           token,
         });
-        console.log("[Auth] Better Auth resetPassword result:", result);
+        console.log("[AuthContext] 📊 Better Auth resetPassword result:", {
+          hasError: !!result?.error,
+          errorMessage: result?.error?.message || "none",
+        });
+        
         if (!result?.error) {
-          console.log("[Auth] Password reset successful via Better Auth client");
+          console.log("[AuthContext] ✅ Password reset successful");
           return;
         }
-        console.warn("[Auth] Better Auth resetPassword returned error:", result.error);
+        
         const errMsg = result.error?.message || "Failed to reset password";
         if (errMsg.toLowerCase().includes("expired") || errMsg.toLowerCase().includes("invalid")) {
           throw new Error("Reset link has expired or is invalid. Please request a new one.");
@@ -516,10 +645,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (clientErr.message && !clientErr.message.includes("forgetPassword") && !clientErr.message.includes("resetPassword")) {
           throw clientErr;
         }
-        console.warn("[Auth] Better Auth client resetPassword failed, trying direct fetch:", clientErr);
+        console.warn("[AuthContext] ⚠️ Better Auth client resetPassword failed:", {
+          message: clientErr.message,
+          name: clientErr.name,
+        });
       }
       
       const { BACKEND_URL } = await import("@/utils/api");
+      console.log("[AuthContext] 🔄 Trying direct fetch to /api/auth/reset-password...");
       const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
         method: "POST",
         headers: {
@@ -536,7 +669,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore parse errors
       }
 
-      console.log("[Auth] reset-password response:", response.status, data);
+      console.log("[AuthContext] 📊 reset-password response:", {
+        status: response.status,
+        ok: response.ok,
+        data,
+      });
 
       if (!response.ok) {
         const errorMsg = data.error || data.message || "Failed to reset password";
@@ -548,9 +685,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(errorMsg);
       }
 
-      console.log("[Auth] Password reset successful");
-    } catch (error) {
-      console.error("[Auth] Password reset failed:", error);
+      console.log("[AuthContext] ✅ Password reset successful");
+    } catch (error: any) {
+      console.error("[AuthContext] ❌ Password reset failed:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
       throw error;
     }
   };

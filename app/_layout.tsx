@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { useColorScheme } from "react-native";
+import Toast from 'react-native-toast-message';
 import {
   DarkTheme,
   DefaultTheme,
@@ -59,6 +60,8 @@ export default function RootLayout() {
               <Stack.Screen name="+not-found" />
             </Stack>
             <StatusBar style="auto" />
+            {/* Global Toast Component */}
+            <Toast />
           </ThemeProvider>
         </WidgetProvider>
       </AuthProvider>
