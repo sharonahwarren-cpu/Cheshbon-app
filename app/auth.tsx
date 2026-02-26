@@ -1,8 +1,5 @@
 
 import React, { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "expo-router";
-import Toast from 'react-native-toast-message';
 import {
   View,
   Text,
@@ -14,286 +11,139 @@ import {
   Platform,
   ScrollView,
   Image,
-  Modal,
 } from "react-native";
-import { colors } from "@/styles/commonStyles";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "expo-router";
+import { colors } from "@/styles/commonStyles";
+import Toast from 'react-native-toast-message';
+import { IconSymbol } from "@/components/IconSymbol";
 
 export default function AuthScreen() {
-  const { user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGoogleRedirect, requestPasswordReset } = useAuth();
+  const { user, loading: authLoading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGoogleRedirect } = useAuth();
   const router = useRouter();
+  
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [resetEmail, setResetEmail] = useState("");
-  const [resetSubmitting, setResetSubmitting] = useState(false);
-  const [resetSuccess, setResetSuccess] = useState(false);
-
-  // Track which button was pressed for better debugging
-  const [activeAuthMethod, setActiveAuthMethod] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!loading && user) {
-      console.log("[Auth Screen] ✅ User authenticated, redirecting to home. User:", user.email);
-      Toast.show({
-        type: 'success',
-        text1: 'Welcome back!',
-        text2: `Signed in as ${user.email}`,
-        position: 'top',
-        visibilityTime: 2000,
-      });
-      router.replace("/");
+    if (user && !authLoading) {
+      console.log("[Auth Screen] User authenticated, redirecting to home");
+      router.replace("/(tabs)/(home)");
     }
-  }, [user, loading]);
+  }, [user, authLoading]);
 
-  const showErrorToast = (title: string, message: string) => {
-    console.error(`[Auth Screen] ❌ ${title}: ${message}`);
-    setError(message);
-    Toast.show({
-      type: 'error',
-      text1: title,
-      text2: message,
-      position: 'top',
-      visibilityTime: 4000,
-    });
-  };
-
-  const showSuccessToast = (title: string, message: string) => {
-    console.log(`[Auth Screen] ✅ ${title}: ${message}`);
-    Toast.show({
-      type: 'success',
-      text1: title,
-      text2: message,
-      position: 'top',
-      visibilityTime: 3000,
-    });
-  };
-
-  const handleSubmit = async () => {
-    console.log("[Auth Screen] 📧 Email/password submit button pressed");
-    console.log("[Auth Screen] Platform:", Platform.OS);
-    console.log("[Auth Screen] Is Sign Up:", isSignUp);
-    console.log("[Auth Screen] Email:", email);
-    
+  const handleEmailAuth = async () => {
     if (!email || !password) {
-      showErrorToast("Missing Information", "Please fill in all fields");
+      Toast.show({
+        type: 'error',
+        text1: 'Missing Information',
+        text2: 'Please enter email and password',
+      });
       return;
     }
 
     if (isSignUp && !name) {
-      showErrorToast("Missing Information", "Please enter your name");
+      Toast.show({
+        type: 'error',
+        text1: 'Missing Information',
+        text2: 'Please enter your name',
+      });
       return;
     }
 
-    setSubmitting(true);
-    setActiveAuthMethod('email');
-    setError("");
-
+    setLoading(true);
     try {
       if (isSignUp) {
-        console.log("[Auth Screen] 🔐 Attempting sign up with email:", email);
+        console.log("[Auth Screen] Signing up with email:", email);
         await signUpWithEmail(email, password, name);
-        console.log("[Auth Screen] ✅ Email sign up successful");
-        showSuccessToast("Account Created", "Welcome to Cheshbon!");
+        Toast.show({
+          type: 'success',
+          text1: 'Account Created',
+          text2: 'Welcome to Cheshbon!',
+        });
       } else {
-        console.log("[Auth Screen] 🔐 Attempting sign in with email:", email);
+        console.log("[Auth Screen] Signing in with email:", email);
         await signInWithEmail(email, password);
-        console.log("[Auth Screen] ✅ Email sign in successful");
-        showSuccessToast("Signed In", "Welcome back!");
+        Toast.show({
+          type: 'success',
+          text1: 'Signed In',
+          text2: 'Welcome back!',
+        });
       }
-      // Navigation will happen automatically via useEffect when user state updates
-    } catch (err: any) {
-      console.error("[Auth Screen] ❌ Email auth error:", err);
-      console.error("[Auth Screen] Error details:", {
-        message: err.message,
-        stack: err.stack,
-        name: err.name,
+    } catch (error: any) {
+      console.error("[Auth Screen] Email auth failed:", error);
+      Toast.show({
+        type: 'error',
+        text1: isSignUp ? 'Sign Up Failed' : 'Sign In Failed',
+        text2: error.message || 'Please try again',
       });
-      showErrorToast(
-        "Authentication Failed",
-        err.message || "Failed to authenticate. Please check your credentials and try again."
-      );
     } finally {
-      setSubmitting(false);
-      setActiveAuthMethod(null);
+      setLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
-    console.log("[Auth Screen] 🔵 Google sign-in button pressed");
-    console.log("[Auth Screen] Platform:", Platform.OS);
-    console.log("[Auth Screen] Device info:", {
-      os: Platform.OS,
-      version: Platform.Version,
-    });
-    
-    setSubmitting(true);
-    setActiveAuthMethod('google');
-    setError("");
-
+    console.log("[Auth Screen] Google sign-in button pressed");
+    setGoogleLoading(true);
     try {
-      console.log("[Auth Screen] 🔐 Calling signInWithGoogle()...");
-      const startTime = Date.now();
-      
+      console.log("[Auth Screen] Calling signInWithGoogle()...");
       await signInWithGoogle();
-      
-      const duration = Date.now() - startTime;
-      console.log("[Auth Screen] ✅ Google sign-in completed successfully in", duration, "ms");
-      showSuccessToast("Signed In", "Welcome back!");
-      // Navigation will happen automatically via useEffect when user state updates
-    } catch (err: any) {
-      console.error("[Auth Screen] ❌ Google sign in error:", err);
-      console.error("[Auth Screen] Error details:", {
-        message: err.message,
-        stack: err.stack,
-        name: err.name,
-        cause: err.cause,
+      console.log("[Auth Screen] ✅ Google sign-in completed successfully");
+      // Success toast is shown in AuthContext
+    } catch (error: any) {
+      console.error("[Auth Screen] ❌ Google sign-in failed:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Google Sign-In Failed',
+        text2: error.message || 'Please try again',
       });
       
-      // Show user-friendly error message
-      let errorTitle = "Google Sign-In Failed";
-      let errorMessage = "Failed to sign in with Google. Please try again.";
-      
-      if (err.message?.includes("popup")) {
-        errorTitle = "Popup Blocked";
-        errorMessage = "Please allow popups for this site and try again.";
-      } else if (err.message?.includes("cancelled") || err.message?.includes("cancel") || err.message?.includes("closed")) {
-        errorTitle = "Sign-In Cancelled";
-        errorMessage = "Sign-in was cancelled. Please try again.";
-      } else if (err.message?.includes("not available") || err.message?.includes("not configured") || err.message?.includes("OAuth configuration") || err.message?.includes("403") || err.message?.includes("Forbidden")) {
-        errorTitle = "Google Sign-In Unavailable";
-        errorMessage = err.message || "Google sign-in is not available. Please use email/password sign-in.";
-      } else if (err.message?.includes("session") || err.message?.includes("establish")) {
-        errorTitle = "Session Error";
-        errorMessage = "Failed to establish session. Trying alternative method...";
-        
-        // Try redirect approach (web only)
-        if (Platform.OS === "web") {
-          console.log("[Auth Screen] 🔄 Popup OAuth failed, trying redirect approach...");
-          setSubmitting(false);
-          setActiveAuthMethod(null);
-          setError("");
-          try {
-            await signInWithGoogleRedirect();
-            // This will navigate away from the page
-            return;
-          } catch (redirectErr: any) {
-            console.error("[Auth Screen] ❌ Redirect OAuth also failed:", redirectErr);
-            errorMessage = "Failed to sign in with Google. Please try email/password instead.";
-          }
-        } else {
-          errorMessage = "Failed to establish session. Please try again or use email/password sign-in.";
+      // If popup was blocked, try redirect flow
+      if (Platform.OS === 'web' && error.message?.toLowerCase().includes("popup")) {
+        console.log("[Auth Screen] Popup blocked, trying redirect flow...");
+        try {
+          await signInWithGoogleRedirect();
+        } catch (redirectErr: any) {
+          console.error("[Auth Screen] Redirect flow also failed:", redirectErr);
         }
-      } else if (err.message) {
-        errorMessage = err.message;
       }
-      
-      showErrorToast(errorTitle, errorMessage);
     } finally {
-      setSubmitting(false);
-      setActiveAuthMethod(null);
+      setGoogleLoading(false);
     }
   };
 
   const handleAppleSignIn = async () => {
-    console.log("[Auth Screen] 🍎 Apple sign-in button pressed");
-    console.log("[Auth Screen] Platform:", Platform.OS);
-    console.log("[Auth Screen] Device info:", {
-      os: Platform.OS,
-      version: Platform.Version,
-    });
-    
-    setSubmitting(true);
-    setActiveAuthMethod('apple');
-    setError("");
-
+    console.log("[Auth Screen] Apple sign-in button pressed");
+    setAppleLoading(true);
     try {
-      console.log("[Auth Screen] 🔐 Calling signInWithApple()...");
-      const startTime = Date.now();
-      
+      console.log("[Auth Screen] Calling signInWithApple()...");
       await signInWithApple();
-      
-      const duration = Date.now() - startTime;
-      console.log("[Auth Screen] ✅ Apple sign-in completed successfully in", duration, "ms");
-      showSuccessToast("Signed In", "Welcome back!");
-      // Navigation will happen automatically via useEffect when user state updates
-    } catch (err: any) {
-      console.error("[Auth Screen] ❌ Apple sign in error:", err);
-      console.error("[Auth Screen] Error details:", {
-        message: err.message,
-        stack: err.stack,
-        name: err.name,
-        cause: err.cause,
+      console.log("[Auth Screen] ✅ Apple sign-in completed successfully");
+      // Success toast is shown in AuthContext
+    } catch (error: any) {
+      console.error("[Auth Screen] ❌ Apple sign-in failed:", error);
+      Toast.show({
+        type: 'error',
+        text1: 'Apple Sign-In Failed',
+        text2: error.message || 'Please try again',
       });
-      
-      // Show user-friendly error message
-      let errorTitle = "Apple Sign-In Failed";
-      let errorMessage = "Failed to sign in with Apple. Please try again.";
-      
-      if (err.message?.includes("popup")) {
-        errorTitle = "Popup Blocked";
-        errorMessage = "Please allow popups for this site and try again.";
-      } else if (err.message?.includes("cancelled") || err.message?.includes("cancel") || err.message?.includes("closed")) {
-        errorTitle = "Sign-In Cancelled";
-        errorMessage = "Sign-in was cancelled. Please try again.";
-      } else if (err.message?.includes("not available") || err.message?.includes("not configured") || err.message?.includes("OAuth configuration") || err.message?.includes("403") || err.message?.includes("Forbidden")) {
-        errorTitle = "Apple Sign-In Unavailable";
-        errorMessage = err.message || "Apple sign-in is not available. Please use email/password sign-in.";
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      
-      showErrorToast(errorTitle, errorMessage);
     } finally {
-      setSubmitting(false);
-      setActiveAuthMethod(null);
+      setAppleLoading(false);
     }
   };
 
-  const handleForgotPassword = async () => {
-    console.log("[Auth Screen] 🔑 Forgot password requested for:", resetEmail);
-    
-    if (!resetEmail) {
-      showErrorToast("Missing Email", "Please enter your email address");
-      return;
-    }
-
-    setResetSubmitting(true);
-    setError("");
-
-    try {
-      console.log("[Auth Screen] 📧 Requesting password reset...");
-      await requestPasswordReset(resetEmail);
-      console.log("[Auth Screen] ✅ Password reset email sent");
-      setResetSuccess(true);
-      showSuccessToast("Email Sent", "Check your inbox for reset instructions");
-      setTimeout(() => {
-        setShowForgotPassword(false);
-        setResetSuccess(false);
-        setResetEmail("");
-      }, 3000);
-    } catch (err: any) {
-      console.error("[Auth Screen] ❌ Password reset error:", err);
-      console.error("[Auth Screen] Error details:", {
-        message: err.message,
-        stack: err.stack,
-      });
-      showErrorToast(
-        "Reset Failed",
-        err.message || "Failed to send reset email. Please try again."
-      );
-    } finally {
-      setResetSubmitting(false);
-    }
+  const handleForgotPassword = () => {
+    router.push("/reset-password");
   };
 
-  if (loading) {
-    console.log("[Auth Screen] ⏳ Loading authentication state...");
+  if (authLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -301,8 +151,6 @@ export default function AuthScreen() {
       </View>
     );
   }
-
-  const isButtonLoading = (method: string) => submitting && activeAuthMethod === method;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -314,22 +162,19 @@ export default function AuthScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.logoContainer}>
+          <View style={styles.header}>
             <Image
               source={require("@/assets/images/Chesbon_app_Logo.png")}
               style={styles.logo}
               resizeMode="contain"
             />
+            <Text style={styles.title}>Cheshbon</Text>
+            <Text style={styles.subtitle}>
+              {isSignUp ? "Create your account" : "Welcome back"}
+            </Text>
           </View>
 
-          <View style={styles.formContainer}>
-            <Text style={styles.title}>{isSignUp ? "Create Account" : "Welcome Back"}</Text>
-            <Text style={styles.subtitle}>
-              {isSignUp ? "Sign up to get started" : "Sign in to continue"}
-            </Text>
-
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
+          <View style={styles.form}>
             {isSignUp && (
               <TextInput
                 style={styles.input}
@@ -338,10 +183,8 @@ export default function AuthScreen() {
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
-                editable={!submitting}
               />
             )}
-
             <TextInput
               style={styles.input}
               placeholder="Email"
@@ -351,9 +194,7 @@ export default function AuthScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
-              editable={!submitting}
             />
-
             <TextInput
               style={styles.input}
               placeholder="Password"
@@ -362,161 +203,102 @@ export default function AuthScreen() {
               onChangeText={setPassword}
               secureTextEntry
               autoCapitalize="none"
-              autoCorrect={false}
-              editable={!submitting}
             />
 
             {!isSignUp && (
-              <TouchableOpacity
-                onPress={() => setShowForgotPassword(true)}
-                disabled={submitting}
-              >
+              <TouchableOpacity onPress={handleForgotPassword}>
                 <Text style={styles.forgotPassword}>Forgot Password?</Text>
               </TouchableOpacity>
             )}
 
             <TouchableOpacity
-              style={[styles.button, submitting && styles.buttonDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
+              style={[styles.button, styles.primaryButton]}
+              onPress={handleEmailAuth}
+              disabled={loading}
             >
-              {isButtonLoading('email') ? (
+              {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.buttonText}>{isSignUp ? "Sign Up" : "Sign In"}</Text>
+                <Text style={styles.buttonText}>
+                  {isSignUp ? "Sign Up" : "Sign In"}
+                </Text>
               )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                setIsSignUp(!isSignUp);
-                setError("");
-              }}
-              disabled={submitting}
-            >
-              <Text style={styles.switchText}>
-                {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
-              </Text>
             </TouchableOpacity>
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or continue with</Text>
+              <Text style={styles.dividerText}>OR</Text>
               <View style={styles.dividerLine} />
             </View>
 
             <TouchableOpacity
-              style={[styles.socialButton, submitting && styles.buttonDisabled]}
+              style={[styles.button, styles.socialButton]}
               onPress={handleGoogleSignIn}
-              disabled={submitting}
+              disabled={googleLoading}
             >
-              {isButtonLoading('google') ? (
+              {googleLoading ? (
                 <ActivityIndicator color={colors.text} />
               ) : (
-                <Text style={styles.socialButtonText}>Continue with Google</Text>
+                <>
+                  <IconSymbol
+                    ios_icon_name="globe"
+                    android_material_icon_name="language"
+                    size={20}
+                    color={colors.text}
+                  />
+                  <Text style={styles.socialButtonText}>Continue with Google</Text>
+                </>
               )}
             </TouchableOpacity>
 
-            {Platform.OS === 'ios' && (
+            {Platform.OS === "ios" && (
               <TouchableOpacity
-                style={[styles.socialButton, styles.appleButton, submitting && styles.buttonDisabled]}
+                style={[styles.button, styles.socialButton]}
                 onPress={handleAppleSignIn}
-                disabled={submitting}
+                disabled={appleLoading}
               >
-                {isButtonLoading('apple') ? (
-                  <ActivityIndicator color="#fff" />
+                {appleLoading ? (
+                  <ActivityIndicator color={colors.text} />
                 ) : (
-                  <Text style={styles.appleButtonText}>Continue with Apple</Text>
+                  <>
+                    <IconSymbol
+                      ios_icon_name="apple.logo"
+                      android_material_icon_name="apple"
+                      size={20}
+                      color={colors.text}
+                    />
+                    <Text style={styles.socialButtonText}>Continue with Apple</Text>
+                  </>
                 )}
               </TouchableOpacity>
             )}
 
-            {/* Debug Info (only visible in development) */}
-            {__DEV__ && (
-              <View style={styles.debugContainer}>
-                <Text style={styles.debugText}>Debug Info:</Text>
-                <Text style={styles.debugText}>Platform: {Platform.OS}</Text>
-                <Text style={styles.debugText}>Loading: {loading ? 'Yes' : 'No'}</Text>
-                <Text style={styles.debugText}>User: {user ? user.email : 'None'}</Text>
-                <Text style={styles.debugText}>Submitting: {submitting ? 'Yes' : 'No'}</Text>
-                <Text style={styles.debugText}>Active Method: {activeAuthMethod || 'None'}</Text>
-              </View>
-            )}
+            <TouchableOpacity
+              style={styles.switchButton}
+              onPress={() => setIsSignUp(!isSignUp)}
+            >
+              <Text style={styles.switchButtonText}>
+                {isSignUp
+                  ? "Already have an account? Sign In"
+                  : "Don't have an account? Sign Up"}
+              </Text>
+            </TouchableOpacity>
           </View>
+
+          {/* Debug info (only in development) */}
+          {__DEV__ && (
+            <View style={styles.debugPanel}>
+              <Text style={styles.debugTitle}>Debug Info:</Text>
+              <Text style={styles.debugText}>Platform: {Platform.OS}</Text>
+              <Text style={styles.debugText}>Loading: {authLoading ? "YES" : "NO"}</Text>
+              <Text style={styles.debugText}>User: {user ? user.email : "None"}</Text>
+              <Text style={styles.debugText}>Submitting: {loading ? "YES" : "NO"}</Text>
+              <Text style={styles.debugText}>Google Loading: {googleLoading ? "YES" : "NO"}</Text>
+              <Text style={styles.debugText}>Apple Loading: {appleLoading ? "YES" : "NO"}</Text>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Forgot Password Modal */}
-      <Modal
-        visible={showForgotPassword}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowForgotPassword(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Reset Password</Text>
-            
-            {resetSuccess ? (
-              <View style={styles.successContainer}>
-                <Text style={styles.successIcon}>✓</Text>
-                <Text style={styles.successText}>
-                  Password reset email sent! Check your inbox.
-                </Text>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.modalSubtitle}>
-                  Enter your email address and we'll send you a link to reset your password.
-                </Text>
-
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-                <TextInput
-                  style={styles.input}
-                  placeholder="Email"
-                  placeholderTextColor={colors.textSecondary}
-                  value={resetEmail}
-                  onChangeText={setResetEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!resetSubmitting}
-                />
-
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.modalButtonSecondary]}
-                    onPress={() => {
-                      setShowForgotPassword(false);
-                      setResetEmail("");
-                      setError("");
-                    }}
-                    disabled={resetSubmitting}
-                  >
-                    <Text style={styles.modalButtonTextSecondary}>Cancel</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.modalButtonPrimary, resetSubmitting && styles.buttonDisabled]}
-                    onPress={handleForgotPassword}
-                    disabled={resetSubmitting}
-                  >
-                    {resetSubmitting ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.modalButtonTextPrimary}>Send Reset Link</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Toast Message Component */}
-      <Toast />
     </SafeAreaView>
   );
 }
@@ -543,33 +325,29 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: 20,
+    padding: 24,
   },
-  logoContainer: {
+  header: {
     alignItems: "center",
     marginBottom: 40,
   },
   logo: {
-    width: 120,
-    height: 120,
-  },
-  formContainer: {
-    width: "100%",
-    maxWidth: 400,
-    alignSelf: "center",
+    width: 100,
+    height: 100,
+    marginBottom: 16,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "bold",
     color: colors.text,
     marginBottom: 8,
-    textAlign: "center",
   },
   subtitle: {
     fontSize: 16,
     color: colors.textSecondary,
-    marginBottom: 32,
-    textAlign: "center",
+  },
+  form: {
+    width: "100%",
   },
   input: {
     backgroundColor: colors.card,
@@ -581,32 +359,38 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  forgotPassword: {
+    color: colors.primary,
+    textAlign: "right",
+    marginBottom: 16,
+    fontSize: 14,
+  },
   button: {
-    backgroundColor: colors.primary,
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
-    marginTop: 8,
+    justifyContent: "center",
+    marginBottom: 12,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  primaryButton: {
+    backgroundColor: colors.primary,
   },
   buttonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },
-  forgotPassword: {
-    color: colors.primary,
-    fontSize: 14,
-    textAlign: "right",
-    marginBottom: 16,
+  socialButton: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: "row",
+    gap: 12,
   },
-  switchText: {
-    color: colors.primary,
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 16,
+  socialButtonText: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "500",
   },
   divider: {
     flexDirection: "row",
@@ -619,121 +403,35 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   dividerText: {
-    color: colors.textSecondary,
-    fontSize: 14,
     marginHorizontal: 16,
-  },
-  socialButton: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 12,
-  },
-  socialButtonText: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  appleButton: {
-    backgroundColor: "#000",
-    borderColor: "#000",
-  },
-  appleButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  errorText: {
-    color: "#FF3B30",
-    fontSize: 14,
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 24,
-    width: "100%",
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: colors.text,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  modalSubtitle: {
-    fontSize: 14,
     color: colors.textSecondary,
-    marginBottom: 24,
-    textAlign: "center",
+    fontSize: 14,
   },
-  modalButtons: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-  },
-  modalButton: {
-    flex: 1,
-    borderRadius: 12,
-    padding: 16,
+  switchButton: {
+    marginTop: 16,
     alignItems: "center",
   },
-  modalButtonPrimary: {
-    backgroundColor: colors.primary,
+  switchButtonText: {
+    color: colors.primary,
+    fontSize: 14,
   },
-  modalButtonSecondary: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  modalButtonTextPrimary: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  modalButtonTextSecondary: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  successContainer: {
-    alignItems: "center",
-    paddingVertical: 20,
-  },
-  successIcon: {
-    fontSize: 48,
-    color: "#34C759",
-    marginBottom: 16,
-  },
-  successText: {
-    fontSize: 16,
-    color: colors.text,
-    textAlign: "center",
-  },
-  debugContainer: {
+  debugPanel: {
     marginTop: 32,
     padding: 16,
     backgroundColor: colors.card,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 8,
   },
   debugText: {
     fontSize: 12,
     color: colors.textSecondary,
     marginBottom: 4,
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
 });

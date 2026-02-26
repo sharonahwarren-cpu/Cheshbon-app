@@ -323,146 +323,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await setBearerToken(betterAuthToken);
             setUser(popupUser as User);
             console.log("[AuthContext] ✅ OAuth sign-in successful (from popup)");
+            Toast.show({
+              type: 'success',
+              text1: 'Signed In',
+              text2: `Welcome back, ${popupUser.name || popupUser.email}!`,
+            });
             return;
           }
           
-          const { BACKEND_URL } = await import("@/utils/api");
-          console.log("[AuthContext] 🔄 Exchanging better_auth_token for session...");
-          console.log("[AuthContext] Backend URL:", BACKEND_URL);
-          
-          // Exchange better_auth_token for a session
-          let sessionData: any = null;
-          
-          // Store the better_auth_token as Bearer token
+          // Store the token and fetch user
+          console.log("[AuthContext] 💾 Storing better_auth_token");
           await setBearerToken(betterAuthToken);
-          console.log("[AuthContext] 💾 Stored better_auth_token");
           
-          // Wait a brief moment to ensure token is stored
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Wait a moment for token to be stored
+          await new Promise(resolve => setTimeout(resolve, 200));
           
-          // Try authClient.getSession() first - it uses the stored Bearer token
-          try {
-            console.log("[AuthContext] 📞 Trying authClient.getSession() with stored token...");
-            const clientSession = await authClient.getSession();
-            console.log("[AuthContext] 📊 authClient.getSession() result:", {
-              hasUser: !!clientSession?.data?.user,
-              hasError: !!clientSession?.error,
-              errorMessage: clientSession?.error?.message || "none",
-            });
-            
-            if (clientSession?.data?.user) {
-              sessionData = {
-                user: clientSession.data.user,
-                session: clientSession.data.session,
-              };
-              console.log("[AuthContext] ✅ Got session from authClient.getSession()");
-            }
-          } catch (err: any) {
-            console.warn("[AuthContext] ⚠️ authClient.getSession() threw error:", {
-              message: err.message,
-              name: err.name,
-            });
-          }
+          // Now fetch the user using the stored token
+          console.log("[AuthContext] 🔄 Fetching user with stored token...");
+          await fetchUser();
           
-          // Fallback: Direct fetch to /api/auth/get-session with Bearer token
-          if (!sessionData?.user) {
-            try {
-              console.log("[AuthContext] 📞 Trying direct fetch to /api/auth/get-session...");
-              const sessionResponse = await fetch(
-                `${BACKEND_URL}/api/auth/get-session`,
-                {
-                  method: "GET",
-                  credentials: "include",
-                  headers: {
-                    "Authorization": `Bearer ${betterAuthToken}`,
-                  },
-                }
-              );
-              
-              const rawText = await sessionResponse.text();
-              console.log("[AuthContext] 📊 /api/auth/get-session response:", {
-                status: sessionResponse.status,
-                ok: sessionResponse.ok,
-                bodyLength: rawText.length,
-                bodyPreview: rawText.substring(0, 200),
-              });
-              
-              if (sessionResponse.ok && rawText) {
-                try {
-                  const parsed = JSON.parse(rawText);
-                  if (parsed?.user) {
-                    sessionData = parsed;
-                    console.log("[AuthContext] ✅ Got session from /api/auth/get-session");
-                  }
-                } catch (parseErr: any) {
-                  console.warn("[AuthContext] ⚠️ Failed to parse get-session response:", parseErr.message);
-                }
-              }
-            } catch (err: any) {
-              console.warn("[AuthContext] ⚠️ /api/auth/get-session fetch threw error:", {
-                message: err.message,
-                name: err.name,
-              });
-            }
-          }
-          
-          // Fallback: Try /api/auth/me with Bearer token
-          if (!sessionData?.user) {
-            try {
-              console.log("[AuthContext] 📞 Trying /api/auth/me as final fallback...");
-              const meResponse = await fetch(
-                `${BACKEND_URL}/api/auth/me`,
-                {
-                  method: "GET",
-                  credentials: "include",
-                  headers: {
-                    "Authorization": `Bearer ${betterAuthToken}`,
-                  },
-                }
-              );
-              
-              const rawText = await meResponse.text();
-              console.log("[AuthContext] 📊 /api/auth/me response:", {
-                status: meResponse.status,
-                ok: meResponse.ok,
-                bodyLength: rawText.length,
-                bodyPreview: rawText.substring(0, 200),
-              });
-              
-              if (meResponse.ok && rawText) {
-                try {
-                  const parsed = JSON.parse(rawText);
-                  if (parsed?.user) {
-                    sessionData = parsed;
-                    console.log("[AuthContext] ✅ Got session from /api/auth/me");
-                  }
-                } catch (parseErr: any) {
-                  console.warn("[AuthContext] ⚠️ Failed to parse /api/auth/me response:", parseErr.message);
-                }
-              }
-            } catch (err: any) {
-              console.warn("[AuthContext] ⚠️ /api/auth/me fetch threw error:", {
-                message: err.message,
-                name: err.name,
-              });
-            }
-          }
-          
-          if (!sessionData?.user) {
-            console.error("[AuthContext] ❌ All session exchange attempts failed");
-            // Clear the invalid token we stored
+          // Check if user was set
+          if (!user) {
+            console.error("[AuthContext] ❌ Failed to establish session after token exchange");
             await clearAuthTokens();
-            throw new Error("Failed to establish session after OAuth. Please try signing in again.");
+            throw new Error("Failed to establish session after OAuth. Please try again.");
           }
           
-          // Store the real session token (prefer session.token over better_auth_token)
-          const tokenToStore = sessionData?.session?.token || betterAuthToken;
-          console.log("[AuthContext] 💾 Storing final session token (length:", tokenToStore.length, ")");
-          await setBearerToken(tokenToStore);
-          
-          // Update user state directly
-          setUser(sessionData.user as User);
-          console.log("[AuthContext] ✅ OAuth sign-in successful:", sessionData.user.email);
+          console.log("[AuthContext] ✅ OAuth sign-in successful");
+          Toast.show({
+            type: 'success',
+            text1: 'Signed In',
+            text2: 'Welcome back!',
+          });
           
         } finally {
           oauthInProgress.current = false;
@@ -536,7 +428,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Try multiple times to fetch the user session (with retries)
           console.log("[AuthContext] 🔄 Fetching user after native OAuth (with retries)...");
           let retries = 0;
-          const maxRetries = 10;
+          const maxRetries = 15; // Increased from 10 to 15
           let sessionEstablished = false;
           
           while (retries < maxRetries && !sessionEstablished) {
@@ -559,6 +451,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   await setBearerToken(session.data.session.token);
                 }
                 sessionEstablished = true;
+                Toast.show({
+                  type: 'success',
+                  text1: 'Signed In',
+                  text2: `Welcome back, ${session.data.user.name || session.data.user.email}!`,
+                });
                 break;
               }
             } catch (err: any) {
@@ -584,6 +481,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     await setBearerToken(bearerSession.session.token);
                   }
                   sessionEstablished = true;
+                  Toast.show({
+                    type: 'success',
+                    text1: 'Signed In',
+                    text2: `Welcome back, ${bearerSession.user.name || bearerSession.user.email}!`,
+                  });
                   break;
                 }
               } catch (err: any) {
@@ -596,7 +498,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             // If not found, wait and retry with increasing backoff
             if (!sessionEstablished && retries < maxRetries - 1) {
-              const waitTime = retries < 3 ? 1000 : retries < 6 ? 2000 : 3000;
+              const waitTime = retries < 3 ? 1000 : retries < 6 ? 2000 : retries < 10 ? 3000 : 4000;
               console.log(`[AuthContext] ⏳ Waiting ${waitTime}ms before retry ${retries + 2}/${maxRetries}...`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
             }
@@ -606,7 +508,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           if (!sessionEstablished) {
             console.error("[AuthContext] ❌ Failed to establish session after", maxRetries, "attempts");
-            throw new Error(`Failed to establish session after ${provider} sign-in. Please try again.`);
+            throw new Error(`Failed to establish session after ${provider} sign-in. Please try again or use email/password sign-in.`);
           }
           
           console.log("[AuthContext] ✅ Native OAuth completed successfully");
