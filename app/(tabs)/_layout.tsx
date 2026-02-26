@@ -95,7 +95,7 @@ export default function TabLayout() {
     },
     {
       name: 'reports',
-      route: '/reports' as any,
+      route: '/(tabs)/reports' as any,
       icon: 'assessment',
       label: 'Reports',
     },
@@ -107,7 +107,7 @@ export default function TabLayout() {
     },
     {
       name: 'profile',
-      route: '/profile' as any,
+      route: '/(tabs)/profile' as any,
       icon: 'person',
       label: 'Profile',
     },

@@ -63,25 +63,29 @@ export default function FloatingTabBar({
       
       console.log(`[FloatingTabBar] Checking tab ${index} (${tab.name}): route="${tabRoute}" vs pathname="${pathname}"`);
 
+      // Normalize paths for comparison (remove trailing slashes)
+      const normalizedPathname = pathname.replace(/\/$/, '');
+      const normalizedTabRoute = tabRoute.replace(/\/$/, '');
+
       // Exact route match gets highest score
-      if (pathname === tabRoute) {
+      if (normalizedPathname === normalizedTabRoute) {
         score = 100;
         console.log(`[FloatingTabBar] Tab ${index} - Exact match! Score: ${score}`);
       }
       // Check if pathname starts with tab route (for nested routes)
-      else if (pathname.startsWith(tabRoute)) {
+      else if (normalizedPathname.startsWith(normalizedTabRoute)) {
         score = 80;
         console.log(`[FloatingTabBar] Tab ${index} - Starts with match! Score: ${score}`);
       }
       // Check if pathname contains the tab name (e.g., "reports" or "profile")
-      else if (pathname.includes(`/${tab.name}`)) {
+      else if (normalizedPathname.includes(`/${tab.name}`)) {
         score = 60;
         console.log(`[FloatingTabBar] Tab ${index} - Name match! Score: ${score}`);
       }
-      // Check for partial matches in the route
-      else if (tabRoute.includes('/(tabs)/') && pathname.includes(tabRoute.split('/(tabs)/')[1])) {
-        score = 40;
-        console.log(`[FloatingTabBar] Tab ${index} - Partial match! Score: ${score}`);
+      // Special handling for home tab
+      else if (tab.name === '(home)' && (normalizedPathname === '/' || normalizedPathname === '')) {
+        score = 90;
+        console.log(`[FloatingTabBar] Tab ${index} - Home root match! Score: ${score}`);
       }
 
       if (score > bestMatchScore) {
@@ -107,9 +111,16 @@ export default function FloatingTabBar({
     }
   }, [activeTabIndex, animatedValue]);
 
-  const handleTabPress = (route: Href, tabName: string) => {
-    console.log('[FloatingTabBar] Tab pressed:', tabName, 'route:', route);
-    router.push(route);
+  const handleTabPress = (route: Href, tabName: string, index: number) => {
+    console.log('[FloatingTabBar] Tab pressed:', tabName, 'route:', route, 'current active:', activeTabIndex);
+    
+    // Only navigate if not already on this tab
+    if (index !== activeTabIndex) {
+      console.log('[FloatingTabBar] Navigating to:', route);
+      router.push(route);
+    } else {
+      console.log('[FloatingTabBar] Already on this tab, skipping navigation');
+    }
   };
 
   const tabWidthPercent = ((100 / tabs.length) - 1).toFixed(2);
@@ -190,7 +201,7 @@ export default function FloatingTabBar({
                 <TouchableOpacity
                   key={index} // Use index as key
                   style={styles.tab}
-                  onPress={() => handleTabPress(tab.route, tab.name)}
+                  onPress={() => handleTabPress(tab.route, tab.name, index)}
                   activeOpacity={0.7}
                 >
                   <View key={index} style={styles.tabContent}>
