@@ -71,6 +71,12 @@ app.withAuth({
       });
     },
   },
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    },
+  },
   trustedOrigins: [
     // Allow localhost for development
     "http://localhost:3000",
