@@ -17,16 +17,16 @@ function isGoalActiveOnDateHelper(goal: any, dateStr: string): boolean {
       return true;
 
     case 'Weekly':
-      if (goal.scheduleDaysOfWeek && Array.isArray(goal.scheduleDaysOfWeek)) {
+      if (goal.scheduleDaysOfWeek && Array.isArray(goal.scheduleDaysOfWeek) && goal.scheduleDaysOfWeek.length > 0) {
         return goal.scheduleDaysOfWeek.includes(dayOfWeek);
       }
-      return true;
+      return false;
 
     case 'Fortnightly':
-      if (goal.scheduleDaysOfWeek && Array.isArray(goal.scheduleDaysOfWeek)) {
+      if (goal.scheduleDaysOfWeek && Array.isArray(goal.scheduleDaysOfWeek) && goal.scheduleDaysOfWeek.length > 0) {
         return goal.scheduleDaysOfWeek.includes(dayOfWeek);
       }
-      return true;
+      return false;
 
     case 'Monthly':
       if (goal.scheduleDatesOfMonth && Array.isArray(goal.scheduleDatesOfMonth)) {
