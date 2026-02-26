@@ -17,26 +17,36 @@ const storage = Platform.OS === "web"
     }
   : SecureStore;
 
-export const authClient = createAuthClient({
-  baseURL: API_URL,
-  plugins: [
-    expoClient({
-      scheme: "cheshbon",
-      storagePrefix: "cheshbon",
-      storage,
-    }),
-  ],
-  // On web, use cookies (credentials: include) and fallback to bearer token
-  ...(Platform.OS === "web" && {
-    fetchOptions: {
-      credentials: "include",
-      auth: {
-        type: "Bearer" as const,
-        token: () => localStorage.getItem(BEARER_TOKEN_KEY) || "",
+// Create auth client - use expoClient plugin for native, standard config for web
+export const authClient = Platform.OS === "web"
+  ? createAuthClient({
+      baseURL: API_URL,
+      // On web, use cookies (credentials: include) AND bearer token for cross-domain support
+      fetchOptions: {
+        credentials: "include" as RequestCredentials,
+        // Use a function to dynamically get the bearer token so it's always fresh
+        auth: {
+          type: "Bearer" as const,
+          token: () => {
+            try {
+              return localStorage.getItem(BEARER_TOKEN_KEY) || "";
+            } catch {
+              return "";
+            }
+          },
+        },
       },
-    },
-  }),
-});
+    })
+  : createAuthClient({
+      baseURL: API_URL,
+      plugins: [
+        expoClient({
+          scheme: "cheshbon",
+          storagePrefix: "cheshbon",
+          storage,
+        }),
+      ],
+    });
 
 export async function setBearerToken(token: string) {
   if (Platform.OS === "web") {

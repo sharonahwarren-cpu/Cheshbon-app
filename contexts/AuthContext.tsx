@@ -86,7 +86,10 @@ function openOAuthPopup(provider: string): Promise<string> {
         window.removeEventListener("message", handleMessage);
         if (!resolved) {
           resolved = true;
-          reject(new Error("Authentication cancelled"));
+          // Popup closed without sending a message - resolve with cookie-auth
+          // The session might have been established via cookie
+          console.log("[Auth] Popup closed without message, resolving with cookie-auth");
+          resolve("cookie-auth");
         }
       }
     }, 500);
@@ -96,22 +99,28 @@ function openOAuthPopup(provider: string): Promise<string> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Track if we're in the middle of an OAuth flow to prevent fetchUser from clearing tokens
+  const oauthInProgress = React.useRef(false);
 
   useEffect(() => {
     fetchUser();
 
-    // Listen for deep links (e.g. from social auth redirects)
+    // Listen for deep links (e.g. from social auth redirects on native)
     const subscription = Linking.addEventListener("url", (event) => {
       console.log("Deep link received, refreshing user session");
-      // Allow time for the client to process the token if needed
-      setTimeout(() => fetchUser(), 500);
+      // Only refresh if not in the middle of an OAuth flow
+      if (!oauthInProgress.current) {
+        setTimeout(() => fetchUser(), 500);
+      }
     });
 
     // POLLING: Refresh session every 5 minutes to keep SecureStore token in sync
     // This prevents 401 errors when the session token rotates
     const intervalId = setInterval(() => {
-      console.log("Auto-refreshing user session to sync token...");
-      fetchUser();
+      if (!oauthInProgress.current) {
+        console.log("Auto-refreshing user session to sync token...");
+        fetchUser();
+      }
     }, 5 * 60 * 1000); // 5 minutes
 
     return () => {
@@ -133,7 +142,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         setUser(null);
-        await clearAuthTokens();
+        // Only clear tokens if we're not in the middle of an OAuth flow
+        // During OAuth, the token might not be valid yet but will be set shortly
+        if (!oauthInProgress.current) {
+          await clearAuthTokens();
+        }
       }
     } catch (error) {
       console.error("Failed to fetch user:", error);
@@ -169,61 +182,181 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const fetchSessionFromBackend = async (): Promise<{ user: User; token: string } | null> => {
+    try {
+      const { BACKEND_URL } = await import("@/utils/api");
+      // Try the /api/auth/get-session endpoint (Better Auth built-in)
+      const endpoints = [
+        `${BACKEND_URL}/api/auth/get-session`,
+        `${BACKEND_URL}/api/auth/session`,
+      ];
+      
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            method: "GET",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log(`[Auth] Backend session from ${endpoint}:`, data?.user ? "user found" : "no user");
+            if (data?.user && data?.session?.token) {
+              return { user: data.user as User, token: data.session.token };
+            }
+            if (data?.user) {
+              return { user: data.user as User, token: "" };
+            }
+          }
+        } catch (err) {
+          console.warn(`[Auth] Failed to fetch session from ${endpoint}:`, err);
+        }
+      }
+    } catch (err) {
+      console.warn("[Auth] fetchSessionFromBackend failed:", err);
+    }
+    return null;
+  };
+
   const signInWithSocial = async (provider: "google" | "apple" | "github") => {
     try {
       console.log(`[Auth] Starting ${provider} sign in...`);
       if (Platform.OS === "web") {
+        // Set flag to prevent fetchUser from clearing tokens during OAuth flow
+        oauthInProgress.current = true;
         console.log("[Auth] Opening OAuth popup for provider:", provider);
         const token = await openOAuthPopup(provider);
-        console.log("[Auth] OAuth popup closed, token received:", token === "cookie-auth" ? "cookie-based" : token ? "bearer token" : "no token");
+        console.log("[Auth] OAuth popup closed, token received:", token === "cookie-auth" ? "cookie-based" : token ? "bearer token (" + token.substring(0, 20) + "... length:" + token.length + ")" : "no token");
         
-        // If we received a real bearer token, store it
+        // If we received a real token from the popup, try to use it
         if (token && token !== "cookie-auth") {
-          console.log("[Auth] Setting bearer token from OAuth response");
+          console.log("[Auth] Token received from OAuth popup, attempting session establishment...");
+          
+          const { BACKEND_URL } = await import("@/utils/api");
+          
+          // Try to use the token as a bearer token directly
+          // Better Auth session tokens can be used as bearer tokens
+          try {
+            const sessionResponse = await fetch(`${BACKEND_URL}/api/auth/get-session`, {
+              method: "GET",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+              },
+            });
+            
+            console.log(`[Auth] Backend /api/auth/get-session with popup token status:`, sessionResponse.status);
+            
+            if (sessionResponse.ok) {
+              const sessionData = await sessionResponse.json();
+              console.log(`[Auth] Backend session data:`, JSON.stringify(sessionData).substring(0, 300));
+              
+              const userData = sessionData?.user || sessionData?.data?.user;
+              const sessionToken = sessionData?.session?.token || sessionData?.data?.session?.token;
+              
+              if (userData) {
+                console.log("[Auth] Session established via backend with popup token:", userData.email);
+                setUser(userData as User);
+                await setBearerToken(sessionToken || token);
+                oauthInProgress.current = false;
+                return;
+              }
+            } else {
+              const errorText = await sessionResponse.text();
+              console.warn("[Auth] Backend session fetch failed:", sessionResponse.status, errorText.substring(0, 200));
+            }
+          } catch (backendErr) {
+            console.warn("[Auth] Backend session fetch with popup token failed:", backendErr);
+          }
+          
+          // Store the token and try the Better Auth client
           await setBearerToken(token);
+          
+          try {
+            const session = await authClient.getSession();
+            console.log("[Auth] Better Auth session with popup token:", session?.data?.user ? "found" : "not found");
+            if (session?.data?.user) {
+              console.log("[Auth] Social sign in successful with token via Better Auth client:", session.data.user.email);
+              setUser(session.data.user as User);
+              if (session.data.session?.token) {
+                await setBearerToken(session.data.session.token);
+              }
+              oauthInProgress.current = false;
+              return;
+            }
+          } catch (sessionErr) {
+            console.warn("[Auth] Session fetch with popup token via Better Auth client failed:", sessionErr);
+          }
+          
+          // Clear the temporary token since it didn't work as a bearer token
+          await clearAuthTokens();
         }
         
         // Give the backend time to process the session
         console.log("[Auth] Waiting for backend to process session...");
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Retry fetchUser up to 6 times to handle timing issues
-        let retries = 6;
-        while (retries > 0) {
-          console.log(`[Auth] Fetching user session (attempt ${7 - retries}/6)...`);
+        // Retry fetching session up to 5 times
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          console.log(`[Auth] Fetching user session (attempt ${attempt}/5)...`);
           
           try {
-            // Try to get session directly from Better Auth client
+            // Try Better Auth client first
             const session = await authClient.getSession();
             if (session?.data?.user) {
               console.log("[Auth] Social sign in successful, user found:", session.data.user.email);
               setUser(session.data.user as User);
-              // Sync token to storage
               if (session.data.session?.token) {
                 await setBearerToken(session.data.session.token);
               }
+              oauthInProgress.current = false;
               return;
             }
           } catch (sessionErr) {
-            console.warn("[Auth] Session fetch attempt failed:", sessionErr);
+            console.warn("[Auth] Better Auth session fetch attempt failed:", sessionErr);
           }
           
-          retries--;
-          if (retries > 0) {
-            const waitTime = retries > 3 ? 1000 : 2000;
-            console.log(`[Auth] User not found yet, retrying in ${waitTime}ms... (${retries} retries left)`);
+          // Try direct backend API call with credentials
+          try {
+            const backendSession = await fetchSessionFromBackend();
+            if (backendSession?.user) {
+              console.log("[Auth] Social sign in successful via backend API:", backendSession.user.email);
+              setUser(backendSession.user);
+              if (backendSession.token) {
+                await setBearerToken(backendSession.token);
+              }
+              oauthInProgress.current = false;
+              return;
+            }
+          } catch (backendErr) {
+            console.warn("[Auth] Backend session fetch attempt failed:", backendErr);
+          }
+          
+          if (attempt < 5) {
+            const waitTime = attempt <= 2 ? 1500 : 2500;
+            console.log(`[Auth] User not found yet, retrying in ${waitTime}ms... (${5 - attempt} retries left)`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
           }
         }
         
         // Final attempt with full fetchUser
+        oauthInProgress.current = false;
         await fetchUser();
         
         // Check one more time
         const finalSession = await authClient.getSession();
         if (!finalSession?.data?.user) {
           console.error("[Auth] Could not confirm user session after OAuth");
-          throw new Error("Authentication completed but session could not be established. Please try again.");
+          throw new Error(
+            "Authentication completed but session could not be established.\n\n" +
+            "This may be due to third-party cookie restrictions in your browser.\n\n" +
+            "Please try:\n" +
+            "1. Signing in with email/password instead\n" +
+            "2. Checking your browser's cookie settings\n" +
+            "3. Trying a different browser (Chrome or Firefox recommended)"
+          );
         }
       } else {
         // Native: Use expo-linking to generate a proper deep link
@@ -239,6 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error(`[Auth] ${provider} sign in failed:`, error);
+      oauthInProgress.current = false;
       throw error;
     }
   };
@@ -272,16 +406,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Use Better Auth's built-in forget-password endpoint
       // This triggers the sendResetPassword callback configured in the backend
       const { BACKEND_URL } = await import("@/utils/api");
+      
+      // The redirectTo tells Better Auth where to send the user after clicking the reset link.
+      // The backend's sendResetPassword callback uses process.env.FRONTEND_URL for the reset link,
+      // but we also pass redirectTo so Better Auth can use it if configured to do so.
       const redirectTo = Platform.OS === "web"
         ? `${window.location.origin}/reset-password`
         : `${BACKEND_URL}/reset-password`;
 
       console.log("[Auth] Calling Better Auth forget-password endpoint, redirectTo:", redirectTo);
+      
+      // First try using the Better Auth client's built-in method
+      try {
+        const result = await authClient.forgetPassword({
+          email: emailString,
+          redirectTo,
+        });
+        console.log("[Auth] Better Auth forgetPassword result:", result);
+        if (!result?.error) {
+          console.log("[Auth] Password reset email sent successfully via Better Auth client");
+          return;
+        }
+        console.warn("[Auth] Better Auth forgetPassword returned error:", result.error);
+      } catch (clientErr) {
+        console.warn("[Auth] Better Auth client forgetPassword failed, trying direct fetch:", clientErr);
+      }
+      
+      // Fallback: direct fetch to the endpoint
       const response = await fetch(`${BACKEND_URL}/api/auth/forget-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({ email: emailString, redirectTo }),
       });
 
@@ -308,13 +465,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = async (token: string, newPassword: string) => {
     try {
       console.log("[Auth] Resetting password with token");
-      // Use Better Auth's built-in reset-password endpoint
+      
+      // First try using the Better Auth client's built-in method
+      try {
+        const result = await authClient.resetPassword({
+          newPassword,
+          token,
+        });
+        console.log("[Auth] Better Auth resetPassword result:", result);
+        if (!result?.error) {
+          console.log("[Auth] Password reset successful via Better Auth client");
+          return;
+        }
+        console.warn("[Auth] Better Auth resetPassword returned error:", result.error);
+        // If the client returned an error, throw it
+        const errMsg = result.error?.message || "Failed to reset password";
+        if (errMsg.toLowerCase().includes("expired") || errMsg.toLowerCase().includes("invalid")) {
+          throw new Error("Reset link has expired or is invalid. Please request a new one.");
+        }
+        throw new Error(errMsg);
+      } catch (clientErr: any) {
+        // If it's our own thrown error, re-throw it
+        if (clientErr.message && !clientErr.message.includes("forgetPassword") && !clientErr.message.includes("resetPassword")) {
+          throw clientErr;
+        }
+        console.warn("[Auth] Better Auth client resetPassword failed, trying direct fetch:", clientErr);
+      }
+      
+      // Fallback: Use Better Auth's built-in reset-password endpoint directly
       const { BACKEND_URL } = await import("@/utils/api");
       const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({ token, newPassword }),
       });
 
@@ -331,7 +516,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const errorMsg = data.error || data.message || "Failed to reset password";
         // Better Auth returns specific error messages
         if (response.status === 400) {
-          throw new Error(errorMsg.includes("expired") ? "Reset link has expired. Please request a new one." : errorMsg);
+          throw new Error(errorMsg.toLowerCase().includes("expired") || errorMsg.toLowerCase().includes("invalid")
+            ? "Reset link has expired or is invalid. Please request a new one."
+            : errorMsg);
         }
         throw new Error(errorMsg);
       }

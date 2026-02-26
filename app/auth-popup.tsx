@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { Platform } from "react-native";
 import { useLocalSearchParams } from "expo-router";
+import { authClient } from "@/lib/auth";
 
 export default function AuthPopupScreen() {
   const { provider } = useLocalSearchParams<{ provider: string }>();
@@ -20,12 +21,16 @@ export default function AuthPopupScreen() {
         console.log("[AuthPopup] Initiating OAuth for provider:", provider);
         // Import BACKEND_URL dynamically
         const { BACKEND_URL } = await import("@/utils/api");
+        
+        // The callbackURL is where Better Auth will redirect after OAuth completes.
+        // Better Auth appends better_auth_token=<token> to this URL so the frontend can capture it.
         const callbackURL = `${window.location.origin}/auth-callback`;
+        
+        console.log("[AuthPopup] Callback URL:", callbackURL);
+        console.log("[AuthPopup] Posting to Better Auth social sign-in endpoint...");
         
         // Better Auth's social sign-in endpoint accepts POST with JSON body
         // It returns a redirect URL in the response
-        console.log("[AuthPopup] Posting to Better Auth social sign-in endpoint...");
-        
         const response = await fetch(`${BACKEND_URL}/api/auth/sign-in/social`, {
           method: "POST",
           headers: {
@@ -64,6 +69,7 @@ export default function AuthPopupScreen() {
         }
 
         // If no redirect URL in response, try fallback GET method
+        // Better Auth also supports GET for social sign-in
         console.log("[AuthPopup] No redirect URL in response, trying fallback GET method");
         const oauthURL = `${BACKEND_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(callbackURL)}`;
         console.log("[AuthPopup] Fallback redirect to:", oauthURL);
