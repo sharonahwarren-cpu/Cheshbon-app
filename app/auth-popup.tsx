@@ -2,7 +2,6 @@ import React, { useEffect } from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { Platform } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { authClient } from "@/lib/auth";
 
 export default function AuthPopupScreen() {
   const { provider } = useLocalSearchParams<{ provider: string }>();
@@ -10,15 +9,63 @@ export default function AuthPopupScreen() {
   useEffect(() => {
     if (Platform.OS !== "web") return;
 
-    if (!provider || !["google", "github", "apple"].includes(provider)) {
-      window.opener?.postMessage({ type: "oauth-error", error: "Invalid provider" }, "*");
-      return;
-    }
+    const initiateOAuth = async () => {
+      if (!provider || !["google", "github", "apple"].includes(provider)) {
+        window.opener?.postMessage({ type: "oauth-error", error: "Invalid provider" }, window.location.origin);
+        window.close();
+        return;
+      }
 
-    authClient.signIn.social({
-      provider: provider as any,
-      callbackURL: `${window.location.origin}/auth-callback`,
-    });
+      try {
+        console.log("[AuthPopup] Initiating OAuth for provider:", provider);
+        // Import BACKEND_URL dynamically
+        const { BACKEND_URL } = await import("@/utils/api");
+        const callbackURL = `${window.location.origin}/auth-callback`;
+        
+        // Better Auth's social sign-in endpoint accepts POST with JSON body
+        // It returns a redirect URL in the response
+        console.log("[AuthPopup] Posting to Better Auth social sign-in endpoint...");
+        
+        const response = await fetch(`${BACKEND_URL}/api/auth/sign-in/social`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            provider,
+            callbackURL,
+            errorCallbackURL: `${window.location.origin}/auth-callback?error=oauth_failed`,
+          }),
+        });
+
+        console.log("[AuthPopup] OAuth response status:", response.status);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log("[AuthPopup] OAuth response data:", JSON.stringify(data));
+          
+          // Better Auth returns { url: "https://accounts.google.com/..." }
+          const redirectUrl = data?.url || data?.redirectUrl || data?.redirect;
+          if (redirectUrl) {
+            console.log("[AuthPopup] Redirecting to OAuth provider:", redirectUrl);
+            window.location.href = redirectUrl;
+            return;
+          }
+        }
+
+        // Fallback: use GET-style URL (some Better Auth versions support this)
+        const oauthURL = `${BACKEND_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(callbackURL)}`;
+        console.log("[AuthPopup] Fallback redirect to:", oauthURL);
+        window.location.href = oauthURL;
+      } catch (error) {
+        console.error("[AuthPopup] OAuth initiation failed:", error);
+        window.opener?.postMessage({ type: "oauth-error", error: "Failed to initiate OAuth" }, window.location.origin);
+        window.close();
+      }
+    };
+
+    initiateOAuth();
   }, [provider]);
 
   return (

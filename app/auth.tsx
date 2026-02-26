@@ -62,7 +62,10 @@ export default function AuthScreen() {
   };
 
   const handleEmailAuth = async () => {
-    if (!email || !password) {
+    const emailValue = String(email).trim();
+    const passwordValue = String(password).trim();
+    
+    if (!emailValue || !passwordValue) {
       showError("Please enter email and password");
       return;
     }
@@ -71,11 +74,12 @@ export default function AuthScreen() {
     try {
       if (mode === "signin") {
         console.log("User tapped Sign In button");
-        await signInWithEmail(email, password);
+        await signInWithEmail(emailValue, passwordValue);
         router.replace("/");
       } else {
         console.log("User tapped Sign Up button");
-        await signUpWithEmail(email, password, name);
+        const nameValue = String(name).trim();
+        await signUpWithEmail(emailValue, passwordValue, nameValue || undefined);
         showSuccess("Account created successfully!");
         setTimeout(() => {
           router.replace("/");
@@ -89,15 +93,16 @@ export default function AuthScreen() {
   };
 
   const handleForgotPassword = async () => {
-    if (!email) {
+    const emailValue = String(email).trim();
+    if (!emailValue) {
       showError("Please enter your email address");
       return;
     }
 
     setLoading(true);
     try {
-      console.log("User tapped Send Reset Email button");
-      await requestPasswordReset(email);
+      console.log("User tapped Send Reset Email button for:", emailValue);
+      await requestPasswordReset(emailValue);
       showSuccess("Password reset email sent! Check your inbox.");
       setTimeout(() => {
         setMode("signin");

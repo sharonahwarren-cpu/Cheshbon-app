@@ -31,30 +31,48 @@ function openOAuthPopup(provider: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const popupUrl = `${window.location.origin}/auth-popup?provider=${provider}`;
     const width = 500;
-    const height = 600;
+    const height = 700;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
+
+    console.log("[Auth] Opening OAuth popup:", popupUrl);
 
     const popup = window.open(
       popupUrl,
       "oauth-popup",
-      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
+      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
     );
 
     if (!popup) {
-      reject(new Error("Failed to open popup. Please allow popups."));
+      reject(new Error("Failed to open popup. Please allow popups for this site and try again."));
       return;
     }
 
+    let resolved = false;
+
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "oauth-success" && event.data?.token) {
-        window.removeEventListener("message", handleMessage);
-        clearInterval(checkClosed);
-        resolve(event.data.token);
+      // Accept messages from same origin only
+      if (event.origin !== window.location.origin) {
+        console.log("[Auth] Ignoring message from different origin:", event.origin);
+        return;
+      }
+
+      console.log("[Auth] Received message from popup:", event.data?.type);
+
+      if (event.data?.type === "oauth-success") {
+        if (!resolved) {
+          resolved = true;
+          window.removeEventListener("message", handleMessage);
+          clearInterval(checkClosed);
+          resolve(event.data.token || "cookie-auth");
+        }
       } else if (event.data?.type === "oauth-error") {
-        window.removeEventListener("message", handleMessage);
-        clearInterval(checkClosed);
-        reject(new Error(event.data.error || "OAuth failed"));
+        if (!resolved) {
+          resolved = true;
+          window.removeEventListener("message", handleMessage);
+          clearInterval(checkClosed);
+          reject(new Error(event.data.error || "OAuth failed"));
+        }
       }
     };
 
@@ -64,7 +82,10 @@ function openOAuthPopup(provider: string): Promise<string> {
       if (popup.closed) {
         clearInterval(checkClosed);
         window.removeEventListener("message", handleMessage);
-        reject(new Error("Authentication cancelled"));
+        if (!resolved) {
+          resolved = true;
+          reject(new Error("Authentication cancelled"));
+        }
       }
     }, 500);
   });
@@ -150,31 +171,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log(`[Auth] Starting ${provider} sign in...`);
       if (Platform.OS === "web") {
+        console.log("[Auth] Opening OAuth popup for provider:", provider);
         const token = await openOAuthPopup(provider);
-        console.log("[Auth] OAuth token received:", token === "cookie-auth" ? "cookie-based" : "bearer token");
-        // Only set bearer token if it's a real token (not cookie-auth placeholder)
+        console.log("[Auth] OAuth popup closed, token received:", token === "cookie-auth" ? "cookie-based" : token ? "bearer token" : "no token");
+        
+        // If we received a real bearer token, store it
         if (token && token !== "cookie-auth") {
+          console.log("[Auth] Setting bearer token from OAuth response");
           await setBearerToken(token);
         }
+        
         // Give the backend time to process the session
+        console.log("[Auth] Waiting for backend to process session...");
         await new Promise(resolve => setTimeout(resolve, 800));
-        // Retry fetchUser up to 5 times to handle timing issues
-        let retries = 5;
+        
+        // Retry fetchUser up to 6 times to handle timing issues
+        let retries = 6;
         while (retries > 0) {
-          await fetchUser();
-          // Check if user was set by reading the session directly
-          const session = await authClient.getSession();
-          if (session?.data?.user) {
-            console.log("[Auth] Social sign in successful, user found");
-            return;
+          console.log(`[Auth] Fetching user session (attempt ${7 - retries}/6)...`);
+          
+          try {
+            // Try to get session directly from Better Auth client
+            const session = await authClient.getSession();
+            if (session?.data?.user) {
+              console.log("[Auth] Social sign in successful, user found:", session.data.user.email);
+              setUser(session.data.user as User);
+              // Sync token to storage
+              if (session.data.session?.token) {
+                await setBearerToken(session.data.session.token);
+              }
+              return;
+            }
+          } catch (sessionErr) {
+            console.warn("[Auth] Session fetch attempt failed:", sessionErr);
           }
+          
           retries--;
           if (retries > 0) {
-            console.log(`[Auth] User not found yet, retrying... (${retries} retries left)`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const waitTime = retries > 3 ? 1000 : 2000;
+            console.log(`[Auth] User not found yet, retrying in ${waitTime}ms... (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
           }
         }
-        console.warn("[Auth] Could not confirm user session after OAuth");
+        
+        // Final attempt with full fetchUser
+        await fetchUser();
+        
+        // Check one more time
+        const finalSession = await authClient.getSession();
+        if (!finalSession?.data?.user) {
+          console.error("[Auth] Could not confirm user session after OAuth");
+          throw new Error("Authentication completed but session could not be established. Please try again.");
+        }
       } else {
         // Native: Use expo-linking to generate a proper deep link
         const callbackURL = Linking.createURL("/");
@@ -213,13 +261,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const requestPasswordReset = async (email: string) => {
     try {
       console.log("[Auth] Requesting password reset for:", email);
+      // Ensure email is a string
+      const emailString = String(email).trim();
+      if (!emailString) {
+        throw new Error("Email address is required");
+      }
+
+      // Use Better Auth's built-in forget-password endpoint
+      // This triggers the sendResetPassword callback configured in the backend
       const { BACKEND_URL } = await import("@/utils/api");
-      const response = await fetch(`${BACKEND_URL}/api/auth/request-password-reset`, {
+      const redirectTo = Platform.OS === "web"
+        ? `${window.location.origin}/reset-password`
+        : `${BACKEND_URL}/reset-password`;
+
+      console.log("[Auth] Calling Better Auth forget-password endpoint, redirectTo:", redirectTo);
+      const response = await fetch(`${BACKEND_URL}/api/auth/forget-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: emailString, redirectTo }),
       });
 
       let data: any = {};
@@ -229,11 +290,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore parse errors
       }
 
+      console.log("[Auth] forget-password response:", response.status, data);
+
       if (!response.ok) {
         throw new Error(data.error || data.message || "Failed to send reset email");
       }
 
-      console.log("[Auth] Password reset email sent:", data);
+      console.log("[Auth] Password reset email sent successfully");
     } catch (error) {
       console.error("[Auth] Password reset request failed:", error);
       throw error;
@@ -243,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = async (token: string, newPassword: string) => {
     try {
       console.log("[Auth] Resetting password with token");
+      // Use Better Auth's built-in reset-password endpoint
       const { BACKEND_URL } = await import("@/utils/api");
       const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
         method: "POST",
@@ -259,11 +323,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ignore parse errors
       }
 
+      console.log("[Auth] reset-password response:", response.status, data);
+
       if (!response.ok) {
-        throw new Error(data.error || data.message || "Failed to reset password");
+        const errorMsg = data.error || data.message || "Failed to reset password";
+        // Better Auth returns specific error messages
+        if (response.status === 400) {
+          throw new Error(errorMsg.includes("expired") ? "Reset link has expired. Please request a new one." : errorMsg);
+        }
+        throw new Error(errorMsg);
       }
 
-      console.log("[Auth] Password reset successful:", data);
+      console.log("[Auth] Password reset successful");
     } catch (error) {
       console.error("[Auth] Password reset failed:", error);
       throw error;
