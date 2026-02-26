@@ -105,11 +105,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true);
       console.log("🔍 Fetching user session...");
 
+      // Try Better Auth client first
       const session = await authClient.getSession();
-      console.log("📦 Session response:", session?.data?.user ? "User found" : "No user");
+      console.log("📦 Session response:", session?.data?.user ? `User found: ${session.data.user.email}` : "No user");
 
       if (session?.data?.user) {
-        console.log("✅ User authenticated:", session.data.user.email);
+        console.log("✅ User authenticated via authClient:", session.data.user.email);
         setUser(session.data.user as User);
 
         // Sync token to storage for utils/api.ts
@@ -117,28 +118,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await setBearerToken(session.data.session.token);
           console.log("💾 Bearer token saved from session");
         }
-      } else {
-        // Try bearer token fallback for native
-        console.log("🔄 Trying bearer token fallback...");
-        const bearerSession = await getSessionWithBearerToken();
-        if (bearerSession?.user) {
-          console.log("✅ User authenticated via bearer token:", bearerSession.user.email);
-          setUser(bearerSession.user as User);
-          if (bearerSession.session?.token) {
-            await setBearerToken(bearerSession.session.token);
-          }
-        } else {
-          console.log("❌ No user session found");
-          setUser(null);
-          // Only clear tokens if not in OAuth flow
-          if (!oauthInProgress.current) {
-            await clearAuthTokens();
-          }
+        return;
+      }
+
+      // Try bearer token fallback
+      console.log("🔄 Trying bearer token fallback...");
+      const bearerSession = await getSessionWithBearerToken();
+      if (bearerSession?.user) {
+        console.log("✅ User authenticated via bearer token:", bearerSession.user.email);
+        setUser(bearerSession.user as User);
+        if (bearerSession.session?.token) {
+          await setBearerToken(bearerSession.session.token);
         }
+        return;
+      }
+
+      // No session found
+      console.log("❌ No user session found");
+      setUser(null);
+      // Only clear tokens if not in OAuth flow
+      if (!oauthInProgress.current) {
+        await clearAuthTokens();
       }
     } catch (error) {
       console.error("❌ Failed to fetch user:", error);
       setUser(null);
+      // Don't clear tokens on error - might be temporary network issue
     } finally {
       setLoading(false);
     }
@@ -215,7 +220,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithSocial = async (provider: "google" | "apple" | "github") => {
+    // Prevent multiple simultaneous OAuth attempts
+    if (oauthInProgress.current) {
+      console.log(`⏸️ OAuth already in progress, ignoring ${provider} sign in request`);
+      Toast.show({
+        type: "info",
+        text1: "Please wait",
+        text2: "Authentication is already in progress.",
+      });
+      return;
+    }
+
     oauthInProgress.current = true;
+    
     try {
       console.log(`🔐 Starting ${provider} sign in on platform: ${Platform.OS}`);
 
@@ -255,6 +272,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.replace("/(tabs)/(home)");
       } else {
         // Native (iOS / Android): Use WebBrowser for OAuth
+        // Ensure any previous session is completed first
+        try {
+          await WebBrowser.dismissBrowser();
+          console.log("🧹 Dismissed any previous browser session");
+        } catch (dismissError) {
+          // Ignore errors if no browser was open
+          console.log("🧹 No previous browser session to dismiss");
+        }
+
         const nativeCallbackURL = Linking.createURL("");
         console.log(`📱 Native OAuth callbackURL: ${nativeCallbackURL}`);
 
@@ -369,6 +395,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error.message?.includes("dismissed")
       ) {
         console.log(`ℹ️ ${provider} sign in was cancelled by user`);
+        return;
+      }
+
+      // Check for "WebBrowser already open" error
+      if (error.message?.includes("WebBrowser") || error.message?.includes("already open")) {
+        console.error("❌ WebBrowser already open error detected");
+        Toast.show({
+          type: "error",
+          text1: "Browser Busy",
+          text2: "Please close the previous browser window and try again.",
+        });
+        // Try to dismiss any lingering browser
+        try {
+          await WebBrowser.dismissBrowser();
+        } catch (dismissErr) {
+          console.log("Could not dismiss browser:", dismissErr);
+        }
         return;
       }
 

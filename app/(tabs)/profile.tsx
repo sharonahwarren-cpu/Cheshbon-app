@@ -40,8 +40,13 @@ export default function ProfileScreen() {
   });
 
   useEffect(() => {
+    console.log('[Profile] Screen mounted, user:', user ? user.email : 'not logged in');
     loadStats();
   }, []);
+
+  useEffect(() => {
+    console.log('[Profile] User state changed:', user ? user.email : 'not logged in');
+  }, [user]);
 
   // Reload stats when screen comes into focus
   useFocusEffect(
@@ -98,6 +103,19 @@ export default function ProfileScreen() {
       setSignOutModalVisible(false);
     }
   };
+
+  // If user is not loaded yet, show loading
+  if (!user) {
+    console.log('[Profile] No user found, showing loading...');
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={{ marginTop: 16, color: colors.textSecondary }}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const userName = user?.name || user?.email || 'User';
   const userEmail = user?.email || '';

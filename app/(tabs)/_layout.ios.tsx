@@ -37,31 +37,35 @@ export default function TabLayout() {
   }, [user, prefsLoaded]);
 
   useEffect(() => {
-    console.log('Auth state changed - user:', user ? 'logged in' : 'not logged in', 'loading:', loading);
+    console.log('[TabLayout iOS] Auth state - user:', user ? user.email : 'not logged in', 'loading:', loading, 'segments:', segments);
     
     if (loading) {
       return;
     }
 
     const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
+    const inTabsGroup = segments[0] === '(tabs)';
 
+    // Only redirect to auth if user is not logged in AND not already in auth flow
     if (!user && !inAuthGroup) {
-      console.log('User not authenticated, redirecting to login screen');
+      console.log('[TabLayout iOS] User not authenticated, redirecting to login screen');
       setPrefsLoaded(false);
       router.replace('/auth');
-    } else if (user && inAuthGroup && prefsLoaded) {
-      console.log('User authenticated, redirecting to home (preferred:', preferredHomeScreen, ')');
+      return;
+    }
+
+    // Only redirect from auth to home if user just logged in
+    if (user && inAuthGroup && prefsLoaded) {
+      console.log('[TabLayout iOS] User authenticated from auth flow, redirecting to home');
       router.replace('/(tabs)/(home)/');
-    } else if (user && inAuthGroup && !prefsLoaded) {
-      console.log('User authenticated, waiting for preferences to load...');
+      return;
+    }
+
+    // If user is authenticated and in tabs, allow normal navigation
+    if (user && inTabsGroup) {
+      console.log('[TabLayout iOS] User authenticated, allowing tab navigation to:', segments.join('/'));
     }
   }, [user, loading, segments, preferredHomeScreen, prefsLoaded, router]);
-
-  // Handle AI chat navigation
-  const handleAIChatPress = () => {
-    console.log('[TabLayout iOS] AI Chat tab pressed, navigating to standalone screen');
-    router.push('/ai-chat');
-  };
 
   if (loading) {
     return (
@@ -85,12 +89,9 @@ export default function TabLayout() {
         <Icon sf="chart.bar.fill" />
         <Label>Reports</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger 
-        key="ai-chat" 
-        name="ai-chat"
-      >
-        <Icon sf="mic.fill" />
-        <Label>AI</Label>
+      <NativeTabs.Trigger key="reflect" name="reflect">
+        <Icon sf="book.fill" />
+        <Label>Reflect</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger key="profile" name="profile">
         <Icon sf="person.fill" />

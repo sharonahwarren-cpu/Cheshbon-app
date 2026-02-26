@@ -43,26 +43,34 @@ export default function TabLayout() {
   }, [user, prefsLoaded]);
 
   useEffect(() => {
-    console.log('Auth state changed - user:', user ? 'logged in' : 'not logged in', 'loading:', loading);
+    console.log('[TabLayout] Auth state - user:', user ? user.email : 'not logged in', 'loading:', loading, 'segments:', segments);
     
     if (loading) {
       return;
     }
 
     const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
+    const inTabsGroup = segments[0] === '(tabs)';
 
+    // Only redirect to auth if user is not logged in AND not already in auth flow
     if (!user && !inAuthGroup) {
-      console.log('User not authenticated, redirecting to login screen');
+      console.log('[TabLayout] User not authenticated, redirecting to login screen');
       setPrefsLoaded(false);
       router.replace('/auth');
-    } else if (user && inAuthGroup && prefsLoaded) {
-      // Redirect to preferred home screen
+      return;
+    }
+
+    // Only redirect from auth to home if user just logged in
+    if (user && inAuthGroup && prefsLoaded) {
       const targetRoute = HOME_SCREEN_ROUTES[preferredHomeScreen] || '/(tabs)/(home)/';
-      console.log('User authenticated, redirecting to preferred home screen:', targetRoute, '(', preferredHomeScreen, ')');
+      console.log('[TabLayout] User authenticated from auth flow, redirecting to:', targetRoute);
       router.replace(targetRoute as any);
-    } else if (user && inAuthGroup && !prefsLoaded) {
-      // Wait for prefs to load before redirecting
-      console.log('User authenticated, waiting for preferences to load...');
+      return;
+    }
+
+    // If user is authenticated and in tabs, allow normal navigation
+    if (user && inTabsGroup) {
+      console.log('[TabLayout] User authenticated, allowing tab navigation to:', segments.join('/'));
     }
   }, [user, loading, segments, preferredHomeScreen, prefsLoaded, router]);
 
