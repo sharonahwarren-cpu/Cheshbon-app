@@ -920,8 +920,22 @@ export default function CreateGoalScreen() {
     if (scheduleType === 'Always Active') {
       return 'every day';
     } else if (scheduleType === 'Weekly') {
-      const dayCount = scheduleConfig.weekdays?.length || 0;
-      return dayCount > 0 ? `${dayCount} days per week` : 'weekly';
+      // CRITICAL FIX: Show which days are selected, not just the count
+      const weekdays = scheduleConfig.weekdays || [];
+      if (weekdays.length === 0) return 'weekly';
+      if (weekdays.length === 7) return 'every day';
+      
+      const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayNames = weekdays.map(day => WEEKDAY_NAMES[day]).filter(name => name !== undefined);
+      
+      if (dayNames.length === 1) {
+        return `every ${dayNames[0]}`;
+      } else if (dayNames.length === 2) {
+        return `every ${dayNames[0]} and ${dayNames[1]}`;
+      } else {
+        const lastDay = dayNames.pop();
+        return `every ${dayNames.join(', ')}, and ${lastDay}`;
+      }
     } else if (scheduleType === 'Fortnightly') {
       return 'fortnightly';
     } else if (scheduleType === 'Monthly') {
