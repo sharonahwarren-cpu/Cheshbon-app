@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,11 +16,11 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 
-type Mode = "signin" | "signup";
+type Mode = "signin" | "signup" | "forgot-password";
 
 export default function AuthScreen() {
   const router = useRouter();
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGitHub, loading: authLoading } =
+  const { user, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGitHub, requestPasswordReset, loading: authLoading } =
     useAuth();
 
   const [mode, setMode] = useState<Mode>("signin");
@@ -33,6 +33,14 @@ export default function AuthScreen() {
   const [successModalVisible, setSuccessModalVisible] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
+  // Redirect to home when user becomes authenticated (e.g. after OAuth)
+  useEffect(() => {
+    if (user && !authLoading) {
+      console.log("[Auth] User authenticated, redirecting to home");
+      router.replace("/");
+    }
+  }, [user, authLoading]);
+
   if (authLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -42,11 +50,13 @@ export default function AuthScreen() {
   }
 
   const showError = (message: string) => {
+    console.log("Showing error:", message);
     setErrorMessage(message);
     setErrorModalVisible(true);
   };
 
   const showSuccess = (message: string) => {
+    console.log("Showing success:", message);
     setSuccessMessage(message);
     setSuccessModalVisible(true);
   };
@@ -60,9 +70,11 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       if (mode === "signin") {
+        console.log("User tapped Sign In button");
         await signInWithEmail(email, password);
         router.replace("/");
       } else {
+        console.log("User tapped Sign Up button");
         await signUpWithEmail(email, password, name);
         showSuccess("Account created successfully!");
         setTimeout(() => {
@@ -76,9 +88,31 @@ export default function AuthScreen() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      showError("Please enter your email address");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      console.log("User tapped Send Reset Email button");
+      await requestPasswordReset(email);
+      showSuccess("Password reset email sent! Check your inbox.");
+      setTimeout(() => {
+        setMode("signin");
+      }, 2000);
+    } catch (error: any) {
+      showError(error.message || "Failed to send reset email");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSocialAuth = async (provider: "google" | "apple" | "github") => {
     setLoading(true);
     try {
+      console.log(`User tapped Continue with ${provider} button`);
       if (provider === "google") {
         await signInWithGoogle();
       } else if (provider === "apple") {
@@ -86,9 +120,14 @@ export default function AuthScreen() {
       } else if (provider === "github") {
         await signInWithGitHub();
       }
-      router.replace("/");
+      // The AuthContext fetchUser will update the user state.
+      // The TabLayout will handle the redirect once user is set.
+      // We only explicitly navigate if the auth context has confirmed the user.
+      console.log("Social auth completed");
     } catch (error: any) {
-      showError(error.message || "Authentication failed");
+      if (error.message !== "Authentication cancelled") {
+        showError(error.message || "Authentication failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -111,8 +150,14 @@ export default function AuthScreen() {
           </View>
 
           <Text style={styles.title}>
-            {mode === "signin" ? "Sign In" : "Sign Up"}
+            {mode === "signin" ? "Sign In" : mode === "signup" ? "Sign Up" : "Reset Password"}
           </Text>
+
+          {mode === "forgot-password" && (
+            <Text style={styles.subtitle}>
+              Enter your email address and we'll send you a link to reset your password.
+            </Text>
+          )}
 
           {mode === "signup" && (
             <TextInput
@@ -134,64 +179,88 @@ export default function AuthScreen() {
             autoCorrect={false}
           />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
+          {mode !== "forgot-password" && (
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+          )}
+
+          {mode === "signin" && (
+            <TouchableOpacity
+              style={styles.forgotPasswordButton}
+              onPress={() => setMode("forgot-password")}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[styles.primaryButton, loading && styles.buttonDisabled]}
-            onPress={handleEmailAuth}
+            onPress={mode === "forgot-password" ? handleForgotPassword : handleEmailAuth}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <Text style={styles.primaryButtonText}>
-                {mode === "signin" ? "Sign In" : "Sign Up"}
+                {mode === "signin" ? "Sign In" : mode === "signup" ? "Sign Up" : "Send Reset Email"}
               </Text>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.switchModeButton}
-            onPress={() => setMode(mode === "signin" ? "signup" : "signin")}
-          >
-            <Text style={styles.switchModeText}>
-              {mode === "signin"
-                ? "Don't have an account? Sign Up"
-                : "Already have an account? Sign In"}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or continue with</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <TouchableOpacity
-            style={styles.socialButton}
-            onPress={() => handleSocialAuth("google")}
-            disabled={loading}
-          >
-            <Text style={styles.socialButtonText}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {Platform.OS === "ios" && (
+          {mode === "forgot-password" ? (
             <TouchableOpacity
-              style={[styles.socialButton, styles.appleButton]}
-              onPress={() => handleSocialAuth("apple")}
-              disabled={loading}
+              style={styles.switchModeButton}
+              onPress={() => setMode("signin")}
             >
-              <Text style={[styles.socialButtonText, styles.appleButtonText]}>
-                Continue with Apple
+              <Text style={styles.switchModeText}>Back to Sign In</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.switchModeButton}
+              onPress={() => setMode(mode === "signin" ? "signup" : "signin")}
+            >
+              <Text style={styles.switchModeText}>
+                {mode === "signin"
+                  ? "Don't have an account? Sign Up"
+                  : "Already have an account? Sign In"}
               </Text>
             </TouchableOpacity>
+          )}
+
+          {mode !== "forgot-password" && (
+            <>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or continue with</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity
+                style={styles.socialButton}
+                onPress={() => handleSocialAuth("google")}
+                disabled={loading}
+              >
+                <Text style={styles.socialButtonText}>Continue with Google</Text>
+              </TouchableOpacity>
+
+              {Platform.OS === "ios" && (
+                <TouchableOpacity
+                  style={[styles.socialButton, styles.appleButton]}
+                  onPress={() => handleSocialAuth("apple")}
+                  disabled={loading}
+                >
+                  <Text style={[styles.socialButtonText, styles.appleButtonText]}>
+                    Continue with Apple
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
       </ScrollView>
@@ -271,9 +340,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: "bold",
-    marginBottom: 32,
+    marginBottom: 16,
     textAlign: "center",
     color: "#000",
+  },
+  subtitle: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 24,
+    paddingHorizontal: 16,
   },
   input: {
     height: 50,
@@ -284,6 +360,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     fontSize: 16,
     backgroundColor: "#fff",
+  },
+  forgotPasswordButton: {
+    alignSelf: "flex-end",
+    marginBottom: 16,
+  },
+  forgotPasswordText: {
+    color: "#007AFF",
+    fontSize: 14,
   },
   primaryButton: {
     height: 50,

@@ -16,8 +16,15 @@ export default function AuthCallbackScreen() {
   const handleCallback = () => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get("better_auth_token");
+      // Better Auth may use different token parameter names
+      const token =
+        urlParams.get("better_auth_token") ||
+        urlParams.get("token") ||
+        urlParams.get("access_token");
       const error = urlParams.get("error");
+
+      console.log("[AuthCallback] URL params:", window.location.search);
+      console.log("[AuthCallback] Token found:", !!token, "Error:", error);
 
       if (error) {
         setStatus("error");
@@ -32,14 +39,18 @@ export default function AuthCallbackScreen() {
         window.opener?.postMessage({ type: "oauth-success", token }, "*");
         setTimeout(() => window.close(), 1000);
       } else {
-        setStatus("error");
-        setMessage("No authentication token received");
-        window.opener?.postMessage({ type: "oauth-error", error: "No token" }, "*");
+        // No token in URL - the session may have been set via cookie
+        // Signal success without a token so the parent can try fetching the session
+        console.log("[AuthCallback] No token in URL, signaling cookie-based auth success");
+        setStatus("success");
+        setMessage("Authentication successful! Closing...");
+        window.opener?.postMessage({ type: "oauth-success", token: "cookie-auth" }, "*");
+        setTimeout(() => window.close(), 1000);
       }
     } catch (err) {
       setStatus("error");
       setMessage("Failed to process authentication");
-      console.error("Auth callback error:", err);
+      console.error("[AuthCallback] Auth callback error:", err);
     }
   };
 

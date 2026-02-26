@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Platform } from "react-native";
 import * as Linking from "expo-linking";
@@ -20,6 +21,8 @@ interface AuthContextType {
   signInWithGitHub: () => Promise<void>;
   signOut: () => Promise<void>;
   fetchUser: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -98,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setLoading(true);
       const session = await authClient.getSession();
+      console.log("Session fetched:", session?.data?.user ? "User found" : "No user");
       if (session?.data?.user) {
         setUser(session.data.user as User);
         // Sync token to SecureStore for utils/api.ts
@@ -118,6 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
+      console.log("Signing in with email:", email);
       await authClient.signIn.email({ email, password });
       await fetchUser();
     } catch (error) {
@@ -128,11 +133,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
     try {
+      console.log("Signing up with email:", email);
       await authClient.signUp.email({
         email,
         password,
         name,
-        // Ensure name is passed in header or logic if required, usually passed in body
       });
       await fetchUser();
     } catch (error) {
@@ -143,27 +148,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithSocial = async (provider: "google" | "apple" | "github") => {
     try {
+      console.log(`[Auth] Starting ${provider} sign in...`);
       if (Platform.OS === "web") {
         const token = await openOAuthPopup(provider);
-        await setBearerToken(token);
-        await fetchUser();
+        console.log("[Auth] OAuth token received:", token === "cookie-auth" ? "cookie-based" : "bearer token");
+        // Only set bearer token if it's a real token (not cookie-auth placeholder)
+        if (token && token !== "cookie-auth") {
+          await setBearerToken(token);
+        }
+        // Give the backend time to process the session
+        await new Promise(resolve => setTimeout(resolve, 800));
+        // Retry fetchUser up to 5 times to handle timing issues
+        let retries = 5;
+        while (retries > 0) {
+          await fetchUser();
+          // Check if user was set by reading the session directly
+          const session = await authClient.getSession();
+          if (session?.data?.user) {
+            console.log("[Auth] Social sign in successful, user found");
+            return;
+          }
+          retries--;
+          if (retries > 0) {
+            console.log(`[Auth] User not found yet, retrying... (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
+        console.warn("[Auth] Could not confirm user session after OAuth");
       } else {
         // Native: Use expo-linking to generate a proper deep link
         const callbackURL = Linking.createURL("/");
+        console.log("[Auth] Native OAuth callback URL:", callbackURL);
         await authClient.signIn.social({
           provider,
           callbackURL,
         });
-        // Note: The redirect will reload the app or be handled by deep linking.
-        // fetchUser will be called on mount or via event listener if needed.
-        // For simple flow, we might need to listen to URL events.
-        // But better-auth expo client handles the redirect and session storage?
-        // We typically need to wait or rely on fetchUser on next app load.
-        // For now, call fetchUser just in case.
+        // Wait for the redirect and session to be established
+        await new Promise(resolve => setTimeout(resolve, 2000));
         await fetchUser();
       }
     } catch (error) {
-      console.error(`${provider} sign in failed:`, error);
+      console.error(`[Auth] ${provider} sign in failed:`, error);
       throw error;
     }
   };
@@ -174,6 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
+      console.log("Signing out...");
       await authClient.signOut();
     } catch (error) {
       console.error("Sign out failed (API):", error);
@@ -181,6 +207,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        // Always clear local state
        setUser(null);
        await clearAuthTokens();
+    }
+  };
+
+  const requestPasswordReset = async (email: string) => {
+    try {
+      console.log("[Auth] Requesting password reset for:", email);
+      const { BACKEND_URL } = await import("@/utils/api");
+      const response = await fetch(`${BACKEND_URL}/api/auth/request-password-reset`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      let data: any = {};
+      try {
+        data = await response.json();
+      } catch {
+        // ignore parse errors
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || "Failed to send reset email");
+      }
+
+      console.log("[Auth] Password reset email sent:", data);
+    } catch (error) {
+      console.error("[Auth] Password reset request failed:", error);
+      throw error;
+    }
+  };
+
+  const resetPassword = async (token: string, newPassword: string) => {
+    try {
+      console.log("[Auth] Resetting password with token");
+      const { BACKEND_URL } = await import("@/utils/api");
+      const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token, newPassword }),
+      });
+
+      let data: any = {};
+      try {
+        data = await response.json();
+      } catch {
+        // ignore parse errors
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error || data.message || "Failed to reset password");
+      }
+
+      console.log("[Auth] Password reset successful:", data);
+    } catch (error) {
+      console.error("[Auth] Password reset failed:", error);
+      throw error;
     }
   };
 
@@ -196,6 +282,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGitHub,
         signOut,
         fetchUser,
+        requestPasswordReset,
+        resetPassword,
       }}
     >
       {children}
