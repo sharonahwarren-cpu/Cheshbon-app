@@ -1,4 +1,4 @@
-import { createApplication } from "@specific-dev/framework";
+import { createApplication, resend } from "@specific-dev/framework";
 import * as appSchema from './db/schema.js';
 import * as authSchema from './db/auth-schema.js';
 import { registerJournalRoutes } from './routes/journal.js';
@@ -18,6 +18,7 @@ import { registerReflectionChatRoutes } from './routes/reflection-chat.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMitzvotRoutes } from './routes/mitzvot.js';
 import { registerMitzvotCategoryRoutes } from './routes/mitzvot-categories.js';
+import { registerAuthRoutes } from './routes/auth.js';
 
 // Combine both schemas
 const schema = { ...appSchema, ...authSchema };
@@ -29,7 +30,49 @@ export const app = await createApplication(schema);
 export type App = typeof app;
 
 // Enable authentication with Better Auth
-app.withAuth();
+const appUrl = process.env.APP_URL || 'http://localhost:3000';
+const resetPasswordUrl = `${appUrl}/reset-password`;
+
+app.withAuth({
+  emailAndPassword: {
+    sendResetPassword: async ({ user, url }) => {
+      // Extract token from URL and create reset link with custom format
+      const token = url.split('token=')[1];
+      const resetLink = `${resetPasswordUrl}?token=${token}`;
+
+      try {
+        await resend.emails.send({
+          from: 'Specular <noreply@specular.app>',
+          to: user.email,
+          subject: 'Reset your password',
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
+              <h2>Password Reset Request</h2>
+              <p>We received a request to reset the password for your account.</p>
+              <p><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a></p>
+              <p>Or copy and paste this link in your browser:</p>
+              <p><code>${resetLink}</code></p>
+              <p>This link will expire in 24 hours.</p>
+              <p>If you didn't request this, you can safely ignore this email.</p>
+              <hr style="margin-top: 30px; border: none; border-top: 1px solid #ddd;">
+              <p style="color: #666; font-size: 12px;">Specular Team</p>
+            </div>
+          `,
+        });
+      } catch (error) {
+        app.logger.error({ err: error, userEmail: user.email }, 'Failed to send password reset email');
+      }
+    },
+  },
+  trustedOrigins: [
+    // Allow localhost for development
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+    // Allow production origin from env
+    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  ],
+});
 
 // Enable storage for file uploads and management
 app.withStorage();
@@ -53,6 +96,7 @@ registerReflectionChatRoutes(app);
 registerHealthRoutes(app);
 registerMitzvotCategoryRoutes(app);
 registerMitzvotRoutes(app);
+registerAuthRoutes(app);
 
 await app.run();
 app.logger.info('Application running');
