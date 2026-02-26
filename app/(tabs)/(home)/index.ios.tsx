@@ -181,7 +181,6 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentView, setCurrentView] = useState<'reflect' | 'express'>('reflect');
   const [expressViewMode, setExpressViewMode] = useState<'detailed' | 'concise'>('detailed');
-  const [homeScreenInitialized, setHomeScreenInitialized] = useState(false);
   
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
   const [lifeAreaHierarchy, setLifeAreaHierarchy] = useState<LifeAreaNode[]>([]);
@@ -288,11 +287,12 @@ export default function HomeScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       
-      // CRITICAL FIX: Always apply user's preferred home screen when preferences are loaded
-      // This ensures that when the user changes preferences and returns to the home screen,
-      // the new preference is immediately applied
+      // CRITICAL FIX: ALWAYS apply user's preferred home screen when preferences are loaded
+      // This ensures that when the user changes preferences in settings and returns to the home screen,
+      // the new preference is immediately applied (not just on first load)
       const preferredScreen = prefsData.preferredHomeScreen;
       console.log('[Home iOS] Applying preferred home screen from backend:', preferredScreen);
+      console.log('[Home iOS] Current view before applying preference:', currentView, expressViewMode);
       
       if (preferredScreen === 'goals-detailed') {
         console.log('[Home iOS] Setting view: goals-detailed -> Express view, Detailed mode');
@@ -303,13 +303,12 @@ export default function HomeScreen() {
         setCurrentView('express');
         setExpressViewMode('concise');
       } else {
+        // Default to reflect view
         console.log('[Home iOS] Setting view: reflect (default)');
         setCurrentView('reflect');
       }
       
-      if (!homeScreenInitialized) {
-        setHomeScreenInitialized(true);
-      }
+      console.log('[Home iOS] View updated based on preference:', preferredScreen);
       
       console.log("[Home iOS] Data loaded successfully");
     } catch (error: any) {
