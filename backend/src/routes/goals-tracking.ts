@@ -177,9 +177,9 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       const lifeAreaMap = new Map(lifeAreasData.map(la => [la.id, la]));
 
-      // Filter goals that are active today
+      // Filter goals that are active on the requested date
       const activatedToday = goals
-        .filter(goal => isGoalActiveTodayHelper(goal))
+        .filter(goal => isGoalActiveOnDateHelper(goal, requestedDate))
         .map(goal => {
           // Count successes and struggles for the requested date, and build dailyEntries array
           let todaySuccessCount = 0;
