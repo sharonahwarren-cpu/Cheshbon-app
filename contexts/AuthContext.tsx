@@ -2,8 +2,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Platform } from "react-native";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import Toast from 'react-native-toast-message';
-import { authClient, setBearerToken, clearAuthTokens, getSessionWithBearerToken } from "@/lib/auth";
+import { authClient, setBearerToken, clearAuthTokens, getSessionWithBearerToken, API_URL } from "@/lib/auth";
+
+// Warm up the browser for faster OAuth on native
+if (Platform.OS !== "web") {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
 interface User {
   id: string;
@@ -360,140 +366,98 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           oauthInProgress.current = false;
         }
       } else {
-        // NATIVE (iOS/Android): Use Better Auth's native OAuth flow
-        console.log("[AuthContext] 📱 Using native OAuth flow for", provider);
+        // NATIVE (iOS/Android): Use WebBrowser-based OAuth flow
+        // This is more reliable than the Better Auth client's built-in flow
+        console.log("[AuthContext] 📱 Using native WebBrowser OAuth flow for", provider);
         oauthInProgress.current = true;
         
         try {
           // Generate the callback URL for deep linking
-          // Use the app scheme for native deep linking (e.g., "Cheshbon://")
-          const callbackURL = Linking.createURL("/");
-          console.log("[AuthContext] 🔗 Native OAuth callback URL:", callbackURL);
-          console.log("[AuthContext] 📱 Platform:", Platform.OS, "Version:", Platform.Version);
+          const redirectUri = Linking.createURL("/");
+          console.log("[AuthContext] 🔗 Native OAuth redirect URI:", redirectUri);
           
-          // Call Better Auth's social sign-in which will open the browser
-          // The @better-auth/expo expoClient plugin handles the browser opening and deep link callback
-          console.log("[AuthContext] 📞 Calling authClient.signIn.social()...");
-          console.log("[AuthContext] 📋 Request params:", { provider, callbackURL });
-          const startTime = Date.now();
+          // Build the OAuth URL
+          const oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(redirectUri)}`;
+          console.log("[AuthContext] 🌐 Opening browser for OAuth:", oauthUrl);
           
-          try {
-            const result = await authClient.signIn.social({
-              provider,
-              callbackURL,
-            });
-            const duration = Date.now() - startTime;
-            
-            console.log("[AuthContext] 📊 Native OAuth result:", {
-              duration: `${duration}ms`,
-              hasResult: !!result,
-              resultType: typeof result,
-              result: JSON.stringify(result).substring(0, 200),
-            });
-          } catch (socialErr: any) {
-            console.error("[AuthContext] ❌ authClient.signIn.social() error:", {
-              message: socialErr.message,
-              name: socialErr.name,
-              stack: socialErr.stack,
-            });
-            
-            // If the error is a 403, provide a more helpful message
-            if (socialErr.message?.includes("403") || socialErr.message?.includes("Forbidden")) {
-              console.error("[AuthContext] 🚫 403 Forbidden - OAuth provider not configured on server");
-              console.error("[AuthContext] 💡 Ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set in backend environment");
-              throw new Error(
-                `${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in is not available. ` +
-                `The server OAuth configuration may be incomplete. Please try email/password sign-in or contact support.`
-              );
-            }
-            
-            // If the error is a network error, provide a helpful message
-            if (socialErr.message?.includes("Network") || socialErr.message?.includes("fetch")) {
-              throw new Error(`Network error during ${provider} sign-in. Please check your connection and try again.`);
-            }
-            
-            // If user cancelled (browser closed without completing)
-            if (socialErr.message?.includes("cancel") || socialErr.message?.includes("dismiss") || socialErr.message?.includes("closed")) {
-              throw new Error(`Sign-in was cancelled. Please try again.`);
-            }
-            
-            throw socialErr;
+          // Open the browser for OAuth
+          const result = await WebBrowser.openAuthSessionAsync(
+            oauthUrl,
+            redirectUri
+          );
+          
+          console.log("[AuthContext] 📊 WebBrowser result:", {
+            type: result.type,
+            url: result.type === "success" ? result.url : "N/A",
+          });
+          
+          if (result.type === "cancel") {
+            throw new Error("Sign-in was cancelled");
           }
           
-          // Wait for the deep link to be processed and session to be established
-          // The expoClient plugin handles the token exchange via deep link
-          console.log("[AuthContext] ⏳ Waiting for session to be established after OAuth...");
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          if (result.type !== "success" || !result.url) {
+            throw new Error("OAuth failed - no redirect URL received");
+          }
+          
+          // Extract the better_auth_token from the redirect URL
+          const url = new URL(result.url);
+          const betterAuthToken = url.searchParams.get("better_auth_token");
+          const error = url.searchParams.get("error");
+          
+          console.log("[AuthContext] 📊 Redirect URL params:", {
+            hasToken: !!betterAuthToken,
+            tokenLength: betterAuthToken?.length || 0,
+            error: error || "none",
+          });
+          
+          if (error) {
+            throw new Error(`OAuth error: ${error}`);
+          }
+          
+          if (!betterAuthToken) {
+            throw new Error("No authentication token received from OAuth");
+          }
+          
+          // Store the token
+          console.log("[AuthContext] 💾 Storing better_auth_token");
+          await setBearerToken(betterAuthToken);
           
           // Try multiple times to fetch the user session (with retries)
           console.log("[AuthContext] 🔄 Fetching user after native OAuth (with retries)...");
           let retries = 0;
-          const maxRetries = 15; // Increased from 10 to 15
+          const maxRetries = 15;
           let sessionEstablished = false;
           
           while (retries < maxRetries && !sessionEstablished) {
             console.log(`[AuthContext] 🔄 Fetch attempt ${retries + 1}/${maxRetries}...`);
             
-            // Try authClient.getSession() first - expoClient stores token in SecureStore
+            // Try getSessionWithBearerToken
             try {
-              const session = await authClient.getSession();
-              console.log(`[AuthContext] 📊 authClient.getSession() attempt ${retries + 1}:`, {
-                hasUser: !!session?.data?.user,
-                hasSession: !!session?.data?.session,
-                hasError: !!session?.error,
-                errorMessage: session?.error?.message || "none",
+              const bearerSession = await getSessionWithBearerToken();
+              console.log(`[AuthContext] 📊 Bearer token session attempt ${retries + 1}:`, {
+                hasUser: !!bearerSession?.user,
+                userEmail: bearerSession?.user?.email || "none",
               });
               
-              if (session?.data?.user) {
-                console.log("[AuthContext] ✅ Session found via authClient on attempt", retries + 1);
-                setUser(session.data.user as User);
-                if (session.data.session?.token) {
-                  await setBearerToken(session.data.session.token);
+              if (bearerSession?.user) {
+                console.log("[AuthContext] ✅ Session found via Bearer token on attempt", retries + 1);
+                setUser(bearerSession.user as User);
+                if (bearerSession?.session?.token) {
+                  await setBearerToken(bearerSession.session.token);
                 }
                 sessionEstablished = true;
                 Toast.show({
                   type: 'success',
                   text1: 'Signed In',
-                  text2: `Welcome back, ${session.data.user.name || session.data.user.email}!`,
+                  text2: `Welcome back, ${bearerSession.user.name || bearerSession.user.email}!`,
                 });
                 break;
               }
             } catch (err: any) {
-              console.warn(`[AuthContext] ⚠️ authClient.getSession() attempt ${retries + 1} failed:`, {
+              console.warn(`[AuthContext] ⚠️ Bearer token session attempt ${retries + 1} failed:`, {
                 message: err.message,
                 name: err.name,
               });
-            }
-            
-            // Also try getSessionWithBearerToken as fallback
-            if (!sessionEstablished) {
-              try {
-                const bearerSession = await getSessionWithBearerToken();
-                console.log(`[AuthContext] 📊 Bearer token session attempt ${retries + 1}:`, {
-                  hasUser: !!bearerSession?.user,
-                  userEmail: bearerSession?.user?.email || "none",
-                });
-                
-                if (bearerSession?.user) {
-                  console.log("[AuthContext] ✅ Session found via Bearer token on attempt", retries + 1);
-                  setUser(bearerSession.user as User);
-                  if (bearerSession?.session?.token) {
-                    await setBearerToken(bearerSession.session.token);
-                  }
-                  sessionEstablished = true;
-                  Toast.show({
-                    type: 'success',
-                    text1: 'Signed In',
-                    text2: `Welcome back, ${bearerSession.user.name || bearerSession.user.email}!`,
-                  });
-                  break;
-                }
-              } catch (err: any) {
-                console.warn(`[AuthContext] ⚠️ Bearer token session attempt ${retries + 1} failed:`, {
-                  message: err.message,
-                  name: err.name,
-                });
-              }
             }
             
             // If not found, wait and retry with increasing backoff
@@ -544,9 +508,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (Platform.OS !== "web") {
       return signInWithSocial("google");
     }
-    const { BACKEND_URL } = await import("@/utils/api");
     const callbackURL = `${window.location.origin}/auth-callback`;
-    const redirectUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackURL)}`;
+    const redirectUrl = `${API_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackURL)}`;
     console.log("[AuthContext] 🌐 Redirecting to:", redirectUrl);
     window.location.href = redirectUrl;
   };
@@ -577,11 +540,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Email address is required");
       }
 
-      const { BACKEND_URL } = await import("@/utils/api");
-      
       const redirectTo = Platform.OS === "web"
         ? `${window.location.origin}/reset-password`
-        : `${BACKEND_URL}/reset-password`;
+        : `${API_URL}/reset-password`;
 
       console.log("[AuthContext] 📧 Calling Better Auth forget-password endpoint");
       console.log("[AuthContext] Redirect URL:", redirectTo);
@@ -609,7 +570,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       console.log("[AuthContext] 🔄 Trying direct fetch to /api/auth/forget-password...");
-      const response = await fetch(`${BACKEND_URL}/api/auth/forget-password`, {
+      const response = await fetch(`${API_URL}/api/auth/forget-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -680,9 +641,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
       
-      const { BACKEND_URL } = await import("@/utils/api");
       console.log("[AuthContext] 🔄 Trying direct fetch to /api/auth/reset-password...");
-      const response = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
+      const response = await fetch(`${API_URL}/api/auth/reset-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
