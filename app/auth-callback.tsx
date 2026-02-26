@@ -1,7 +1,8 @@
+
 import React, { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { Platform } from "react-native";
-import { authClient } from "@/lib/auth";
+import Constants from "expo-constants";
 
 type Status = "processing" | "success" | "error";
 
@@ -17,263 +18,220 @@ export default function AuthCallbackScreen() {
   const handleCallback = async () => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      // Better Auth uses 'better_auth_token' as the query parameter name for the OAuth callback token
       const betterAuthToken = urlParams.get("better_auth_token");
-      const rawToken = urlParams.get("token") || urlParams.get("access_token");
       const error = urlParams.get("error");
 
       console.log("[AuthCallback] URL:", window.location.href);
-      console.log("[AuthCallback] URL params:", window.location.search);
-      console.log("[AuthCallback] better_auth_token:", !!betterAuthToken, "raw token:", !!rawToken, "Error:", error);
+      console.log("[AuthCallback] better_auth_token present:", !!betterAuthToken);
+      console.log("[AuthCallback] Error:", error);
 
       if (error) {
+        console.error("[AuthCallback] OAuth error:", error);
         setStatus("error");
         setMessage(`Authentication failed: ${error}`);
         if (window.opener) {
           window.opener.postMessage({ type: "oauth-error", error }, window.location.origin);
         }
+        setTimeout(() => window.close(), 2000);
         return;
       }
 
-      // If we have a better_auth_token, use it to establish the session
-      if (betterAuthToken) {
-        console.log("[AuthCallback] better_auth_token found in URL:", betterAuthToken.substring(0, 20) + "... (length:", betterAuthToken.length, ")");
-        
-        const { BACKEND_URL } = await import("@/utils/api");
-        
-        // Try to get the session using the better_auth_token as a query parameter
-        // Better Auth processes the token when it's in the URL query string
-        try {
-          const sessionResponse = await fetch(`${BACKEND_URL}/api/auth/get-session?better_auth_token=${betterAuthToken}`, {
-            method: "GET",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-          });
-          
-          console.log("[AuthCallback] Session with better_auth_token query param status:", sessionResponse.status);
-          
-          if (sessionResponse.ok) {
-            const sessionData = await sessionResponse.json();
-            console.log("[AuthCallback] Session data:", JSON.stringify(sessionData).substring(0, 300));
-            
-            if (sessionData?.session?.token) {
-              console.log("[AuthCallback] Session token obtained, sending to parent");
-              setStatus("success");
-              setMessage("Authentication successful! Closing...");
-              if (window.opener) {
-                window.opener.postMessage(
-                  { type: "oauth-success", token: sessionData.session.token },
-                  window.location.origin
-                );
-              }
-              setTimeout(() => window.close(), 1000);
-              return;
-            }
-            
-            if (sessionData?.user) {
-              console.log("[AuthCallback] User found, sending better_auth_token to parent");
-              setStatus("success");
-              setMessage("Authentication successful! Closing...");
-              if (window.opener) {
-                window.opener.postMessage(
-                  { type: "oauth-success", token: betterAuthToken },
-                  window.location.origin
-                );
-              }
-              setTimeout(() => window.close(), 1000);
-              return;
-            }
-          } else {
-            const errorText = await sessionResponse.text();
-            console.warn("[AuthCallback] Session with query param failed:", sessionResponse.status, errorText.substring(0, 200));
-          }
-        } catch (queryErr) {
-          console.warn("[AuthCallback] Session with query param failed:", queryErr);
-        }
-        
-        // Try using the token as a bearer token
-        try {
-          const sessionResponse = await fetch(`${BACKEND_URL}/api/auth/get-session`, {
-            method: "GET",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${betterAuthToken}`,
-            },
-          });
-          
-          console.log("[AuthCallback] Session with bearer token status:", sessionResponse.status);
-          
-          if (sessionResponse.ok) {
-            const sessionData = await sessionResponse.json();
-            console.log("[AuthCallback] Session data:", JSON.stringify(sessionData).substring(0, 300));
-            
-            if (sessionData?.session?.token) {
-              console.log("[AuthCallback] Session token obtained via bearer, sending to parent");
-              setStatus("success");
-              setMessage("Authentication successful! Closing...");
-              if (window.opener) {
-                window.opener.postMessage(
-                  { type: "oauth-success", token: sessionData.session.token },
-                  window.location.origin
-                );
-              }
-              setTimeout(() => window.close(), 1000);
-              return;
-            }
-            
-            if (sessionData?.user) {
-              console.log("[AuthCallback] User found via bearer, sending better_auth_token to parent");
-              setStatus("success");
-              setMessage("Authentication successful! Closing...");
-              if (window.opener) {
-                window.opener.postMessage(
-                  { type: "oauth-success", token: betterAuthToken },
-                  window.location.origin
-                );
-              }
-              setTimeout(() => window.close(), 1000);
-              return;
-            }
-          } else {
-            const errorText = await sessionResponse.text();
-            console.warn("[AuthCallback] Session with bearer failed:", sessionResponse.status, errorText.substring(0, 200));
-          }
-        } catch (bearerErr) {
-          console.warn("[AuthCallback] Session with bearer failed:", bearerErr);
-        }
-        
-        // Last resort: send the better_auth_token directly to the parent
-        console.log("[AuthCallback] Sending better_auth_token directly to parent as last resort");
-        setStatus("success");
-        setMessage("Authentication successful! Closing...");
+      if (!betterAuthToken) {
+        console.error("[AuthCallback] No better_auth_token in URL");
+        setStatus("error");
+        setMessage("No authentication token received");
         if (window.opener) {
           window.opener.postMessage(
-            { type: "oauth-success", token: betterAuthToken },
+            { type: "oauth-error", error: "No authentication token received" },
             window.location.origin
           );
         }
-        setTimeout(() => window.close(), 1000);
+        setTimeout(() => window.close(), 2000);
         return;
       }
 
-      // No better_auth_token in URL - try to fetch the session using Better Auth client
-      // Better Auth sets a cookie after OAuth, so we can verify by calling getSession
-      console.log("[AuthCallback] No token in URL, attempting to fetch session via Better Auth client...");
+      // The better_auth_token is a one-time token from Better Auth's OAuth flow.
+      // Better Auth's authClient.getSession() automatically reads better_auth_token
+      // from the current page URL and exchanges it for a real session.
+      // This MUST happen in the popup window (auth-callback) because the token
+      // is in THIS window's URL.
+      console.log("[AuthCallback] Exchanging better_auth_token for session...");
       
-      // Wait a moment for the session to be established
-      await new Promise(resolve => setTimeout(resolve, 800));
+      const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || "";
       
-      // Try multiple times to get the session token
-      for (let attempt = 1; attempt <= 4; attempt++) {
-        console.log(`[AuthCallback] Session fetch attempt ${attempt}/4...`);
-        
-        try {
-          // Try Better Auth client first (handles cookies automatically)
-          const session = await authClient.getSession();
-          console.log("[AuthCallback] Better Auth session:", session?.data?.user ? "found" : "not found", "token:", session?.data?.session?.token ? "present" : "absent");
-          
-          if (session?.data?.session?.token) {
-            console.log("[AuthCallback] Session token found via Better Auth client, sending to parent");
-            setStatus("success");
-            setMessage("Authentication successful! Closing...");
-            if (window.opener) {
-              window.opener.postMessage(
-                { type: "oauth-success", token: session.data.session.token },
-                window.location.origin
-              );
-            }
-            setTimeout(() => window.close(), 1000);
-            return;
-          }
-          
-          if (session?.data?.user) {
-            // User found but no token in response - use cookie-auth signal
-            console.log("[AuthCallback] User found via Better Auth client (cookie-based), sending to parent");
-            setStatus("success");
-            setMessage("Authentication successful! Closing...");
-            if (window.opener) {
-              window.opener.postMessage({ type: "oauth-success", token: "cookie-auth" }, window.location.origin);
-            }
-            setTimeout(() => window.close(), 1000);
-            return;
-          }
-        } catch (sessionErr) {
-          console.warn(`[AuthCallback] Better Auth session fetch attempt ${attempt} failed:`, sessionErr);
-        }
-
-        // Try the backend API directly as fallback
-        try {
-          const { BACKEND_URL } = await import("@/utils/api");
-          
-          const sessionResponse = await fetch(`${BACKEND_URL}/api/auth/get-session`, {
+      let sessionToken: string | null = null;
+      let userData: any = null;
+      
+      // Exchange better_auth_token for a real session
+      // The better_auth_token is a one-time token generated by Better Auth after OAuth
+      // We try multiple approaches to exchange it for a real session token
+      console.log("[AuthCallback] Starting token exchange for better_auth_token (length:", betterAuthToken.length, ")");
+      
+      // IMPORTANT: Clear any stored Bearer token first to avoid interference
+      localStorage.removeItem("cheshbon_bearer_token");
+      
+      // Approach 1: Direct fetch to /api/auth/get-session with better_auth_token as query param
+      // This is the standard Better Auth token exchange endpoint
+      try {
+        const sessionResponse = await fetch(
+          `${BACKEND_URL}/api/auth/get-session?better_auth_token=${encodeURIComponent(betterAuthToken)}`,
+          {
             method: "GET",
             credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          });
-
-          console.log(`[AuthCallback] Backend session fetch status:`, sessionResponse.status);
-
-          if (sessionResponse.ok) {
-            const sessionData = await sessionResponse.json();
-            console.log("[AuthCallback] Backend session data:", sessionData?.user ? "user found" : "no user");
-
-            if (sessionData?.session?.token) {
-              console.log("[AuthCallback] Backend session token found, sending to parent");
-              setStatus("success");
-              setMessage("Authentication successful! Closing...");
-              if (window.opener) {
-                window.opener.postMessage(
-                  { type: "oauth-success", token: sessionData.session.token },
-                  window.location.origin
-                );
-              }
-              setTimeout(() => window.close(), 1000);
-              return;
+          }
+        );
+        
+        const rawText = await sessionResponse.text();
+        console.log("[AuthCallback] /api/auth/get-session?better_auth_token status:", sessionResponse.status, "body:", rawText.substring(0, 300));
+        
+        if (sessionResponse.ok && rawText) {
+          try {
+            const parsed = JSON.parse(rawText);
+            if (parsed?.user) {
+              userData = parsed.user;
+              sessionToken = parsed?.session?.token || betterAuthToken;
+              console.log("[AuthCallback] Session established via get-session query param");
+            } else {
+              console.warn("[AuthCallback] get-session returned no user:", JSON.stringify(parsed).substring(0, 200));
             }
-            
-            if (sessionData?.user) {
-              console.log("[AuthCallback] Backend user found (cookie-based), sending to parent");
-              setStatus("success");
-              setMessage("Authentication successful! Closing...");
-              if (window.opener) {
-                window.opener.postMessage({ type: "oauth-success", token: "cookie-auth" }, window.location.origin);
+          } catch (parseErr) {
+            console.warn("[AuthCallback] Failed to parse get-session response:", parseErr);
+          }
+        }
+      } catch (err) {
+        console.warn("[AuthCallback] /api/auth/get-session fetch failed:", err);
+      }
+      
+      // Approach 2: Try /api/auth/get-session with Bearer header
+      if (!userData) {
+        try {
+          const sessionResponse = await fetch(
+            `${BACKEND_URL}/api/auth/get-session`,
+            {
+              method: "GET",
+              credentials: "include",
+              headers: {
+                "Authorization": `Bearer ${betterAuthToken}`,
+              },
+            }
+          );
+          
+          const rawText = await sessionResponse.text();
+          console.log("[AuthCallback] /api/auth/get-session Bearer status:", sessionResponse.status, "body:", rawText.substring(0, 300));
+          
+          if (sessionResponse.ok && rawText) {
+            try {
+              const parsed = JSON.parse(rawText);
+              if (parsed?.user) {
+                userData = parsed.user;
+                sessionToken = parsed?.session?.token || betterAuthToken;
+                console.log("[AuthCallback] Session established via get-session Bearer");
               }
-              setTimeout(() => window.close(), 1000);
-              return;
+            } catch (parseErr) {
+              console.warn("[AuthCallback] Failed to parse get-session Bearer response:", parseErr);
             }
           }
-        } catch (backendErr) {
-          console.warn("[AuthCallback] Backend session fetch failed:", backendErr);
-        }
-
-        if (attempt < 4) {
-          const waitTime = attempt * 1000;
-          console.log(`[AuthCallback] Session not found, waiting ${waitTime}ms before retry...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+        } catch (err) {
+          console.warn("[AuthCallback] /api/auth/get-session Bearer failed:", err);
         }
       }
-
-      // Final fallback: signal cookie-based auth success so the parent can try fetching the session
-      console.log("[AuthCallback] All attempts exhausted, signaling cookie-based auth to parent (final fallback)");
-      setStatus("success");
-      setMessage("Authentication successful! Closing...");
-      if (window.opener) {
-        window.opener.postMessage({ type: "oauth-success", token: "cookie-auth" }, window.location.origin);
+      
+      // Approach 3: Try /api/auth/me with Bearer token
+      if (!userData) {
+        try {
+          const meResponse = await fetch(
+            `${BACKEND_URL}/api/auth/me`,
+            {
+              method: "GET",
+              credentials: "include",
+              headers: {
+                "Authorization": `Bearer ${betterAuthToken}`,
+              },
+            }
+          );
+          
+          const rawText = await meResponse.text();
+          console.log("[AuthCallback] /api/auth/me status:", meResponse.status, "body:", rawText.substring(0, 300));
+          
+          if (meResponse.ok && rawText) {
+            try {
+              const parsed = JSON.parse(rawText);
+              if (parsed?.user) {
+                userData = parsed.user;
+                sessionToken = parsed?.session?.token || betterAuthToken;
+                console.log("[AuthCallback] Session established via /api/auth/me");
+              }
+            } catch (parseErr) {
+              console.warn("[AuthCallback] Failed to parse /api/auth/me response:", parseErr);
+            }
+          }
+        } catch (err) {
+          console.warn("[AuthCallback] /api/auth/me fetch failed:", err);
+        }
       }
-      setTimeout(() => window.close(), 1000);
+      
+      const isPopup = !!window.opener;
+      
+      if (userData && sessionToken) {
+        // Store the real session token in localStorage
+        // (localStorage is shared between popup and parent on same origin)
+        localStorage.setItem("cheshbon_bearer_token", sessionToken);
+        
+        console.log("[AuthCallback] Authentication successful");
+        setStatus("success");
+        setMessage("Authentication successful! Closing...");
+        
+        if (isPopup) {
+          // Popup mode: notify parent window
+          window.opener.postMessage(
+            { 
+              type: "oauth-success", 
+              token: sessionToken,
+              user: userData,
+            },
+            window.location.origin
+          );
+          setTimeout(() => window.close(), 1000);
+        } else {
+          // Redirect mode: navigate to home page
+          console.log("[AuthCallback] Redirect mode, navigating to home...");
+          setTimeout(() => {
+            window.location.href = "/";
+          }, 500);
+        }
+      } else {
+        // If we couldn't exchange the token in the popup, pass the better_auth_token
+        // The parent window will try all approaches to exchange it
+        console.log("[AuthCallback] Could not exchange token, passing better_auth_token for exchange");
+        setStatus("success");
+        setMessage("Authentication successful! Closing...");
+        
+        if (isPopup) {
+          window.opener.postMessage(
+            { type: "oauth-success", token: betterAuthToken, user: null },
+            window.location.origin
+          );
+          setTimeout(() => window.close(), 1000);
+        } else {
+          // Redirect mode: store the better_auth_token and navigate to home
+          // The home page's AuthProvider will try to exchange it
+          localStorage.setItem("cheshbon_bearer_token", betterAuthToken);
+          setTimeout(() => {
+            window.location.href = "/";
+          }, 500);
+        }
+      }
     } catch (err) {
+      console.error("[AuthCallback] Error processing callback:", err);
       setStatus("error");
       setMessage("Failed to process authentication");
-      console.error("[AuthCallback] Auth callback error:", err);
       if (window.opener) {
         window.opener.postMessage(
           { type: "oauth-error", error: "Failed to process authentication" },
           window.location.origin
         );
       }
+      setTimeout(() => window.close(), 2000);
     }
   };
 
