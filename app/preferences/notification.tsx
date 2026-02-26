@@ -159,8 +159,20 @@ export default function NotificationPreferencesScreen() {
     return `${hours}:${minutes}`;
   };
 
+  const formatTime12Hour = (date: Date): string => {
+    let hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+    return `${hours}:${minutesStr}${ampm}`;
+  };
+
   const onTimeChange = (event: any, selectedDate?: Date) => {
-    setShowTimePicker(Platform.OS === 'ios');
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
+    }
     if (selectedDate) {
       setAlarmTime(selectedDate);
     }
@@ -176,6 +188,8 @@ export default function NotificationPreferencesScreen() {
       </SafeAreaView>
     );
   }
+
+  const timeDisplayText = formatTime12Hour(alarmTime);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -280,16 +294,17 @@ export default function NotificationPreferencesScreen() {
               style={styles.timeButton}
               onPress={() => setShowTimePicker(true)}
             >
-              <Text style={styles.timeButtonText}>{formatTime(alarmTime)}</Text>
+              <Text style={styles.timeButtonText}>{timeDisplayText}</Text>
             </TouchableOpacity>
 
-            {showTimePicker && (
+            {(showTimePicker || Platform.OS === 'ios') && (
               <DateTimePicker
                 value={alarmTime}
                 mode="time"
-                is24Hour={true}
-                display="default"
+                is24Hour={false}
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={onTimeChange}
+                style={styles.timePicker}
               />
             )}
 
@@ -487,6 +502,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
   },
+  timePicker: {
+    marginBottom: 16,
+  },
   frequencyContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -542,5 +560,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-
-
