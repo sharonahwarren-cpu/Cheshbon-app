@@ -21,35 +21,35 @@ export default function SettingsMenuScreen() {
       title: 'Goals',
       icon: 'flag',
       iosIcon: 'flag',
-      route: '/settings?section=goals',
+      route: '/(tabs)/settings?section=goals',
     },
     {
       id: 'strategies',
       title: 'Strategies',
       icon: 'lightbulb',
       iosIcon: 'lightbulb',
-      route: '/settings?section=strategies',
+      route: '/(tabs)/settings?section=strategies',
     },
     {
       id: 'gains-losses',
       title: 'Gains & Losses',
       icon: 'swap-vert',
       iosIcon: 'arrow.up.arrow.down',
-      route: '/settings?section=gains-losses',
+      route: '/(tabs)/settings?section=gainsLosses',
     },
     {
       id: 'life-areas',
       title: 'Life Areas',
       icon: 'category',
       iosIcon: 'square.grid.2x2',
-      route: '/settings?section=life-areas',
+      route: '/(tabs)/settings?section=lifeAreas',
     },
     {
       id: 'currencies',
       title: 'Currencies',
       icon: 'attach-money',
       iosIcon: 'dollarsign.circle',
-      route: '/settings?section=currencies',
+      route: '/(tabs)/settings?section=currencies',
     },
   ];
 
@@ -80,7 +80,7 @@ export default function SettingsMenuScreen() {
               key={option.id}
               style={styles.optionButton}
               onPress={() => {
-                console.log('Navigating to:', option.route);
+                console.log('[Settings Menu iOS] Navigating to:', option.route);
                 router.push(option.route as any);
               }}
             >

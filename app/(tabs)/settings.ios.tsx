@@ -578,14 +578,20 @@ export default function SettingsScreen() {
   };
 
   const handleBackPress = () => {
-    console.log('[Settings iOS] Back button pressed from section:', currentSection);
-    // If we're in a sub-section and came from settings-menu (via URL params), go back to settings-menu
-    if (currentSection !== 'main' && params.section) {
-      console.log('[Settings iOS] Navigating back to settings-menu');
-      router.push('/settings-menu');
-    } else {
+    console.log('[Settings iOS] Back button pressed from section:', currentSection, 'params.section:', params.section);
+    
+    // If we came from settings-menu (indicated by params.section), always go back to settings-menu
+    if (params.section) {
+      console.log('[Settings iOS] Navigating back to /settings-menu');
+      router.replace('/settings-menu');
+    } else if (currentSection !== 'main') {
+      // If we're in a sub-section but didn't come from settings-menu, go to main
       console.log('[Settings iOS] Returning to main section');
       setCurrentSection('main');
+    } else {
+      // If we're already in main, use default back behavior
+      console.log('[Settings iOS] Using default back behavior');
+      router.back();
     }
   };
 
