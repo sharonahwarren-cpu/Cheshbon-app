@@ -78,16 +78,9 @@ export const apiCall = async <T = any>(
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
-      let errorMessage = `API error: ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.error || errorMessage;
-      } catch {
-        const text = await response.text();
-        errorMessage = text || errorMessage;
-      }
-      console.error("[API] Error response:", response.status, errorMessage);
-      throw new Error(errorMessage);
+      const text = await response.text();
+      console.error("[API] Error response:", response.status, text);
+      throw new Error(`API error: ${response.status} - ${text}`);
     }
 
     const data = await response.json();
@@ -147,47 +140,13 @@ export const apiPatch = async <T = any>(
 
 /**
  * DELETE request helper
- * Does NOT send Content-Type header or body for DELETE requests
+ * Always sends a body to avoid FST_ERR_CTP_EMPTY_JSON_BODY errors
  */
-export const apiDelete = async <T = any>(endpoint: string): Promise<T> => {
-  if (!isBackendConfigured()) {
-    throw new Error("Backend URL not configured. Please rebuild the app.");
-  }
-
-  const url = `${BACKEND_URL}${endpoint}`;
-  console.log("[API] Calling:", url, "DELETE");
-
-  try {
-    const token = await getBearerToken();
-    const fetchOptions: RequestInit = {
-      method: "DELETE",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    };
-
-    console.log("[API] Fetch options:", fetchOptions);
-
-    const response = await fetch(url, fetchOptions);
-
-    if (!response.ok) {
-      let errorMessage = `API error: ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.error || errorMessage;
-      } catch {
-        const text = await response.text();
-        errorMessage = text || errorMessage;
-      }
-      console.error("[API] Error response:", response.status, errorMessage);
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    console.log("[API] Success:", data);
-    return data;
-  } catch (error) {
-    console.error("[API] Request failed:", error);
-    throw error;
-  }
+export const apiDelete = async <T = any>(endpoint: string, data: any = {}): Promise<T> => {
+  return apiCall<T>(endpoint, {
+    method: "DELETE",
+    body: JSON.stringify(data),
+  });
 };
 
 /**
@@ -266,52 +225,11 @@ export const authenticatedPatch = async <T = any>(
 
 /**
  * Authenticated DELETE request
- * Does NOT send Content-Type header or body for DELETE requests
+ * Always sends a body to avoid FST_ERR_CTP_EMPTY_JSON_BODY errors
  */
-export const authenticatedDelete = async <T = any>(endpoint: string): Promise<T> => {
-  const token = await getBearerToken();
-
-  if (!token) {
-    throw new Error("Authentication token not found. Please sign in.");
-  }
-
-  if (!isBackendConfigured()) {
-    throw new Error("Backend URL not configured. Please rebuild the app.");
-  }
-
-  const url = `${BACKEND_URL}${endpoint}`;
-  console.log("[API] Calling:", url, "DELETE (authenticated)");
-
-  try {
-    const fetchOptions: RequestInit = {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    };
-
-    console.log("[API] Fetch options:", fetchOptions);
-
-    const response = await fetch(url, fetchOptions);
-
-    if (!response.ok) {
-      let errorMessage = `API error: ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorData.error || errorMessage;
-      } catch {
-        const text = await response.text();
-        errorMessage = text || errorMessage;
-      }
-      console.error("[API] Error response:", response.status, errorMessage);
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    console.log("[API] Success:", data);
-    return data;
-  } catch (error) {
-    console.error("[API] Request failed:", error);
-    throw error;
-  }
+export const authenticatedDelete = async <T = any>(endpoint: string, data: any = {}): Promise<T> => {
+  return authenticatedApiCall<T>(endpoint, {
+    method: "DELETE",
+    body: JSON.stringify(data),
+  });
 };
