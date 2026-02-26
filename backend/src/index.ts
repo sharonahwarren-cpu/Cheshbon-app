@@ -62,20 +62,32 @@ if (hasAppleOAuth) {
 
 // Build trusted origins including mobile app schemes
 const trustedOrigins = [
-  // Allow localhost for development
+  // Allow localhost for development (including dynamic ports)
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:5173",
+  "http://localhost",
   // Allow production origin from env
   ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
   // Allow wildcard domains for deployments
   "https://*.newly.dev",
   "https://*.app.specular.dev",
-  // Allow mobile app deep link schemes
-  "cheshbon://",
-  "exp://",
-  "exp://520cd74e-164f-40c1-aec1-273dae601c20.newly.dev",
+  // Allow mobile app deep link schemes (native iOS/Android apps)
+  "cheshbon://",        // lowercase for native app
+  "Cheshbon://",        // uppercase for native app variant
+  "exp://",             // Expo Go app
+  "exp://520cd74e-164f-40c1-aec1-273dae601c20.newly.dev",  // Specific Expo development environment
 ];
+
+// Log the OAuth configuration at startup
+if (Object.keys(socialProviders).length > 0) {
+  app.logger.info(
+    { providers: Object.keys(socialProviders), trustedOriginCount: trustedOrigins.length },
+    'OAuth configuration initialized'
+  );
+} else {
+  app.logger.warn('No OAuth providers configured. Set GOOGLE_CLIENT_ID/SECRET and/or APPLE_CLIENT_ID/SECRET to enable social sign-in.');
+}
 
 app.withAuth({
   emailAndPassword: {
