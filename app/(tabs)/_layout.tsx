@@ -89,25 +89,25 @@ export default function TabLayout() {
   const tabs: TabBarItem[] = [
     {
       name: '(home)',
-      route: '/(tabs)/(home)/',
+      route: '/(tabs)/(home)/' as any,
       icon: 'home',
       label: 'Home',
     },
     {
       name: 'reports',
-      route: '/(tabs)/reports',
+      route: '/reports' as any,
       icon: 'assessment',
       label: 'Reports',
     },
     {
       name: 'ai-chat',
-      route: '/ai-chat',
+      route: '/ai-chat' as any,
       icon: 'mic',
       label: 'AI',
     },
     {
       name: 'profile',
-      route: '/(tabs)/profile',
+      route: '/profile' as any,
       icon: 'person',
       label: 'Profile',
     },

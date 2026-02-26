@@ -1,3 +1,4 @@
+
 import React from 'react';
 import {
   View,
@@ -50,28 +51,37 @@ export default function FloatingTabBar({
 
   // Improved active tab detection with better path matching
   const activeTabIndex = React.useMemo(() => {
+    console.log('[FloatingTabBar] Current pathname:', pathname);
+    
     // Find the best matching tab based on the current pathname
     let bestMatch = -1;
     let bestMatchScore = 0;
 
     tabs.forEach((tab, index) => {
       let score = 0;
+      const tabRoute = tab.route as string;
+      
+      console.log(`[FloatingTabBar] Checking tab ${index} (${tab.name}): route="${tabRoute}" vs pathname="${pathname}"`);
 
       // Exact route match gets highest score
-      if (pathname === tab.route) {
+      if (pathname === tabRoute) {
         score = 100;
+        console.log(`[FloatingTabBar] Tab ${index} - Exact match! Score: ${score}`);
       }
       // Check if pathname starts with tab route (for nested routes)
-      else if (pathname.startsWith(tab.route as string)) {
+      else if (pathname.startsWith(tabRoute)) {
         score = 80;
+        console.log(`[FloatingTabBar] Tab ${index} - Starts with match! Score: ${score}`);
       }
-      // Check if pathname contains the tab name
-      else if (pathname.includes(tab.name)) {
+      // Check if pathname contains the tab name (e.g., "reports" or "profile")
+      else if (pathname.includes(`/${tab.name}`)) {
         score = 60;
+        console.log(`[FloatingTabBar] Tab ${index} - Name match! Score: ${score}`);
       }
       // Check for partial matches in the route
-      else if (tab.route.includes('/(tabs)/') && pathname.includes(tab.route.split('/(tabs)/')[1])) {
+      else if (tabRoute.includes('/(tabs)/') && pathname.includes(tabRoute.split('/(tabs)/')[1])) {
         score = 40;
+        console.log(`[FloatingTabBar] Tab ${index} - Partial match! Score: ${score}`);
       }
 
       if (score > bestMatchScore) {
@@ -80,12 +90,15 @@ export default function FloatingTabBar({
       }
     });
 
+    console.log(`[FloatingTabBar] Best match: tab ${bestMatch} with score ${bestMatchScore}`);
+    
     // Default to first tab if no match found
     return bestMatch >= 0 ? bestMatch : 0;
   }, [pathname, tabs]);
 
   React.useEffect(() => {
     if (activeTabIndex >= 0) {
+      console.log('[FloatingTabBar] Animating to tab index:', activeTabIndex);
       animatedValue.value = withSpring(activeTabIndex, {
         damping: 20,
         stiffness: 120,
@@ -94,11 +107,10 @@ export default function FloatingTabBar({
     }
   }, [activeTabIndex, animatedValue]);
 
-  const handleTabPress = (route: Href) => {
+  const handleTabPress = (route: Href, tabName: string) => {
+    console.log('[FloatingTabBar] Tab pressed:', tabName, 'route:', route);
     router.push(route);
   };
-
-  // Remove unnecessary tabBarStyle animation to prevent flickering
 
   const tabWidthPercent = ((100 / tabs.length) - 1).toFixed(2);
 
@@ -178,7 +190,7 @@ export default function FloatingTabBar({
                 <TouchableOpacity
                   key={index} // Use index as key
                   style={styles.tab}
-                  onPress={() => handleTabPress(tab.route)}
+                  onPress={() => handleTabPress(tab.route, tab.name)}
                   activeOpacity={0.7}
                 >
                   <View key={index} style={styles.tabContent}>
