@@ -290,22 +290,36 @@ export default function NotificationPreferencesScreen() {
             />
 
             <Text style={styles.inputLabel}>Time</Text>
-            <TouchableOpacity
-              style={styles.timeButton}
-              onPress={() => setShowTimePicker(true)}
-            >
-              <Text style={styles.timeButtonText}>{timeDisplayText}</Text>
-            </TouchableOpacity>
-
-            {(showTimePicker || Platform.OS === 'ios') && (
-              <DateTimePicker
-                value={alarmTime}
-                mode="time"
-                is24Hour={false}
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={onTimeChange}
-                style={styles.timePicker}
-              />
+            {Platform.OS === 'ios' ? (
+              <View style={styles.iosTimePickerContainer}>
+                <DateTimePicker
+                  value={alarmTime}
+                  mode="time"
+                  is24Hour={false}
+                  display="spinner"
+                  onChange={onTimeChange}
+                  style={styles.iosTimePicker}
+                  textColor={colors.text}
+                />
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.timeButton}
+                  onPress={() => setShowTimePicker(true)}
+                >
+                  <Text style={styles.timeButtonText}>{timeDisplayText}</Text>
+                </TouchableOpacity>
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={alarmTime}
+                    mode="time"
+                    is24Hour={false}
+                    display="default"
+                    onChange={onTimeChange}
+                  />
+                )}
+              </>
             )}
 
             <Text style={styles.inputLabel}>Frequency</Text>
@@ -502,8 +516,17 @@ const styles = StyleSheet.create({
     color: colors.text,
     textAlign: 'center',
   },
-  timePicker: {
+  iosTimePickerContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
     marginBottom: 16,
+    overflow: 'hidden',
+  },
+  iosTimePicker: {
+    width: '100%',
+    height: 180,
   },
   frequencyContainer: {
     flexDirection: 'row',
