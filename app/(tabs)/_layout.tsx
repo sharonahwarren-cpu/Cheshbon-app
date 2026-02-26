@@ -38,10 +38,11 @@ export default function TabLayout() {
     return null;
   }
 
+  // Define tabs with CORRECT routes that match the file structure
   const tabs: TabBarItem[] = [
     {
       name: '(home)',
-      route: '/(tabs)/(home)/' as any,
+      route: '/(tabs)/(home)' as any,
       icon: 'home',
       label: 'Home',
     },
@@ -77,6 +78,8 @@ export default function TabLayout() {
         <Stack.Screen name="reports" />
         <Stack.Screen name="ai-chat" />
         <Stack.Screen name="profile" />
+        <Stack.Screen name="reflect" />
+        <Stack.Screen name="settings" />
       </Stack>
       <FloatingTabBar tabs={tabs} />
     </>

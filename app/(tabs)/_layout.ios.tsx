@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useRouter, useSegments } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,20 +41,20 @@ export default function TabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="(home)">
-        <Icon sf="house.fill" />
-        <Label>Home</Label>
+        <NativeTabs.Icon sf="house.fill" />
+        <NativeTabs.Label>Home</NativeTabs.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reports">
-        <Icon sf="chart.bar.fill" />
-        <Label>Reports</Label>
+        <NativeTabs.Icon sf="chart.bar.fill" />
+        <NativeTabs.Label>Reports</NativeTabs.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="ai-chat">
-        <Icon sf="mic.fill" />
-        <Label>AI</Label>
+        <NativeTabs.Icon sf="mic.fill" />
+        <NativeTabs.Label>AI</NativeTabs.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
-        <Icon sf="person.fill" />
-        <Label>Profile</Label>
+        <NativeTabs.Icon sf="person.fill" />
+        <NativeTabs.Label>Profile</NativeTabs.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );

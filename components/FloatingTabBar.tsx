@@ -49,78 +49,61 @@ export default function FloatingTabBar({
   const theme = useTheme();
   const animatedValue = useSharedValue(0);
 
-  // Improved active tab detection with better path matching
+  // Simple, reliable active tab detection
   const activeTabIndex = React.useMemo(() => {
     console.log('[FloatingTabBar] Current pathname:', pathname);
     
-    // Find the best matching tab based on the current pathname
-    let bestMatch = -1;
-    let bestMatchScore = 0;
-
-    tabs.forEach((tab, index) => {
-      let score = 0;
-      const tabRoute = tab.route as string;
-      
-      console.log(`[FloatingTabBar] Checking tab ${index} (${tab.name}): route="${tabRoute}" vs pathname="${pathname}"`);
-
-      // Normalize paths for comparison (remove trailing slashes)
-      const normalizedPathname = pathname.replace(/\/$/, '');
-      const normalizedTabRoute = tabRoute.replace(/\/$/, '');
-
-      // Exact route match gets highest score
-      if (normalizedPathname === normalizedTabRoute) {
-        score = 100;
-        console.log(`[FloatingTabBar] Tab ${index} - Exact match! Score: ${score}`);
-      }
-      // Check if pathname starts with tab route (for nested routes)
-      else if (normalizedPathname.startsWith(normalizedTabRoute)) {
-        score = 80;
-        console.log(`[FloatingTabBar] Tab ${index} - Starts with match! Score: ${score}`);
-      }
-      // Check if pathname contains the tab name (e.g., "reports" or "profile")
-      else if (normalizedPathname.includes(`/${tab.name}`)) {
-        score = 60;
-        console.log(`[FloatingTabBar] Tab ${index} - Name match! Score: ${score}`);
-      }
-      // Special handling for home tab
-      else if (tab.name === '(home)' && (normalizedPathname === '/' || normalizedPathname === '' || normalizedPathname === '/(tabs)')) {
-        score = 90;
-        console.log(`[FloatingTabBar] Tab ${index} - Home root match! Score: ${score}`);
-      }
-
-      if (score > bestMatchScore) {
-        bestMatchScore = score;
-        bestMatch = index;
-      }
-    });
-
-    console.log(`[FloatingTabBar] Best match: tab ${bestMatch} with score ${bestMatchScore}`);
+    // Normalize pathname (remove trailing slashes)
+    const normalizedPathname = pathname.replace(/\/$/, '');
     
-    // Default to first tab if no match found
-    return bestMatch >= 0 ? bestMatch : 0;
+    // Check each tab for a match
+    for (let i = 0; i < tabs.length; i++) {
+      const tab = tabs[i];
+      const tabRoute = (tab.route as string).replace(/\/$/, '');
+      
+      console.log(`[FloatingTabBar] Checking tab ${i} "${tab.label}": route="${tabRoute}"`);
+      
+      // Special handling for home tab
+      if (tab.name === '(home)') {
+        if (normalizedPathname === '/' || 
+            normalizedPathname === '' || 
+            normalizedPathname === '/(tabs)' ||
+            normalizedPathname === '/(tabs)/(home)' ||
+            normalizedPathname.startsWith('/(tabs)/(home)/')) {
+          console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (home match)`);
+          return i;
+        }
+      }
+      // For other tabs, check if pathname matches or starts with the route
+      else if (normalizedPathname === tabRoute || normalizedPathname.startsWith(tabRoute + '/')) {
+        console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (exact/prefix match)`);
+        return i;
+      }
+    }
+    
+    console.log('[FloatingTabBar] No match found, defaulting to tab 0 (Home)');
+    return 0; // Default to first tab (Home)
   }, [pathname, tabs]);
 
   React.useEffect(() => {
-    if (activeTabIndex >= 0) {
-      console.log('[FloatingTabBar] Animating to tab index:', activeTabIndex);
-      animatedValue.value = withSpring(activeTabIndex, {
-        damping: 20,
-        stiffness: 120,
-        mass: 1,
-      });
-    }
+    console.log('[FloatingTabBar] Active tab index changed to:', activeTabIndex);
+    animatedValue.value = withSpring(activeTabIndex, {
+      damping: 20,
+      stiffness: 120,
+      mass: 1,
+    });
   }, [activeTabIndex, animatedValue]);
 
   const handleTabPress = (route: Href, tabName: string, index: number) => {
-    console.log('[FloatingTabBar] Tab pressed:', tabName, 'route:', route, 'current active:', activeTabIndex);
+    console.log('[FloatingTabBar] ========================================');
+    console.log('[FloatingTabBar] Tab pressed:', tabName);
+    console.log('[FloatingTabBar] Target route:', route);
+    console.log('[FloatingTabBar] Current pathname:', pathname);
+    console.log('[FloatingTabBar] Current active index:', activeTabIndex);
+    console.log('[FloatingTabBar] Pressed tab index:', index);
+    console.log('[FloatingTabBar] ========================================');
     
-    // Don't navigate if already on this tab
-    if (activeTabIndex === index) {
-      console.log('[FloatingTabBar] Already on this tab, skipping navigation');
-      return;
-    }
-    
-    // Navigate to the selected tab
+    // Always navigate - let expo-router handle if we're already there
     console.log('[FloatingTabBar] Navigating to:', route);
     router.push(route);
   };
@@ -128,7 +111,7 @@ export default function FloatingTabBar({
   const tabWidthPercent = ((100 / tabs.length) - 1).toFixed(2);
 
   const indicatorStyle = useAnimatedStyle(() => {
-    const tabWidth = (containerWidth - 8) / tabs.length; // Account for container padding (4px on each side)
+    const tabWidth = (containerWidth - 8) / tabs.length;
     return {
       transform: [
         {
@@ -142,7 +125,6 @@ export default function FloatingTabBar({
     };
   });
 
-  // Dynamic styles based on theme
   const dynamicStyles = {
     blurContainer: {
       ...styles.blurContainer,
@@ -173,9 +155,9 @@ export default function FloatingTabBar({
     indicator: {
       ...styles.indicator,
       backgroundColor: theme.dark
-        ? 'rgba(255, 255, 255, 0.08)' // Subtle white overlay in dark mode
-        : 'rgba(0, 0, 0, 0.04)', // Subtle black overlay in light mode
-      width: `${tabWidthPercent}%` as `${number}%`, // Dynamic width based on number of tabs
+        ? 'rgba(255, 255, 255, 0.08)'
+        : 'rgba(0, 0, 0, 0.04)',
+      width: `${tabWidthPercent}%` as `${number}%`,
     },
   };
 
@@ -199,14 +181,13 @@ export default function FloatingTabBar({
               const isActive = activeTabIndex === index;
 
               return (
-                <React.Fragment key={index}>
                 <TouchableOpacity
-                  key={index} // Use index as key
+                  key={`tab-${index}-${tab.name}`}
                   style={styles.tab}
                   onPress={() => handleTabPress(tab.route, tab.name, index)}
                   activeOpacity={0.7}
                 >
-                  <View key={index} style={styles.tabContent}>
+                  <View style={styles.tabContent}>
                     <IconSymbol
                       android_material_icon_name={tab.icon}
                       ios_icon_name={tab.icon}
@@ -224,7 +205,6 @@ export default function FloatingTabBar({
                     </Text>
                   </View>
                 </TouchableOpacity>
-                </React.Fragment>
               );
             })}
           </View>
@@ -241,20 +221,17 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 1000,
-    alignItems: 'center', // Center the content
+    alignItems: 'center',
   },
   container: {
     marginHorizontal: 20,
     alignSelf: 'center',
-    // width and marginBottom handled dynamically via props
   },
   blurContainer: {
     overflow: 'hidden',
-    // borderRadius and other styling applied dynamically
   },
   background: {
     ...StyleSheet.absoluteFillObject,
-    // Dynamic styling applied in component
   },
   indicator: {
     position: 'absolute',
@@ -262,8 +239,6 @@ const styles = StyleSheet.create({
     left: 2,
     bottom: 4,
     borderRadius: 27,
-    width: `${(100 / 2) - 1}%`, // Default for 2 tabs, will be overridden by dynamic styles
-    // Dynamic styling applied in component
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -286,6 +261,5 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '500',
     marginTop: 2,
-    // Dynamic styling applied in component
   },
 });
