@@ -10,10 +10,12 @@ import {
   Platform,
   KeyboardAvoidingView,
   ScrollView,
+  Image,
 } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import Toast from "react-native-toast-message";
+import { colors } from "@/styles/commonStyles";
 
 type Mode = "signin" | "signup";
 
@@ -31,7 +33,7 @@ export default function AuthScreen() {
   if (authLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -93,6 +95,16 @@ export default function AuthScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require("@/assets/images/Chesbon_app_Logo Small.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.appName}>Cheshbon</Text>
+            <Text style={styles.tagline}>Journaling, Goals & Tracking</Text>
+          </View>
+
           <Text style={styles.title}>
             {mode === "signin" ? "Sign In" : "Sign Up"}
           </Text>
@@ -185,13 +197,13 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -201,30 +213,57 @@ const styles = StyleSheet.create({
     padding: 24,
     justifyContent: "center",
   },
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 40,
+  },
+  logo: {
+    width: 100,
+    height: 100,
+    marginBottom: 16,
+  },
+  appName: {
+    fontSize: 36,
+    fontWeight: "bold",
+    color: colors.primary,
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  tagline: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: "500",
+  },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: "bold",
     marginBottom: 32,
     textAlign: "center",
-    color: "#000",
+    color: colors.text,
   },
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
+    borderColor: colors.cardBorder,
+    borderRadius: 12,
     paddingHorizontal: 16,
     marginBottom: 16,
     fontSize: 16,
-    backgroundColor: "#fff",
+    backgroundColor: colors.backgroundAlt,
+    color: colors.text,
   },
   primaryButton: {
     height: 50,
-    backgroundColor: "#007AFF",
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     marginTop: 8,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   primaryButtonText: {
     color: "#fff",
@@ -239,8 +278,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   switchModeText: {
-    color: "#007AFF",
+    color: colors.primary,
     fontSize: 14,
+    fontWeight: "500",
   },
   divider: {
     flexDirection: "row",
@@ -250,31 +290,31 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#ddd",
+    backgroundColor: colors.cardBorder,
   },
   dividerText: {
     marginHorizontal: 12,
-    color: "#666",
+    color: colors.textSecondary,
     fontSize: 14,
   },
   socialButton: {
     height: 50,
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
+    borderColor: colors.cardBorder,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 12,
-    backgroundColor: "#fff",
+    backgroundColor: colors.backgroundAlt,
   },
   socialButtonText: {
     fontSize: 16,
-    color: "#000",
+    color: colors.text,
     fontWeight: "500",
   },
   appleButton: {
-    backgroundColor: "#000",
-    borderColor: "#000",
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   appleButtonText: {
     color: "#fff",
