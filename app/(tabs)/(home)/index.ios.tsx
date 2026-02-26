@@ -119,6 +119,7 @@ interface Reflection {
 interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
+  preferredHomeScreen?: 'reflect' | 'goals-detailed' | 'goals-concise';
 }
 
 interface JournalEntry {
@@ -180,6 +181,7 @@ export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentView, setCurrentView] = useState<'reflect' | 'express'>('reflect');
   const [expressViewMode, setExpressViewMode] = useState<'detailed' | 'concise'>('detailed');
+  const [homeScreenInitialized, setHomeScreenInitialized] = useState(false);
   
   const [activatedGoals, setActivatedGoals] = useState<ActivatedGoal[]>([]);
   const [lifeAreaHierarchy, setLifeAreaHierarchy] = useState<LifeAreaNode[]>([]);
@@ -214,12 +216,12 @@ export default function HomeScreen() {
 
   useEffect(() => {
     console.log("HomeScreen iOS mounted");
-    loadData();
+    loadData(false);
   }, []);
 
   useEffect(() => {
     console.log("Selected date changed iOS, reloading data:", selectedDate);
-    loadData();
+    loadData(false);
   }, [selectedDate]);
 
   useEffect(() => {
@@ -242,7 +244,7 @@ export default function HomeScreen() {
   };
 
   const loadData = async (isRefreshing: boolean = false) => {
-    console.log("Loading home screen data iOS");
+    console.log("[Home iOS] Loading home screen data, isRefreshing:", isRefreshing);
     if (isRefreshing) {
       setRefreshing(true);
     } else {
@@ -273,6 +275,8 @@ export default function HomeScreen() {
       console.log('[Home iOS] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
       console.log('[Home iOS] Loaded goals from backend:', goalsData.length, 'goals for date:', dateString);
+      console.log('[Home iOS] User preferences loaded:', prefsData);
+      console.log('[Home iOS] Preferred home screen from backend:', prefsData.preferredHomeScreen);
       
       setActivatedGoals(goalsData);
       setLifeAreaHierarchy(lifeAreasData);
@@ -284,9 +288,30 @@ export default function HomeScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       
-      console.log("Home data loaded successfully iOS");
+      // CRITICAL FIX: Set initial view based on user's preferred home screen (only on first load)
+      if (!homeScreenInitialized) {
+        const preferredScreen = prefsData.preferredHomeScreen;
+        console.log('[Home iOS] Setting initial view based on preferred home screen:', preferredScreen);
+        
+        if (preferredScreen === 'goals-detailed') {
+          console.log('[Home iOS] Applying preference: goals-detailed -> Express view, Detailed mode');
+          setCurrentView('express');
+          setExpressViewMode('detailed');
+        } else if (preferredScreen === 'goals-concise') {
+          console.log('[Home iOS] Applying preference: goals-concise -> Express view, Concise mode');
+          setCurrentView('express');
+          setExpressViewMode('concise');
+        } else {
+          console.log('[Home iOS] Applying preference: reflect (default)');
+          setCurrentView('reflect');
+        }
+        
+        setHomeScreenInitialized(true);
+      }
+      
+      console.log("[Home iOS] Data loaded successfully");
     } catch (error: any) {
-      console.error("Error loading home data iOS:", error);
+      console.error("[Home iOS] Error loading home data:", error);
       showError(error.message || "Failed to load data");
     } finally {
       if (isRefreshing) {
