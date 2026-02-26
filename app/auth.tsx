@@ -19,7 +19,7 @@ import { colors } from "@/styles/commonStyles";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AuthScreen() {
-  const { user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithGoogleRedirect, requestPasswordReset } = useAuth();
+  const { user, loading, signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGoogleRedirect, requestPasswordReset } = useAuth();
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -70,11 +70,13 @@ export default function AuthScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    console.log("[Auth] Google sign-in button pressed");
     setSubmitting(true);
     setError("");
 
     try {
       await signInWithGoogle();
+      console.log("[Auth] Google sign-in completed successfully");
       // Navigation will happen automatically via useEffect when user state updates
     } catch (err: any) {
       console.error("[Auth] Google sign in error:", err);
@@ -98,6 +100,33 @@ export default function AuthScreen() {
         } catch (redirectErr: any) {
           errorMessage = "Failed to sign in with Google. Please try again or use email/password.";
         }
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    console.log("[Auth] Apple sign-in button pressed");
+    setSubmitting(true);
+    setError("");
+
+    try {
+      await signInWithApple();
+      console.log("[Auth] Apple sign-in completed successfully");
+      // Navigation will happen automatically via useEffect when user state updates
+    } catch (err: any) {
+      console.error("[Auth] Apple sign in error:", err);
+      
+      // Show user-friendly error message
+      let errorMessage = "Failed to sign in with Apple. Please try again.";
+      
+      if (err.message?.includes("popup")) {
+        errorMessage = "Please allow popups for this site and try again.";
+      } else if (err.message?.includes("closed")) {
+        errorMessage = "Sign-in was cancelled. Please try again.";
       }
       
       setError(errorMessage);
@@ -251,6 +280,20 @@ export default function AuthScreen() {
                 <Text style={styles.socialButtonText}>Continue with Google</Text>
               )}
             </TouchableOpacity>
+
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={[styles.socialButton, styles.appleButton, submitting && styles.buttonDisabled]}
+                onPress={handleAppleSignIn}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.appleButtonText}>Continue with Apple</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -431,9 +474,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: colors.border,
+    marginBottom: 12,
   },
   socialButtonText: {
     color: colors.text,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  appleButton: {
+    backgroundColor: "#000",
+    borderColor: "#000",
+  },
+  appleButtonText: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },

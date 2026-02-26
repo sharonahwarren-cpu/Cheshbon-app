@@ -217,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithSocial = async (provider: "google" | "apple" | "github") => {
     try {
-      console.log(`[Auth] Starting ${provider} sign in...`);
+      console.log(`[Auth] Starting ${provider} sign in on platform:`, Platform.OS);
       if (Platform.OS === "web") {
         oauthInProgress.current = true;
         
@@ -365,15 +365,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           oauthInProgress.current = false;
         }
       } else {
-        // Native: Use expo-linking to generate a proper deep link
-        const callbackURL = Linking.createURL("/");
-        console.log("[Auth] Native OAuth callback URL:", callbackURL);
-        await authClient.signIn.social({
-          provider,
-          callbackURL,
-        });
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        await fetchUser();
+        // Native (iOS/Android): Use Better Auth's native OAuth flow
+        console.log("[Auth] Starting native OAuth flow for", provider);
+        oauthInProgress.current = true;
+        
+        try {
+          // Generate the callback URL for deep linking
+          const callbackURL = Linking.createURL("/");
+          console.log("[Auth] Native OAuth callback URL:", callbackURL);
+          
+          // Call Better Auth's social sign-in which will open the browser
+          const result = await authClient.signIn.social({
+            provider,
+            callbackURL,
+          });
+          
+          console.log("[Auth] Native OAuth result:", result ? "success" : "no result");
+          
+          // Wait a moment for the deep link to be processed
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Fetch the user session
+          await fetchUser();
+          
+          console.log("[Auth] Native OAuth completed, user:", user ? "authenticated" : "not authenticated");
+        } finally {
+          oauthInProgress.current = false;
+        }
       }
     } catch (error) {
       console.error(`[Auth] ${provider} sign in failed:`, error);

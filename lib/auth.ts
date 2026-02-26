@@ -61,7 +61,7 @@ export const authClient = Platform.OS === "web"
       baseURL: API_URL,
       plugins: [
         expoClient({
-          scheme: "cheshbon",
+          scheme: "Cheshbon",
           storagePrefix: "cheshbon",
           storage,
         }),
