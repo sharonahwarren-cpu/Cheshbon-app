@@ -57,7 +57,7 @@ function openOAuthPopup(provider: string): Promise<string> {
         return;
       }
 
-      console.log("[Auth] Received message from popup:", event.data?.type);
+      console.log("[Auth] Received message from popup:", event.data?.type, event.data?.error || "");
 
       if (event.data?.type === "oauth-success") {
         if (!resolved) {
@@ -71,7 +71,9 @@ function openOAuthPopup(provider: string): Promise<string> {
           resolved = true;
           window.removeEventListener("message", handleMessage);
           clearInterval(checkClosed);
-          reject(new Error(event.data.error || "OAuth failed"));
+          const errorMsg = event.data.error || "OAuth failed";
+          console.error("[Auth] OAuth error from popup:", errorMsg);
+          reject(new Error(errorMsg));
         }
       }
     };

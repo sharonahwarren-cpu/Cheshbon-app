@@ -41,20 +41,30 @@ export default function AuthPopupScreen() {
 
         console.log("[AuthPopup] OAuth response status:", response.status);
 
-        if (response.ok) {
-          const data = await response.json();
-          console.log("[AuthPopup] OAuth response data:", JSON.stringify(data));
-          
-          // Better Auth returns { url: "https://accounts.google.com/..." }
-          const redirectUrl = data?.url || data?.redirectUrl || data?.redirect;
-          if (redirectUrl) {
-            console.log("[AuthPopup] Redirecting to OAuth provider:", redirectUrl);
-            window.location.href = redirectUrl;
-            return;
-          }
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("[AuthPopup] OAuth initiation failed:", response.status, errorText);
+          window.opener?.postMessage({ 
+            type: "oauth-error", 
+            error: `OAuth initiation failed (${response.status}): ${errorText}` 
+          }, window.location.origin);
+          window.close();
+          return;
         }
 
-        // Fallback: use GET-style URL (some Better Auth versions support this)
+        const data = await response.json();
+        console.log("[AuthPopup] OAuth response data:", JSON.stringify(data));
+        
+        // Better Auth returns { url: "https://accounts.google.com/..." }
+        const redirectUrl = data?.url || data?.redirectUrl || data?.redirect;
+        if (redirectUrl) {
+          console.log("[AuthPopup] Redirecting to OAuth provider:", redirectUrl);
+          window.location.href = redirectUrl;
+          return;
+        }
+
+        // If no redirect URL in response, try fallback GET method
+        console.log("[AuthPopup] No redirect URL in response, trying fallback GET method");
         const oauthURL = `${BACKEND_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(callbackURL)}`;
         console.log("[AuthPopup] Fallback redirect to:", oauthURL);
         window.location.href = oauthURL;
