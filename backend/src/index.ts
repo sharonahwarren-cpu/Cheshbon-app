@@ -32,6 +32,50 @@ export type App = typeof app;
 // Enable authentication with Better Auth
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+// Validate OAuth credentials
+const hasGoogleOAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
+const hasAppleOAuth = process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET;
+
+if (!hasGoogleOAuth) {
+  app.logger.warn('Google OAuth credentials not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.');
+}
+if (!hasAppleOAuth) {
+  app.logger.warn('Apple OAuth credentials not configured. Set APPLE_CLIENT_ID and APPLE_CLIENT_SECRET environment variables.');
+}
+
+// Build social providers object only with configured providers
+const socialProviders: any = {};
+if (hasGoogleOAuth) {
+  socialProviders.google = {
+    clientId: process.env.GOOGLE_CLIENT_ID!,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  };
+  app.logger.info('Google OAuth provider enabled');
+}
+if (hasAppleOAuth) {
+  socialProviders.apple = {
+    clientId: process.env.APPLE_CLIENT_ID!,
+    clientSecret: process.env.APPLE_CLIENT_SECRET!,
+  };
+  app.logger.info('Apple OAuth provider enabled');
+}
+
+// Build trusted origins including mobile app schemes
+const trustedOrigins = [
+  // Allow localhost for development
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:5173",
+  // Allow production origin from env
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  // Allow wildcard domains for deployments
+  "https://*.newly.dev",
+  "https://*.app.specular.dev",
+  // Allow mobile app deep link schemes
+  "cheshbon://",
+  "exp://",
+];
+
 app.withAuth({
   emailAndPassword: {
     sendResetPassword: async ({ user, url, token }) => {
@@ -71,27 +115,8 @@ app.withAuth({
       });
     },
   },
-  socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    },
-    apple: {
-      clientId: process.env.APPLE_CLIENT_ID || '',
-      clientSecret: process.env.APPLE_CLIENT_SECRET || '',
-    },
-  },
-  trustedOrigins: [
-    // Allow localhost for development
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:5173",
-    // Allow production origin from env
-    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
-    // Allow wildcard domains for deployments
-    "https://*.newly.dev",
-    "https://*.app.specular.dev",
-  ],
+  ...(Object.keys(socialProviders).length > 0 && { socialProviders }),
+  trustedOrigins,
 });
 
 // Enable storage for file uploads and management
