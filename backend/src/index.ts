@@ -74,6 +74,7 @@ const trustedOrigins = [
   // Allow mobile app deep link schemes
   "cheshbon://",
   "exp://",
+  "exp://520cd74e-164f-40c1-aec1-273dae601c20.newly.dev",
 ];
 
 app.withAuth({
@@ -115,7 +116,7 @@ app.withAuth({
       });
     },
   },
-  ...(Object.keys(socialProviders).length > 0 && { socialProviders }),
+  socialProviders,
   trustedOrigins,
 });
 
