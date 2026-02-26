@@ -101,7 +101,7 @@ export default function TabLayout() {
     },
     {
       name: 'ai-chat',
-      route: '/ai-chat' as any,
+      route: '/(tabs)/ai-chat' as any,
       icon: 'mic',
       label: 'AI',
     },
@@ -123,6 +123,7 @@ export default function TabLayout() {
       >
         <Stack.Screen key="home" name="(home)" />
         <Stack.Screen key="reports" name="reports" />
+        <Stack.Screen key="ai-chat" name="ai-chat" />
         <Stack.Screen key="profile" name="profile" />
       </Stack>
       <FloatingTabBar tabs={tabs} />

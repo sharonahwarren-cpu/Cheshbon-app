@@ -698,19 +698,6 @@ export default function AIChatScreen() {
           headerShown: true,
           title: conversationTitle,
           headerBackTitle: 'Back',
-          headerLeft: () => (
-            <TouchableOpacity 
-              onPress={() => router.back()}
-              style={styles.backButton}
-            >
-              <IconSymbol
-                ios_icon_name="chevron.left"
-                android_material_icon_name="arrow-back"
-                size={24}
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          ),
           headerRight: () => (
             <View style={styles.headerActions}>
               <TouchableOpacity
@@ -1257,10 +1244,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-  },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
   },
   headerButton: {
     padding: 6,

@@ -83,7 +83,7 @@ export default function FloatingTabBar({
         console.log(`[FloatingTabBar] Tab ${index} - Name match! Score: ${score}`);
       }
       // Special handling for home tab
-      else if (tab.name === '(home)' && (normalizedPathname === '/' || normalizedPathname === '')) {
+      else if (tab.name === '(home)' && (normalizedPathname === '/' || normalizedPathname === '' || normalizedPathname === '/(tabs)')) {
         score = 90;
         console.log(`[FloatingTabBar] Tab ${index} - Home root match! Score: ${score}`);
       }
@@ -114,13 +114,9 @@ export default function FloatingTabBar({
   const handleTabPress = (route: Href, tabName: string, index: number) => {
     console.log('[FloatingTabBar] Tab pressed:', tabName, 'route:', route, 'current active:', activeTabIndex);
     
-    // Only navigate if not already on this tab
-    if (index !== activeTabIndex) {
-      console.log('[FloatingTabBar] Navigating to:', route);
-      router.push(route);
-    } else {
-      console.log('[FloatingTabBar] Already on this tab, skipping navigation');
-    }
+    // Always navigate, even if already on this tab (to ensure proper state)
+    console.log('[FloatingTabBar] Navigating to:', route);
+    router.push(route);
   };
 
   const tabWidthPercent = ((100 / tabs.length) - 1).toFixed(2);
