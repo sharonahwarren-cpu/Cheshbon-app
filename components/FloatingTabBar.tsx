@@ -49,7 +49,7 @@ export default function FloatingTabBar({
   const theme = useTheme();
   const animatedValue = useSharedValue(0);
 
-  // Simple, reliable active tab detection
+  // Improved active tab detection
   const activeTabIndex = React.useMemo(() => {
     console.log('[FloatingTabBar] Current pathname:', pathname);
     
@@ -63,7 +63,7 @@ export default function FloatingTabBar({
       
       console.log(`[FloatingTabBar] Checking tab ${i} "${tab.label}": route="${tabRoute}"`);
       
-      // Special handling for home tab
+      // Special handling for home tab - match root, /(tabs), /(tabs)/(home), or any path starting with /(tabs)/(home)/
       if (tab.name === '(home)') {
         if (normalizedPathname === '/' || 
             normalizedPathname === '' || 
@@ -74,9 +74,33 @@ export default function FloatingTabBar({
           return i;
         }
       }
-      // For other tabs, check if pathname matches or starts with the route
+      // For reports tab - match /(tabs)/reports or any path starting with it
+      else if (tab.name === 'reports') {
+        if (normalizedPathname === '/(tabs)/reports' ||
+            normalizedPathname.startsWith('/(tabs)/reports/')) {
+          console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (reports match)`);
+          return i;
+        }
+      }
+      // For ai-chat tab - match /(tabs)/ai-chat or any path starting with it
+      else if (tab.name === 'ai-chat') {
+        if (normalizedPathname === '/(tabs)/ai-chat' ||
+            normalizedPathname.startsWith('/(tabs)/ai-chat/')) {
+          console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (ai-chat match)`);
+          return i;
+        }
+      }
+      // For profile tab - match /(tabs)/profile or any path starting with it
+      else if (tab.name === 'profile') {
+        if (normalizedPathname === '/(tabs)/profile' ||
+            normalizedPathname.startsWith('/(tabs)/profile/')) {
+          console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (profile match)`);
+          return i;
+        }
+      }
+      // Generic fallback - exact match or prefix match
       else if (normalizedPathname === tabRoute || normalizedPathname.startsWith(tabRoute + '/')) {
-        console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (exact/prefix match)`);
+        console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (generic match)`);
         return i;
       }
     }
@@ -103,7 +127,13 @@ export default function FloatingTabBar({
     console.log('[FloatingTabBar] Pressed tab index:', index);
     console.log('[FloatingTabBar] ========================================');
     
-    // Always navigate - let expo-router handle if we're already there
+    // If already on this tab, don't navigate (prevents unnecessary re-renders)
+    if (activeTabIndex === index) {
+      console.log('[FloatingTabBar] Already on this tab, skipping navigation');
+      return;
+    }
+    
+    // Navigate to the route
     console.log('[FloatingTabBar] Navigating to:', route);
     router.push(route);
   };
