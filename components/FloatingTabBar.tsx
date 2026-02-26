@@ -114,7 +114,13 @@ export default function FloatingTabBar({
   const handleTabPress = (route: Href, tabName: string, index: number) => {
     console.log('[FloatingTabBar] Tab pressed:', tabName, 'route:', route, 'current active:', activeTabIndex);
     
-    // Always navigate, even if already on this tab (to ensure proper state)
+    // Don't navigate if already on this tab
+    if (activeTabIndex === index) {
+      console.log('[FloatingTabBar] Already on this tab, skipping navigation');
+      return;
+    }
+    
+    // Navigate to the selected tab
     console.log('[FloatingTabBar] Navigating to:', route);
     router.push(route);
   };

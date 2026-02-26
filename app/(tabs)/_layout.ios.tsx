@@ -54,7 +54,8 @@ export default function TabLayout() {
       return;
     }
 
-    // Only redirect from auth to home if user just logged in (not when navigating between tabs)
+    // Only redirect from auth to home if user just logged in (coming FROM auth screens)
+    // Do NOT redirect when already in tabs group
     if (user && inAuthGroup && prefsLoaded) {
       console.log('[TabLayout iOS] User authenticated from auth flow, redirecting to home');
       router.replace('/(tabs)/(home)/');
@@ -64,8 +65,9 @@ export default function TabLayout() {
     // Allow free navigation between tabs when authenticated - DO NOT redirect
     if (user && inTabsGroup) {
       console.log('[TabLayout iOS] User authenticated, allowing free navigation to:', segments.join('/'));
+      // DO NOT call router.replace here - let the user navigate freely
     }
-  }, [user, loading, segments, preferredHomeScreen, prefsLoaded, router]);
+  }, [user, loading, segments, prefsLoaded]);
 
   if (loading) {
     return (
