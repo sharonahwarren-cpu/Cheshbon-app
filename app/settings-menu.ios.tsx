@@ -1,5 +1,5 @@
 
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -14,6 +14,7 @@ import {
 
 export default function SettingsMenuScreen() {
   const router = useRouter();
+  const localSearchParams = useLocalSearchParams<{ from?: string }>();
 
   const settingsOptions = [
     {
@@ -80,8 +81,10 @@ export default function SettingsMenuScreen() {
               key={option.id}
               style={styles.optionButton}
               onPress={() => {
-                console.log('[Settings Menu iOS] Navigating to:', option.route);
-                router.push(option.route as any);
+                console.log('[Settings Menu iOS] Navigating to:', option.route, 'from:', localSearchParams.from);
+                // Pass the 'from' parameter to the settings screen
+                const fromParam = localSearchParams.from || 'settings-menu';
+                router.push(`${option.route}&from=${fromParam}` as any);
               }}
             >
               <View style={styles.optionLeft}>

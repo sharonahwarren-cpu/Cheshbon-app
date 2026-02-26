@@ -847,7 +847,7 @@ export default function SettingsScreen() {
         router.replace('/(tabs)/profile');
       } else {
         console.log('[Settings] Navigating back to /settings-menu');
-        router.replace('/settings-menu');
+        router.back();
       }
     } else if (currentSection !== 'main') {
       // If we're in a sub-section but didn't come from settings-menu, go to main

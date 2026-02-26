@@ -588,7 +588,7 @@ export default function SettingsScreen() {
         router.replace('/(tabs)/profile');
       } else {
         console.log('[Settings iOS] Navigating back to /settings-menu');
-        router.replace('/settings-menu');
+        router.back();
       }
     } else if (currentSection !== 'main') {
       // If we're in a sub-section but didn't come from settings-menu, go to main
@@ -599,6 +599,7 @@ export default function SettingsScreen() {
       console.log('[Settings iOS] Using default back behavior');
       router.back();
     }
+    return true; // Prevent default back behavior
   };
 
   const renderMainMenu = () => {
