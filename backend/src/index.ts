@@ -30,15 +30,13 @@ export const app = await createApplication(schema);
 export type App = typeof app;
 
 // Enable authentication with Better Auth
-const appUrl = process.env.APP_URL || 'http://localhost:3000';
-const resetPasswordUrl = `${appUrl}/reset-password`;
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 app.withAuth({
   emailAndPassword: {
-    sendResetPassword: async ({ user, url }) => {
-      // Extract token from URL and create reset link with custom format
-      const token = url.split('token=')[1];
-      const resetLink = `${resetPasswordUrl}?token=${token}`;
+    sendResetPassword: async ({ user, url, token }) => {
+      // Create reset link pointing to frontend with the token from Better Auth
+      const resetLink = `${frontendUrl}/reset-password?token=${token}`;
 
       try {
         await resend.emails.send({
@@ -46,19 +44,27 @@ app.withAuth({
           to: user.email,
           subject: 'Reset your password',
           html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px;">
-              <h2>Password Reset Request</h2>
-              <p>We received a request to reset the password for your account.</p>
-              <p><a href="${resetLink}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a></p>
-              <p>Or copy and paste this link in your browser:</p>
-              <p><code>${resetLink}</code></p>
-              <p>This link will expire in 24 hours.</p>
-              <p>If you didn't request this, you can safely ignore this email.</p>
-              <hr style="margin-top: 30px; border: none; border-top: 1px solid #ddd;">
-              <p style="color: #666; font-size: 12px;">Specular Team</p>
+            <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #333; margin-top: 0;">Password Reset Request</h2>
+              <p style="color: #666;">We received a request to reset the password for your account.</p>
+              <p style="margin: 30px 0;">
+                <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
+              </p>
+              <p style="color: #666; font-size: 14px;">Or copy and paste this link in your browser:</p>
+              <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; font-size: 12px;">
+                ${resetLink}
+              </p>
+              <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+              <p style="color: #999; font-size: 12px;">
+                This password reset link will expire in 24 hours.<br>
+                If you didn't request this, you can safely ignore this email.
+              </p>
+              <p style="color: #999; font-size: 12px; margin-top: 20px;">The Specular Team</p>
             </div>
           `,
         });
+
+        app.logger.info({ userEmail: user.email }, 'Password reset email sent successfully');
       } catch (error) {
         app.logger.error({ err: error, userEmail: user.email }, 'Failed to send password reset email');
       }

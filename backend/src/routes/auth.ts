@@ -56,32 +56,17 @@ export function registerAuthRoutes(app: App) {
     };
   });
 
-  // POST /api/auth/request-password-reset - Request password reset email
-  app.fastify.post('/api/auth/request-password-reset', {
+  // Health check endpoint
+  app.fastify.get('/api/auth/health', {
     schema: {
-      description: 'Request a password reset email',
+      description: 'Health check endpoint',
       tags: ['auth'],
-      body: {
-        type: 'object',
-        required: ['email'],
-        properties: {
-          email: { type: 'string', format: 'email', description: 'User email address' },
-        },
-      },
       response: {
         200: {
-          description: 'Password reset email sent',
+          description: 'Service is healthy',
           type: 'object',
           properties: {
-            success: { type: 'boolean' },
-            message: { type: 'string' },
-          },
-        },
-        400: {
-          description: 'Bad request or user not found',
-          type: 'object',
-          properties: {
-            error: { type: 'string' },
+            status: { type: 'string', enum: ['ok'] },
           },
         },
       },
@@ -89,22 +74,7 @@ export function registerAuthRoutes(app: App) {
   }, async (
     request: FastifyRequest,
     reply: FastifyReply
-  ): Promise<any | void> => {
-    const { email } = request.body as { email?: string };
-
-    if (!email) {
-      app.logger.warn({ body: request.body }, 'Password reset requested without email');
-      return reply.status(400).send({ error: 'Email is required' });
-    }
-
-    app.logger.info({ email }, 'Password reset requested');
-
-    // Note: The actual password reset flow is handled by Better Auth
-    // This endpoint is just a convenient wrapper for the frontend
-    // The frontend should use POST /api/auth/request-password-reset directly with Better Auth
-    return {
-      success: true,
-      message: 'If an account exists with this email, you will receive a password reset link shortly.',
-    };
+  ): Promise<any> => {
+    return { status: 'ok' };
   });
 }
