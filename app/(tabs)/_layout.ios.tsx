@@ -1,7 +1,7 @@
 
 import React, { useEffect } from 'react';
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -9,22 +9,21 @@ export default function TabLayout() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const pathname = usePathname();
 
+  // SIMPLIFIED: Only handle auth redirects, NO tab navigation logic
   useEffect(() => {
-    console.log('[TabLayout iOS] Auth state - user:', user ? user.email : 'not logged in', 'loading:', loading, 'segments:', segments);
+    console.log('[TabLayout iOS] Auth check - user:', user ? user.email : 'none', 'loading:', loading, 'pathname:', pathname);
     
-    if (loading) {
-      return;
-    }
+    if (loading) return;
 
     const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
 
-    // Only redirect to auth if user is not logged in AND not already in auth flow
     if (!user && !inAuthGroup) {
-      console.log('[TabLayout iOS] User not authenticated, redirecting to login screen');
+      console.log('[TabLayout iOS] Redirecting to auth');
       router.replace('/auth');
     }
-  }, [user, loading, segments]);
+  }, [user, loading]);
 
   if (loading) {
     return (
@@ -38,24 +37,44 @@ export default function TabLayout() {
     return null;
   }
 
+  console.log('[TabLayout iOS] Rendering NativeTabs with Stack, current pathname:', pathname);
+
   return (
-    <NativeTabs>
-      <NativeTabs.Trigger name="(home)">
-        <NativeTabs.Icon sf="house.fill" />
-        <NativeTabs.Label>Home</NativeTabs.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reports">
-        <NativeTabs.Icon sf="chart.bar.fill" />
-        <NativeTabs.Label>Reports</NativeTabs.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="ai-chat">
-        <NativeTabs.Icon sf="mic.fill" />
-        <NativeTabs.Label>AI</NativeTabs.Label>
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <NativeTabs.Icon sf="person.fill" />
-        <NativeTabs.Label>Profile</NativeTabs.Label>
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <>
+      {/* Stack is REQUIRED to register the screens properly */}
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'none',
+        }}
+      >
+        <Stack.Screen name="(home)" />
+        <Stack.Screen name="reports" />
+        <Stack.Screen name="ai-chat" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="reflect" />
+        <Stack.Screen name="settings" />
+      </Stack>
+      
+      {/* NativeTabs provides the native iOS tab bar UI */}
+      <NativeTabs>
+        <NativeTabs.Trigger name="(home)">
+          <NativeTabs.Icon sf="house.fill" />
+          <NativeTabs.Label>Home</NativeTabs.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="reports">
+          <NativeTabs.Icon sf="chart.bar.fill" />
+          <NativeTabs.Label>Reports</NativeTabs.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="ai-chat">
+          <NativeTabs.Icon sf="mic.fill" />
+          <NativeTabs.Label>AI</NativeTabs.Label>
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="profile">
+          <NativeTabs.Icon sf="person.fill" />
+          <NativeTabs.Label>Profile</NativeTabs.Label>
+        </NativeTabs.Trigger>
+      </NativeTabs>
+    </>
   );
 }

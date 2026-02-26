@@ -49,68 +49,59 @@ export default function FloatingTabBar({
   const theme = useTheme();
   const animatedValue = useSharedValue(0);
 
-  // Improved active tab detection
+  // Determine active tab based on pathname
   const activeTabIndex = React.useMemo(() => {
-    console.log('[FloatingTabBar] Current pathname:', pathname);
-    
-    // Normalize pathname (remove trailing slashes)
     const normalizedPathname = pathname.replace(/\/$/, '');
     
-    // Check each tab for a match
+    console.log('[FloatingTabBar] Current pathname:', normalizedPathname);
+    
+    // Check each tab
     for (let i = 0; i < tabs.length; i++) {
       const tab = tabs[i];
-      const tabRoute = (tab.route as string).replace(/\/$/, '');
       
-      console.log(`[FloatingTabBar] Checking tab ${i} "${tab.label}": route="${tabRoute}"`);
-      
-      // Special handling for home tab - match root, /(tabs), /(tabs)/(home), or any path starting with /(tabs)/(home)/
+      // Home tab - match root or /(tabs)/(home)
       if (tab.name === '(home)') {
         if (normalizedPathname === '/' || 
             normalizedPathname === '' || 
             normalizedPathname === '/(tabs)' ||
             normalizedPathname === '/(tabs)/(home)' ||
             normalizedPathname.startsWith('/(tabs)/(home)/')) {
-          console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (home match)`);
+          console.log(`[FloatingTabBar] Active tab: ${i} (${tab.label})`);
           return i;
         }
       }
-      // For reports tab - match /(tabs)/reports or any path starting with it
+      // Reports tab
       else if (tab.name === 'reports') {
         if (normalizedPathname === '/(tabs)/reports' ||
             normalizedPathname.startsWith('/(tabs)/reports/')) {
-          console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (reports match)`);
+          console.log(`[FloatingTabBar] Active tab: ${i} (${tab.label})`);
           return i;
         }
       }
-      // For ai-chat tab - match /(tabs)/ai-chat or any path starting with it
+      // AI Chat tab
       else if (tab.name === 'ai-chat') {
         if (normalizedPathname === '/(tabs)/ai-chat' ||
             normalizedPathname.startsWith('/(tabs)/ai-chat/')) {
-          console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (ai-chat match)`);
+          console.log(`[FloatingTabBar] Active tab: ${i} (${tab.label})`);
           return i;
         }
       }
-      // For profile tab - match /(tabs)/profile or any path starting with it
+      // Profile tab
       else if (tab.name === 'profile') {
         if (normalizedPathname === '/(tabs)/profile' ||
             normalizedPathname.startsWith('/(tabs)/profile/')) {
-          console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (profile match)`);
+          console.log(`[FloatingTabBar] Active tab: ${i} (${tab.label})`);
           return i;
         }
       }
-      // Generic fallback - exact match or prefix match
-      else if (normalizedPathname === tabRoute || normalizedPathname.startsWith(tabRoute + '/')) {
-        console.log(`[FloatingTabBar] ✓ Tab ${i} "${tab.label}" is ACTIVE (generic match)`);
-        return i;
-      }
     }
     
-    console.log('[FloatingTabBar] No match found, defaulting to tab 0 (Home)');
-    return 0; // Default to first tab (Home)
+    // Default to home
+    console.log('[FloatingTabBar] No match, defaulting to Home (0)');
+    return 0;
   }, [pathname, tabs]);
 
   React.useEffect(() => {
-    console.log('[FloatingTabBar] Active tab index changed to:', activeTabIndex);
     animatedValue.value = withSpring(activeTabIndex, {
       damping: 20,
       stiffness: 120,
@@ -119,23 +110,24 @@ export default function FloatingTabBar({
   }, [activeTabIndex, animatedValue]);
 
   const handleTabPress = (route: Href, tabName: string, index: number) => {
-    console.log('[FloatingTabBar] ========================================');
-    console.log('[FloatingTabBar] Tab pressed:', tabName);
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('[FloatingTabBar] TAB PRESSED');
+    console.log('[FloatingTabBar] Tab name:', tabName);
+    console.log('[FloatingTabBar] Tab label:', tabs[index].label);
     console.log('[FloatingTabBar] Target route:', route);
     console.log('[FloatingTabBar] Current pathname:', pathname);
     console.log('[FloatingTabBar] Current active index:', activeTabIndex);
     console.log('[FloatingTabBar] Pressed tab index:', index);
-    console.log('[FloatingTabBar] ========================================');
+    console.log('═══════════════════════════════════════════════════════');
     
-    // If already on this tab, don't navigate (prevents unnecessary re-renders)
-    if (activeTabIndex === index) {
-      console.log('[FloatingTabBar] Already on this tab, skipping navigation');
-      return;
+    // Always navigate, even if already on the tab (to ensure it works)
+    try {
+      console.log('[FloatingTabBar] Calling router.push with route:', route);
+      router.push(route);
+      console.log('[FloatingTabBar] Navigation call completed');
+    } catch (error) {
+      console.error('[FloatingTabBar] Navigation error:', error);
     }
-    
-    // Navigate to the route
-    console.log('[FloatingTabBar] Navigating to:', route);
-    router.push(route);
   };
 
   const tabWidthPercent = ((100 / tabs.length) - 1).toFixed(2);
