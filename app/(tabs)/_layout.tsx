@@ -13,17 +13,22 @@ export default function TabLayout() {
 
   // SIMPLIFIED: Only handle auth redirects, NO tab navigation logic
   useEffect(() => {
-    console.log('[TabLayout] Auth check - user:', user ? user.email : 'none', 'loading:', loading);
+    console.log('[TabLayout] Auth check - user:', user ? user.email : 'none', 'loading:', loading, 'segments:', segments);
     
     if (loading) return;
 
     const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
+    const inTabsGroup = segments[0] === '(tabs)';
 
+    // Only redirect to auth if not logged in AND not already in auth flow
     if (!user && !inAuthGroup) {
       console.log('[TabLayout] Redirecting to auth');
       router.replace('/auth');
+      return;
     }
-  }, [user, loading]);
+
+    // Don't do any other redirects - let the user navigate freely
+  }, [user, loading, segments]);
 
   if (loading) {
     return (

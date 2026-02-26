@@ -157,8 +157,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Only fetch user on initial mount, not on every pathname change
+    // This prevents interrupting navigation
     fetchUser();
-  }, [pathname]);
+  }, []); // Empty dependency array - only run once on mount
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
