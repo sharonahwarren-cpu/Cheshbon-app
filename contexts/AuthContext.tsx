@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Listen for deep links (e.g. from social auth redirects on native)
     const subscription = Linking.addEventListener("url", (event) => {
-      console.log("Deep link received, refreshing user session");
+      console.log("[Auth] Deep link received:", event.url);
       if (!oauthInProgress.current) {
         setTimeout(() => fetchUser(), 500);
       }
@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // POLLING: Refresh session every 5 minutes to keep SecureStore token in sync
     const intervalId = setInterval(() => {
       if (!oauthInProgress.current) {
-        console.log("Auto-refreshing user session to sync token...");
+        console.log("[Auth] Auto-refreshing user session to sync token...");
         fetchUser();
       }
     }, 5 * 60 * 1000);
@@ -149,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("[Auth] authClient.getSession() threw error:", sessionErr);
       }
       
-      console.log("Session fetched:", session?.data?.user ? "User found" : "No user");
+      console.log("[Auth] Session fetched:", session?.data?.user ? "User found" : "No user");
       
       if (session?.data?.user) {
         setUser(session.data.user as User);
@@ -182,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearAuthTokens();
       }
     } catch (error) {
-      console.error("Failed to fetch user:", error);
+      console.error("[Auth] Failed to fetch user:", error);
       setUser(null);
     } finally {
       setLoading(false);
@@ -191,18 +191,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
-      console.log("Signing in with email:", email);
+      console.log("[Auth] Signing in with email:", email);
       await authClient.signIn.email({ email, password });
       await fetchUser();
     } catch (error) {
-      console.error("Email sign in failed:", error);
+      console.error("[Auth] Email sign in failed:", error);
       throw error;
     }
   };
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
     try {
-      console.log("Signing up with email:", email);
+      console.log("[Auth] Signing up with email:", email);
       await authClient.signUp.email({
         email,
         password,
@@ -210,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       await fetchUser();
     } catch (error) {
-      console.error("Email sign up failed:", error);
+      console.error("[Auth] Email sign up failed:", error);
       throw error;
     }
   };
@@ -218,7 +218,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithSocial = async (provider: "google" | "apple" | "github") => {
     try {
       console.log(`[Auth] Starting ${provider} sign in on platform:`, Platform.OS);
+      
       if (Platform.OS === "web") {
+        // WEB: Use popup-based OAuth flow
         oauthInProgress.current = true;
         
         try {
@@ -365,7 +367,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           oauthInProgress.current = false;
         }
       } else {
-        // Native (iOS/Android): Use Better Auth's native OAuth flow
+        // NATIVE (iOS/Android): Use Better Auth's native OAuth flow
         console.log("[Auth] Starting native OAuth flow for", provider);
         oauthInProgress.current = true;
         
@@ -389,6 +391,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await fetchUser();
           
           console.log("[Auth] Native OAuth completed, user:", user ? "authenticated" : "not authenticated");
+        } catch (nativeErr: any) {
+          console.error("[Auth] Native OAuth failed:", nativeErr);
+          throw new Error(nativeErr.message || `Failed to sign in with ${provider}. Please try again.`);
         } finally {
           oauthInProgress.current = false;
         }
@@ -417,10 +422,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      console.log("Signing out...");
+      console.log("[Auth] Signing out...");
       await authClient.signOut();
     } catch (error) {
-      console.error("Sign out failed (API):", error);
+      console.error("[Auth] Sign out failed (API):", error);
     } finally {
        setUser(null);
        await clearAuthTokens();

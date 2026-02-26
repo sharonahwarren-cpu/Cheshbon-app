@@ -14,6 +14,7 @@ import {
   ScrollView,
   Image,
   Modal,
+  Alert,
 } from "react-native";
 import { colors } from "@/styles/commonStyles";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -41,6 +42,7 @@ export default function AuthScreen() {
   }, [user, loading]);
 
   const handleSubmit = async () => {
+    console.log("[Auth] Email/password submit button pressed");
     if (!email || !password) {
       setError("Please fill in all fields");
       return;
@@ -56,10 +58,13 @@ export default function AuthScreen() {
 
     try {
       if (isSignUp) {
+        console.log("[Auth] Attempting sign up with email:", email);
         await signUpWithEmail(email, password, name);
       } else {
+        console.log("[Auth] Attempting sign in with email:", email);
         await signInWithEmail(email, password);
       }
+      console.log("[Auth] Email auth successful");
       // Navigation will happen automatically via useEffect when user state updates
     } catch (err: any) {
       console.error("[Auth] Email auth error:", err);
@@ -70,11 +75,12 @@ export default function AuthScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    console.log("[Auth] Google sign-in button pressed");
+    console.log("[Auth] Google sign-in button pressed, Platform:", Platform.OS);
     setSubmitting(true);
     setError("");
 
     try {
+      console.log("[Auth] Calling signInWithGoogle()...");
       await signInWithGoogle();
       console.log("[Auth] Google sign-in completed successfully");
       // Navigation will happen automatically via useEffect when user state updates
@@ -109,11 +115,12 @@ export default function AuthScreen() {
   };
 
   const handleAppleSignIn = async () => {
-    console.log("[Auth] Apple sign-in button pressed");
+    console.log("[Auth] Apple sign-in button pressed, Platform:", Platform.OS);
     setSubmitting(true);
     setError("");
 
     try {
+      console.log("[Auth] Calling signInWithApple()...");
       await signInWithApple();
       console.log("[Auth] Apple sign-in completed successfully");
       // Navigation will happen automatically via useEffect when user state updates
@@ -127,6 +134,8 @@ export default function AuthScreen() {
         errorMessage = "Please allow popups for this site and try again.";
       } else if (err.message?.includes("closed")) {
         errorMessage = "Sign-in was cancelled. Please try again.";
+      } else if (err.message) {
+        errorMessage = err.message;
       }
       
       setError(errorMessage);
@@ -164,6 +173,7 @@ export default function AuthScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
@@ -380,6 +390,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: colors.background,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.text,
   },
   keyboardView: {
     flex: 1,
