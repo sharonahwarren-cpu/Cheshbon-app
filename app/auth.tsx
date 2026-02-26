@@ -162,25 +162,32 @@ export default function AuthScreen() {
       if (err.message?.includes("popup")) {
         errorTitle = "Popup Blocked";
         errorMessage = "Please allow popups for this site and try again.";
-      } else if (err.message?.includes("closed")) {
+      } else if (err.message?.includes("cancelled") || err.message?.includes("cancel") || err.message?.includes("closed")) {
         errorTitle = "Sign-In Cancelled";
         errorMessage = "Sign-in was cancelled. Please try again.";
+      } else if (err.message?.includes("not available") || err.message?.includes("not configured") || err.message?.includes("OAuth configuration") || err.message?.includes("403") || err.message?.includes("Forbidden")) {
+        errorTitle = "Google Sign-In Unavailable";
+        errorMessage = err.message || "Google sign-in is not available. Please use email/password sign-in.";
       } else if (err.message?.includes("session") || err.message?.includes("establish")) {
         errorTitle = "Session Error";
         errorMessage = "Failed to establish session. Trying alternative method...";
         
-        // Try redirect approach
-        console.log("[Auth Screen] 🔄 Popup OAuth failed, trying redirect approach...");
-        setSubmitting(false);
-        setActiveAuthMethod(null);
-        setError("");
-        try {
-          await signInWithGoogleRedirect();
-          // This will navigate away from the page
-          return;
-        } catch (redirectErr: any) {
-          console.error("[Auth Screen] ❌ Redirect OAuth also failed:", redirectErr);
-          errorMessage = "Failed to sign in with Google. Please try email/password instead.";
+        // Try redirect approach (web only)
+        if (Platform.OS === "web") {
+          console.log("[Auth Screen] 🔄 Popup OAuth failed, trying redirect approach...");
+          setSubmitting(false);
+          setActiveAuthMethod(null);
+          setError("");
+          try {
+            await signInWithGoogleRedirect();
+            // This will navigate away from the page
+            return;
+          } catch (redirectErr: any) {
+            console.error("[Auth Screen] ❌ Redirect OAuth also failed:", redirectErr);
+            errorMessage = "Failed to sign in with Google. Please try email/password instead.";
+          }
+        } else {
+          errorMessage = "Failed to establish session. Please try again or use email/password sign-in.";
         }
       } else if (err.message) {
         errorMessage = err.message;
@@ -231,12 +238,12 @@ export default function AuthScreen() {
       if (err.message?.includes("popup")) {
         errorTitle = "Popup Blocked";
         errorMessage = "Please allow popups for this site and try again.";
-      } else if (err.message?.includes("closed")) {
+      } else if (err.message?.includes("cancelled") || err.message?.includes("cancel") || err.message?.includes("closed")) {
         errorTitle = "Sign-In Cancelled";
         errorMessage = "Sign-in was cancelled. Please try again.";
-      } else if (err.message?.includes("not available")) {
-        errorTitle = "Not Available";
-        errorMessage = "Apple Sign-In is not available on this device.";
+      } else if (err.message?.includes("not available") || err.message?.includes("not configured") || err.message?.includes("OAuth configuration") || err.message?.includes("403") || err.message?.includes("Forbidden")) {
+        errorTitle = "Apple Sign-In Unavailable";
+        errorMessage = err.message || "Apple sign-in is not available. Please use email/password sign-in.";
       } else if (err.message) {
         errorMessage = err.message;
       }

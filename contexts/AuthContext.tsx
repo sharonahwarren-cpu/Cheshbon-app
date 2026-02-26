@@ -474,38 +474,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         try {
           // Generate the callback URL for deep linking
+          // Use the app scheme for native deep linking (e.g., "Cheshbon://")
           const callbackURL = Linking.createURL("/");
           console.log("[AuthContext] 🔗 Native OAuth callback URL:", callbackURL);
+          console.log("[AuthContext] 📱 Platform:", Platform.OS, "Version:", Platform.Version);
           
           // Call Better Auth's social sign-in which will open the browser
+          // The @better-auth/expo expoClient plugin handles the browser opening and deep link callback
           console.log("[AuthContext] 📞 Calling authClient.signIn.social()...");
+          console.log("[AuthContext] 📋 Request params:", { provider, callbackURL });
           const startTime = Date.now();
-          const result = await authClient.signIn.social({
-            provider,
-            callbackURL,
-          });
-          const duration = Date.now() - startTime;
           
-          console.log("[AuthContext] 📊 Native OAuth result:", {
-            duration: `${duration}ms`,
-            hasResult: !!result,
-            resultType: typeof result,
-          });
+          try {
+            const result = await authClient.signIn.social({
+              provider,
+              callbackURL,
+            });
+            const duration = Date.now() - startTime;
+            
+            console.log("[AuthContext] 📊 Native OAuth result:", {
+              duration: `${duration}ms`,
+              hasResult: !!result,
+              resultType: typeof result,
+              result: JSON.stringify(result).substring(0, 200),
+            });
+          } catch (socialErr: any) {
+            console.error("[AuthContext] ❌ authClient.signIn.social() error:", {
+              message: socialErr.message,
+              name: socialErr.name,
+              stack: socialErr.stack,
+            });
+            
+            // If the error is a 403, provide a more helpful message
+            if (socialErr.message?.includes("403") || socialErr.message?.includes("Forbidden")) {
+              console.error("[AuthContext] 🚫 403 Forbidden - OAuth provider not configured on server");
+              console.error("[AuthContext] 💡 Ensure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set in backend environment");
+              throw new Error(
+                `${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in is not available. ` +
+                `The server OAuth configuration may be incomplete. Please try email/password sign-in or contact support.`
+              );
+            }
+            
+            // If the error is a network error, provide a helpful message
+            if (socialErr.message?.includes("Network") || socialErr.message?.includes("fetch")) {
+              throw new Error(`Network error during ${provider} sign-in. Please check your connection and try again.`);
+            }
+            
+            // If user cancelled (browser closed without completing)
+            if (socialErr.message?.includes("cancel") || socialErr.message?.includes("dismiss") || socialErr.message?.includes("closed")) {
+              throw new Error(`Sign-in was cancelled. Please try again.`);
+            }
+            
+            throw socialErr;
+          }
           
-          // Wait longer for the deep link to be processed and session to be established
-          console.log("[AuthContext] ⏳ Waiting for session to be established...");
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          // Wait for the deep link to be processed and session to be established
+          // The expoClient plugin handles the token exchange via deep link
+          console.log("[AuthContext] ⏳ Waiting for session to be established after OAuth...");
+          await new Promise(resolve => setTimeout(resolve, 2000));
           
           // Try multiple times to fetch the user session (with retries)
           console.log("[AuthContext] 🔄 Fetching user after native OAuth (with retries)...");
           let retries = 0;
-          const maxRetries = 8;
+          const maxRetries = 10;
           let sessionEstablished = false;
           
           while (retries < maxRetries && !sessionEstablished) {
             console.log(`[AuthContext] 🔄 Fetch attempt ${retries + 1}/${maxRetries}...`);
             
-            // Try authClient.getSession() first
+            // Try authClient.getSession() first - expoClient stores token in SecureStore
             try {
               const session = await authClient.getSession();
               console.log(`[AuthContext] 📊 authClient.getSession() attempt ${retries + 1}:`, {
@@ -557,10 +594,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             }
             
-            // If not found, wait and retry
+            // If not found, wait and retry with increasing backoff
             if (!sessionEstablished && retries < maxRetries - 1) {
-              const waitTime = retries < 3 ? 1000 : 2000; // Wait longer after first few attempts
-              console.log(`[AuthContext] ⏳ Waiting ${waitTime}ms before retry...`);
+              const waitTime = retries < 3 ? 1000 : retries < 6 ? 2000 : 3000;
+              console.log(`[AuthContext] ⏳ Waiting ${waitTime}ms before retry ${retries + 2}/${maxRetries}...`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
             }
             
@@ -572,7 +609,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw new Error(`Failed to establish session after ${provider} sign-in. Please try again.`);
           }
           
-          console.log("[AuthContext] ✅ Native OAuth completed successfully, user:", user?.email || "authenticated");
+          console.log("[AuthContext] ✅ Native OAuth completed successfully");
         } catch (nativeErr: any) {
           console.error("[AuthContext] ❌ Native OAuth failed:", {
             message: nativeErr.message,
