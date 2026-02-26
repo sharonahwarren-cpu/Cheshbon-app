@@ -288,24 +288,26 @@ export default function HomeScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       
-      // CRITICAL FIX: Set initial view based on user's preferred home screen (only on first load)
+      // CRITICAL FIX: Always apply user's preferred home screen when preferences are loaded
+      // This ensures that when the user changes preferences and returns to the home screen,
+      // the new preference is immediately applied
+      const preferredScreen = prefsData.preferredHomeScreen;
+      console.log('[Home iOS] Applying preferred home screen from backend:', preferredScreen);
+      
+      if (preferredScreen === 'goals-detailed') {
+        console.log('[Home iOS] Setting view: goals-detailed -> Express view, Detailed mode');
+        setCurrentView('express');
+        setExpressViewMode('detailed');
+      } else if (preferredScreen === 'goals-concise') {
+        console.log('[Home iOS] Setting view: goals-concise -> Express view, Concise mode');
+        setCurrentView('express');
+        setExpressViewMode('concise');
+      } else {
+        console.log('[Home iOS] Setting view: reflect (default)');
+        setCurrentView('reflect');
+      }
+      
       if (!homeScreenInitialized) {
-        const preferredScreen = prefsData.preferredHomeScreen;
-        console.log('[Home iOS] Setting initial view based on preferred home screen:', preferredScreen);
-        
-        if (preferredScreen === 'goals-detailed') {
-          console.log('[Home iOS] Applying preference: goals-detailed -> Express view, Detailed mode');
-          setCurrentView('express');
-          setExpressViewMode('detailed');
-        } else if (preferredScreen === 'goals-concise') {
-          console.log('[Home iOS] Applying preference: goals-concise -> Express view, Concise mode');
-          setCurrentView('express');
-          setExpressViewMode('concise');
-        } else {
-          console.log('[Home iOS] Applying preference: reflect (default)');
-          setCurrentView('reflect');
-        }
-        
         setHomeScreenInitialized(true);
       }
       
