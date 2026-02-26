@@ -152,17 +152,18 @@ function summarizeFortnightly(config: ScheduleSummaryRequest): string {
  * Generate summary for Monthly schedules
  */
 function summarizeMonthly(config: ScheduleSummaryRequest): string {
-  const parts: string[] = [];
-
   // Check if using Hebrew calendar
   const isHebrewCalendar = config.monthlyUseAlternativeCalendar && config.monthlyCalendarType === 'hebrew';
 
-  // Hebrew calendar event
+  // Hebrew calendar event - return immediately with just the event name
   if (isHebrewCalendar && config.monthlyCalendarEvent) {
-    parts.push(`on Hebrew calendar event: ${config.monthlyCalendarEvent}`);
+    return `Scheduled on ${config.monthlyCalendarEvent}`;
   }
+
+  const parts: string[] = [];
+
   // Hebrew calendar specific dates
-  else if (isHebrewCalendar && config.scheduleDatesOfMonth && config.scheduleDatesOfMonth.length > 0) {
+  if (isHebrewCalendar && config.scheduleDatesOfMonth && config.scheduleDatesOfMonth.length > 0) {
     const dates = config.scheduleDatesOfMonth.map(d => formatOrdinal(d));
     parts.push(`the ${dates.join(' and ')} of every Hebrew month`);
   }
