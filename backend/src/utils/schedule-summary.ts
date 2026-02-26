@@ -104,7 +104,10 @@ function summarizeDaily(config: ScheduleSummaryRequest): string {
  * Generate summary for Weekly schedules
  */
 function summarizeWeekly(config: ScheduleSummaryRequest): string {
-  const days = config.scheduleDaysOfWeek || [];
+  // Filter out invalid day values (must be 0-6, not null/undefined)
+  const days = (config.scheduleDaysOfWeek || []).filter(
+    (day): day is number => day !== null && day !== undefined && day >= 0 && day <= 6
+  );
 
   if (days.length === 0) {
     return 'Scheduled weekly';
@@ -122,9 +125,17 @@ function summarizeWeekly(config: ScheduleSummaryRequest): string {
     return 'Scheduled daily';
   }
 
-  const dayNames = days.map(d => getDayName(d));
+  // Map to day names and filter out 'Unknown' entries
+  const dayNames = days
+    .map(d => getDayName(d))
+    .filter(name => name !== 'Unknown');
 
-  if (days.length === 1) {
+  // If no valid day names remain, return error message
+  if (dayNames.length === 0) {
+    return 'Scheduled weekly (no valid days)';
+  }
+
+  if (dayNames.length === 1) {
     return `Scheduled every ${dayNames[0]}`;
   }
 
