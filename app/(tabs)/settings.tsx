@@ -128,7 +128,7 @@ const ICON_OPTIONS = [
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ section?: string }>();
+  const params = useLocalSearchParams<{ section?: string; from?: string }>();
   
   // Determine initial section from URL params
   const getInitialSection = (): SettingsSection => {
@@ -836,11 +836,35 @@ export default function SettingsScreen() {
     return [...activeGoals, ...deactivatedGoals];
   }, [goals]);
 
+  const handleBackPress = () => {
+    console.log('[Settings] Back button pressed from section:', currentSection, 'params.section:', params.section, 'params.from:', params.from);
+    
+    // If we came from settings-menu (indicated by params.section)
+    if (params.section) {
+      // Check if we originally came from the Profile tab
+      if (params.from === 'profile') {
+        console.log('[Settings] Navigating back to Profile tab (/(tabs)/profile)');
+        router.replace('/(tabs)/profile');
+      } else {
+        console.log('[Settings] Navigating back to /settings-menu');
+        router.replace('/settings-menu');
+      }
+    } else if (currentSection !== 'main') {
+      // If we're in a sub-section but didn't come from settings-menu, go to main
+      console.log('[Settings] Returning to main section');
+      setCurrentSection('main');
+    } else {
+      // If we're already in main, use default back behavior
+      console.log('[Settings] Using default back behavior');
+      router.back();
+    }
+  };
+
   const renderGoals = () => {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={handleBackPress}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1151,7 +1175,7 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={handleBackPress}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1295,7 +1319,7 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={handleBackPress}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1377,7 +1401,7 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={handleBackPress}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1464,7 +1488,7 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={handleBackPress}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1589,7 +1613,7 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={handleBackPress}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1715,7 +1739,7 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={handleBackPress}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"
@@ -1802,7 +1826,7 @@ export default function SettingsScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setCurrentSection('main')}>
+          <TouchableOpacity onPress={handleBackPress}>
             <IconSymbol
               ios_icon_name="chevron.left"
               android_material_icon_name="arrow-back"

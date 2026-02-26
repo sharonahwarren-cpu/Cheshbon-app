@@ -123,7 +123,7 @@ type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currenci
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ section?: string }>();
+  const params = useLocalSearchParams<{ section?: string; from?: string }>();
   
   // Determine initial section from URL params
   const getInitialSection = (): SettingsSection => {
@@ -578,12 +578,18 @@ export default function SettingsScreen() {
   };
 
   const handleBackPress = () => {
-    console.log('[Settings iOS] Back button pressed from section:', currentSection, 'params.section:', params.section);
+    console.log('[Settings iOS] Back button pressed from section:', currentSection, 'params.section:', params.section, 'params.from:', params.from);
     
-    // If we came from settings-menu (indicated by params.section), always go back to settings-menu
+    // If we came from settings-menu (indicated by params.section)
     if (params.section) {
-      console.log('[Settings iOS] Navigating back to /settings-menu');
-      router.replace('/settings-menu');
+      // Check if we originally came from the Profile tab
+      if (params.from === 'profile') {
+        console.log('[Settings iOS] Navigating back to Profile tab (/(tabs)/profile)');
+        router.replace('/(tabs)/profile');
+      } else {
+        console.log('[Settings iOS] Navigating back to /settings-menu');
+        router.replace('/settings-menu');
+      }
     } else if (currentSection !== 'main') {
       // If we're in a sub-section but didn't come from settings-menu, go to main
       console.log('[Settings iOS] Returning to main section');
