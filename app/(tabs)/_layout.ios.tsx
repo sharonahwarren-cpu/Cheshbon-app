@@ -1,40 +1,14 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
 import { useRouter, useSegments } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { authenticatedGet } from '@/utils/api';
-
-type PreferredHomeScreen = 'reflect' | 'goals-detailed' | 'goals-concise';
 
 export default function TabLayout() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
-  const [preferredHomeScreen, setPreferredHomeScreen] = useState<PreferredHomeScreen>('reflect');
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
-
-  // Load user preferences to determine home screen
-  useEffect(() => {
-    if (user && !prefsLoaded) {
-      console.log('[TabLayout iOS] Loading user preferences for home screen routing');
-      authenticatedGet<any>('/api/user-preferences')
-        .then((data) => {
-          const prefs = data?.data || data;
-          const homeScreen = prefs?.preferredHomeScreen as PreferredHomeScreen;
-          if (homeScreen && ['reflect', 'goals-detailed', 'goals-concise'].includes(homeScreen)) {
-            console.log('[TabLayout iOS] Preferred home screen:', homeScreen);
-            setPreferredHomeScreen(homeScreen);
-          }
-          setPrefsLoaded(true);
-        })
-        .catch((err) => {
-          console.error('[TabLayout iOS] Failed to load preferences:', err);
-          setPrefsLoaded(true);
-        });
-    }
-  }, [user, prefsLoaded]);
 
   useEffect(() => {
     console.log('[TabLayout iOS] Auth state - user:', user ? user.email : 'not logged in', 'loading:', loading, 'segments:', segments);
@@ -44,30 +18,13 @@ export default function TabLayout() {
     }
 
     const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
-    const inTabsGroup = segments[0] === '(tabs)';
 
     // Only redirect to auth if user is not logged in AND not already in auth flow
     if (!user && !inAuthGroup) {
       console.log('[TabLayout iOS] User not authenticated, redirecting to login screen');
-      setPrefsLoaded(false);
       router.replace('/auth');
-      return;
     }
-
-    // Only redirect from auth to home if user just logged in (coming FROM auth screens)
-    // Do NOT redirect when already in tabs group
-    if (user && inAuthGroup && prefsLoaded) {
-      console.log('[TabLayout iOS] User authenticated from auth flow, redirecting to home');
-      router.replace('/(tabs)/(home)/');
-      return;
-    }
-
-    // Allow free navigation between tabs when authenticated - DO NOT redirect
-    if (user && inTabsGroup) {
-      console.log('[TabLayout iOS] User authenticated, allowing free navigation to:', segments.join('/'));
-      // DO NOT call router.replace here - let the user navigate freely
-    }
-  }, [user, loading, segments, prefsLoaded]);
+  }, [user, loading, segments]);
 
   if (loading) {
     return (
@@ -83,19 +40,19 @@ export default function TabLayout() {
 
   return (
     <NativeTabs>
-      <NativeTabs.Trigger key="home" name="(home)">
+      <NativeTabs.Trigger name="(home)">
         <Icon sf="house.fill" />
         <Label>Home</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger key="reports" name="reports">
+      <NativeTabs.Trigger name="reports">
         <Icon sf="chart.bar.fill" />
         <Label>Reports</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger key="ai-chat" name="ai-chat">
+      <NativeTabs.Trigger name="ai-chat">
         <Icon sf="mic.fill" />
         <Label>AI</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger key="profile" name="profile">
+      <NativeTabs.Trigger name="profile">
         <Icon sf="person.fill" />
         <Label>Profile</Label>
       </NativeTabs.Trigger>
