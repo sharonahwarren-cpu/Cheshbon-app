@@ -4,6 +4,12 @@ import { Platform } from "react-native";
 
 type Status = "processing" | "success" | "error";
 
+/**
+ * Web OAuth callback page.
+ * This page is opened inside the popup window (from auth-popup.tsx).
+ * After Better Auth completes the OAuth flow it redirects here with a token.
+ * We extract the token and post it back to the opener window, then close.
+ */
 export default function AuthCallbackScreen() {
   const [status, setStatus] = useState<Status>("processing");
   const [message, setMessage] = useState("Processing authentication...");
@@ -16,36 +22,80 @@ export default function AuthCallbackScreen() {
   const handleCallback = () => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get("better_auth_token");
-      const error = urlParams.get("error");
+
+      // Better Auth may use different parameter names
+      const token =
+        urlParams.get("token") ||
+        urlParams.get("better_auth_token") ||
+        urlParams.get("session_token");
+
+      const error =
+        urlParams.get("error") || urlParams.get("error_description");
+
+      console.log("[AuthCallback] URL:", window.location.href);
+      console.log("[AuthCallback] Token present:", !!token);
+      console.log("[AuthCallback] Error:", error);
 
       if (error) {
         setStatus("error");
         setMessage(`Authentication failed: ${error}`);
-        window.opener?.postMessage({ type: "oauth-error", error }, "*");
+        if (window.opener) {
+          window.opener.postMessage({ type: "oauth-error", error }, "*");
+        }
         return;
       }
 
       if (token) {
         setStatus("success");
         setMessage("Authentication successful! Closing...");
-        window.opener?.postMessage({ type: "oauth-success", token }, "*");
-        setTimeout(() => window.close(), 1000);
+        console.log("[AuthCallback] Sending token to opener...");
+        if (window.opener) {
+          window.opener.postMessage({ type: "oauth-success", token }, "*");
+          setTimeout(() => window.close(), 1000);
+        } else {
+          // No opener - this might be a direct navigation (not a popup)
+          // Store the token and redirect to home
+          try {
+            localStorage.setItem("cheshbon_bearer_token", token);
+          } catch {}
+          setTimeout(() => {
+            window.location.href = "/";
+          }, 1000);
+        }
       } else {
-        setStatus("error");
-        setMessage("No authentication token received");
-        window.opener?.postMessage({ type: "oauth-error", error: "No token" }, "*");
+        // No token in query params - check if Better Auth set a cookie session
+        // In this case we can just close the popup and let the parent refresh
+        console.log("[AuthCallback] No token in URL, checking for session cookie...");
+        setStatus("success");
+        setMessage("Authentication complete! Closing...");
+        if (window.opener) {
+          // Signal success without a token - parent will call getSession()
+          window.opener.postMessage({ type: "oauth-success-cookie" }, "*");
+          setTimeout(() => window.close(), 1000);
+        } else {
+          setTimeout(() => {
+            window.location.href = "/";
+          }, 1000);
+        }
       }
     } catch (err) {
       setStatus("error");
       setMessage("Failed to process authentication");
-      console.error("Auth callback error:", err);
+      console.error("[AuthCallback] Error:", err);
+      if (window.opener) {
+        window.opener.postMessage(
+          { type: "oauth-error", error: "Processing failed" },
+          "*"
+        );
+      }
     }
   };
 
   return (
     <View style={styles.container}>
-      {status === "processing" && <ActivityIndicator size="large" color="#007AFF" />}
+      {status === "processing" && (
+        <ActivityIndicator size="large" color="#007AFF" />
+      )}
       {status === "success" && <Text style={styles.successIcon}>✓</Text>}
       {status === "error" && <Text style={styles.errorIcon}>✗</Text>}
       <Text style={styles.message}>{message}</Text>

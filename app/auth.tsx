@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import {
   View,
@@ -6,13 +7,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   Platform,
   KeyboardAvoidingView,
   ScrollView,
 } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
+import Toast from "react-native-toast-message";
 
 type Mode = "signin" | "signup";
 
@@ -37,7 +38,11 @@ export default function AuthScreen() {
 
   const handleEmailAuth = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
+      Toast.show({
+        type: "error",
+        text1: "Missing Information",
+        text2: "Please enter email and password",
+      });
       return;
     }
 
@@ -48,14 +53,11 @@ export default function AuthScreen() {
         router.replace("/(tabs)/(home)");
       } else {
         await signUpWithEmail(email, password, name);
-        Alert.alert(
-          "Success",
-          "Account created! Please check your email to verify your account."
-        );
         router.replace("/(tabs)/(home)");
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Authentication failed");
+      // Error is already shown by AuthContext
+      console.log("Auth error handled by context");
     } finally {
       setLoading(false);
     }
@@ -71,9 +73,14 @@ export default function AuthScreen() {
       } else if (provider === "github") {
         await signInWithGitHub();
       }
-      router.replace("/(tabs)/(home)");
+      
+      // On web, navigate immediately. On native, the deep link will handle navigation
+      if (Platform.OS === "web") {
+        router.replace("/(tabs)/(home)");
+      }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Authentication failed");
+      // Error is already shown by AuthContext
+      console.log("Social auth error handled by context");
     } finally {
       setLoading(false);
     }

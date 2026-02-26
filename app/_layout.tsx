@@ -6,8 +6,9 @@ import { WidgetProvider } from "@/contexts/WidgetContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
+import * as WebBrowser from "expo-web-browser";
 import React, { useEffect } from "react";
-import { useColorScheme } from "react-native";
+import { useColorScheme, Platform } from "react-native";
 import Toast from 'react-native-toast-message';
 import {
   DarkTheme,
@@ -17,6 +18,11 @@ import {
 import "react-native-reanimated";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+
+// Required for expo-web-browser OAuth sessions to complete properly on web
+if (Platform.OS === "web") {
+  WebBrowser.maybeCompleteAuthSession();
+}
 
 SplashScreen.preventAutoHideAsync();
 
