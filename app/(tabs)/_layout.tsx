@@ -50,7 +50,6 @@ export default function TabLayout() {
     }
 
     const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
-    const inTabsGroup = segments[0] === '(tabs)';
 
     // Only redirect to auth if user is not logged in AND not already in auth flow
     if (!user && !inAuthGroup) {
@@ -60,7 +59,7 @@ export default function TabLayout() {
       return;
     }
 
-    // Only redirect from auth to home if user just logged in
+    // Only redirect from auth to home if user just logged in (not when navigating between tabs)
     if (user && inAuthGroup && prefsLoaded) {
       const targetRoute = HOME_SCREEN_ROUTES[preferredHomeScreen] || '/(tabs)/(home)/';
       console.log('[TabLayout] User authenticated from auth flow, redirecting to:', targetRoute);
@@ -68,9 +67,9 @@ export default function TabLayout() {
       return;
     }
 
-    // If user is authenticated and in tabs, allow normal navigation
-    if (user && inTabsGroup) {
-      console.log('[TabLayout] User authenticated, allowing tab navigation to:', segments.join('/'));
+    // Allow free navigation between tabs when authenticated
+    if (user) {
+      console.log('[TabLayout] User authenticated, allowing navigation to:', segments.join('/'));
     }
   }, [user, loading, segments, preferredHomeScreen, prefsLoaded, router]);
 
@@ -90,7 +89,7 @@ export default function TabLayout() {
     {
       name: '(home)',
       route: '/(tabs)/(home)/',
-      icon: 'edit',
+      icon: 'home',
       label: 'Home',
     },
     {

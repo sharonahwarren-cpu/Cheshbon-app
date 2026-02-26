@@ -93,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const oauthInProgress = useRef(false);
+  const lastOAuthAttempt = useRef<number>(0);
 
   const fetchUser = async () => {
     // Don't interfere with OAuth flow
@@ -221,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithSocial = async (provider: "google" | "apple" | "github") => {
     // Prevent multiple simultaneous OAuth attempts
+    const now = Date.now();
     if (oauthInProgress.current) {
       console.log(`⏸️ OAuth already in progress, ignoring ${provider} sign in request`);
       Toast.show({
@@ -231,6 +233,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Prevent rapid successive attempts (debounce)
+    if (now - lastOAuthAttempt.current < 2000) {
+      console.log(`⏸️ Too soon after last OAuth attempt, ignoring ${provider} sign in request`);
+      return;
+    }
+
+    lastOAuthAttempt.current = now;
     oauthInProgress.current = true;
     
     try {
@@ -272,13 +281,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.replace("/(tabs)/(home)");
       } else {
         // Native (iOS / Android): Use WebBrowser for OAuth
-        // Ensure any previous session is completed first
+        // CRITICAL: Ensure any previous browser session is dismissed first
         try {
+          console.log("🧹 Attempting to dismiss any previous browser session...");
           await WebBrowser.dismissBrowser();
-          console.log("🧹 Dismissed any previous browser session");
-        } catch (dismissError) {
-          // Ignore errors if no browser was open
-          console.log("🧹 No previous browser session to dismiss");
+          console.log("✅ Previous browser session dismissed successfully");
+          // Wait a moment for cleanup
+          await new Promise(resolve => setTimeout(resolve, 300));
+        } catch (dismissError: any) {
+          // This is expected if no browser was open
+          console.log("ℹ️ No previous browser session to dismiss:", dismissError.message);
         }
 
         const nativeCallbackURL = Linking.createURL("");
@@ -398,19 +410,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Check for "WebBrowser already open" error
-      if (error.message?.includes("WebBrowser") || error.message?.includes("already open")) {
-        console.error("❌ WebBrowser already open error detected");
+      // Check for "WebBrowser already open" error - this is the Android issue
+      if (
+        error.message?.toLowerCase().includes("webbrowser") && 
+        error.message?.toLowerCase().includes("already open")
+      ) {
+        console.error("❌ WebBrowser already open error detected - attempting recovery");
         Toast.show({
           type: "error",
           text1: "Browser Busy",
-          text2: "Please close the previous browser window and try again.",
+          text2: "Closing previous session. Please try again in a moment.",
         });
-        // Try to dismiss any lingering browser
+        // Force dismiss any lingering browser
         try {
           await WebBrowser.dismissBrowser();
+          console.log("✅ Force dismissed lingering browser");
         } catch (dismissErr) {
-          console.log("Could not dismiss browser:", dismissErr);
+          console.log("⚠️ Could not force dismiss browser:", dismissErr);
         }
         return;
       }
