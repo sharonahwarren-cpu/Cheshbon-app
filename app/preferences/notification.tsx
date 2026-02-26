@@ -523,6 +523,10 @@ const styles = StyleSheet.create({
     borderColor: colors.cardBorder,
     marginBottom: 16,
     overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iosTimePicker: {
     width: '100%',
