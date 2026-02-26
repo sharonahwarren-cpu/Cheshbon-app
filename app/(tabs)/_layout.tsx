@@ -50,6 +50,7 @@ export default function TabLayout() {
     }
 
     const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
+    const inTabsGroup = segments[0] === '(tabs)';
 
     // Only redirect to auth if user is not logged in AND not already in auth flow
     if (!user && !inAuthGroup) {
@@ -67,9 +68,9 @@ export default function TabLayout() {
       return;
     }
 
-    // Allow free navigation between tabs when authenticated
-    if (user) {
-      console.log('[TabLayout] User authenticated, allowing navigation to:', segments.join('/'));
+    // Allow free navigation between tabs when authenticated - DO NOT redirect
+    if (user && inTabsGroup) {
+      console.log('[TabLayout] User authenticated, allowing free navigation to:', segments.join('/'));
     }
   }, [user, loading, segments, preferredHomeScreen, prefsLoaded, router]);
 
