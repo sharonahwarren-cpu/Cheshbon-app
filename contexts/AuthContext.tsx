@@ -132,19 +132,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for deep links (e.g. from social auth redirects on native)
     const subscription = Linking.addEventListener("url", (event) => {
       console.log("[AuthContext] 🔗 Deep link received:", event.url);
+      console.log("[AuthContext] OAuth in progress:", oauthInProgress.current);
+      // Don't fetch user if OAuth is in progress - the OAuth flow will handle it
       if (!oauthInProgress.current) {
         setTimeout(() => {
           console.log("[AuthContext] 🔄 Fetching user after deep link...");
           fetchUser();
         }, 500);
+      } else {
+        console.log("[AuthContext] ⏸️ Skipping fetchUser - OAuth in progress");
       }
     });
 
     // POLLING: Refresh session every 5 minutes to keep SecureStore token in sync
     const intervalId = setInterval(() => {
+      console.log("[AuthContext] 🔄 Auto-refresh check (5min interval)...");
+      console.log("[AuthContext] OAuth in progress:", oauthInProgress.current);
       if (!oauthInProgress.current) {
-        console.log("[AuthContext] 🔄 Auto-refreshing user session (5min interval)...");
+        console.log("[AuthContext] 🔄 Auto-refreshing user session...");
         fetchUser();
+      } else {
+        console.log("[AuthContext] ⏸️ Skipping auto-refresh - OAuth in progress");
       }
     }, 5 * 60 * 1000);
 
@@ -158,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUser = async () => {
     try {
       console.log("[AuthContext] 🔍 fetchUser() called");
+      console.log("[AuthContext] OAuth in progress:", oauthInProgress.current);
       setLoading(true);
       
       // First try the authClient.getSession() which handles cookies/native storage
@@ -215,19 +224,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
       
+      // Don't clear user state if OAuth is in progress - the OAuth flow will set it
+      if (oauthInProgress.current) {
+        console.log("[AuthContext] ⏸️ OAuth in progress, skipping user state clear");
+        return;
+      }
+      
       console.log("[AuthContext] ❌ No user found, clearing state");
       setUser(null);
-      if (!oauthInProgress.current) {
-        console.log("[AuthContext] 🧹 Clearing auth tokens");
-        await clearAuthTokens();
-      }
+      console.log("[AuthContext] 🧹 Clearing auth tokens");
+      await clearAuthTokens();
     } catch (error: any) {
       console.error("[AuthContext] ❌ Failed to fetch user:", {
         message: error.message,
         name: error.name,
         stack: error.stack,
       });
-      setUser(null);
+      // Don't clear user state if OAuth is in progress
+      if (!oauthInProgress.current) {
+        setUser(null);
+      }
     } finally {
       setLoading(false);
       console.log("[AuthContext] ✅ fetchUser() completed");
@@ -473,16 +489,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log("[AuthContext] 📊 Native OAuth result:", {
             duration: `${duration}ms`,
             hasResult: !!result,
+            resultType: typeof result,
           });
           
-          // Wait a moment for the deep link to be processed
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          // Wait longer for the deep link to be processed and session to be established
+          console.log("[AuthContext] ⏳ Waiting for session to be established...");
+          await new Promise(resolve => setTimeout(resolve, 3000));
           
-          // Fetch the user session
-          console.log("[AuthContext] 🔄 Fetching user after native OAuth...");
-          await fetchUser();
+          // Try multiple times to fetch the user session (with retries)
+          console.log("[AuthContext] 🔄 Fetching user after native OAuth (with retries)...");
+          let retries = 0;
+          const maxRetries = 8;
+          let sessionEstablished = false;
           
-          console.log("[AuthContext] ✅ Native OAuth completed, user:", user ? "authenticated" : "not authenticated");
+          while (retries < maxRetries && !sessionEstablished) {
+            console.log(`[AuthContext] 🔄 Fetch attempt ${retries + 1}/${maxRetries}...`);
+            
+            // Try authClient.getSession() first
+            try {
+              const session = await authClient.getSession();
+              console.log(`[AuthContext] 📊 authClient.getSession() attempt ${retries + 1}:`, {
+                hasUser: !!session?.data?.user,
+                hasSession: !!session?.data?.session,
+                hasError: !!session?.error,
+                errorMessage: session?.error?.message || "none",
+              });
+              
+              if (session?.data?.user) {
+                console.log("[AuthContext] ✅ Session found via authClient on attempt", retries + 1);
+                setUser(session.data.user as User);
+                if (session.data.session?.token) {
+                  await setBearerToken(session.data.session.token);
+                }
+                sessionEstablished = true;
+                break;
+              }
+            } catch (err: any) {
+              console.warn(`[AuthContext] ⚠️ authClient.getSession() attempt ${retries + 1} failed:`, {
+                message: err.message,
+                name: err.name,
+              });
+            }
+            
+            // Also try getSessionWithBearerToken as fallback
+            if (!sessionEstablished) {
+              try {
+                const bearerSession = await getSessionWithBearerToken();
+                console.log(`[AuthContext] 📊 Bearer token session attempt ${retries + 1}:`, {
+                  hasUser: !!bearerSession?.user,
+                  userEmail: bearerSession?.user?.email || "none",
+                });
+                
+                if (bearerSession?.user) {
+                  console.log("[AuthContext] ✅ Session found via Bearer token on attempt", retries + 1);
+                  setUser(bearerSession.user as User);
+                  if (bearerSession?.session?.token) {
+                    await setBearerToken(bearerSession.session.token);
+                  }
+                  sessionEstablished = true;
+                  break;
+                }
+              } catch (err: any) {
+                console.warn(`[AuthContext] ⚠️ Bearer token session attempt ${retries + 1} failed:`, {
+                  message: err.message,
+                  name: err.name,
+                });
+              }
+            }
+            
+            // If not found, wait and retry
+            if (!sessionEstablished && retries < maxRetries - 1) {
+              const waitTime = retries < 3 ? 1000 : 2000; // Wait longer after first few attempts
+              console.log(`[AuthContext] ⏳ Waiting ${waitTime}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+            
+            retries++;
+          }
+          
+          if (!sessionEstablished) {
+            console.error("[AuthContext] ❌ Failed to establish session after", maxRetries, "attempts");
+            throw new Error(`Failed to establish session after ${provider} sign-in. Please try again.`);
+          }
+          
+          console.log("[AuthContext] ✅ Native OAuth completed successfully, user:", user?.email || "authenticated");
         } catch (nativeErr: any) {
           console.error("[AuthContext] ❌ Native OAuth failed:", {
             message: nativeErr.message,
