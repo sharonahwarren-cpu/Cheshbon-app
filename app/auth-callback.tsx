@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { View, Text, ActivityIndicator, StyleSheet, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { useURL } from "expo-linking";
@@ -11,13 +11,16 @@ type Status = "processing" | "success" | "error";
 
 /**
  * OAuth callback handler for both web and native platforms.
- * 
+ *
  * WEB: This page is opened inside the popup window (from auth-popup.tsx).
  * After Better Auth completes the OAuth flow it redirects here with a token.
  * We extract the token, establish the session, and post it back to the opener window.
- * 
+ *
  * NATIVE: This screen is opened via deep link (cheshbon://auth-callback?token=...).
  * We extract the token from the URL, establish the session, and navigate to home.
+ * Note: On iOS/Android, WebBrowser.openAuthSessionAsync intercepts the deep link
+ * and returns it in browserResult.url - this screen handles the fallback case
+ * where the app was backgrounded or the deep link arrives independently.
  */
 export default function AuthCallbackScreen() {
   const [status, setStatus] = useState<Status>("processing");
@@ -25,15 +28,21 @@ export default function AuthCallbackScreen() {
   const router = useRouter();
   const url = useURL(); // Get the deep link URL on native
   const { setUser, fetchUser } = useAuth();
+  const handledRef = useRef(false);
 
   useEffect(() => {
     if (Platform.OS === "web") {
-      handleWebCallback();
-    } else {
-      // Native: Handle deep link
-      if (url) {
-        handleNativeCallback(url);
+      if (!handledRef.current) {
+        handledRef.current = true;
+        handleWebCallback();
       }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" && url && !handledRef.current) {
+      handledRef.current = true;
+      handleNativeCallback(url);
     }
   }, [url]);
 
@@ -65,22 +74,24 @@ export default function AuthCallbackScreen() {
 
       if (betterAuthToken) {
         console.log("[AuthCallback Web] Token found, establishing session...");
-        
+
+        // Save the token first
+        await setBearerToken(betterAuthToken);
+
         // Try to exchange the token for a session using Better Auth client
         try {
-          await setBearerToken(betterAuthToken);
           const session = await authClient.getSession();
-          
+
           if (session?.data?.user) {
             console.log("[AuthCallback Web] Session established via authClient");
             setStatus("success");
             setMessage("Authentication successful! Closing...");
-            
+
             if (window.opener) {
               window.opener.postMessage({
                 type: "oauth-success",
                 token: session.data.session?.token || betterAuthToken,
-                user: session.data.user
+                user: session.data.user,
               }, window.location.origin);
               setTimeout(() => window.close(), 1000);
             }
@@ -92,10 +103,10 @@ export default function AuthCallbackScreen() {
 
         // Fallback: Try direct API call to /api/auth/me
         try {
-          console.log("[AuthCallback Web] Trying direct API call...");
+          console.log("[AuthCallback Web] Trying direct API call to /api/auth/me...");
           const response = await fetch(`${API_URL}/api/auth/me`, {
             headers: {
-              "Authorization": `Bearer ${betterAuthToken}`,
+              Authorization: `Bearer ${betterAuthToken}`,
             },
             credentials: "include",
           });
@@ -103,15 +114,15 @@ export default function AuthCallbackScreen() {
           if (response.ok) {
             const data = await response.json();
             if (data?.user) {
-              console.log("[AuthCallback Web] Session established via direct API");
+              console.log("[AuthCallback Web] Session established via /api/auth/me");
               setStatus("success");
               setMessage("Authentication successful! Closing...");
-              
+
               if (window.opener) {
                 window.opener.postMessage({
                   type: "oauth-success",
                   token: data.session?.token || betterAuthToken,
-                  user: data.user
+                  user: data.user,
                 }, window.location.origin);
                 setTimeout(() => window.close(), 1000);
               }
@@ -126,11 +137,11 @@ export default function AuthCallbackScreen() {
         console.log("[AuthCallback Web] Sending raw token to parent");
         setStatus("success");
         setMessage("Authentication successful! Closing...");
-        
+
         if (window.opener) {
           window.opener.postMessage({
             type: "oauth-success",
-            token: betterAuthToken
+            token: betterAuthToken,
           }, window.location.origin);
           setTimeout(() => window.close(), 1000);
         } else {
@@ -145,19 +156,19 @@ export default function AuthCallbackScreen() {
       } else {
         // No token in query params - check if Better Auth set a cookie session
         console.log("[AuthCallback Web] No token in URL, checking for session cookie...");
-        
+
         try {
           const session = await authClient.getSession();
           if (session?.data?.user) {
             console.log("[AuthCallback Web] Session found via cookie");
             setStatus("success");
             setMessage("Authentication complete! Closing...");
-            
+
             if (window.opener) {
               window.opener.postMessage({
                 type: "oauth-success",
                 token: session.data.session?.token || "cookie-auth",
-                user: session.data.user
+                user: session.data.user,
               }, window.location.origin);
               setTimeout(() => window.close(), 1000);
             } else {
@@ -177,7 +188,7 @@ export default function AuthCallbackScreen() {
         if (window.opener) {
           window.opener.postMessage({
             type: "oauth-error",
-            error: "No token received"
+            error: "No token received",
           }, window.location.origin);
         }
       }
@@ -197,12 +208,20 @@ export default function AuthCallbackScreen() {
   const handleNativeCallback = async (deepLinkUrl: string) => {
     try {
       console.log("[AuthCallback Native] Deep link URL:", deepLinkUrl);
-      
-      const parsedUrl = new URL(deepLinkUrl);
-      const params = new URLSearchParams(parsedUrl.search);
+
+      // Parse the deep link URL - handle both cheshbon://auth-callback?token=... format
+      let params: URLSearchParams;
+      try {
+        const parsedUrl = new URL(deepLinkUrl);
+        params = parsedUrl.searchParams;
+      } catch {
+        // Fallback: manually parse query string
+        const queryStart = deepLinkUrl.indexOf("?");
+        params = new URLSearchParams(queryStart >= 0 ? deepLinkUrl.slice(queryStart + 1) : "");
+      }
 
       // Extract token from multiple possible parameter names
-      const token = 
+      const token =
         params.get("token") ||
         params.get("better_auth_token") ||
         params.get("session_token") ||
@@ -244,20 +263,20 @@ export default function AuthCallbackScreen() {
 
       console.log("[AuthCallback Native] Token found, saving and establishing session...");
       setMessage("Establishing session...");
-      
+
       // Save the token
       await setBearerToken(token);
-      
+
       // Give the backend a moment to process
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Try to establish session with retries
       let sessionEstablished = false;
       const maxRetries = 5;
-      
+
       for (let i = 0; i < maxRetries && !sessionEstablished; i++) {
         console.log(`[AuthCallback Native] Attempting to establish session (${i + 1}/${maxRetries})...`);
-        
+
         try {
           // Try authClient.getSession first
           const session = await authClient.getSession();
@@ -271,9 +290,9 @@ export default function AuthCallbackScreen() {
           console.warn("[AuthCallback Native] authClient.getSession failed:", sessionError);
         }
 
-        // Try bearer token fallback
+        // Try bearer token fallback via /api/auth/me (correct endpoint)
         try {
-          const response = await fetch(`${API_URL}/api/auth/get-session`, {
+          const response = await fetch(`${API_URL}/api/auth/me`, {
             headers: {
               Authorization: `Bearer ${token}`,
             },
@@ -283,7 +302,7 @@ export default function AuthCallbackScreen() {
           if (response.ok) {
             const data = await response.json();
             if (data?.user) {
-              console.log("[AuthCallback Native] Session established via bearer token");
+              console.log("[AuthCallback Native] Session established via /api/auth/me");
               setUser(data.user);
               sessionEstablished = true;
               break;
@@ -297,6 +316,17 @@ export default function AuthCallbackScreen() {
           const delay = 1000 * Math.pow(2, i); // Exponential backoff
           console.log(`[AuthCallback Native] Waiting ${delay}ms before retry...`);
           await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+
+      if (!sessionEstablished) {
+        // Last resort: try fetchUser which will use the saved token
+        console.log("[AuthCallback Native] Trying fetchUser as last resort...");
+        try {
+          await fetchUser();
+          sessionEstablished = true;
+        } catch (fetchErr) {
+          console.warn("[AuthCallback Native] fetchUser failed:", fetchErr);
         }
       }
 
@@ -323,12 +353,11 @@ export default function AuthCallbackScreen() {
         text1: "Welcome!",
         text2: "You've successfully signed in.",
       });
-      
+
       // Navigate to home
       setTimeout(() => {
         router.replace("/(tabs)/(home)");
       }, 1000);
-      
     } catch (err: any) {
       console.error("[AuthCallback Native] Error:", err);
       setStatus("error");

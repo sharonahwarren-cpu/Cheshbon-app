@@ -114,7 +114,8 @@ export async function getSessionWithBearerToken() {
       return null;
     }
 
-    const response = await fetch(`${API_URL}/api/auth/get-session`, {
+    // Use /api/auth/me - the correct endpoint for session retrieval
+    const response = await fetch(`${API_URL}/api/auth/me`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },

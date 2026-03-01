@@ -34,6 +34,7 @@ interface AuthContextType {
   signInWithGitHub: () => Promise<void>;
   signOut: () => Promise<void>;
   fetchUser: () => Promise<void>;
+  setUser: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -324,10 +325,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Create the callback URL using the app scheme
+        // IMPORTANT: Use lowercase "cheshbon" - must match CFBundleURLSchemes in iOS and intentFilters in Android
         const nativeCallbackURL = `cheshbon://auth-callback`;
         console.log(`📱 [${provider.toUpperCase()}] Native OAuth callbackURL: ${nativeCallbackURL}`);
 
-        // Construct the OAuth URL directly (Better Auth pattern)
+        // Build the OAuth URL using Better Auth's built-in social sign-in endpoint.
+        // This endpoint redirects to the OAuth provider (Google/Apple) and after
+        // authentication, redirects back to nativeCallbackURL with a token parameter.
+        // The callbackURL parameter tells Better Auth where to redirect after OAuth completes.
         const oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(nativeCallbackURL)}`;
         console.log(`📱 [${provider.toUpperCase()}] OAuth URL: ${oauthUrl}`);
 
@@ -339,8 +344,95 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         console.log(`📱 [${provider.toUpperCase()}] Opening OAuth URL in browser...`);
-        
-        // Android-specific: Add extra safeguard with try-catch
+
+        // Helper to extract token from a deep link URL
+        const extractTokenFromUrl = (urlStr: string): string | null => {
+          try {
+            let params: URLSearchParams;
+            try {
+              const parsed = new URL(urlStr);
+              params = parsed.searchParams;
+            } catch {
+              const queryStart = urlStr.indexOf("?");
+              params = new URLSearchParams(queryStart >= 0 ? urlStr.slice(queryStart + 1) : "");
+            }
+            return (
+              params.get("token") ||
+              params.get("better_auth_token") ||
+              params.get("session_token") ||
+              params.get("access_token")
+            );
+          } catch {
+            return null;
+          }
+        };
+
+        // Helper to establish session from a token
+        const establishSessionFromToken = async (token: string): Promise<boolean> => {
+          console.log(`💾 [${provider.toUpperCase()}] Saving token...`);
+          await setBearerToken(token);
+
+          // Give the backend a moment to process
+          await new Promise(resolve => setTimeout(resolve, 800));
+
+          for (let i = 0; i < MAX_RETRIES; i++) {
+            console.log(`🔄 [${provider.toUpperCase()}] Attempting to establish session (${i + 1}/${MAX_RETRIES})...`);
+
+            try {
+              const session = await authClient.getSession();
+              if (session?.data?.user) {
+                setUser(session.data.user as User);
+                console.log(`✅ [${provider.toUpperCase()}] Session established via authClient`);
+                return true;
+              }
+            } catch (sessionError) {
+              console.warn(`⚠️ [${provider.toUpperCase()}] authClient.getSession failed:`, sessionError);
+            }
+
+            try {
+              const bearerSession = await getSessionWithBearerToken();
+              if (bearerSession?.user) {
+                setUser(bearerSession.user as User);
+                console.log(`✅ [${provider.toUpperCase()}] Session established via bearer token`);
+                return true;
+              }
+            } catch (bearerError) {
+              console.warn(`⚠️ [${provider.toUpperCase()}] Bearer token session failed:`, bearerError);
+            }
+
+            if (i < MAX_RETRIES - 1) {
+              const delay = RETRY_INTERVAL_MS * Math.pow(2, i);
+              console.log(`⏳ [${provider.toUpperCase()}] Waiting ${delay}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
+          return false;
+        };
+
+        // On Android, WebBrowser.openAuthSessionAsync may return "dismiss" even when
+        // the OAuth flow succeeded (because Chrome Custom Tabs doesn't always intercept
+        // custom scheme redirects). We use Linking.addEventListener as a fallback to
+        // catch the deep link when it arrives.
+        let deepLinkToken: string | null = null;
+        let deepLinkResolve: ((token: string | null) => void) | null = null;
+
+        const deepLinkPromise = new Promise<string | null>((resolve) => {
+          deepLinkResolve = resolve;
+        });
+
+        // Set up deep link listener BEFORE opening the browser
+        const linkingSubscription = Linking.addEventListener("url", (event) => {
+          console.log(`📱 [${provider.toUpperCase()}] Deep link received via Linking listener:`, event.url);
+          if (event.url && event.url.startsWith("cheshbon://auth-callback")) {
+            const token = extractTokenFromUrl(event.url);
+            console.log(`📱 [${provider.toUpperCase()}] Token from deep link: ${token ? "found" : "not found"}`);
+            deepLinkToken = token;
+            if (deepLinkResolve) {
+              deepLinkResolve(token);
+            }
+          }
+        });
+
         let browserResult;
         try {
           browserResult = await WebBrowser.openAuthSessionAsync(
@@ -351,28 +443,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           );
         } catch (browserError: any) {
+          linkingSubscription.remove();
           console.error(`❌ [${provider.toUpperCase()}] WebBrowser error:`, browserError);
-          
-          // Check if it's the "already open" error
+
           if (
-            browserError.message?.toLowerCase().includes("webbrowser") && 
+            browserError.message?.toLowerCase().includes("webbrowser") &&
             (browserError.message?.toLowerCase().includes("already open") ||
-             browserError.message?.toLowerCase().includes("busy"))
+              browserError.message?.toLowerCase().includes("busy"))
           ) {
             console.error(`❌ [${provider.toUpperCase()}] WebBrowser already open - forcing cleanup and retry`);
-            
-            // Force dismiss and retry once
             try {
               await WebBrowser.dismissBrowser();
               await new Promise(resolve => setTimeout(resolve, 1500));
-              
               console.log(`🔄 [${provider.toUpperCase()}] Retrying browser open after cleanup...`);
               browserResult = await WebBrowser.openAuthSessionAsync(
                 oauthUrl,
                 nativeCallbackURL,
-                {
-                  showInRecents: false,
-                }
+                { showInRecents: false }
               );
             } catch (retryError: any) {
               console.error(`❌ [${provider.toUpperCase()}] Retry failed:`, retryError);
@@ -383,69 +470,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        // Remove the Linking listener after browser closes
+        linkingSubscription.remove();
+
         console.log(`📱 [${provider.toUpperCase()}] Browser result type: ${browserResult.type}`);
+
+        // Try to get token from browser result URL first
+        let token: string | null = null;
 
         if (browserResult.type === "success" && browserResult.url) {
           console.log(`📱 [${provider.toUpperCase()}] Browser redirect URL received: ${browserResult.url}`);
+          token = extractTokenFromUrl(browserResult.url);
+          console.log(`📱 [${provider.toUpperCase()}] Token from browser result: ${token ? "found" : "not found"}`);
+        }
 
-          // Step 3: Extract token from the redirect URL
-          const url = new URL(browserResult.url);
-          const token = 
-            url.searchParams.get("token") ||
-            url.searchParams.get("better_auth_token") ||
-            url.searchParams.get("session_token") ||
-            url.searchParams.get("access_token");
+        // If no token from browser result, check if deep link listener caught it
+        if (!token && deepLinkToken) {
+          console.log(`📱 [${provider.toUpperCase()}] Using token from deep link listener`);
+          token = deepLinkToken;
+        }
 
-          console.log(`📱 [${provider.toUpperCase()}] Token from redirect: ${token ? "found" : "not found"}`);
-          
-          if (!token) {
-            console.error(`❌ [${provider.toUpperCase()}] No token in redirect URL. Full URL:`, browserResult.url);
-            throw new Error("No authentication token received from server. Please try again.");
-          }
+        // If still no token but browser was dismissed (Android issue), wait briefly for deep link
+        if (!token && (browserResult.type === "cancel" || browserResult.type === "dismiss")) {
+          console.log(`📱 [${provider.toUpperCase()}] Browser dismissed - waiting for deep link (Android fallback)...`);
+          // Wait up to 3 seconds for the deep link to arrive
+          const timeoutPromise = new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 3000));
+          token = await Promise.race([deepLinkPromise, timeoutPromise]);
+          console.log(`📱 [${provider.toUpperCase()}] Deep link wait result: ${token ? "token found" : "no token"}`);
+        }
 
-          console.log(`💾 [${provider.toUpperCase()}] Saving token...`);
-          await setBearerToken(token);
-          
-          // Give the backend a moment to process
-          await new Promise(resolve => setTimeout(resolve, 800));
-
-          // Step 4: Retry session establishment with exponential backoff
-          let sessionEstablished = false;
-          for (let i = 0; i < MAX_RETRIES && !sessionEstablished; i++) {
-            console.log(`🔄 [${provider.toUpperCase()}] Attempting to establish session (${i + 1}/${MAX_RETRIES})...`);
-            
-            try {
-              // Try authClient.getSession first
-              const session = await authClient.getSession();
-              if (session?.data?.user) {
-                setUser(session.data.user as User);
-                sessionEstablished = true;
-                console.log(`✅ [${provider.toUpperCase()}] Session established via authClient`);
-                break;
-              }
-            } catch (sessionError) {
-              console.warn(`⚠️ [${provider.toUpperCase()}] authClient.getSession failed:`, sessionError);
-            }
-
-            // Try bearer token fallback
-            try {
-              const bearerSession = await getSessionWithBearerToken();
-              if (bearerSession?.user) {
-                setUser(bearerSession.user as User);
-                sessionEstablished = true;
-                console.log(`✅ [${provider.toUpperCase()}] Session established via bearer token`);
-                break;
-              }
-            } catch (bearerError) {
-              console.warn(`⚠️ [${provider.toUpperCase()}] Bearer token session failed:`, bearerError);
-            }
-
-            if (i < MAX_RETRIES - 1) {
-              const delay = RETRY_INTERVAL_MS * Math.pow(2, i); // Exponential backoff
-              console.log(`⏳ [${provider.toUpperCase()}] Waiting ${delay}ms before retry...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
-          }
+        if (token) {
+          const sessionEstablished = await establishSessionFromToken(token);
 
           if (!sessionEstablished) {
             console.error(`❌ [${provider.toUpperCase()}] Could not establish session after ${MAX_RETRIES} attempts`);
@@ -462,8 +517,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.log(`ℹ️ [${provider.toUpperCase()}] OAuth browser was dismissed by user`);
           // User cancelled - no error toast needed
         } else {
-          console.log(`⚠️ [${provider.toUpperCase()}] Unexpected browser result type: ${(browserResult as any).type}`);
-          throw new Error("Authentication was not completed");
+          console.log(`⚠️ [${provider.toUpperCase()}] No token received. Browser result: ${(browserResult as any).type}`);
+          if (browserResult.type === "success") {
+            throw new Error("No authentication token received from server. Please try again.");
+          }
+          // For other cases (cancel/dismiss without token), silently ignore
         }
       }
     } catch (error: any) {
@@ -575,6 +633,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGitHub,
         signOut,
         fetchUser,
+        setUser,
       }}
     >
       {children}
