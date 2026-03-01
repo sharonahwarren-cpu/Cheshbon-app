@@ -204,24 +204,36 @@ export default function AuthScreen() {
   };
 
   const handleSocialAuth = async (provider: "google" | "apple" | "github") => {
+    console.log(`🔘 User tapped ${provider} sign in button`);
+    console.log(`📱 Platform: ${Platform.OS}`);
     setLoading(true);
     try {
       if (provider === "google") {
+        console.log("📞 Calling signInWithGoogle...");
         await signInWithGoogle();
+        console.log("✅ signInWithGoogle completed");
       } else if (provider === "apple") {
+        console.log("📞 Calling signInWithApple...");
         await signInWithApple();
+        console.log("✅ signInWithApple completed");
       } else if (provider === "github") {
+        console.log("📞 Calling signInWithGitHub...");
         await signInWithGitHub();
+        console.log("✅ signInWithGitHub completed");
       }
       
       // On web, navigate immediately. On native, the deep link will handle navigation
       if (Platform.OS === "web") {
+        console.log("🌐 Web platform - navigating to home");
         router.replace("/(tabs)/(home)");
+      } else {
+        console.log("📱 Native platform - waiting for deep link navigation");
       }
     } catch (error: any) {
       // Error is already shown by AuthContext
-      console.log("Social auth error handled by context");
+      console.log("❌ Social auth error handled by context:", error?.message);
     } finally {
+      console.log("🏁 Social auth flow finished, resetting loading state");
       setLoading(false);
     }
   };

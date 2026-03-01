@@ -94,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const oauthInProgress = useRef(false);
   const lastOAuthAttempt = useRef<number>(0);
+  const oauthTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchUser = async () => {
     // Don't interfere with OAuth flow
@@ -235,8 +236,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Prevent rapid successive attempts (debounce) - longer on Android
-    const debounceTime = Platform.OS === "android" ? 3000 : 2000;
+    // Prevent rapid successive attempts (debounce) - iOS needs shorter debounce
+    const debounceTime = Platform.OS === "ios" ? 1000 : (Platform.OS === "android" ? 3000 : 2000);
     if (now - lastOAuthAttempt.current < debounceTime) {
       console.log(`⏸️ Too soon after last OAuth attempt (${now - lastOAuthAttempt.current}ms), ignoring ${provider} sign in request`);
       Toast.show({
@@ -249,6 +250,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     lastOAuthAttempt.current = now;
     oauthInProgress.current = true;
+    console.log(`🔐 OAuth flag set to true for ${provider}`);
+    
+    // Safety timeout: Reset OAuth flag after 2 minutes if it gets stuck
+    if (oauthTimeoutRef.current) {
+      clearTimeout(oauthTimeoutRef.current);
+    }
+    oauthTimeoutRef.current = setTimeout(() => {
+      if (oauthInProgress.current) {
+        console.warn("⚠️ OAuth timeout - resetting stuck flag");
+        oauthInProgress.current = false;
+      }
+    }, 120000); // 2 minutes
     
     try {
       console.log(`🔐 Starting ${provider} sign in on platform: ${Platform.OS}`);
@@ -290,7 +303,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         // Native (iOS / Android): Use WebBrowser for OAuth
         // CRITICAL: Ensure any previous browser session is dismissed first
-        // Android requires more aggressive cleanup
+        const isIOS = Platform.OS === "ios";
         const isAndroid = Platform.OS === "android";
         
         try {
@@ -298,22 +311,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await WebBrowser.dismissBrowser();
           console.log("✅ Previous browser session dismissed successfully");
           
-          // Android needs longer wait time for cleanup
-          const cleanupDelay = isAndroid ? 800 : 300;
+          // Platform-specific cleanup delays
+          const cleanupDelay = isAndroid ? 800 : (isIOS ? 500 : 300);
           console.log(`⏳ Waiting ${cleanupDelay}ms for cleanup...`);
           await new Promise(resolve => setTimeout(resolve, cleanupDelay));
         } catch (dismissError: any) {
           // This is expected if no browser was open
           console.log("ℹ️ No previous browser session to dismiss:", dismissError.message);
           
-          // On Android, still wait a bit to ensure state is clean
+          // Platform-specific wait times even when no browser was open
           if (isAndroid) {
             await new Promise(resolve => setTimeout(resolve, 500));
+          } else if (isIOS) {
+            await new Promise(resolve => setTimeout(resolve, 300));
           }
         }
 
         const nativeCallbackURL = Linking.createURL("");
         console.log(`📱 Native OAuth callbackURL: ${nativeCallbackURL}`);
+        console.log(`📱 Platform: ${Platform.OS}, Provider: ${provider}`);
 
         Toast.show({
           type: "info",
@@ -342,7 +358,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         console.log(`📱 Opening OAuth URL in browser...`);
         
-        // Android-specific: Add extra safeguard with try-catch
+        // Platform-specific: Add extra safeguard with try-catch
         let browserResult;
         try {
           browserResult = await WebBrowser.openAuthSessionAsync(
@@ -350,17 +366,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             nativeCallbackURL
           );
         } catch (browserError: any) {
-          // Check if it's the "already open" error
+          console.error("❌ WebBrowser error:", browserError);
+          
+          // Check if it's the "already open" error (common on Android and iOS)
           if (
             browserError.message?.toLowerCase().includes("webbrowser") && 
-            browserError.message?.toLowerCase().includes("already open")
+            (browserError.message?.toLowerCase().includes("already open") ||
+             browserError.message?.toLowerCase().includes("in progress"))
           ) {
             console.error("❌ WebBrowser already open - forcing cleanup and retry");
             
             // Force dismiss and retry once
             try {
               await WebBrowser.dismissBrowser();
-              await new Promise(resolve => setTimeout(resolve, 1000));
+              const retryDelay = isAndroid ? 1000 : (isIOS ? 800 : 500);
+              console.log(`⏳ Waiting ${retryDelay}ms before retry...`);
+              await new Promise(resolve => setTimeout(resolve, retryDelay));
               
               console.log("🔄 Retrying browser open after cleanup...");
               browserResult = await WebBrowser.openAuthSessionAsync(
@@ -377,9 +398,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         console.log(`📱 Browser result type: ${browserResult.type}`);
+        console.log(`📱 Browser result:`, JSON.stringify(browserResult, null, 2));
 
         if (browserResult.type === "success" && browserResult.url) {
-          console.log(`📱 Browser redirect URL received`);
+          console.log(`📱 Browser redirect URL received: ${browserResult.url}`);
 
           // Step 3: Extract token from the redirect URL
           const url = new URL(browserResult.url);
@@ -440,7 +462,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           router.replace("/(tabs)/(home)");
         } else if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
           console.log(`ℹ️ ${provider} OAuth browser was dismissed by user`);
-          // User cancelled - no error toast needed
+          // User cancelled - no error toast needed, just reset the flag
+          return;
         } else {
           console.log(`⚠️ Unexpected browser result type: ${(browserResult as any).type}`);
           throw new Error("Authentication was not completed");
@@ -516,7 +539,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw error;
     } finally {
+      // Always reset the OAuth flag, even on error
+      console.log(`🔓 OAuth flag reset to false for ${provider}`);
       oauthInProgress.current = false;
+      
+      // Clear the safety timeout
+      if (oauthTimeoutRef.current) {
+        clearTimeout(oauthTimeoutRef.current);
+        oauthTimeoutRef.current = null;
+      }
     }
   };
 
