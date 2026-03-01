@@ -1,3 +1,4 @@
+
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
@@ -53,38 +54,51 @@ export const apiCall = async <T = any>(
   }
 
   const url = `${BACKEND_URL}${endpoint}`;
-  console.log("[API] Calling:", url, options?.method || "GET");
+  const method = options?.method || "GET";
+  
+  // Get bearer token FIRST before building headers
+  const token = await getBearerToken();
+  
+  console.log(`[API] Calling: ${method} ${url}`);
+  if (token) {
+    console.log(`[API] Using bearer token: ${token.substring(0, 20)}...`);
+  } else {
+    console.log("[API] No bearer token available");
+  }
 
   try {
-    const fetchOptions: RequestInit = {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
+    // Build headers object properly
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(options?.headers as Record<string, string> || {}),
     };
 
-    console.log("[API] Fetch options:", fetchOptions);
-
-    // Always send the token if we have it (needed for cross-domain/iframe support)
-    const token = await getBearerToken();
+    // Add bearer token if available
     if (token) {
-      fetchOptions.headers = {
-        ...fetchOptions.headers,
-        Authorization: `Bearer ${token}`,
-      };
+      headers["Authorization"] = `Bearer ${token}`;
     }
+
+    const fetchOptions: RequestInit = {
+      ...options,
+      headers,
+    };
+
+    console.log("[API] Fetch options:", JSON.stringify({
+      method: fetchOptions.method,
+      headers: fetchOptions.headers,
+      hasBody: !!fetchOptions.body
+    }));
 
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
       const text = await response.text();
-      console.error("[API] Error response:", response.status, text);
+      console.error(`[API] Error response: ${response.status}`, text);
       throw new Error(`API error: ${response.status} - ${text}`);
     }
 
     const data = await response.json();
-    console.log("[API] Success:", data);
+    console.log("[API] Success");
     return data;
   } catch (error) {
     console.error("[API] Request failed:", error);
@@ -165,8 +179,11 @@ export const authenticatedApiCall = async <T = any>(
   const token = await getBearerToken();
 
   if (!token) {
+    console.error("[API] No authentication token found");
     throw new Error("Authentication token not found. Please sign in.");
   }
+
+  console.log(`[API] Authenticated call with token: ${token.substring(0, 20)}...`);
 
   return apiCall<T>(endpoint, {
     ...options,

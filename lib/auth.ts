@@ -23,17 +23,23 @@ const storage =
 
 // Helper to get bearer token from storage
 async function getBearerToken(): Promise<string | null> {
-  if (Platform.OS === "web") {
-    return typeof localStorage !== "undefined"
-      ? localStorage.getItem(BEARER_TOKEN_KEY)
-      : null;
-  } else {
-    try {
-      return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
-    } catch (error) {
-      console.warn("[Auth] Failed to get bearer token:", error);
-      return null;
+  try {
+    if (Platform.OS === "web") {
+      return typeof localStorage !== "undefined"
+        ? localStorage.getItem(BEARER_TOKEN_KEY)
+        : null;
+    } else {
+      const token = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+      if (token) {
+        console.log(`[Auth] Retrieved bearer token from SecureStore: ${token.substring(0, 20)}...`);
+      } else {
+        console.log("[Auth] No bearer token found in SecureStore");
+      }
+      return token;
     }
+  } catch (error) {
+    console.warn("[Auth] Failed to get bearer token:", error);
+    return null;
   }
 }
 
@@ -48,6 +54,8 @@ const authClientConfig: any = {
       if (token) {
         context.headers.set("Authorization", `Bearer ${token}`);
         console.log("[Auth] Added bearer token to request");
+      } else {
+        console.log("[Auth] No bearer token available for request");
       }
     },
   },
@@ -67,14 +75,16 @@ if (Platform.OS !== "web") {
 export const authClient = createAuthClient(authClientConfig);
 
 export async function setBearerToken(token: string) {
-  console.log("💾 Saving bearer token...");
+  console.log(`💾 Saving bearer token: ${token.substring(0, 20)}...`);
   if (Platform.OS === "web") {
     if (typeof localStorage !== "undefined") {
       localStorage.setItem(BEARER_TOKEN_KEY, token);
+      console.log("✅ Bearer token saved to localStorage");
     }
   } else {
     try {
       await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
+      console.log("✅ Bearer token saved to SecureStore");
     } catch (error) {
       console.error("❌ Failed to save bearer token:", error);
     }
@@ -86,10 +96,12 @@ export async function clearAuthTokens() {
   if (Platform.OS === "web") {
     if (typeof localStorage !== "undefined") {
       localStorage.removeItem(BEARER_TOKEN_KEY);
+      console.log("✅ Bearer token cleared from localStorage");
     }
   } else {
     try {
       await SecureStore.deleteItemAsync(BEARER_TOKEN_KEY);
+      console.log("✅ Bearer token cleared from SecureStore");
     } catch (error) {
       console.error("❌ Failed to clear bearer token:", error);
     }
@@ -124,6 +136,7 @@ export async function getBetterAuthStoredToken(): Promise<string | null> {
       // ignore
     }
   }
+  console.log("[Auth] No Better Auth token found in any known storage keys");
   return null;
 }
 
@@ -162,18 +175,24 @@ export async function getSessionWithBearerToken() {
       return null;
     }
 
-    console.log("[Auth] Fetching session with bearer token...");
+    console.log(`[Auth] Fetching session with bearer token: ${token.substring(0, 20)}...`);
 
     // Use /api/auth/me - the correct endpoint for session retrieval
     const response = await fetch(`${API_URL}/api/auth/me`, {
       headers: {
         Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
       credentials: "include",
     });
 
+    console.log(`[Auth] /api/auth/me response status: ${response.status}`);
+
     if (!response.ok) {
-      console.warn("[Auth] /api/auth/me returned:", response.status);
+      console.warn(`[Auth] /api/auth/me returned: ${response.status}`);
+      const responseText = await response.text();
+      console.warn(`[Auth] Response body: ${responseText}`);
+      
       // If 401, the token is invalid - clear it
       if (response.status === 401) {
         console.log("[Auth] Token is invalid (401), clearing stored token");
