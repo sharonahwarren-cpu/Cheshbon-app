@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Cheshbon",
@@ -69,13 +70,23 @@
         }
       ]
     ],
-    "scheme": "Cheshbon",
+    "scheme": "cheshbon",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev"
+      "backendUrl": "https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev",
+      "oauth": {
+        "google": {
+          "clientIdIOS": "[GOOGLE_IOS_CLIENT_ID]",
+          "clientIdAndroid": "[GOOGLE_ANDROID_CLIENT_ID]",
+          "clientIdWeb": "[GOOGLE_WEB_CLIENT_ID]"
+        },
+        "apple": {
+          "clientId": "[APPLE_CLIENT_ID]"
+        }
+      }
     }
   }
 }
