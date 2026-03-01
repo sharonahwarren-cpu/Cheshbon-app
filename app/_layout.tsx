@@ -39,7 +39,7 @@ function AuthBootstrap({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-callback';
+    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-callback' || segments[0] === 'auth-popup-callback';
     console.log('🔐 [AUTH BOOTSTRAP] Auth state resolved:', { user: !!user, inAuthGroup, segments });
 
     if (!user && !inAuthGroup) {
@@ -99,6 +99,7 @@ export default function RootLayout() {
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="auth" options={{ headerShown: false }} />
                 <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
+                <Stack.Screen name="auth-popup-callback" options={{ headerShown: false }} />
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="ai-chat" options={{ headerShown: false }} />
                 <Stack.Screen name="+not-found" />

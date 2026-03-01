@@ -61,7 +61,7 @@ export default function AuthScreen() {
         })
         .catch(() => setBiometricsAvailable(false));
     }
-  }, []);
+  }, [checkBiometricsAvailable]);
 
   // Check Apple Authentication availability
   useEffect(() => {
@@ -309,7 +309,7 @@ export default function AuthScreen() {
                 </TouchableOpacity>
               )}
 
-              {/* Google */}
+              {/* Google Sign In */}
               <TouchableOpacity
                 style={[styles.button, styles.googleButton, loading && styles.buttonDisabled]}
                 onPress={handleGoogleSignIn}
@@ -325,7 +325,7 @@ export default function AuthScreen() {
                 <Text style={styles.buttonText}>Continue with Google</Text>
               </TouchableOpacity>
 
-              {/* Apple - only on iOS */}
+              {/* Apple - only on iOS/web where available */}
               {appleAuthAvailable && (
                 <TouchableOpacity
                   style={[styles.button, styles.appleButton, loading && styles.buttonDisabled]}
@@ -505,6 +505,16 @@ const styles = StyleSheet.create({
   },
   socialButtons: {
     gap: 0,
+  },
+  disabledButtonContainer: {
+    marginBottom: 12,
+  },
+  disabledNote: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   demoHint: {
     marginTop: 24,
