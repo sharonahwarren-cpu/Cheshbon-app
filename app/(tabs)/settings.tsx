@@ -2026,6 +2026,128 @@ export default function SettingsScreen() {
         onCancel={() => setShowConfirmDelete(false)}
       />
 
+      {/* Currency Add/Edit Modal */}
+      <Modal
+        visible={showModal && modalType === 'currency'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Currency' : 'Add Currency'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name || ''}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholder="Currency name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Symbol</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.symbol || ''}
+                  onChangeText={(text) => setFormData({ ...formData, symbol: text })}
+                  placeholder="e.g. $, ★, 🏆"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Type</Text>
+                <View style={styles.optionsGrid}>
+                  {['reward', 'consequence'].map((t) => {
+                    const isSelected = formData.type === t;
+                    return (
+                      <TouchableOpacity
+                        key={t}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, type: t })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {t.charAt(0).toUpperCase() + t.slice(1)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>On Success</Text>
+                <View style={styles.optionsGrid}>
+                  {['ADD', 'SUBTRACT', 'NONE'].map((action) => {
+                    const isSelected = formData.onSuccess === action;
+                    return (
+                      <TouchableOpacity
+                        key={action}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, onSuccess: action })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {action}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>On Failure</Text>
+                <View style={styles.optionsGrid}>
+                  {['ADD', 'SUBTRACT', 'NONE'].map((action) => {
+                    const isSelected = formData.onFailure === action;
+                    return (
+                      <TouchableOpacity
+                        key={action}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, onFailure: action })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {action}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading || !formData.name}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Strategy Add/Edit Modal */}
       <Modal
         visible={showModal && modalType === 'strategy'}

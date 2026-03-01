@@ -5,11 +5,14 @@ import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import Constants from 'expo-constants';
 
 // Essential for auth session cleanup
 WebBrowser.maybeCompleteAuthSession();
 
-const BACKEND_URL = 'https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev';
+const BACKEND_URL =
+  Constants.expoConfig?.extra?.backendUrl ||
+  'https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev';
 const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
 const BIOMETRIC_EMAIL_KEY = 'cheshbon_biometric_email';
 const BIOMETRIC_PASSWORD_KEY = 'cheshbon_biometric_password';
@@ -138,11 +141,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithEmail = async (email: string, password: string) => {
     console.log('📧 [EMAIL] Signing in with email:', email);
     try {
+      // CRITICAL FIX: Add Origin header for mobile to avoid 403 MISSING_OR_NULL_ORIGIN error
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // For mobile, set a valid Origin header (Better Auth requires this)
+      if (Platform.OS !== 'web') {
+        headers['Origin'] = BACKEND_URL;
+        console.log('📧 [EMAIL] Setting Origin header for mobile:', BACKEND_URL);
+      }
+
       const response = await fetch(`${BACKEND_URL}/api/auth/sign-in/email`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ email, password }),
       });
 
@@ -189,11 +201,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
     console.log('📧 [EMAIL] Signing up with email:', email);
     try {
+      // CRITICAL FIX: Add Origin header for mobile to avoid 403 MISSING_OR_NULL_ORIGIN error
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // For mobile, set a valid Origin header (Better Auth requires this)
+      if (Platform.OS !== 'web') {
+        headers['Origin'] = BACKEND_URL;
+        console.log('📧 [EMAIL] Setting Origin header for mobile:', BACKEND_URL);
+      }
+
       const response = await fetch(`${BACKEND_URL}/api/auth/sign-up/email`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ email, password, name }),
       });
 
@@ -243,126 +264,156 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (Platform.OS === 'web') {
       return new Promise<void>((resolve, reject) => {
         try {
-          // Better Auth social sign-in endpoint with callback to our popup handler
+          // Use initiate-social to get the proper authorization URL
           const callbackURL = `${window.location.origin}/auth-popup-callback`;
-          const authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackURL)}`;
-          console.log('📱 [GOOGLE] Opening auth URL:', authUrl);
           
-          // Open popup window
-          const width = 500;
-          const height = 600;
-          const left = window.screen.width / 2 - width / 2;
-          const top = window.screen.height / 2 - height / 2;
-          
-          const popup = window.open(
-            authUrl,
-            'Google Sign In',
-            `width=${width},height=${height},left=${left},top=${top}`
-          );
-
-          if (!popup) {
-            reject(new Error('Failed to open popup. Please allow popups for this site.'));
-            return;
-          }
-
-          // Listen for message from popup
-          const handleMessage = async (event: MessageEvent) => {
-            if (event.origin !== window.location.origin) return;
-            
-            if (event.data.type === 'auth-success' && event.data.token) {
-              console.log('✅ [GOOGLE] Received token from popup');
-              window.removeEventListener('message', handleMessage);
-              clearInterval(checkClosed);
-              popup.close();
-              
-              try {
-                await saveToken(event.data.token);
-                await fetchUser();
-                resolve();
-              } catch (err) {
-                reject(err);
+          // First get the authorization URL from the backend
+          fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'google', callbackURL }),
+          })
+            .then(async (res) => {
+              let authUrl: string;
+              if (res.ok) {
+                const data = await res.json();
+                authUrl = data.authorizationUrl;
+                console.log('📱 [GOOGLE WEB] Got authorization URL from backend:', authUrl ? 'YES' : 'NO');
+              } else {
+                // Fallback to direct Better Auth endpoint
+                authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackURL)}`;
+                console.log('📱 [GOOGLE WEB] Using fallback auth URL');
               }
-            } else if (event.data.type === 'auth-error') {
-              console.error('❌ [GOOGLE] Auth error:', event.data.error);
-              window.removeEventListener('message', handleMessage);
-              clearInterval(checkClosed);
-              popup.close();
-              reject(new Error(event.data.error || 'Google sign-in failed'));
-            }
-          };
+              
+              console.log('📱 [GOOGLE WEB] Opening popup with URL:', authUrl);
+              
+              // Open popup window
+              const width = 500;
+              const height = 600;
+              const left = window.screen.width / 2 - width / 2;
+              const top = window.screen.height / 2 - height / 2;
+              
+              const popup = window.open(
+                authUrl,
+                'Google Sign In',
+                `width=${width},height=${height},left=${left},top=${top}`
+              );
 
-          window.addEventListener('message', handleMessage);
+              if (!popup) {
+                reject(new Error('Failed to open popup. Please allow popups for this site.'));
+                return;
+              }
 
-          // Check if popup was closed without completing auth
-          const checkClosed = setInterval(() => {
-            if (popup.closed) {
-              clearInterval(checkClosed);
-              window.removeEventListener('message', handleMessage);
-              console.log('⚠️ [GOOGLE] Popup was closed without completing auth');
-              // Don't reject - user may have closed intentionally
-              resolve();
-            }
-          }, 500);
+              // Listen for message from popup
+              const handleMessage = async (event: MessageEvent) => {
+                if (event.origin !== window.location.origin) return;
+                
+                if (event.data.type === 'auth-success' && event.data.token) {
+                  console.log('✅ [GOOGLE WEB] Received token from popup');
+                  window.removeEventListener('message', handleMessage);
+                  clearInterval(checkClosed);
+                  popup.close();
+                  
+                  try {
+                    await saveToken(event.data.token);
+                    await fetchUser();
+                    resolve();
+                  } catch (err) {
+                    reject(err);
+                  }
+                } else if (event.data.type === 'auth-error') {
+                  console.error('❌ [GOOGLE WEB] Auth error:', event.data.error);
+                  window.removeEventListener('message', handleMessage);
+                  clearInterval(checkClosed);
+                  popup.close();
+                  reject(new Error(event.data.error || 'Google sign-in failed'));
+                }
+              };
+
+              window.addEventListener('message', handleMessage);
+
+              // Check if popup was closed without completing auth
+              const checkClosed = setInterval(() => {
+                if (popup.closed) {
+                  clearInterval(checkClosed);
+                  window.removeEventListener('message', handleMessage);
+                  console.log('⚠️ [GOOGLE WEB] Popup was closed without completing auth');
+                  resolve();
+                }
+              }, 500);
+            })
+            .catch((error) => {
+              console.error('❌ [GOOGLE WEB] Failed to get auth URL:', error);
+              reject(error);
+            });
 
         } catch (error) {
-          console.error('❌ [GOOGLE] Sign in error:', error);
+          console.error('❌ [GOOGLE WEB] Sign in error:', error);
           reject(error);
         }
       });
     } else {
       // For native (iOS/Android), use deep linking with Better Auth social endpoint
       try {
-        // Use oauth-start to get the proper authorization URL with mobile callback
         const callbackUrl = 'cheshbon://auth-callback';
-        console.log('📱 [GOOGLE] Requesting OAuth start URL from backend...');
+        console.log('📱 [GOOGLE NATIVE] Requesting authorization URL from backend...');
         
-        const startResponse = await fetch(`${BACKEND_URL}/api/auth/oauth-start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider: 'google', callbackUrl }),
-        });
-
+        // Use initiate-social endpoint to get the proper authorization URL
         let authUrl: string;
-        if (startResponse.ok) {
-          const startData = await startResponse.json();
-          // oauth-start returns a URL that may point to FRONTEND_URL - we need the backend URL
-          // Use Better Auth's direct social sign-in endpoint instead
+        try {
+          const initiateResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'google', callbackURL: callbackUrl }),
+          });
+
+          if (initiateResponse.ok) {
+            const initiateData = await initiateResponse.json();
+            authUrl = initiateData.authorizationUrl;
+            console.log('📱 [GOOGLE NATIVE] Got authorization URL from initiate-social:', authUrl ? 'YES' : 'NO');
+          } else {
+            const errText = await initiateResponse.text();
+            console.warn('📱 [GOOGLE NATIVE] initiate-social failed:', initiateResponse.status, errText);
+            // Fallback: use Better Auth social sign-in directly
+            authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackUrl)}`;
+          }
+        } catch (fetchErr) {
+          console.warn('📱 [GOOGLE NATIVE] initiate-social request failed, using fallback:', fetchErr);
           authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackUrl)}`;
-          console.log('📱 [GOOGLE] Using auth URL:', authUrl);
-        } else {
-          // Fallback: use Better Auth social sign-in directly
-          authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackUrl)}`;
-          console.log('📱 [GOOGLE] Fallback auth URL:', authUrl);
         }
         
-        console.log('📱 [GOOGLE] Opening browser for auth:', authUrl);
+        console.log('📱 [GOOGLE NATIVE] Opening browser for auth:', authUrl);
         
         const result = await WebBrowser.openAuthSessionAsync(
           authUrl,
           callbackUrl
         );
 
-        console.log('📱 [GOOGLE] Browser result:', result);
+        console.log('📱 [GOOGLE NATIVE] Browser result type:', result.type);
 
         if (result.type === 'success' && result.url) {
+          console.log('📱 [GOOGLE NATIVE] Callback URL received:', result.url);
           // Extract token from callback URL
           const url = new URL(result.url);
           const token = url.searchParams.get('token');
           
           if (token) {
-            console.log('✅ [GOOGLE] Received token from callback');
+            console.log('✅ [GOOGLE NATIVE] Token received, saving...');
             await saveToken(token);
             await fetchUser();
+            console.log('✅ [GOOGLE NATIVE] Sign in complete');
           } else {
-            console.warn('⚠️ [GOOGLE] No token in callback URL:', result.url);
-            throw new Error('No token received from Google sign-in');
+            console.warn('⚠️ [GOOGLE NATIVE] No token in callback URL:', result.url);
+            throw new Error('No token received from Google sign-in. Please try again.');
           }
         } else if (result.type === 'cancel') {
-          console.log('⚠️ [GOOGLE] User cancelled sign-in');
+          console.log('⚠️ [GOOGLE NATIVE] User cancelled sign-in');
           throw new Error('Google sign-in was cancelled');
+        } else {
+          console.log('⚠️ [GOOGLE NATIVE] Unexpected result type:', result.type);
         }
       } catch (error) {
-        console.error('❌ [GOOGLE] Sign in error:', error);
+        console.error('❌ [GOOGLE NATIVE] Sign in error:', error);
         throw error;
       }
     }
@@ -376,62 +427,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return new Promise<void>((resolve, reject) => {
         try {
           const callbackURL = `${window.location.origin}/auth-popup-callback`;
-          const authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=apple&callbackURL=${encodeURIComponent(callbackURL)}`;
-          console.log('📞 [APPLE] Opening Apple auth URL:', authUrl);
           
-          const width = 500;
-          const height = 600;
-          const left = window.screen.width / 2 - width / 2;
-          const top = window.screen.height / 2 - height / 2;
-          
-          const popup = window.open(
-            authUrl,
-            'Apple Sign In',
-            `width=${width},height=${height},left=${left},top=${top}`
-          );
-
-          if (!popup) {
-            reject(new Error('Failed to open popup. Please allow popups for this site.'));
-            return;
-          }
-
-          const handleMessage = async (event: MessageEvent) => {
-            if (event.origin !== window.location.origin) return;
-            
-            if (event.data.type === 'auth-success' && event.data.token) {
-              console.log('✅ [APPLE] Received token from popup');
-              window.removeEventListener('message', handleMessage);
-              clearInterval(checkClosed);
-              popup.close();
-              
-              try {
-                await saveToken(event.data.token);
-                await fetchUser();
-                resolve();
-              } catch (err) {
-                reject(err);
+          // Use initiate-social to get the proper authorization URL
+          fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'apple', callbackURL }),
+          })
+            .then(async (res) => {
+              let authUrl: string;
+              if (res.ok) {
+                const data = await res.json();
+                authUrl = data.authorizationUrl;
+                console.log('📞 [APPLE WEB] Got authorization URL from backend:', authUrl ? 'YES' : 'NO');
+              } else {
+                authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=apple&callbackURL=${encodeURIComponent(callbackURL)}`;
+                console.log('📞 [APPLE WEB] Using fallback auth URL');
               }
-            } else if (event.data.type === 'auth-error') {
-              console.error('❌ [APPLE] Auth error:', event.data.error);
-              window.removeEventListener('message', handleMessage);
-              clearInterval(checkClosed);
-              popup.close();
-              reject(new Error(event.data.error || 'Apple sign-in failed'));
-            }
-          };
+              
+              console.log('📞 [APPLE WEB] Opening popup with URL:', authUrl);
+              
+              const width = 500;
+              const height = 600;
+              const left = window.screen.width / 2 - width / 2;
+              const top = window.screen.height / 2 - height / 2;
+              
+              const popup = window.open(
+                authUrl,
+                'Apple Sign In',
+                `width=${width},height=${height},left=${left},top=${top}`
+              );
 
-          window.addEventListener('message', handleMessage);
+              if (!popup) {
+                reject(new Error('Failed to open popup. Please allow popups for this site.'));
+                return;
+              }
 
-          const checkClosed = setInterval(() => {
-            if (popup.closed) {
-              clearInterval(checkClosed);
-              window.removeEventListener('message', handleMessage);
-              console.log('⚠️ [APPLE] Popup was closed');
-              resolve();
-            }
-          }, 500);
+              const handleMessage = async (event: MessageEvent) => {
+                if (event.origin !== window.location.origin) return;
+                
+                if (event.data.type === 'auth-success' && event.data.token) {
+                  console.log('✅ [APPLE WEB] Received token from popup');
+                  window.removeEventListener('message', handleMessage);
+                  clearInterval(checkClosed);
+                  popup.close();
+                  
+                  try {
+                    await saveToken(event.data.token);
+                    await fetchUser();
+                    resolve();
+                  } catch (err) {
+                    reject(err);
+                  }
+                } else if (event.data.type === 'auth-error') {
+                  console.error('❌ [APPLE WEB] Auth error:', event.data.error);
+                  window.removeEventListener('message', handleMessage);
+                  clearInterval(checkClosed);
+                  popup.close();
+                  reject(new Error(event.data.error || 'Apple sign-in failed'));
+                }
+              };
+
+              window.addEventListener('message', handleMessage);
+
+              const checkClosed = setInterval(() => {
+                if (popup.closed) {
+                  clearInterval(checkClosed);
+                  window.removeEventListener('message', handleMessage);
+                  console.log('⚠️ [APPLE WEB] Popup was closed');
+                  resolve();
+                }
+              }, 500);
+            })
+            .catch((error) => {
+              console.error('❌ [APPLE WEB] Failed to get auth URL:', error);
+              reject(error);
+            });
         } catch (error) {
-          console.error('❌ [APPLE] Sign in error:', error);
+          console.error('❌ [APPLE WEB] Sign in error:', error);
           reject(error);
         }
       });
@@ -442,6 +515,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Use native Apple Authentication to get the identity token
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -449,65 +523,99 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ],
       });
       
-      console.log('✅ [APPLE] Apple credential received');
-      console.log('📞 [APPLE] Identity token:', credential.identityToken ? 'YES' : 'NO');
+      console.log('✅ [APPLE NATIVE] Apple credential received');
+      console.log('📞 [APPLE NATIVE] Identity token:', credential.identityToken ? 'YES' : 'NO');
+      console.log('📞 [APPLE NATIVE] User:', credential.user);
+      console.log('📞 [APPLE NATIVE] Email:', credential.email || 'not provided');
 
       if (!credential.identityToken) {
         throw new Error('No identity token received from Apple');
       }
 
-      // Send identity token to Better Auth's Apple sign-in endpoint
-      // Better Auth handles Apple identity token verification at /api/auth/sign-in/apple
-      const response = await fetch(`${BACKEND_URL}/api/auth/sign-in/apple`, {
+      const displayName = credential.fullName
+        ? `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim()
+        : undefined;
+
+      // Better Auth handles Apple identity token at /api/auth/sign-in/social with idToken
+      // Try the Better Auth callback endpoint for Apple with the identity token
+      console.log('📞 [APPLE NATIVE] Sending identity token to backend...');
+      
+      // Better Auth's Apple sign-in via the social callback endpoint
+      // The correct endpoint is /api/auth/callback/apple with the id_token
+      const response = await fetch(`${BACKEND_URL}/api/auth/callback/apple`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Origin': BACKEND_URL,
         },
         body: JSON.stringify({
-          idToken: credential.identityToken,
-          user: credential.user,
-          email: credential.email,
-          name: credential.fullName
-            ? `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim()
-            : undefined,
+          id_token: credential.identityToken,
+          user: JSON.stringify({
+            name: {
+              firstName: credential.fullName?.givenName || '',
+              lastName: credential.fullName?.familyName || '',
+            },
+            email: credential.email,
+          }),
         }),
       });
 
+      console.log('📞 [APPLE NATIVE] Backend response status:', response.status);
+      const responseText = await response.text();
+      console.log('📞 [APPLE NATIVE] Backend response:', responseText);
+
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ [APPLE] Backend error:', response.status, errorText);
+        console.error('❌ [APPLE NATIVE] /api/auth/callback/apple failed:', response.status, responseText);
         
-        // Fallback: try the generic social callback endpoint
-        const fallbackResponse = await fetch(`${BACKEND_URL}/api/auth/callback/apple`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id_token: credential.identityToken,
-            user: JSON.stringify({
-              name: credential.fullName,
-              email: credential.email,
-            }),
-          }),
-        });
+        // Fallback: use WebBrowser OAuth flow (same as Google)
+        console.log('📞 [APPLE NATIVE] Trying WebBrowser OAuth fallback...');
+        const callbackUrl = 'cheshbon://auth-callback';
         
-        if (!fallbackResponse.ok) {
-          const fallbackError = await fallbackResponse.text();
-          throw new Error(`Apple sign-in failed: ${response.status} - ${errorText}`);
+        let authUrl: string;
+        try {
+          const initiateResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: 'apple', callbackURL: callbackUrl }),
+          });
+          
+          if (initiateResponse.ok) {
+            const initiateData = await initiateResponse.json();
+            authUrl = initiateData.authorizationUrl;
+            console.log('📞 [APPLE NATIVE] Got authorization URL from initiate-social');
+          } else {
+            authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=apple&callbackURL=${encodeURIComponent(callbackUrl)}`;
+          }
+        } catch {
+          authUrl = `${BACKEND_URL}/api/auth/sign-in/social?provider=apple&callbackURL=${encodeURIComponent(callbackUrl)}`;
         }
         
-        const fallbackData = await fallbackResponse.json();
-        const fallbackToken = fallbackData.token || fallbackData.session?.token;
-        if (fallbackToken) {
-          await saveToken(fallbackToken);
-          await fetchUser();
-          console.log('✅ [APPLE] Sign in successful via fallback');
-          return;
+        const browserResult = await WebBrowser.openAuthSessionAsync(authUrl, callbackUrl);
+        console.log('📞 [APPLE NATIVE] Browser result type:', browserResult.type);
+        
+        if (browserResult.type === 'success' && browserResult.url) {
+          const url = new URL(browserResult.url);
+          const token = url.searchParams.get('token');
+          if (token) {
+            await saveToken(token);
+            await fetchUser();
+            console.log('✅ [APPLE NATIVE] Sign in successful via browser fallback');
+            return;
+          }
         }
-        throw new Error(`Apple sign-in failed: ${response.status} - ${errorText}`);
+        
+        throw new Error(`Apple sign-in failed: ${response.status} - ${responseText}`);
       }
 
-      const data = await response.json();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error('Invalid response from Apple sign-in endpoint');
+      }
+      
       const token = data.token || data.session?.token || data.user?.token || data.accessToken;
+      console.log('📞 [APPLE NATIVE] Token received:', token ? 'YES' : 'NO');
 
       if (!token) {
         throw new Error('No authentication token received from server');
@@ -515,13 +623,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       await saveToken(token);
       await fetchUser();
-      console.log('✅ [APPLE] Sign in successful');
+      console.log('✅ [APPLE NATIVE] Sign in successful');
     } catch (error: any) {
       if (error.code === 'ERR_CANCELED') {
-        console.log('📱 [APPLE] Apple Sign-In cancelled by user');
+        console.log('📱 [APPLE NATIVE] Apple Sign-In cancelled by user');
         throw new Error('Apple Sign-In was cancelled');
       } else {
-        console.error('❌ [APPLE] Apple Sign-In error:', error);
+        console.error('❌ [APPLE NATIVE] Apple Sign-In error:', error);
         throw error;
       }
     }

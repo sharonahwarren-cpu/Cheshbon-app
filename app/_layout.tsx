@@ -39,7 +39,7 @@ function AuthBootstrap({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-callback' || segments[0] === 'auth-popup-callback';
+    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-callback' || segments[0] === 'auth-popup-callback' || segments[0] === 'auth-popup';
     console.log('🔐 [AUTH BOOTSTRAP] Auth state resolved:', { user: !!user, inAuthGroup, segments });
 
     if (!user && !inAuthGroup) {

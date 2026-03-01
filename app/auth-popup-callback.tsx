@@ -27,10 +27,10 @@ export default function AuthPopupCallbackScreen() {
     let error = params.error as string;
 
     // Also check the raw URL for token (Better Auth may use different param names)
-    if (!token && typeof window !== 'undefined') {
+    if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      token = token || urlParams.get('token') || urlParams.get('access_token') || '';
-      error = error || urlParams.get('error') || '';
+      token = token || urlParams.get('token') || urlParams.get('access_token') || urlParams.get('session_token') || '';
+      error = error || urlParams.get('error') || urlParams.get('error_description') || '';
       
       // Check hash fragment too
       if (!token && window.location.hash) {
@@ -39,73 +39,74 @@ export default function AuthPopupCallbackScreen() {
       }
     }
 
-    console.log('🔄 [AUTH POPUP CALLBACK] Token found:', token ? 'YES' : 'NO');
+    console.log('🔄 [AUTH POPUP CALLBACK] Full URL:', typeof window !== 'undefined' ? window.location.href : 'N/A');
+    console.log('🔄 [AUTH POPUP CALLBACK] Token found:', token ? 'YES (length: ' + token.length + ')' : 'NO');
     console.log('🔄 [AUTH POPUP CALLBACK] Error:', error || 'none');
+    console.log('🔄 [AUTH POPUP CALLBACK] Has opener:', typeof window !== 'undefined' ? !!window.opener : 'N/A');
+
+    const sendToParent = (message: any) => {
+      if (typeof window === 'undefined') return;
+      try {
+        if (window.opener) {
+          window.opener.postMessage(message, window.location.origin);
+          console.log('✅ [AUTH POPUP CALLBACK] Message sent to parent:', message.type);
+        }
+      } catch (e) {
+        console.error('❌ [AUTH POPUP CALLBACK] Failed to post message:', e);
+      }
+    };
 
     if (window.opener) {
       // We're in a popup window, send message to parent
       if (token) {
         console.log('✅ [AUTH POPUP CALLBACK] Sending token to parent window');
         setDisplayState('success');
-        
-        try {
-          window.opener.postMessage(
-            {
-              type: 'auth-success',
-              token: token,
-            },
-            window.location.origin
-          );
-        } catch (e) {
-          console.error('❌ [AUTH POPUP CALLBACK] Failed to post message:', e);
-        }
-        
+        sendToParent({ type: 'auth-success', token });
         // Close popup after brief delay
-        setTimeout(() => {
-          window.close();
-        }, 1000);
+        setTimeout(() => window.close(), 1000);
       } else if (error) {
         console.error('❌ [AUTH POPUP CALLBACK] Error:', error);
         setErrorDetail(error);
         setDisplayState('error');
-        
-        try {
-          window.opener.postMessage(
-            {
-              type: 'auth-error',
-              error: error,
-            },
-            window.location.origin
-          );
-        } catch (e) {
-          console.error('❌ [AUTH POPUP CALLBACK] Failed to post error message:', e);
-        }
-        
-        setTimeout(() => {
-          window.close();
-        }, 2000);
+        sendToParent({ type: 'auth-error', error });
+        setTimeout(() => window.close(), 2000);
       } else {
         // No token and no error - might be an intermediate redirect
-        // Wait a moment and check again, or just close
-        console.log('⚠️ [AUTH POPUP CALLBACK] No token or error found in URL');
-        setDisplayState('error');
-        setErrorDetail('No authentication token received');
+        // Better Auth may be doing a server-side redirect - wait briefly then check cookies
+        console.log('⚠️ [AUTH POPUP CALLBACK] No token or error found in URL, checking for session...');
         
-        try {
-          window.opener.postMessage(
-            {
-              type: 'auth-error',
-              error: 'No authentication token received',
-            },
-            window.location.origin
-          );
-        } catch (e) {
-          console.error('❌ [AUTH POPUP CALLBACK] Failed to post message:', e);
-        }
-        
-        setTimeout(() => {
-          window.close();
-        }, 2000);
+        // Try to fetch the session from the backend (Better Auth may have set a cookie)
+        const BACKEND_URL = 'https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev';
+        fetch(`${BACKEND_URL}/api/auth/me`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              const sessionToken = data.session?.token || data.token;
+              if (sessionToken) {
+                console.log('✅ [AUTH POPUP CALLBACK] Session found via cookie, sending token to parent');
+                setDisplayState('success');
+                sendToParent({ type: 'auth-success', token: sessionToken });
+                setTimeout(() => window.close(), 1000);
+                return;
+              }
+            }
+            // No session found
+            console.log('⚠️ [AUTH POPUP CALLBACK] No session found, sending error to parent');
+            setDisplayState('error');
+            setErrorDetail('No authentication token received');
+            sendToParent({ type: 'auth-error', error: 'No authentication token received' });
+            setTimeout(() => window.close(), 2000);
+          })
+          .catch(() => {
+            setDisplayState('error');
+            setErrorDetail('Authentication failed');
+            sendToParent({ type: 'auth-error', error: 'Authentication failed' });
+            setTimeout(() => window.close(), 2000);
+          });
       }
     } else {
       // Not in a popup - this is a direct navigation (e.g., after web OAuth redirect)
@@ -129,10 +130,34 @@ export default function AuthPopupCallbackScreen() {
           router.replace('/auth');
         }, 2000);
       } else {
-        // No token - redirect to home and let auth bootstrap handle it
-        setTimeout(() => {
-          router.replace('/(tabs)/(home)');
-        }, 1000);
+        // No token - try to check if there's a session via cookie
+        const BACKEND_URL = 'https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev';
+        fetch(`${BACKEND_URL}/api/auth/me`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              const sessionToken = data.session?.token || data.token;
+              if (sessionToken) {
+                console.log('✅ [AUTH POPUP CALLBACK] Session found via cookie, saving token');
+                import('@/utils/api').then(({ setBearerToken }) => {
+                  setBearerToken(sessionToken).then(() => {
+                    setDisplayState('success');
+                    setTimeout(() => router.replace('/(tabs)/(home)'), 500);
+                  });
+                });
+                return;
+              }
+            }
+            // No session - redirect to home and let auth bootstrap handle it
+            setTimeout(() => router.replace('/(tabs)/(home)'), 1000);
+          })
+          .catch(() => {
+            setTimeout(() => router.replace('/(tabs)/(home)'), 1000);
+          });
       }
     }
   }, []);
