@@ -7,7 +7,7 @@ import React, {
   ReactNode,
   useRef,
 } from "react";
-import { Platform } from "react-native";
+import { Platform, Alert } from "react-native";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { useRouter, usePathname } from "expo-router";
@@ -317,6 +317,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const isAndroid = Platform.OS === "android";
         
         console.log(`📱 [${provider.toUpperCase()}] Using native WebBrowser flow`);
+        console.log(`📱 [${provider.toUpperCase()}] iOS: ${isIOS}, Android: ${isAndroid}`);
         
         // CRITICAL: Ensure any previous browser session is dismissed first
         try {
@@ -344,31 +345,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const nativeCallbackURL = Linking.createURL("/auth-callback");
         console.log(`📱 [${provider.toUpperCase()}] Native callback URL: ${nativeCallbackURL}`);
 
+        // Show user feedback
         Toast.show({
           type: "info",
           text1: "Opening browser...",
           text2: `Sign in with ${provider}`,
+          visibilityTime: 3000,
         });
 
         // CRITICAL FIX: Construct the OAuth URL directly
         // The Better Auth endpoint expects: /api/auth/sign-in/social?provider=X&callbackURL=Y
         const oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(nativeCallbackURL)}`;
         console.log(`📱 [${provider.toUpperCase()}] OAuth URL: ${oauthUrl}`);
-
         console.log(`📱 [${provider.toUpperCase()}] Opening OAuth URL in browser...`);
         
         // Platform-specific: Add extra safeguard with try-catch
         let browserResult;
         try {
+          console.log(`🌐 [${provider.toUpperCase()}] Calling WebBrowser.openAuthSessionAsync...`);
           browserResult = await WebBrowser.openAuthSessionAsync(
             oauthUrl,
             nativeCallbackURL
           );
           console.log(`📱 [${provider.toUpperCase()}] Browser session completed`);
+          console.log(`📱 [${provider.toUpperCase()}] Browser result:`, JSON.stringify(browserResult, null, 2));
         } catch (browserError: any) {
           console.error(`❌ [${provider.toUpperCase()}] WebBrowser error:`, browserError);
           console.error(`❌ [${provider.toUpperCase()}] Error message:`, browserError.message);
           console.error(`❌ [${provider.toUpperCase()}] Error code:`, browserError.code);
+          console.error(`❌ [${provider.toUpperCase()}] Error stack:`, browserError.stack);
           
           // Check if it's the "already open" error (common on Android and iOS)
           if (
@@ -395,6 +400,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               throw new Error("Browser is busy. Please close any open browser windows and try again.");
             }
           } else {
+            // Re-throw the original error
             throw browserError;
           }
         }
