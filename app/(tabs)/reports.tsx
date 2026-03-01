@@ -9,6 +9,7 @@ import {
   Modal,
   TextInput,
   Platform,
+  Dimensions,
 } from "react-native";
 import { authenticatedGet, authenticatedPost } from "@/utils/api";
 import React, { useState, useEffect } from "react";
@@ -17,6 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { VictoryPie, VictoryChart, VictoryLine, VictoryAxis, VictoryTheme, VictoryLabel } from "victory-native";
+import Svg, { Circle, Text as SvgText } from "react-native-svg";
 
 interface CurrencyBalance {
   currencyId: string;
@@ -84,11 +87,27 @@ interface Currency {
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
 
+interface Strategy {
+  id: string;
+  name: string;
+  successCount: number;
+  failureCount: number;
+  timesUsed: number;
+  successRate: number;
+}
+
+type TimeRange = 'week' | 'month' | '60days' | '90days' | 'year' | 'all' | 'custom';
+
+const { width: screenWidth } = Dimensions.get('window');
+
 export default function ReportsScreen() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   
   const [loading, setLoading] = useState(true);
+  const [currentView, setCurrentView] = useState<'reports' | 'charts'>('reports');
+  const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('week');
+  
   const [currencyBalances, setCurrencyBalances] = useState<CurrencyBalance[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [winsVsLosses, setWinsVsLosses] = useState<WinsVsLosses | null>(null);
@@ -98,6 +117,7 @@ export default function ReportsScreen() {
   const [gainsLossesSummary, setGainsLossesSummary] = useState<GainsLossesSummary | null>(null);
   const [behaviorCounts, setBehaviorCounts] = useState<BehaviorCounts | null>(null);
   const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);
+  const [strategies, setStrategies] = useState<Strategy[]>([]);
   
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -118,6 +138,13 @@ export default function ReportsScreen() {
     console.log("ReportsScreen mounted");
     loadReportsData();
   }, []);
+
+  useEffect(() => {
+    if (currentView === 'charts') {
+      console.log("Loading chart data for time range:", selectedTimeRange);
+      loadChartData();
+    }
+  }, [currentView, selectedTimeRange]);
 
   const showError = (message: string) => {
     setErrorMessage(message);
@@ -187,6 +214,18 @@ export default function ReportsScreen() {
     }
   };
 
+  const loadChartData = async () => {
+    console.log("Loading chart data for time range:", selectedTimeRange);
+    try {
+      const strategiesRes = await authenticatedGet('/api/strategies');
+      const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
+      setStrategies(strategiesData);
+    } catch (error: any) {
+      console.error("Error loading chart data:", error);
+      showError(error.message || "Failed to load chart data");
+    }
+  };
+
   const isRewardCurrency = (currency: Currency): boolean => {
     return currency.onSuccess === 'ADD';
   };
@@ -239,18 +278,252 @@ export default function ReportsScreen() {
     }
   };
 
-  if (loading) {
+  const renderGaugeChart = (value: number, total: number, label: string, color: string) => {
+    const percentage = total > 0 ? (value / total) * 100 : 0;
+    const angle = (percentage / 100) * 180;
+    const radius = 80;
+    const centerX = 100;
+    const centerY = 100;
+    
+    const percentageText = `${Math.round(percentage)}%`;
+    const valueText = `${value}`;
+    const totalText = `${total}`;
+    
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={styles.gaugeContainer}>
+        <Text style={styles.gaugeLabel}>{label}</Text>
+        <Svg width={200} height={140} viewBox="0 0 200 140">
+          <Circle
+            cx={centerX}
+            cy={centerY}
+            r={radius}
+            stroke={colors.cardBorder}
+            strokeWidth={20}
+            fill="none"
+            strokeDasharray={`${Math.PI * radius} ${Math.PI * radius}`}
+            strokeDashoffset={0}
+            rotation="-180"
+            origin={`${centerX}, ${centerY}`}
+          />
+          <Circle
+            cx={centerX}
+            cy={centerY}
+            r={radius}
+            stroke={color}
+            strokeWidth={20}
+            fill="none"
+            strokeDasharray={`${Math.PI * radius} ${Math.PI * radius}`}
+            strokeDashoffset={Math.PI * radius * (1 - percentage / 100)}
+            rotation="-180"
+            origin={`${centerX}, ${centerY}`}
+            strokeLinecap="round"
+          />
+          <SvgText
+            x={centerX}
+            y={centerY - 10}
+            fontSize="32"
+            fontWeight="bold"
+            fill={colors.text}
+            textAnchor="middle"
+          >
+            {percentageText}
+          </SvgText>
+          <SvgText
+            x={centerX}
+            y={centerY + 20}
+            fontSize="16"
+            fill={colors.textSecondary}
+            textAnchor="middle"
+          >
+            {valueText} / {totalText}
+          </SvgText>
+        </Svg>
       </View>
     );
-  }
+  };
 
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+  const renderStrategyLineChart = () => {
+    if (strategies.length === 0) {
+      return (
+        <View style={styles.emptyChartState}>
+          <Text style={styles.emptyChartText}>No strategy data available</Text>
+        </View>
+      );
+    }
+
+    const chartData = strategies.slice(0, 5).map((strategy, index) => ({
+      x: index + 1,
+      y: strategy.successRate,
+      label: strategy.name,
+    }));
+
+    return (
+      <View style={styles.lineChartContainer}>
+        <Text style={styles.chartTitle}>Strategy Effectiveness Over Time</Text>
+        <VictoryChart
+          width={screenWidth - 40}
+          height={300}
+          theme={VictoryTheme.material}
+          padding={{ top: 20, bottom: 60, left: 60, right: 20 }}
+        >
+          <VictoryAxis
+            style={{
+              axis: { stroke: colors.border },
+              tickLabels: { fill: colors.textSecondary, fontSize: 10 },
+              grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
+            }}
+            tickFormat={(t) => {
+              const strategy = strategies[t - 1];
+              const strategyName = strategy ? strategy.name : '';
+              const shortName = strategyName.length > 10 ? strategyName.substring(0, 10) + '...' : strategyName;
+              return shortName;
+            }}
+          />
+          <VictoryAxis
+            dependentAxis
+            style={{
+              axis: { stroke: colors.border },
+              tickLabels: { fill: colors.textSecondary, fontSize: 12 },
+              grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
+            }}
+            tickFormat={(t) => `${t}%`}
+          />
+          <VictoryLine
+            data={chartData}
+            style={{
+              data: { stroke: colors.primary, strokeWidth: 3 },
+              parent: { border: "1px solid #ccc" }
+            }}
+            animate={{
+              duration: 1000,
+              onLoad: { duration: 500 }
+            }}
+          />
+        </VictoryChart>
+        <View style={styles.strategyLegend}>
+          {strategies.slice(0, 5).map((strategy, index) => {
+            const strategyName = strategy.name;
+            const successRateText = `${strategy.successRate}%`;
+            const timesUsedText = `${strategy.timesUsed}x`;
+            
+            return (
+              <View key={index} style={styles.strategyLegendItem}>
+                <View style={[styles.strategyLegendDot, { backgroundColor: colors.primary }]} />
+                <View style={styles.strategyLegendTextContainer}>
+                  <Text style={styles.strategyLegendName}>{strategyName}</Text>
+                  <Text style={styles.strategyLegendStats}>
+                    {successRateText} success • {timesUsedText} used
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderTimeRangeSelector = () => {
+    const timeRanges: { value: TimeRange; label: string }[] = [
+      { value: 'week', label: 'Week' },
+      { value: 'month', label: 'Month' },
+      { value: '60days', label: '60 Days' },
+      { value: '90days', label: '90 Days' },
+      { value: 'year', label: 'Year' },
+      { value: 'all', label: 'All' },
+      { value: 'custom', label: 'Custom' },
+    ];
+
+    return (
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={styles.timeRangeSelector}
+        contentContainerStyle={styles.timeRangeSelectorContent}
+      >
+        {timeRanges.map((range) => {
+          const isSelected = selectedTimeRange === range.value;
+          
+          return (
+            <TouchableOpacity
+              key={range.value}
+              style={[
+                styles.timeRangeButton,
+                isSelected && styles.timeRangeButtonActive,
+              ]}
+              onPress={() => setSelectedTimeRange(range.value)}
+            >
+              <Text
+                style={[
+                  styles.timeRangeButtonText,
+                  isSelected && styles.timeRangeButtonTextActive,
+                ]}
+              >
+                {range.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+
+  const renderChartsView = () => {
+    const winsTotal = winsVsLosses ? winsVsLosses.wins + winsVsLosses.losses : 0;
+    const winsValue = winsVsLosses ? winsVsLosses.wins : 0;
+    const lossesValue = winsVsLosses ? winsVsLosses.losses : 0;
+
+    return (
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <Text style={styles.headerTitle}>Reports</Text>
+        <View style={styles.viewToggleContainer}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setCurrentView('reports')}
+          >
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+            <Text style={styles.backButtonText}>Back to Reports</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.headerTitle}>Charts</Text>
+
+        {renderTimeRangeSelector()}
+
+        <Text style={styles.sectionTitle}>Wins vs Losses</Text>
+        <View style={styles.gaugeRow}>
+          {renderGaugeChart(winsValue, winsTotal, 'Wins', colors.success)}
+          {renderGaugeChart(lossesValue, winsTotal, 'Losses', colors.error)}
+        </View>
+
+        <Text style={styles.sectionTitle}>Strategy Effectiveness</Text>
+        {renderStrategyLineChart()}
+      </ScrollView>
+    );
+  };
+
+  const renderReportsView = () => {
+    return (
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        <View style={styles.viewToggleContainer}>
+          <Text style={styles.headerTitle}>Reports</Text>
+          <TouchableOpacity
+            style={styles.chartsButton}
+            onPress={() => setCurrentView('charts')}
+          >
+            <IconSymbol
+              ios_icon_name="chart.bar"
+              android_material_icon_name="assessment"
+              size={20}
+              color={colors.background}
+            />
+            <Text style={styles.chartsButtonText}>View Charts</Text>
+          </TouchableOpacity>
+        </View>
 
         {currencyBalances.length > 0 && (
           <>
@@ -658,6 +931,20 @@ export default function ReportsScreen() {
           </View>
         )}
       </ScrollView>
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {currentView === 'reports' ? renderReportsView() : renderChartsView()}
 
       <Modal
         visible={showCurrencyModal}
@@ -808,11 +1095,66 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? 48 : 20,
     paddingBottom: 100,
   },
+  viewToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
   headerTitle: {
     fontSize: 32,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 24,
+  },
+  chartsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  chartsButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  timeRangeSelector: {
+    marginBottom: 20,
+  },
+  timeRangeSelectorContent: {
+    gap: 8,
+  },
+  timeRangeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  timeRangeButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  timeRangeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  timeRangeButtonTextActive: {
+    color: colors.background,
   },
   sectionTitle: {
     fontSize: 20,
@@ -820,6 +1162,71 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginTop: 16,
     marginBottom: 12,
+  },
+  gaugeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 24,
+  },
+  gaugeContainer: {
+    alignItems: 'center',
+  },
+  gaugeLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  lineChartContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  strategyLegend: {
+    marginTop: 16,
+    gap: 12,
+  },
+  strategyLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  strategyLegendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  strategyLegendTextContainer: {
+    flex: 1,
+  },
+  strategyLegendName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  strategyLegendStats: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  emptyChartState: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyChartText: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
   reportCard: {
     backgroundColor: colors.card,
