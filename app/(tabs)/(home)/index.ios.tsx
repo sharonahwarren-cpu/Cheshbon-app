@@ -18,7 +18,6 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { IconSymbol } from "@/components/IconSymbol";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@/styles/commonStyles";
-import { useAuth } from "@/contexts/AuthContext";
 import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -170,7 +169,6 @@ function formatAlternativeDate(date: Date, calendarType: string): string {
 }
 
 export default function HomeScreen() {
-  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -213,36 +211,7 @@ export default function HomeScreen() {
     description?: string;
   } | undefined>(undefined);
 
-  useEffect(() => {
-    console.log("HomeScreen iOS mounted");
-    loadData(false);
-  }, []);
-
-  useEffect(() => {
-    console.log("Selected date changed iOS, reloading data:", selectedDate);
-    loadData(false);
-  }, [selectedDate]);
-
-  useEffect(() => {
-    if (showSuccessModal) {
-      const timer = setTimeout(() => {
-        setShowSuccessModal(false);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [showSuccessModal]);
-
-  const showError = (message: string) => {
-    setErrorMessage(message);
-    setErrorModalVisible(true);
-  };
-
-  const showSuccess = (message: string) => {
-    setSuccessModalMessage(message);
-    setShowSuccessModal(true);
-  };
-
-  const loadData = async (isRefreshing: boolean = false) => {
+  const loadData = React.useCallback(async (isRefreshing: boolean = false) => {
     console.log("[Home iOS] Loading home screen data, isRefreshing:", isRefreshing);
     if (isRefreshing) {
       setRefreshing(true);
@@ -321,6 +290,35 @@ export default function HomeScreen() {
         setLoading(false);
       }
     }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    console.log("HomeScreen iOS mounted");
+    loadData(false);
+  }, []);
+
+  useEffect(() => {
+    console.log("Selected date changed iOS, reloading data:", selectedDate);
+    loadData(false);
+  }, [selectedDate, loadData]);
+
+  useEffect(() => {
+    if (showSuccessModal) {
+      const timer = setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccessModal]);
+
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    setErrorModalVisible(true);
+  };
+
+  const showSuccess = (message: string) => {
+    setSuccessModalMessage(message);
+    setShowSuccessModal(true);
   };
 
   const handleRefresh = async () => {
@@ -674,12 +672,12 @@ export default function HomeScreen() {
     const successCount = dailySuccessEntries.length;
     const struggleCount = dailyStruggleEntries.length;
 
-    const tallies: Array<{ 
-      tally: number; 
-      currencySymbol: string; 
+    const tallies: {
+      tally: number;
+      currencySymbol: string;
       currencyType: 'reward' | 'consequence';
       currencyId: string;
-    }> = [];
+    }[] = [];
 
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
       const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);

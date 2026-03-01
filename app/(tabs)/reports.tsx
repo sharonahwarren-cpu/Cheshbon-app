@@ -13,7 +13,6 @@ import {
 import { authenticatedGet, authenticatedPost } from "@/utils/api";
 import React, { useState, useEffect } from "react";
 import { colors } from "@/styles/commonStyles";
-import { useAuth } from "@/contexts/AuthContext";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -23,7 +22,7 @@ interface CurrencyBalance {
   currencyName: string;
   symbol: string;
   totalBalance: number;
-  goalBreakdown?: Array<{ goalId: string; goalTitle: string; balance: number }>;
+  goalBreakdown?: { goalId: string; goalTitle: string; balance: number }[];
 }
 
 interface WinsVsLosses {
@@ -52,9 +51,9 @@ interface JournalCount {
 interface GainsLossesSummary {
   totalGains: number;
   totalLosses: number;
-  byCategory: Array<{ category: string; gains: number; losses: number }>;
-  topGains: Array<{ id: string; name: string; count: number }>;
-  topLosses: Array<{ id: string; name: string; count: number }>;
+  byCategory: { category: string; gains: number; losses: number }[];
+  topGains: { id: string; name: string; count: number }[];
+  topLosses: { id: string; name: string; count: number }[];
 }
 
 interface BehaviorCounts {
@@ -85,7 +84,6 @@ interface Currency {
 }
 
 export default function ReportsScreen() {
-  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   
   const [loading, setLoading] = useState(true);
@@ -114,25 +112,7 @@ export default function ReportsScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
 
-  useEffect(() => {
-    console.log("ReportsScreen mounted");
-    loadReportsData();
-  }, []);
-
-  const showError = (message: string) => {
-    setErrorMessage(message);
-    setErrorModalVisible(true);
-  };
-
-  const showSuccess = (message: string) => {
-    setSuccessModalMessage(message);
-    setShowSuccessModal(true);
-    setTimeout(() => {
-      setShowSuccessModal(false);
-    }, 2000);
-  };
-
-  const loadReportsData = async () => {
+  const loadReportsData = React.useCallback(async () => {
     console.log("Loading reports data");
     setLoading(true);
     try {
@@ -185,6 +165,24 @@ export default function ReportsScreen() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    console.log("ReportsScreen mounted");
+    loadReportsData();
+  }, [loadReportsData]);
+
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    setErrorModalVisible(true);
+  };
+
+  const showSuccess = (message: string) => {
+    setSuccessModalMessage(message);
+    setShowSuccessModal(true);
+    setTimeout(() => {
+      setShowSuccessModal(false);
+    }, 2000);
   };
 
   const isRewardCurrency = (currency: Currency): boolean => {

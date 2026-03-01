@@ -1,49 +1,9 @@
 
-import React, { useEffect } from 'react';
-import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
-import { ActivityIndicator, View } from 'react-native';
+import React from 'react';
+import { Stack } from 'expo-router';
 import FloatingTabBar, { TabBarItem } from '@/components/FloatingTabBar';
-import { useAuth } from '@/contexts/AuthContext';
 
 export default function TabLayout() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const segments = useSegments();
-  const pathname = usePathname();
-
-  // SIMPLIFIED: Only handle auth redirects, NO tab navigation logic
-  useEffect(() => {
-    console.log('[TabLayout] Auth check - user:', user ? user.email : 'none', 'loading:', loading, 'segments:', segments);
-    
-    if (loading) return;
-
-    const inAuthGroup = segments[0] === 'auth' || segments[0] === 'auth-popup' || segments[0] === 'auth-callback';
-    const inTabsGroup = segments[0] === '(tabs)';
-
-    // Only redirect to auth if not logged in AND not already in auth flow
-    if (!user && !inAuthGroup) {
-      console.log('[TabLayout] Redirecting to auth');
-      router.replace('/auth');
-      return;
-    }
-
-    // Don't do any other redirects - let the user navigate freely
-  }, [user, loading, segments]);
-
-  if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  console.log('[TabLayout] Rendering tabs, current pathname:', pathname);
-
   const tabs: TabBarItem[] = [
     {
       name: '(home)',

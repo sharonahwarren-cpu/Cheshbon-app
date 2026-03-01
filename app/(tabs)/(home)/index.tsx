@@ -16,7 +16,6 @@ import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDel
 import React, { useState, useEffect, useRef } from "react";
 import { colors } from "@/styles/commonStyles";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
-import { useAuth } from "@/contexts/AuthContext";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -187,7 +186,6 @@ function formatAlternativeDate(date: Date, calendarType: string): string {
 }
 
 export default function HomeScreen() {
-  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams();
   const scrollViewRef = useRef<ScrollView>(null);

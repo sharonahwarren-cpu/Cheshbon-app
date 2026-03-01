@@ -3,12 +3,10 @@ import { SystemBars } from "react-native-edge-to-edge";
 import { useFonts } from "expo-font";
 import { useNetworkState } from "expo-network";
 import { WidgetProvider } from "@/contexts/WidgetContext";
-import { AuthProvider } from "@/contexts/AuthContext";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
-import * as WebBrowser from "expo-web-browser";
 import React, { useEffect } from "react";
-import { useColorScheme, Platform } from "react-native";
+import { useColorScheme } from "react-native";
 import Toast from 'react-native-toast-message';
 import {
   DarkTheme,
@@ -18,9 +16,6 @@ import {
 import "react-native-reanimated";
 import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-
-// Complete auth session for OAuth flows (must be called early)
-WebBrowser.maybeCompleteAuthSession();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -50,25 +45,19 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <WidgetProvider>
-          <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-            <SystemBars style="auto" />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="auth" options={{ headerShown: false }} />
-              <Stack.Screen name="auth-popup" options={{ headerShown: false }} />
-              <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
-              <Stack.Screen name="reset-password" options={{ headerShown: false }} />
-              <Stack.Screen name="ai-chat" options={{ headerShown: false }} />
-              <Stack.Screen name="+not-found" />
-            </Stack>
-            <StatusBar style="auto" />
-            {/* Global Toast Component */}
-            <Toast />
-          </ThemeProvider>
-        </WidgetProvider>
-      </AuthProvider>
+      <WidgetProvider>
+        <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+          <SystemBars style="auto" />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="ai-chat" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style="auto" />
+          {/* Global Toast Component */}
+          <Toast />
+        </ThemeProvider>
+      </WidgetProvider>
     </GestureHandlerRootView>
   );
 }

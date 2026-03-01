@@ -1,54 +1,13 @@
 
-import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Modal, ActivityIndicator, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { IconSymbol } from "@/components/IconSymbol";
 import { colors } from "@/styles/commonStyles";
-import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
   const router = useRouter();
-  const [signOutModalVisible, setSignOutModalVisible] = useState(false);
-
-  useEffect(() => {
-    console.log('[Profile] Screen mounted, user:', user ? user.email : 'not logged in');
-  }, []);
-
-  useEffect(() => {
-    console.log('[Profile] User state changed:', user ? user.email : 'not logged in');
-  }, [user]);
-
-  const handleSignOut = async () => {
-    console.log("User signing out");
-    try {
-      await signOut();
-      console.log("Sign out successful, redirecting to auth");
-      router.replace('/auth');
-    } catch (error) {
-      console.error("Sign out error:", error);
-    } finally {
-      setSignOutModalVisible(false);
-    }
-  };
-
-  // If user is not loaded yet, show loading
-  if (!user) {
-    console.log('[Profile] No user found, showing loading...');
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 16, color: colors.textSecondary }}>Loading profile...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const userName = user?.name || user?.email || 'User';
-  const userEmail = user?.email || '';
-  const userInitial = userName.charAt(0).toUpperCase();
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -61,11 +20,11 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{userInitial}</Text>
+              <Text style={styles.avatarText}>U</Text>
             </View>
           </View>
-          <Text style={styles.userName}>{userName}</Text>
-          <Text style={styles.userEmail}>{userEmail}</Text>
+          <Text style={styles.userName}>User</Text>
+          <Text style={styles.userEmail}>Welcome to Cheshbon</Text>
         </View>
 
         {/* Preferences Button */}
@@ -131,58 +90,7 @@ export default function ProfileScreen() {
             Stay consistent, reflect on your journey, and celebrate your wins!
           </Text>
         </View>
-
-        {/* Sign Out Button */}
-        <TouchableOpacity
-          style={styles.signOutButton}
-          onPress={() => {
-            console.log("Sign out button pressed");
-            setSignOutModalVisible(true);
-          }}
-        >
-          <IconSymbol
-            ios_icon_name="arrow.right.square"
-            android_material_icon_name="logout"
-            size={20}
-            color="#EF4444"
-          />
-          <Text style={styles.signOutButtonText}>Sign Out</Text>
-        </TouchableOpacity>
       </ScrollView>
-
-      {/* Sign Out Confirmation Modal */}
-      <Modal
-        visible={signOutModalVisible}
-        animationType="fade"
-        transparent={true}
-        onRequestClose={() => setSignOutModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmModal}>
-            <Text style={styles.confirmTitle}>Sign Out?</Text>
-            <Text style={styles.confirmText}>
-              Are you sure you want to sign out?
-            </Text>
-            <View style={styles.confirmButtons}>
-              <TouchableOpacity
-                style={[styles.confirmButton, styles.confirmButtonCancel]}
-                onPress={() => {
-                  console.log("Sign out cancelled");
-                  setSignOutModalVisible(false);
-                }}
-              >
-                <Text style={styles.confirmButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.confirmButton, styles.confirmButtonSignOut]}
-                onPress={handleSignOut}
-              >
-                <Text style={styles.confirmButtonTextSignOut}>Sign Out</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -284,77 +192,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginLeft: 12,
-  },
-  signOutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EF4444',
-    gap: 8,
-  },
-  signOutButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#EF4444',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  confirmModal: {
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: 16,
-    padding: 24,
-    marginHorizontal: 40,
-    width: '80%',
-    maxWidth: 400,
-  },
-  confirmTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  confirmText: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  confirmButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  confirmButton: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  confirmButtonCancel: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  confirmButtonSignOut: {
-    backgroundColor: '#EF4444',
-  },
-  confirmButtonTextCancel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  confirmButtonTextSignOut: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 });
