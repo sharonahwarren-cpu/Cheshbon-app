@@ -19,6 +19,9 @@ interface ConfirmModalProps {
   confirmButtonText?: string;
   cancelButtonText?: string;
   confirmButtonColor?: string;
+  // Aliases for convenience
+  confirmText?: string;
+  cancelText?: string;
 }
 
 export function ConfirmModal({
@@ -27,10 +30,14 @@ export function ConfirmModal({
   message,
   onConfirm,
   onCancel,
-  confirmButtonText = 'Delete',
-  cancelButtonText = 'Cancel',
+  confirmButtonText,
+  cancelButtonText,
   confirmButtonColor = colors.error,
+  confirmText,
+  cancelText,
 }: ConfirmModalProps) {
+  const resolvedConfirmText = confirmButtonText || confirmText || 'Delete';
+  const resolvedCancelText = cancelButtonText || cancelText || 'Cancel';
   return (
     <Modal
       visible={visible}
@@ -55,13 +62,13 @@ export function ConfirmModal({
               style={[styles.alertButton, styles.alertButtonSecondary]}
               onPress={onCancel}
             >
-              <Text style={styles.alertButtonSecondaryText}>{cancelButtonText}</Text>
+              <Text style={styles.alertButtonSecondaryText}>{resolvedCancelText}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.alertButton, { backgroundColor: confirmButtonColor }]}
               onPress={onConfirm}
             >
-              <Text style={styles.alertButtonText}>{confirmButtonText}</Text>
+              <Text style={styles.alertButtonText}>{resolvedConfirmText}</Text>
             </TouchableOpacity>
           </View>
         </View>

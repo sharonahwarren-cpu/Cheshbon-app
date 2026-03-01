@@ -1,13 +1,39 @@
 
-import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Image } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Image, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React from "react";
 import { IconSymbol } from "@/components/IconSymbol";
 import { colors } from "@/styles/commonStyles";
 import { useRouter } from "expo-router";
+import { useAuth } from "@/contexts/AuthContext";
+import { ConfirmModal } from "@/components/ConfirmModal";
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { user, signOut } = useAuth();
+  const [showSignOutModal, setShowSignOutModal] = React.useState(false);
+
+  const handleSignOut = async () => {
+    console.log('🚪 [PROFILE] Sign out button pressed');
+    setShowSignOutModal(true);
+  };
+
+  const confirmSignOut = async () => {
+    console.log('🚪 [PROFILE] Confirming sign out...');
+    try {
+      await signOut();
+      console.log('✅ [PROFILE] Sign out successful');
+      setShowSignOutModal(false);
+      router.replace('/auth');
+    } catch (error: any) {
+      console.error('❌ [PROFILE] Sign out error:', error);
+      Alert.alert('Error', 'Failed to sign out. Please try again.');
+    }
+  };
+
+  const userInitial = user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U';
+  const displayName = user?.name || 'User';
+  const displayEmail = user?.email || 'Welcome to Cheshbon';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -20,11 +46,11 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>U</Text>
+              <Text style={styles.avatarText}>{userInitial}</Text>
             </View>
           </View>
-          <Text style={styles.userName}>User</Text>
-          <Text style={styles.userEmail}>Welcome to Cheshbon</Text>
+          <Text style={styles.userName}>{displayName}</Text>
+          <Text style={styles.userEmail}>{displayEmail}</Text>
         </View>
 
         {/* Preferences Button */}
@@ -73,6 +99,26 @@ export default function ProfileScreen() {
           />
         </TouchableOpacity>
 
+        {/* Sign Out Button */}
+        <TouchableOpacity
+          style={[styles.menuButton, styles.signOutButton]}
+          onPress={handleSignOut}
+        >
+          <IconSymbol
+            ios_icon_name="arrow.right.square"
+            android_material_icon_name="logout"
+            size={20}
+            color="#EF4444"
+          />
+          <Text style={[styles.menuButtonText, styles.signOutText]}>Sign Out</Text>
+          <IconSymbol
+            ios_icon_name="chevron.right"
+            android_material_icon_name="chevron-right"
+            size={20}
+            color={colors.textSecondary}
+          />
+        </TouchableOpacity>
+
         {/* About Card with Logo */}
         <View style={styles.card}>
           <View style={styles.aboutLogoContainer}>
@@ -91,6 +137,17 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Sign Out Confirmation Modal */}
+      <ConfirmModal
+        visible={showSignOutModal}
+        title="Sign Out"
+        message="Are you sure you want to sign out?"
+        onConfirm={confirmSignOut}
+        onCancel={() => setShowSignOutModal(false)}
+        confirmText="Sign Out"
+        cancelText="Cancel"
+      />
     </SafeAreaView>
   );
 }
@@ -192,5 +249,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginLeft: 12,
+  },
+  signOutButton: {
+    borderColor: '#EF4444',
+  },
+  signOutText: {
+    color: '#EF4444',
   },
 });

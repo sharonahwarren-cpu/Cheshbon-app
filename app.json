@@ -22,6 +22,7 @@
         ],
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset) and geofencing.",
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset).",
+        "NSFaceIDUsageDescription": "Use Face ID to sign in quickly and securely.",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
@@ -38,6 +39,10 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.anonymous.Natively",
+      "permissions": [
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -63,6 +68,9 @@
       "expo-font",
       "expo-router",
       "expo-web-browser",
+      "expo-apple-authentication",
+      "expo-secure-store",
+      "expo-local-authentication",
       [
         "expo-location",
         {
@@ -70,7 +78,7 @@
         }
       ]
     ],
-    "scheme": "Cheshbon",
+    "scheme": "cheshbon",
     "experiments": {
       "typedRoutes": true
     },
