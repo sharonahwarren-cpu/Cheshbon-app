@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -16,13 +16,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import Toast from "react-native-toast-message";
 import { colors } from "@/styles/commonStyles";
-import * as LocalAuthentication from "expo-local-authentication";
-import * as SecureStore from "expo-secure-store";
-import { IconSymbol } from "@/components/IconSymbol";
 
 type Mode = "signin" | "signup";
-
-const BIOMETRIC_CREDENTIALS_KEY = "cheshbon_biometric_credentials";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -34,127 +29,6 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricType, setBiometricType] = useState<string>("");
-  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
-
-  useEffect(() => {
-    checkBiometricAvailability();
-    checkSavedCredentials();
-  }, []);
-
-  const checkBiometricAvailability = async () => {
-    try {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      const available = compatible && enrolled;
-      
-      setBiometricAvailable(available);
-      
-      if (available) {
-        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-        const biometricTypeNames = types.map(type => {
-          switch (type) {
-            case LocalAuthentication.AuthenticationType.FINGERPRINT:
-              return "Touch ID";
-            case LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION:
-              return "Face ID";
-            case LocalAuthentication.AuthenticationType.IRIS:
-              return "Iris";
-            default:
-              return "Biometric";
-          }
-        });
-        
-        const typeText = biometricTypeNames.join(" / ");
-        setBiometricType(typeText);
-        console.log("✅ Biometric authentication available:", typeText);
-      } else {
-        console.log("❌ Biometric authentication not available");
-      }
-    } catch (error) {
-      console.error("Error checking biometric availability:", error);
-      setBiometricAvailable(false);
-    }
-  };
-
-  const checkSavedCredentials = async () => {
-    try {
-      if (Platform.OS === "web") {
-        setHasSavedCredentials(false);
-        return;
-      }
-      
-      const savedCreds = await SecureStore.getItemAsync(BIOMETRIC_CREDENTIALS_KEY);
-      setHasSavedCredentials(!!savedCreds);
-      console.log("Saved credentials:", savedCreds ? "Found" : "Not found");
-    } catch (error) {
-      console.error("Error checking saved credentials:", error);
-      setHasSavedCredentials(false);
-    }
-  };
-
-  const handleBiometricAuth = async () => {
-    try {
-      console.log("🔐 Starting biometric authentication...");
-      
-      const savedCredsString = await SecureStore.getItemAsync(BIOMETRIC_CREDENTIALS_KEY);
-      if (!savedCredsString) {
-        Toast.show({
-          type: "error",
-          text1: "No Saved Credentials",
-          text2: "Please sign in with email/password first to enable biometric login.",
-        });
-        return;
-      }
-
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Sign in to Cheshbon",
-        fallbackLabel: "Use password",
-        cancelLabel: "Cancel",
-      });
-
-      if (result.success) {
-        console.log("✅ Biometric authentication successful");
-        
-        const savedCreds = JSON.parse(savedCredsString);
-        setLoading(true);
-        
-        try {
-          await signInWithEmail(savedCreds.email, savedCreds.password);
-          router.replace("/(tabs)/(home)");
-        } catch (error: any) {
-          console.error("❌ Sign in failed after biometric auth:", error);
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        console.log("❌ Biometric authentication failed or cancelled");
-      }
-    } catch (error) {
-      console.error("❌ Biometric authentication error:", error);
-      Toast.show({
-        type: "error",
-        text1: "Authentication Failed",
-        text2: "Could not authenticate with biometrics.",
-      });
-    }
-  };
-
-  const saveBiometricCredentials = async (email: string, password: string) => {
-    try {
-      if (Platform.OS === "web") {
-        return;
-      }
-      
-      const credentials = JSON.stringify({ email, password });
-      await SecureStore.setItemAsync(BIOMETRIC_CREDENTIALS_KEY, credentials);
-      setHasSavedCredentials(true);
-      console.log("💾 Biometric credentials saved");
-    } catch (error) {
-      console.error("Error saving biometric credentials:", error);
-    }
-  };
 
   if (authLoading) {
     return (
@@ -178,21 +52,9 @@ export default function AuthScreen() {
     try {
       if (mode === "signin") {
         await signInWithEmail(email, password);
-        
-        // Save credentials for biometric auth if available
-        if (biometricAvailable && Platform.OS !== "web") {
-          await saveBiometricCredentials(email, password);
-        }
-        
         router.replace("/(tabs)/(home)");
       } else {
         await signUpWithEmail(email, password, name);
-        
-        // Save credentials for biometric auth if available
-        if (biometricAvailable && Platform.OS !== "web") {
-          await saveBiometricCredentials(email, password);
-        }
-        
         router.replace("/(tabs)/(home)");
       }
     } catch (error: any) {
@@ -204,36 +66,24 @@ export default function AuthScreen() {
   };
 
   const handleSocialAuth = async (provider: "google" | "apple" | "github") => {
-    console.log(`🔘 User tapped ${provider} sign in button`);
-    console.log(`📱 Platform: ${Platform.OS}`);
     setLoading(true);
     try {
       if (provider === "google") {
-        console.log("📞 Calling signInWithGoogle...");
         await signInWithGoogle();
-        console.log("✅ signInWithGoogle completed");
       } else if (provider === "apple") {
-        console.log("📞 Calling signInWithApple...");
         await signInWithApple();
-        console.log("✅ signInWithApple completed");
       } else if (provider === "github") {
-        console.log("📞 Calling signInWithGitHub...");
         await signInWithGitHub();
-        console.log("✅ signInWithGitHub completed");
       }
       
       // On web, navigate immediately. On native, the deep link will handle navigation
       if (Platform.OS === "web") {
-        console.log("🌐 Web platform - navigating to home");
         router.replace("/(tabs)/(home)");
-      } else {
-        console.log("📱 Native platform - waiting for deep link navigation");
       }
     } catch (error: any) {
       // Error is already shown by AuthContext
-      console.log("❌ Social auth error handled by context:", error?.message);
+      console.log("Social auth error handled by context");
     } finally {
-      console.log("🏁 Social auth flow finished, resetting loading state");
       setLoading(false);
     }
   };
@@ -312,24 +162,6 @@ export default function AuthScreen() {
                 : "Already have an account? Sign In"}
             </Text>
           </TouchableOpacity>
-
-          {biometricAvailable && hasSavedCredentials && mode === "signin" && (
-            <TouchableOpacity
-              style={styles.biometricButton}
-              onPress={handleBiometricAuth}
-              disabled={loading}
-            >
-              <IconSymbol
-                ios_icon_name="faceid"
-                android_material_icon_name="fingerprint"
-                size={24}
-                color={colors.primary}
-              />
-              <Text style={styles.biometricButtonText}>
-                Sign in with {biometricType}
-              </Text>
-            </TouchableOpacity>
-          )}
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
@@ -486,23 +318,5 @@ const styles = StyleSheet.create({
   },
   appleButtonText: {
     color: "#fff",
-  },
-  biometricButton: {
-    height: 50,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 16,
-    marginBottom: 8,
-    backgroundColor: colors.backgroundAlt,
-    flexDirection: "row",
-    gap: 12,
-  },
-  biometricButtonText: {
-    fontSize: 16,
-    color: colors.primary,
-    fontWeight: "600",
   },
 });
