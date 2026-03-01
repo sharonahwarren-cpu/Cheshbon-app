@@ -280,7 +280,6 @@ export default function ReportsScreen() {
 
   const renderGaugeChart = (value: number, total: number, label: string, color: string) => {
     const percentage = total > 0 ? (value / total) * 100 : 0;
-    const angle = (percentage / 100) * 180;
     const radius = 80;
     const centerX = 100;
     const centerY = 100;
@@ -290,7 +289,7 @@ export default function ReportsScreen() {
     const totalText = `${total}`;
     
     return (
-      <View style={styles.gaugeContainer}>
+      <View style={styles.gaugeContainer} key={label}>
         <Text style={styles.gaugeLabel}>{label}</Text>
         <Svg width={200} height={140} viewBox="0 0 200 140">
           <Circle
