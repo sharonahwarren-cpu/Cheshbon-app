@@ -291,22 +291,29 @@ export default function AuthScreen() {
             <View style={styles.socialButtons}>
               {/* Biometric - only show if available AND not in sign-up mode */}
               {biometricsAvailable && mode === 'signin' && signInWithBiometrics && (
-                <TouchableOpacity
-                  style={[styles.button, styles.biometricButton, loading && styles.buttonDisabled]}
-                  onPress={handleBiometricSignIn}
-                  disabled={loading}
-                  activeOpacity={0.8}
-                >
-                  <IconSymbol
-                    ios_icon_name="faceid"
-                    android_material_icon_name="fingerprint"
-                    size={24}
-                    color="#fff"
-                  />
-                  <Text style={styles.buttonText}>
-                    {Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Biometric Sign In'}
+                <View>
+                  <TouchableOpacity
+                    style={[styles.button, styles.biometricButton, loading && styles.buttonDisabled]}
+                    onPress={handleBiometricSignIn}
+                    disabled={loading}
+                    activeOpacity={0.8}
+                  >
+                    <IconSymbol
+                      ios_icon_name="faceid"
+                      android_material_icon_name="fingerprint"
+                      size={24}
+                      color="#fff"
+                    />
+                    <Text style={styles.buttonText}>
+                      {Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Fingerprint Sign In'}
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.biometricNote}>
+                    {Platform.OS === 'ios'
+                      ? 'Uses Face ID or Touch ID. Sign in with email first to enable.'
+                      : 'Uses fingerprint. Sign in with email first to enable.'}
                   </Text>
-                </TouchableOpacity>
+                </View>
               )}
 
               {/* Google Sign In */}
@@ -530,6 +537,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     fontStyle: 'italic',
+  },
+  biometricNote: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
+    paddingHorizontal: 16,
   },
   modalOverlay: {
     flex: 1,
