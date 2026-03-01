@@ -18,11 +18,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { VictoryPie, VictoryChart, VictoryLine, VictoryAxis, VictoryLabel } from "victory-native";
+import { VictoryPie, VictoryChart, VictoryLine, VictoryAxis } from "victory-native";
 import Svg, { Circle, Text as SvgText } from "react-native-svg";
 
-console.log("Victory Native imports:", { VictoryPie, VictoryChart, VictoryLine, VictoryAxis, VictoryLabel });
-console.log("React Native SVG imports:", { Svg, Circle, SvgText });
+const isWeb = Platform.OS === 'web';
 
 interface CurrencyBalance {
   currencyId: string;
@@ -138,17 +137,15 @@ export default function ReportsScreen() {
   const [successModalMessage, setSuccessModalMessage] = useState('');
 
   useEffect(() => {
-    console.log("ReportsScreen mounted");
+    console.log("ReportsScreen mounted - Platform:", Platform.OS);
     loadReportsData();
   }, []);
 
   useEffect(() => {
-    console.log("useEffect triggered - currentView:", currentView, "selectedTimeRange:", selectedTimeRange);
+    console.log("View changed to:", currentView);
     if (currentView === 'charts') {
-      console.log("Current view is charts, loading chart data for time range:", selectedTimeRange);
+      console.log("Loading chart data for time range:", selectedTimeRange);
       loadChartData();
-    } else {
-      console.log("Current view is NOT charts, skipping chart data load");
     }
   }, [currentView, selectedTimeRange]);
 
@@ -224,12 +221,9 @@ export default function ReportsScreen() {
     console.log("Loading chart data for time range:", selectedTimeRange);
     try {
       const strategiesRes = await authenticatedGet('/api/strategies');
-      console.log("Strategies response:", strategiesRes);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
-      console.log("Strategies data parsed:", strategiesData);
-      console.log("Number of strategies:", strategiesData.length);
+      console.log("Strategies loaded:", strategiesData.length);
       setStrategies(strategiesData);
-      console.log("Strategies state updated");
     } catch (error: any) {
       console.error("Error loading chart data:", error);
       showError(error.message || "Failed to load chart data");
@@ -241,7 +235,6 @@ export default function ReportsScreen() {
   };
 
   const openCurrencyModal = (currencyId: string, currencyName: string, currencySymbol: string, balance: number, type: 'claim' | 'pay') => {
-    console.log("Opening currency modal:", type, currencyName, balance);
     setSelectedCurrencyId(currencyId);
     setSelectedCurrencyName(currencyName);
     setSelectedCurrencySymbol(currencySymbol);
@@ -252,8 +245,6 @@ export default function ReportsScreen() {
   };
 
   const handleCurrencyAction = async () => {
-    console.log("Handling currency action:", currencyModalType, selectedCurrencyName, currencyModalAmount);
-    
     const amount = parseFloat(currencyModalAmount);
     if (isNaN(amount) || amount <= 0) {
       showError('Please enter a valid amount');
@@ -271,7 +262,7 @@ export default function ReportsScreen() {
         ? `/api/currencies/${selectedCurrencyId}/claim`
         : `/api/currencies/${selectedCurrencyId}/pay`;
       
-      const response = await authenticatedPost(endpoint, { amount });
+      await authenticatedPost(endpoint, { amount });
       
       setShowCurrencyModal(false);
       setCurrencyModalAmount('');
@@ -288,9 +279,31 @@ export default function ReportsScreen() {
     }
   };
 
-  const renderGaugeChart = (value: number, total: number, label: string, color: string) => {
-    console.log(`Rendering gauge chart - Label: ${label}, Value: ${value}, Total: ${total}, Color: ${color}`);
+  const renderSimpleBarChart = (value: number, total: number, label: string, color: string) => {
+    const percentage = total > 0 ? (value / total) * 100 : 0;
+    const percentageText = `${Math.round(percentage)}%`;
+    const valueText = `${value}`;
+    const totalText = `${total}`;
     
+    return (
+      <View style={styles.simpleChartContainer} key={label}>
+        <Text style={styles.simpleChartLabel}>{label}</Text>
+        <View style={styles.simpleChartBarContainer}>
+          <View style={[styles.simpleChartBar, { width: `${percentage}%`, backgroundColor: color }]} />
+        </View>
+        <View style={styles.simpleChartStats}>
+          <Text style={[styles.simpleChartValue, { color }]}>{percentageText}</Text>
+          <Text style={styles.simpleChartTotal}>{valueText} / {totalText}</Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderGaugeChart = (value: number, total: number, label: string, color: string) => {
+    if (isWeb) {
+      return renderSimpleBarChart(value, total, label, color);
+    }
+
     const percentage = total > 0 ? (value / total) * 100 : 0;
     const radius = 80;
     const centerX = 100;
@@ -300,10 +313,7 @@ export default function ReportsScreen() {
     const valueText = `${value}`;
     const totalText = `${total}`;
     
-    console.log(`Gauge chart calculated - Percentage: ${percentage}%, Text: ${percentageText}`);
-    
     try {
-      console.log("Rendering SVG gauge chart");
       return (
         <View style={styles.gaugeContainer} key={label}>
           <Text style={styles.gaugeLabel}>{label}</Text>
@@ -353,33 +363,67 @@ export default function ReportsScreen() {
               {valueText} / {totalText}
             </SvgText>
           </Svg>
-          <Text style={styles.emptyChartText}>SVG rendered successfully</Text>
         </View>
       );
     } catch (error) {
-      console.error("Error rendering SVG gauge chart:", error);
-      return (
-        <View style={styles.gaugeContainer} key={label}>
-          <Text style={styles.gaugeLabel}>{label}</Text>
-          <View style={styles.emptyChartState}>
-            <Text style={styles.emptyChartText}>Error rendering gauge</Text>
-            <Text style={styles.emptyChartText}>{String(error)}</Text>
-          </View>
-        </View>
-      );
+      console.error("Error rendering gauge chart:", error);
+      return renderSimpleBarChart(value, total, label, color);
     }
   };
 
   const renderStrategyLineChart = () => {
-    console.log("Rendering strategy line chart");
-    console.log("Strategies length:", strategies.length);
-    console.log("Strategies data:", JSON.stringify(strategies, null, 2));
+    console.log("Rendering strategy chart - strategies count:", strategies.length);
     
     if (strategies.length === 0) {
-      console.log("No strategies available, showing empty state");
       return (
         <View style={styles.emptyChartState}>
+          <IconSymbol
+            ios_icon_name="chart.line.uptrend.xyaxis"
+            android_material_icon_name="show-chart"
+            size={48}
+            color={colors.muted}
+          />
           <Text style={styles.emptyChartText}>No strategy data available</Text>
+          <Text style={styles.emptyChartSubtext}>Create strategies and link them to reflections to see effectiveness data</Text>
+        </View>
+      );
+    }
+
+    if (isWeb) {
+      return (
+        <View style={styles.webChartContainer}>
+          <Text style={styles.webChartTitle}>Strategy Effectiveness</Text>
+          <View style={styles.webChartNotice}>
+            <IconSymbol
+              ios_icon_name="info.circle"
+              android_material_icon_name="info"
+              size={24}
+              color={colors.primary}
+            />
+            <Text style={styles.webChartNoticeText}>
+              Interactive charts are available on the mobile app. Here's your strategy data:
+            </Text>
+          </View>
+          <View style={styles.strategyList}>
+            {strategies.slice(0, 5).map((strategy, index) => {
+              const successRateText = `${strategy.successRate}%`;
+              const timesUsedText = `${strategy.timesUsed}`;
+              const barWidth = `${strategy.successRate}%`;
+              
+              return (
+                <View key={index} style={styles.strategyListItem}>
+                  <View style={styles.strategyListHeader}>
+                    <Text style={styles.strategyListName}>{strategy.name}</Text>
+                    <Text style={styles.strategyListRate}>{successRateText}</Text>
+                  </View>
+                  <View style={styles.strategyListBarContainer}>
+                    <View style={[styles.strategyListBar, { width: barWidth }]} />
+                  </View>
+                  <Text style={styles.strategyListUsage}>Used {timesUsedText} times</Text>
+                </View>
+              );
+            })}
+          </View>
         </View>
       );
     }
@@ -389,89 +433,79 @@ export default function ReportsScreen() {
       y: strategy.successRate,
       label: strategy.name,
     }));
-    
-    console.log("Chart data prepared:", JSON.stringify(chartData, null, 2));
 
-    console.log("About to render VictoryChart component");
-    
-    return (
-      <View style={styles.lineChartContainer}>
-        <Text style={styles.chartTitle}>Strategy Effectiveness Over Time</Text>
-        {(() => {
-          try {
-            console.log("Rendering VictoryChart with width:", screenWidth - 40);
-            return (
-              <VictoryChart
-                width={screenWidth - 40}
-                height={300}
-                padding={{ top: 20, bottom: 60, left: 60, right: 20 }}
-              >
-                <VictoryAxis
-                  style={{
-                    axis: { stroke: colors.border },
-                    tickLabels: { fill: colors.textSecondary, fontSize: 10 },
-                    grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
-                  }}
-                  tickFormat={(t) => {
-                    const strategy = strategies[t - 1];
-                    const strategyName = strategy ? strategy.name : '';
-                    const shortName = strategyName.length > 10 ? strategyName.substring(0, 10) + '...' : strategyName;
-                    return shortName;
-                  }}
-                />
-                <VictoryAxis
-                  dependentAxis
-                  style={{
-                    axis: { stroke: colors.border },
-                    tickLabels: { fill: colors.textSecondary, fontSize: 12 },
-                    grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
-                  }}
-                  tickFormat={(t) => `${t}%`}
-                />
-                <VictoryLine
-                  data={chartData}
-                  style={{
-                    data: { stroke: colors.primary, strokeWidth: 3 },
-                    parent: { border: "1px solid #ccc" }
-                  }}
-                  animate={{
-                    duration: 1000,
-                    onLoad: { duration: 500 }
-                  }}
-                />
-              </VictoryChart>
-            );
-          } catch (error) {
-            console.error("Error rendering VictoryChart:", error);
-            return (
-              <View style={styles.emptyChartState}>
-                <Text style={styles.emptyChartText}>Error rendering chart</Text>
-                <Text style={styles.emptyChartText}>{String(error)}</Text>
-              </View>
-            );
-          }
-        })()}
-        <View style={styles.strategyLegend}>
-          {strategies.slice(0, 5).map((strategy, index) => {
-            const strategyName = strategy.name;
-            const successRateText = `${strategy.successRate}%`;
-            const timesUsedText = `${strategy.timesUsed}x`;
-            
-            return (
-              <View key={index} style={styles.strategyLegendItem}>
-                <View style={[styles.strategyLegendDot, { backgroundColor: colors.primary }]} />
-                <View style={styles.strategyLegendTextContainer}>
-                  <Text style={styles.strategyLegendName}>{strategyName}</Text>
-                  <Text style={styles.strategyLegendStats}>
-                    {successRateText} success • {timesUsedText} used
-                  </Text>
+    try {
+      return (
+        <View style={styles.lineChartContainer}>
+          <Text style={styles.chartTitle}>Strategy Effectiveness</Text>
+          <VictoryChart
+            width={screenWidth - 40}
+            height={300}
+            padding={{ top: 20, bottom: 60, left: 60, right: 20 }}
+          >
+            <VictoryAxis
+              style={{
+                axis: { stroke: colors.border },
+                tickLabels: { fill: colors.textSecondary, fontSize: 10 },
+                grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
+              }}
+              tickFormat={(t) => {
+                const strategy = strategies[t - 1];
+                if (!strategy) return '';
+                const strategyName = strategy.name;
+                return strategyName.length > 10 ? strategyName.substring(0, 10) + '...' : strategyName;
+              }}
+            />
+            <VictoryAxis
+              dependentAxis
+              style={{
+                axis: { stroke: colors.border },
+                tickLabels: { fill: colors.textSecondary, fontSize: 12 },
+                grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
+              }}
+              tickFormat={(t) => `${t}%`}
+            />
+            <VictoryLine
+              data={chartData}
+              style={{
+                data: { stroke: colors.primary, strokeWidth: 3 },
+              }}
+              animate={{
+                duration: 1000,
+                onLoad: { duration: 500 }
+              }}
+            />
+          </VictoryChart>
+          <View style={styles.strategyLegend}>
+            {strategies.slice(0, 5).map((strategy, index) => {
+              const strategyName = strategy.name;
+              const successRateText = `${strategy.successRate}%`;
+              const timesUsedText = `${strategy.timesUsed}x`;
+              
+              return (
+                <View key={index} style={styles.strategyLegendItem}>
+                  <View style={[styles.strategyLegendDot, { backgroundColor: colors.primary }]} />
+                  <View style={styles.strategyLegendTextContainer}>
+                    <Text style={styles.strategyLegendName}>{strategyName}</Text>
+                    <Text style={styles.strategyLegendStats}>
+                      {successRateText} success • {timesUsedText} used
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            );
-          })}
+              );
+            })}
+          </View>
         </View>
-      </View>
-    );
+      );
+    } catch (error) {
+      console.error("Error rendering Victory chart:", error);
+      return (
+        <View style={styles.emptyChartState}>
+          <Text style={styles.emptyChartText}>Error rendering chart</Text>
+          <Text style={styles.emptyChartSubtext}>{String(error)}</Text>
+        </View>
+      );
+    }
   };
 
   const renderTimeRangeSelector = () => {
@@ -482,7 +516,6 @@ export default function ReportsScreen() {
       { value: '90days', label: '90 Days' },
       { value: 'year', label: 'Year' },
       { value: 'all', label: 'All' },
-      { value: 'custom', label: 'Custom' },
     ];
 
     return (
@@ -502,10 +535,7 @@ export default function ReportsScreen() {
                 styles.timeRangeButton,
                 isSelected && styles.timeRangeButtonActive,
               ]}
-              onPress={() => {
-                console.log("Time range button pressed:", range.value);
-                setSelectedTimeRange(range.value);
-              }}
+              onPress={() => setSelectedTimeRange(range.value)}
             >
               <Text
                 style={[
@@ -523,29 +553,16 @@ export default function ReportsScreen() {
   };
 
   const renderChartsView = () => {
-    console.log("Rendering charts view");
-    console.log("winsVsLosses data:", winsVsLosses);
-    console.log("strategies data:", strategies);
-    
     const winsTotal = winsVsLosses ? winsVsLosses.wins + winsVsLosses.losses : 0;
     const winsValue = winsVsLosses ? winsVsLosses.wins : 0;
     const lossesValue = winsVsLosses ? winsVsLosses.losses : 0;
-    
-    console.log("Calculated wins total:", winsTotal);
-    console.log("Calculated wins value:", winsValue);
-    console.log("Calculated losses value:", lossesValue);
 
     return (
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.viewToggleContainer}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => {
-              console.log("Back to Reports button pressed");
-              console.log("Current view before change:", currentView);
-              setCurrentView('reports');
-              console.log("setCurrentView('reports') called");
-            }}
+            onPress={() => setCurrentView('reports')}
           >
             <IconSymbol
               ios_icon_name="chevron.left"
@@ -559,55 +576,34 @@ export default function ReportsScreen() {
 
         <Text style={styles.headerTitle}>Charts</Text>
 
+        {isWeb && (
+          <View style={styles.webNotice}>
+            <IconSymbol
+              ios_icon_name="info.circle.fill"
+              android_material_icon_name="info"
+              size={20}
+              color={colors.primary}
+            />
+            <Text style={styles.webNoticeText}>
+              For the best chart experience, use the mobile app. Simplified charts shown below.
+            </Text>
+          </View>
+        )}
+
         {renderTimeRangeSelector()}
 
-        <Text style={styles.sectionTitle}>Wins vs Losses</Text>
-        <View style={styles.gaugeRow}>
-          {(() => {
-            try {
-              console.log("Attempting to render Wins gauge chart");
-              return renderGaugeChart(winsValue, winsTotal, 'Wins', colors.success);
-            } catch (error) {
-              console.error("Error rendering Wins gauge chart:", error);
-              return (
-                <View style={styles.emptyChartState}>
-                  <Text style={styles.emptyChartText}>Error rendering Wins chart</Text>
-                  <Text style={styles.emptyChartText}>{String(error)}</Text>
-                </View>
-              );
-            }
-          })()}
-          {(() => {
-            try {
-              console.log("Attempting to render Losses gauge chart");
-              return renderGaugeChart(lossesValue, winsTotal, 'Losses', colors.error);
-            } catch (error) {
-              console.error("Error rendering Losses gauge chart:", error);
-              return (
-                <View style={styles.emptyChartState}>
-                  <Text style={styles.emptyChartText}>Error rendering Losses chart</Text>
-                  <Text style={styles.emptyChartText}>{String(error)}</Text>
-                </View>
-              );
-            }
-          })()}
-        </View>
+        {winsTotal > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Wins vs Losses</Text>
+            <View style={isWeb ? styles.webGaugeRow : styles.gaugeRow}>
+              {renderGaugeChart(winsValue, winsTotal, 'Wins', colors.success)}
+              {renderGaugeChart(lossesValue, winsTotal, 'Losses', colors.error)}
+            </View>
+          </>
+        )}
 
         <Text style={styles.sectionTitle}>Strategy Effectiveness</Text>
-        {(() => {
-          try {
-            console.log("Attempting to render Strategy line chart");
-            return renderStrategyLineChart();
-          } catch (error) {
-            console.error("Error rendering Strategy line chart:", error);
-            return (
-              <View style={styles.emptyChartState}>
-                <Text style={styles.emptyChartText}>Error rendering Strategy chart</Text>
-                <Text style={styles.emptyChartText}>{String(error)}</Text>
-              </View>
-            );
-          }
-        })()}
+        {renderStrategyLineChart()}
       </ScrollView>
     );
   };
@@ -620,10 +616,8 @@ export default function ReportsScreen() {
           <TouchableOpacity
             style={styles.chartsButton}
             onPress={() => {
-              console.log("View Charts button pressed");
-              console.log("Current view before change:", currentView);
+              console.log("Switching to charts view");
               setCurrentView('charts');
-              console.log("setCurrentView('charts') called");
             }}
           >
             <IconSymbol
@@ -705,10 +699,7 @@ export default function ReportsScreen() {
                   
                   <TouchableOpacity 
                     style={styles.drillDownHint}
-                    onPress={() => {
-                      console.log("Navigating to currency reflections for:", balance.currencyId);
-                      router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
-                    }}
+                    onPress={() => router.push(`/currency-reflections?currencyId=${balance.currencyId}`)}
                   >
                     <IconSymbol
                       ios_icon_name="chevron.right"
@@ -729,10 +720,7 @@ export default function ReportsScreen() {
             <Text style={styles.sectionTitle}>Wins vs Losses</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => router.push('/(tabs)/reflect')}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Wins:</Text>
@@ -764,10 +752,7 @@ export default function ReportsScreen() {
             <Text style={styles.sectionTitle}>Success vs Struggles</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => router.push('/(tabs)/reflect')}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Successes:</Text>
@@ -799,10 +784,7 @@ export default function ReportsScreen() {
             <Text style={styles.sectionTitle}>Reflection Statistics</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => router.push('/(tabs)/reflect')}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Total Reflections:</Text>
@@ -852,10 +834,7 @@ export default function ReportsScreen() {
             <Text style={styles.sectionTitle}>Gains and Losses</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => router.push('/(tabs)/reflect')}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Total Gains:</Text>
@@ -919,10 +898,7 @@ export default function ReportsScreen() {
             <Text style={styles.sectionTitle}>Behavior Entries</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => router.push('/(tabs)/reflect')}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Action Entries:</Text>
@@ -963,7 +939,6 @@ export default function ReportsScreen() {
                   key={index} 
                   style={styles.reportCard}
                   onPress={() => {
-                    console.log("Navigating to reflections for goal:", goal.goalId);
                     router.push({
                       pathname: '/(tabs)/reflect',
                       params: { goalId: goal.goalId },
@@ -1053,9 +1028,6 @@ export default function ReportsScreen() {
     );
   }
 
-  console.log("ReportsScreen render - currentView:", currentView);
-  console.log("ReportsScreen render - loading:", loading);
-  
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {currentView === 'reports' ? renderReportsView() : renderChartsView()}
@@ -1244,6 +1216,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
   },
+  webNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.card,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  webNoticeText: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
+  },
   timeRangeSelector: {
     marginBottom: 20,
   },
@@ -1282,6 +1271,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     marginBottom: 24,
   },
+  webGaugeRow: {
+    gap: 16,
+    marginBottom: 24,
+  },
   gaugeContainer: {
     alignItems: 'center',
   },
@@ -1290,6 +1283,43 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginBottom: 8,
+  },
+  simpleChartContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  simpleChartLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  simpleChartBarContainer: {
+    height: 40,
+    backgroundColor: colors.cardBorder,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  simpleChartBar: {
+    height: '100%',
+    borderRadius: 8,
+  },
+  simpleChartStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  simpleChartValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  simpleChartTotal: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
   lineChartContainer: {
     backgroundColor: colors.card,
@@ -1305,6 +1335,76 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 16,
     textAlign: 'center',
+  },
+  webChartContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  webChartTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 16,
+  },
+  webChartNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    backgroundColor: colors.backgroundAlt,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  webChartNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  strategyList: {
+    gap: 16,
+  },
+  strategyListItem: {
+    backgroundColor: colors.backgroundAlt,
+    padding: 12,
+    borderRadius: 8,
+  },
+  strategyListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  strategyListName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    flex: 1,
+  },
+  strategyListRate: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  strategyListBarContainer: {
+    height: 8,
+    backgroundColor: colors.cardBorder,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 6,
+  },
+  strategyListBar: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 4,
+  },
+  strategyListUsage: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   strategyLegend: {
     marginTop: 16,
@@ -1337,10 +1437,23 @@ const styles = StyleSheet.create({
     padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   emptyChartText: {
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 12,
+  },
+  emptyChartSubtext: {
+    fontSize: 13,
     color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 20,
   },
   reportCard: {
     backgroundColor: colors.card,
