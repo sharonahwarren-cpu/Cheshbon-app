@@ -2,17 +2,14 @@
 import { Tabs, useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/IconSymbol';
-import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const colorScheme = 'light'; // Simplified - remove useColorScheme dependency
   const router = useRouter();
   const { user, loading } = useAuth();
 
@@ -23,7 +20,7 @@ export default function TabLayout() {
       console.log('🔐 [TAB LAYOUT] User not authenticated, redirecting to auth...');
       router.replace('/auth');
     }
-  }, [user, loading]);
+  }, [user, loading, router]);
 
   // Show loading while checking auth
   if (loading) {
@@ -44,8 +41,6 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarBackground: TabBarBackground,
         tabBarStyle: Platform.select({
           ios: {
             position: 'absolute',
