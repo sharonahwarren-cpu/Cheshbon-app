@@ -160,6 +160,18 @@ app.withAuth({
 // Enable storage for file uploads and management
 app.withStorage();
 
+// Add hook BEFORE route registration to handle missing Origin header for mobile clients
+// This must run before Better Auth validates the origin
+app.fastify.addHook('onRequest', async (request, reply) => {
+  // For mobile clients that don't send Origin header, set a default
+  // This allows native iOS/Android apps to make OAuth requests
+  if (!request.headers.origin && request.url.includes('/api/auth/')) {
+    // Set origin to the request host for mobile apps that don't send Origin header
+    request.headers.origin = request.headers.host || 'http://localhost';
+    app.logger.debug({ url: request.url, host: request.headers.host }, 'Mobile OAuth request - origin header set');
+  }
+});
+
 // Register routes - add your route modules here
 // IMPORTANT: Always use registration functions to avoid circular dependency issues
 registerJournalRoutes(app);
@@ -181,19 +193,6 @@ registerMitzvotCategoryRoutes(app);
 registerMitzvotRoutes(app);
 registerAuthRoutes(app);
 
-// Add hook to handle missing Origin header for mobile clients
-app.fastify.addHook('preHandler', async (request, reply) => {
-  // For mobile clients that don't send Origin header, set a default
-  if (!request.headers.origin && request.url.includes('/api/auth/')) {
-    const userAgent = request.headers['user-agent'] || '';
-    // If request looks like it could be from a mobile app (no Origin header), allow it
-    if (!request.headers.origin) {
-      // Set a dummy origin to pass validation for mobile OAuth flows
-      request.headers.origin = request.headers.host || 'http://localhost';
-    }
-  }
-});
-
 // Log registered auth endpoints
 app.logger.info(
   {
@@ -203,16 +202,23 @@ app.logger.info(
       'POST /api/auth/initiate-social (OAuth initiation with mobile/web support)',
       'POST /api/auth/sign-in/email (Email/password sign-in)',
       'POST /api/auth/sign-up/email (Email/password sign-up)',
+      'GET /api/auth/oauth-callback (OAuth provider callback - code exchange)',
       'POST /api/auth/callback (OAuth callback handler)',
       'POST /api/auth/oauth-start (OAuth flow initiation)',
       'POST /api/auth/oauth-redirect (OAuth redirect handler)',
-      'GET /api/auth/me (Get current user session - protected)',
+      'POST /api/auth/apple-callback (Apple OAuth callback)',
+      'GET /api/auth/me (Get current user session - protected - use Bearer token)',
       'GET /api/auth/health (Health check)',
       'GET /api/auth/oauth-test (OAuth configuration test)',
       'GET /api/auth/debug-session (Debug auth headers)',
     ],
-    oauthProviders: Object.keys(socialProviders),
-    trustedOriginsCount: trustedOrigins.length,
+    oauthProviders: Object.keys(socialProviders).length > 0 ? Object.keys(socialProviders) : ['NONE - check environment variables'],
+    trustedOrigins: trustedOrigins,
+    mobileSupport: {
+      deepLinkSchemes: ['cheshbon://', 'Cheshbon://', 'exp://'],
+      originHeaderHandling: 'Mobile requests without Origin header are automatically handled',
+      bearerTokenSupport: 'Session tokens can be used as Bearer tokens in Authorization header',
+    },
   },
   'Authentication endpoints and OAuth configured'
 );
