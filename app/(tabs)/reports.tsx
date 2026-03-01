@@ -18,8 +18,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { VictoryPie, VictoryChart, VictoryLine, VictoryAxis } from "victory-native";
-import Svg, { Circle, Text as SvgText } from "react-native-svg";
+import { VictoryChart, VictoryLine, VictoryAxis } from "victory-native";
+import { AnimatedGaugeChart } from "@/components/AnimatedGaugeChart";
 
 const isWeb = Platform.OS === 'web';
 
@@ -299,78 +299,6 @@ export default function ReportsScreen() {
     );
   };
 
-  const renderGaugeChart = (value: number, total: number, label: string, color: string) => {
-    if (isWeb) {
-      return renderSimpleBarChart(value, total, label, color);
-    }
-
-    const percentage = total > 0 ? (value / total) * 100 : 0;
-    const radius = 80;
-    const centerX = 100;
-    const centerY = 100;
-    
-    const percentageText = `${Math.round(percentage)}%`;
-    const valueText = `${value}`;
-    const totalText = `${total}`;
-    
-    try {
-      return (
-        <View style={styles.gaugeContainer} key={label}>
-          <Text style={styles.gaugeLabel}>{label}</Text>
-          <Svg width={200} height={140} viewBox="0 0 200 140">
-            <Circle
-              cx={centerX}
-              cy={centerY}
-              r={radius}
-              stroke={colors.cardBorder}
-              strokeWidth={20}
-              fill="none"
-              strokeDasharray={`${Math.PI * radius} ${Math.PI * radius}`}
-              strokeDashoffset={0}
-              rotation="-180"
-              origin={`${centerX}, ${centerY}`}
-            />
-            <Circle
-              cx={centerX}
-              cy={centerY}
-              r={radius}
-              stroke={color}
-              strokeWidth={20}
-              fill="none"
-              strokeDasharray={`${Math.PI * radius} ${Math.PI * radius}`}
-              strokeDashoffset={Math.PI * radius * (1 - percentage / 100)}
-              rotation="-180"
-              origin={`${centerX}, ${centerY}`}
-              strokeLinecap="round"
-            />
-            <SvgText
-              x={centerX}
-              y={centerY - 10}
-              fontSize="32"
-              fontWeight="bold"
-              fill={colors.text}
-              textAnchor="middle"
-            >
-              {percentageText}
-            </SvgText>
-            <SvgText
-              x={centerX}
-              y={centerY + 20}
-              fontSize="16"
-              fill={colors.textSecondary}
-              textAnchor="middle"
-            >
-              {valueText} / {totalText}
-            </SvgText>
-          </Svg>
-        </View>
-      );
-    } catch (error) {
-      console.error("Error rendering gauge chart:", error);
-      return renderSimpleBarChart(value, total, label, color);
-    }
-  };
-
   const renderStrategyLineChart = () => {
     console.log("Rendering strategy chart - strategies count:", strategies.length);
     
@@ -553,9 +481,9 @@ export default function ReportsScreen() {
   };
 
   const renderChartsView = () => {
-    const winsTotal = winsVsLosses ? winsVsLosses.wins + winsVsLosses.losses : 0;
     const winsValue = winsVsLosses ? winsVsLosses.wins : 0;
     const lossesValue = winsVsLosses ? winsVsLosses.losses : 0;
+    const total = winsValue + lossesValue;
 
     return (
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -592,13 +520,19 @@ export default function ReportsScreen() {
 
         {renderTimeRangeSelector()}
 
-        {winsTotal > 0 && (
+        {total > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Wins vs Losses</Text>
-            <View style={isWeb ? styles.webGaugeRow : styles.gaugeRow}>
-              {renderGaugeChart(winsValue, winsTotal, 'Wins', colors.success)}
-              {renderGaugeChart(lossesValue, winsTotal, 'Losses', colors.error)}
-            </View>
+            {isWeb ? (
+              <>
+                <Text style={styles.sectionTitle}>Wins vs Losses</Text>
+                <View style={styles.webGaugeRow}>
+                  {renderSimpleBarChart(winsValue, total, 'Wins', colors.success)}
+                  {renderSimpleBarChart(lossesValue, total, 'Losses', colors.error)}
+                </View>
+              </>
+            ) : (
+              <AnimatedGaugeChart wins={winsValue} losses={lossesValue} />
+            )}
           </>
         )}
 
@@ -1266,23 +1200,9 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 12,
   },
-  gaugeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 24,
-  },
   webGaugeRow: {
     gap: 16,
     marginBottom: 24,
-  },
-  gaugeContainer: {
-    alignItems: 'center',
-  },
-  gaugeLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 8,
   },
   simpleChartContainer: {
     backgroundColor: colors.card,
