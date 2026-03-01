@@ -21,6 +21,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { VictoryPie, VictoryChart, VictoryLine, VictoryAxis, VictoryLabel } from "victory-native";
 import Svg, { Circle, Text as SvgText } from "react-native-svg";
 
+console.log("Victory Native imports:", { VictoryPie, VictoryChart, VictoryLine, VictoryAxis, VictoryLabel });
+console.log("React Native SVG imports:", { Svg, Circle, SvgText });
+
 interface CurrencyBalance {
   currencyId: string;
   currencyName: string;
@@ -140,9 +143,12 @@ export default function ReportsScreen() {
   }, []);
 
   useEffect(() => {
+    console.log("useEffect triggered - currentView:", currentView, "selectedTimeRange:", selectedTimeRange);
     if (currentView === 'charts') {
-      console.log("Loading chart data for time range:", selectedTimeRange);
+      console.log("Current view is charts, loading chart data for time range:", selectedTimeRange);
       loadChartData();
+    } else {
+      console.log("Current view is NOT charts, skipping chart data load");
     }
   }, [currentView, selectedTimeRange]);
 
@@ -218,8 +224,12 @@ export default function ReportsScreen() {
     console.log("Loading chart data for time range:", selectedTimeRange);
     try {
       const strategiesRes = await authenticatedGet('/api/strategies');
+      console.log("Strategies response:", strategiesRes);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
+      console.log("Strategies data parsed:", strategiesData);
+      console.log("Number of strategies:", strategiesData.length);
       setStrategies(strategiesData);
+      console.log("Strategies state updated");
     } catch (error: any) {
       console.error("Error loading chart data:", error);
       showError(error.message || "Failed to load chart data");
@@ -279,6 +289,8 @@ export default function ReportsScreen() {
   };
 
   const renderGaugeChart = (value: number, total: number, label: string, color: string) => {
+    console.log(`Rendering gauge chart - Label: ${label}, Value: ${value}, Total: ${total}, Color: ${color}`);
+    
     const percentage = total > 0 ? (value / total) * 100 : 0;
     const radius = 80;
     const centerX = 100;
@@ -288,61 +300,83 @@ export default function ReportsScreen() {
     const valueText = `${value}`;
     const totalText = `${total}`;
     
-    return (
-      <View style={styles.gaugeContainer} key={label}>
-        <Text style={styles.gaugeLabel}>{label}</Text>
-        <Svg width={200} height={140} viewBox="0 0 200 140">
-          <Circle
-            cx={centerX}
-            cy={centerY}
-            r={radius}
-            stroke={colors.cardBorder}
-            strokeWidth={20}
-            fill="none"
-            strokeDasharray={`${Math.PI * radius} ${Math.PI * radius}`}
-            strokeDashoffset={0}
-            rotation="-180"
-            origin={`${centerX}, ${centerY}`}
-          />
-          <Circle
-            cx={centerX}
-            cy={centerY}
-            r={radius}
-            stroke={color}
-            strokeWidth={20}
-            fill="none"
-            strokeDasharray={`${Math.PI * radius} ${Math.PI * radius}`}
-            strokeDashoffset={Math.PI * radius * (1 - percentage / 100)}
-            rotation="-180"
-            origin={`${centerX}, ${centerY}`}
-            strokeLinecap="round"
-          />
-          <SvgText
-            x={centerX}
-            y={centerY - 10}
-            fontSize="32"
-            fontWeight="bold"
-            fill={colors.text}
-            textAnchor="middle"
-          >
-            {percentageText}
-          </SvgText>
-          <SvgText
-            x={centerX}
-            y={centerY + 20}
-            fontSize="16"
-            fill={colors.textSecondary}
-            textAnchor="middle"
-          >
-            {valueText} / {totalText}
-          </SvgText>
-        </Svg>
-      </View>
-    );
+    console.log(`Gauge chart calculated - Percentage: ${percentage}%, Text: ${percentageText}`);
+    
+    try {
+      console.log("Rendering SVG gauge chart");
+      return (
+        <View style={styles.gaugeContainer} key={label}>
+          <Text style={styles.gaugeLabel}>{label}</Text>
+          <Svg width={200} height={140} viewBox="0 0 200 140">
+            <Circle
+              cx={centerX}
+              cy={centerY}
+              r={radius}
+              stroke={colors.cardBorder}
+              strokeWidth={20}
+              fill="none"
+              strokeDasharray={`${Math.PI * radius} ${Math.PI * radius}`}
+              strokeDashoffset={0}
+              rotation="-180"
+              origin={`${centerX}, ${centerY}`}
+            />
+            <Circle
+              cx={centerX}
+              cy={centerY}
+              r={radius}
+              stroke={color}
+              strokeWidth={20}
+              fill="none"
+              strokeDasharray={`${Math.PI * radius} ${Math.PI * radius}`}
+              strokeDashoffset={Math.PI * radius * (1 - percentage / 100)}
+              rotation="-180"
+              origin={`${centerX}, ${centerY}`}
+              strokeLinecap="round"
+            />
+            <SvgText
+              x={centerX}
+              y={centerY - 10}
+              fontSize="32"
+              fontWeight="bold"
+              fill={colors.text}
+              textAnchor="middle"
+            >
+              {percentageText}
+            </SvgText>
+            <SvgText
+              x={centerX}
+              y={centerY + 20}
+              fontSize="16"
+              fill={colors.textSecondary}
+              textAnchor="middle"
+            >
+              {valueText} / {totalText}
+            </SvgText>
+          </Svg>
+          <Text style={styles.emptyChartText}>SVG rendered successfully</Text>
+        </View>
+      );
+    } catch (error) {
+      console.error("Error rendering SVG gauge chart:", error);
+      return (
+        <View style={styles.gaugeContainer} key={label}>
+          <Text style={styles.gaugeLabel}>{label}</Text>
+          <View style={styles.emptyChartState}>
+            <Text style={styles.emptyChartText}>Error rendering gauge</Text>
+            <Text style={styles.emptyChartText}>{String(error)}</Text>
+          </View>
+        </View>
+      );
+    }
   };
 
   const renderStrategyLineChart = () => {
+    console.log("Rendering strategy line chart");
+    console.log("Strategies length:", strategies.length);
+    console.log("Strategies data:", JSON.stringify(strategies, null, 2));
+    
     if (strategies.length === 0) {
+      console.log("No strategies available, showing empty state");
       return (
         <View style={styles.emptyChartState}>
           <Text style={styles.emptyChartText}>No strategy data available</Text>
@@ -355,49 +389,68 @@ export default function ReportsScreen() {
       y: strategy.successRate,
       label: strategy.name,
     }));
+    
+    console.log("Chart data prepared:", JSON.stringify(chartData, null, 2));
 
+    console.log("About to render VictoryChart component");
+    
     return (
       <View style={styles.lineChartContainer}>
         <Text style={styles.chartTitle}>Strategy Effectiveness Over Time</Text>
-        <VictoryChart
-          width={screenWidth - 40}
-          height={300}
-          padding={{ top: 20, bottom: 60, left: 60, right: 20 }}
-        >
-          <VictoryAxis
-            style={{
-              axis: { stroke: colors.border },
-              tickLabels: { fill: colors.textSecondary, fontSize: 10 },
-              grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
-            }}
-            tickFormat={(t) => {
-              const strategy = strategies[t - 1];
-              const strategyName = strategy ? strategy.name : '';
-              const shortName = strategyName.length > 10 ? strategyName.substring(0, 10) + '...' : strategyName;
-              return shortName;
-            }}
-          />
-          <VictoryAxis
-            dependentAxis
-            style={{
-              axis: { stroke: colors.border },
-              tickLabels: { fill: colors.textSecondary, fontSize: 12 },
-              grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
-            }}
-            tickFormat={(t) => `${t}%`}
-          />
-          <VictoryLine
-            data={chartData}
-            style={{
-              data: { stroke: colors.primary, strokeWidth: 3 },
-              parent: { border: "1px solid #ccc" }
-            }}
-            animate={{
-              duration: 1000,
-              onLoad: { duration: 500 }
-            }}
-          />
-        </VictoryChart>
+        {(() => {
+          try {
+            console.log("Rendering VictoryChart with width:", screenWidth - 40);
+            return (
+              <VictoryChart
+                width={screenWidth - 40}
+                height={300}
+                padding={{ top: 20, bottom: 60, left: 60, right: 20 }}
+              >
+                <VictoryAxis
+                  style={{
+                    axis: { stroke: colors.border },
+                    tickLabels: { fill: colors.textSecondary, fontSize: 10 },
+                    grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
+                  }}
+                  tickFormat={(t) => {
+                    const strategy = strategies[t - 1];
+                    const strategyName = strategy ? strategy.name : '';
+                    const shortName = strategyName.length > 10 ? strategyName.substring(0, 10) + '...' : strategyName;
+                    return shortName;
+                  }}
+                />
+                <VictoryAxis
+                  dependentAxis
+                  style={{
+                    axis: { stroke: colors.border },
+                    tickLabels: { fill: colors.textSecondary, fontSize: 12 },
+                    grid: { stroke: colors.cardBorder, strokeDasharray: '4,4' },
+                  }}
+                  tickFormat={(t) => `${t}%`}
+                />
+                <VictoryLine
+                  data={chartData}
+                  style={{
+                    data: { stroke: colors.primary, strokeWidth: 3 },
+                    parent: { border: "1px solid #ccc" }
+                  }}
+                  animate={{
+                    duration: 1000,
+                    onLoad: { duration: 500 }
+                  }}
+                />
+              </VictoryChart>
+            );
+          } catch (error) {
+            console.error("Error rendering VictoryChart:", error);
+            return (
+              <View style={styles.emptyChartState}>
+                <Text style={styles.emptyChartText}>Error rendering chart</Text>
+                <Text style={styles.emptyChartText}>{String(error)}</Text>
+              </View>
+            );
+          }
+        })()}
         <View style={styles.strategyLegend}>
           {strategies.slice(0, 5).map((strategy, index) => {
             const strategyName = strategy.name;
@@ -449,7 +502,10 @@ export default function ReportsScreen() {
                 styles.timeRangeButton,
                 isSelected && styles.timeRangeButtonActive,
               ]}
-              onPress={() => setSelectedTimeRange(range.value)}
+              onPress={() => {
+                console.log("Time range button pressed:", range.value);
+                setSelectedTimeRange(range.value);
+              }}
             >
               <Text
                 style={[
@@ -467,16 +523,29 @@ export default function ReportsScreen() {
   };
 
   const renderChartsView = () => {
+    console.log("Rendering charts view");
+    console.log("winsVsLosses data:", winsVsLosses);
+    console.log("strategies data:", strategies);
+    
     const winsTotal = winsVsLosses ? winsVsLosses.wins + winsVsLosses.losses : 0;
     const winsValue = winsVsLosses ? winsVsLosses.wins : 0;
     const lossesValue = winsVsLosses ? winsVsLosses.losses : 0;
+    
+    console.log("Calculated wins total:", winsTotal);
+    console.log("Calculated wins value:", winsValue);
+    console.log("Calculated losses value:", lossesValue);
 
     return (
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.viewToggleContainer}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => setCurrentView('reports')}
+            onPress={() => {
+              console.log("Back to Reports button pressed");
+              console.log("Current view before change:", currentView);
+              setCurrentView('reports');
+              console.log("setCurrentView('reports') called");
+            }}
           >
             <IconSymbol
               ios_icon_name="chevron.left"
@@ -494,12 +563,51 @@ export default function ReportsScreen() {
 
         <Text style={styles.sectionTitle}>Wins vs Losses</Text>
         <View style={styles.gaugeRow}>
-          {renderGaugeChart(winsValue, winsTotal, 'Wins', colors.success)}
-          {renderGaugeChart(lossesValue, winsTotal, 'Losses', colors.error)}
+          {(() => {
+            try {
+              console.log("Attempting to render Wins gauge chart");
+              return renderGaugeChart(winsValue, winsTotal, 'Wins', colors.success);
+            } catch (error) {
+              console.error("Error rendering Wins gauge chart:", error);
+              return (
+                <View style={styles.emptyChartState}>
+                  <Text style={styles.emptyChartText}>Error rendering Wins chart</Text>
+                  <Text style={styles.emptyChartText}>{String(error)}</Text>
+                </View>
+              );
+            }
+          })()}
+          {(() => {
+            try {
+              console.log("Attempting to render Losses gauge chart");
+              return renderGaugeChart(lossesValue, winsTotal, 'Losses', colors.error);
+            } catch (error) {
+              console.error("Error rendering Losses gauge chart:", error);
+              return (
+                <View style={styles.emptyChartState}>
+                  <Text style={styles.emptyChartText}>Error rendering Losses chart</Text>
+                  <Text style={styles.emptyChartText}>{String(error)}</Text>
+                </View>
+              );
+            }
+          })()}
         </View>
 
         <Text style={styles.sectionTitle}>Strategy Effectiveness</Text>
-        {renderStrategyLineChart()}
+        {(() => {
+          try {
+            console.log("Attempting to render Strategy line chart");
+            return renderStrategyLineChart();
+          } catch (error) {
+            console.error("Error rendering Strategy line chart:", error);
+            return (
+              <View style={styles.emptyChartState}>
+                <Text style={styles.emptyChartText}>Error rendering Strategy chart</Text>
+                <Text style={styles.emptyChartText}>{String(error)}</Text>
+              </View>
+            );
+          }
+        })()}
       </ScrollView>
     );
   };
@@ -511,7 +619,12 @@ export default function ReportsScreen() {
           <Text style={styles.headerTitle}>Reports</Text>
           <TouchableOpacity
             style={styles.chartsButton}
-            onPress={() => setCurrentView('charts')}
+            onPress={() => {
+              console.log("View Charts button pressed");
+              console.log("Current view before change:", currentView);
+              setCurrentView('charts');
+              console.log("setCurrentView('charts') called");
+            }}
           >
             <IconSymbol
               ios_icon_name="chart.bar"
@@ -940,6 +1053,9 @@ export default function ReportsScreen() {
     );
   }
 
+  console.log("ReportsScreen render - currentView:", currentView);
+  console.log("ReportsScreen render - loading:", loading);
+  
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {currentView === 'reports' ? renderReportsView() : renderChartsView()}
