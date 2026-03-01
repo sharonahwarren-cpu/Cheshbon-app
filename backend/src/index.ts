@@ -34,13 +34,13 @@ const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // Validate OAuth credentials
 const hasGoogleOAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
-const hasAppleOAuth = process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET;
+const hasAppleOAuth = process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY;
 
 if (!hasGoogleOAuth) {
   app.logger.warn('Google OAuth credentials not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.');
 }
 if (!hasAppleOAuth) {
-  app.logger.warn('Apple OAuth credentials not configured. Set APPLE_CLIENT_ID and APPLE_CLIENT_SECRET environment variables.');
+  app.logger.warn('Apple OAuth credentials not configured. Set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, and APPLE_PRIVATE_KEY environment variables.');
 }
 
 // Build social providers object only with configured providers
@@ -55,7 +55,9 @@ if (hasGoogleOAuth) {
 if (hasAppleOAuth) {
   socialProviders.apple = {
     clientId: process.env.APPLE_CLIENT_ID!,
-    clientSecret: process.env.APPLE_CLIENT_SECRET!,
+    teamId: process.env.APPLE_TEAM_ID!,
+    keyId: process.env.APPLE_KEY_ID!,
+    privateKey: process.env.APPLE_PRIVATE_KEY!,
   };
   app.logger.info('Apple OAuth provider enabled');
 }
