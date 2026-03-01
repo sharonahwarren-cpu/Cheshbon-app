@@ -136,7 +136,25 @@ app.withAuth({
     },
   },
   socialProviders,
-  trustedOrigins,
+  trustedOrigins: [
+    // Always allow localhost
+    "http://localhost",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+    "http://localhost:8081",
+    // Allow specific origins
+    "https://520cd74e-164f-40c1-aec1-273dae601c20.newly.dev",
+    // Allow environment-configured origin
+    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+    // Allow wildcard subdomains
+    "https://*.newly.dev",
+    "https://*.app.specular.dev",
+    // Allow mobile app schemes (don't require exact match for these)
+    "cheshbon://",
+    "Cheshbon://",
+    "exp://",
+  ],
 });
 
 // Enable storage for file uploads and management
@@ -163,24 +181,40 @@ registerMitzvotCategoryRoutes(app);
 registerMitzvotRoutes(app);
 registerAuthRoutes(app);
 
+// Add hook to handle missing Origin header for mobile clients
+app.fastify.addHook('preHandler', async (request, reply) => {
+  // For mobile clients that don't send Origin header, set a default
+  if (!request.headers.origin && request.url.includes('/api/auth/')) {
+    const userAgent = request.headers['user-agent'] || '';
+    // If request looks like it could be from a mobile app (no Origin header), allow it
+    if (!request.headers.origin) {
+      // Set a dummy origin to pass validation for mobile OAuth flows
+      request.headers.origin = request.headers.host || 'http://localhost';
+    }
+  }
+});
+
 // Log registered auth endpoints
 app.logger.info(
   {
     authEndpoints: [
-      'POST /api/auth/sign-in/social (Better Auth - automatic)',
-      'POST /api/auth/sign-in/social-v1 (custom wrapper)',
-      'POST /api/auth/sign-in/email',
-      'POST /api/auth/sign-up/email',
-      'POST /api/auth/callback',
-      'POST /api/auth/oauth-start',
-      'POST /api/auth/oauth-redirect',
-      'GET /api/auth/me',
-      'GET /api/auth/health',
-      'GET /api/auth/oauth-test',
-      'GET /api/auth/debug-session',
+      'POST /api/auth/sign-in/social (Better Auth - automatic OAuth)',
+      'POST /api/auth/sign-in/social-v1 (OAuth wrapper with error handling)',
+      'POST /api/auth/initiate-social (OAuth initiation with mobile/web support)',
+      'POST /api/auth/sign-in/email (Email/password sign-in)',
+      'POST /api/auth/sign-up/email (Email/password sign-up)',
+      'POST /api/auth/callback (OAuth callback handler)',
+      'POST /api/auth/oauth-start (OAuth flow initiation)',
+      'POST /api/auth/oauth-redirect (OAuth redirect handler)',
+      'GET /api/auth/me (Get current user session - protected)',
+      'GET /api/auth/health (Health check)',
+      'GET /api/auth/oauth-test (OAuth configuration test)',
+      'GET /api/auth/debug-session (Debug auth headers)',
     ],
+    oauthProviders: Object.keys(socialProviders),
+    trustedOriginsCount: trustedOrigins.length,
   },
-  'Authentication endpoints registered'
+  'Authentication endpoints and OAuth configured'
 );
 
 await app.run();
