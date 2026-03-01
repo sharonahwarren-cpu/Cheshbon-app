@@ -4,6 +4,145 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 export function registerAuthRoutes(app: App) {
   const requireAuth = app.requireAuth();
 
+  // GET /api/auth/oauth-test - Test OAuth configuration and endpoints
+  app.fastify.get('/api/auth/oauth-test', {
+    schema: {
+      description: 'Test OAuth configuration (development endpoint)',
+      tags: ['auth'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            status: { type: 'string' },
+            providers: { type: 'array' },
+            endpoints: { type: 'array' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const providers = [];
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      providers.push('google');
+    }
+    if (process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY) {
+      providers.push('apple');
+    }
+
+    return {
+      status: 'ok',
+      providers,
+      endpoints: [
+        '/api/auth/sign-in/social',
+        '/api/auth/callback',
+        '/api/auth/oauth-start',
+        '/api/auth/oauth-redirect',
+      ],
+      message: `OAuth configured for: ${providers.length > 0 ? providers.join(', ') : 'none'}`,
+    };
+  });
+
+  // POST /api/auth/sign-in/social - Handle OAuth sign-in (wrapper with error handling)
+  app.fastify.post('/api/auth/sign-in/social-v1', {
+    schema: {
+      description: 'Sign in with OAuth provider (wrapper endpoint)',
+      tags: ['auth'],
+      querystring: {
+        type: 'object',
+        properties: {
+          provider: { type: 'string', enum: ['google', 'apple'], description: 'OAuth provider' },
+          callbackURL: { type: 'string', description: 'Callback URL after OAuth (optional)' },
+        },
+        required: ['provider'],
+      },
+      body: {
+        type: 'object',
+        properties: {
+          provider: { type: 'string' },
+          callbackURL: { type: 'string' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            authorizationUrl: { type: 'string' },
+            provider: { type: 'string' },
+          },
+        },
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const queryProvider = (request.query as any)?.provider;
+    const queryCallbackURL = (request.query as any)?.callbackURL;
+    const bodyProvider = (request.body as any)?.provider;
+    const bodyCallbackURL = (request.body as any)?.callbackURL;
+
+    const provider = queryProvider || bodyProvider;
+    const callbackURL = queryCallbackURL || bodyCallbackURL;
+
+    app.logger.info(
+      { provider, callbackURL: callbackURL ? 'provided' : 'not provided', origin: request.headers.origin },
+      'OAuth sign-in requested'
+    );
+
+    if (!provider || !['google', 'apple'].includes(provider)) {
+      app.logger.warn({ provider, origin: request.headers.origin }, 'Invalid or missing provider');
+      return reply.status(400).send({
+        error: 'INVALID_PROVIDER',
+        message: 'Provider must be "google" or "apple"',
+      });
+    }
+
+    // Check if OAuth credentials are configured
+    const hasGoogleOAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
+    const hasAppleOAuth = process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY;
+
+    if (provider === 'google' && !hasGoogleOAuth) {
+      app.logger.warn({ origin: request.headers.origin }, 'Google OAuth not configured');
+      return reply.status(400).send({
+        error: 'OAUTH_NOT_CONFIGURED',
+        message: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.',
+      });
+    }
+
+    if (provider === 'apple' && !hasAppleOAuth) {
+      app.logger.warn({ origin: request.headers.origin }, 'Apple OAuth not configured');
+      return reply.status(400).send({
+        error: 'OAUTH_NOT_CONFIGURED',
+        message: 'Apple OAuth is not configured. Set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, and APPLE_PRIVATE_KEY environment variables.',
+      });
+    }
+
+    // Build the authorization URL
+    // Better Auth handles the OAuth flow automatically at /api/auth/sign-in/social
+    const authorizationUrl = `/api/auth/sign-in/social?provider=${provider}${callbackURL ? `&callbackURL=${encodeURIComponent(callbackURL)}` : ''}`;
+
+    app.logger.info(
+      { provider, authorizationUrl: authorizationUrl.split('?')[0], hasCallbackURL: !!callbackURL },
+      `${provider} OAuth authorization URL prepared`
+    );
+
+    return {
+      provider,
+      authorizationUrl,
+    };
+  });
+
   // GET /api/auth/me - Get current user session
   app.fastify.get('/api/auth/me', {
     schema: {

@@ -87,8 +87,13 @@ if (Object.keys(socialProviders).length > 0) {
     { providers: Object.keys(socialProviders), trustedOriginCount: trustedOrigins.length },
     'OAuth configuration initialized'
   );
+  app.logger.info(
+    { providers: Object.keys(socialProviders) },
+    'OAuth endpoints available: /api/auth/sign-in/social, /api/auth/sign-in/social-v1'
+  );
 } else {
   app.logger.warn('No OAuth providers configured. Set GOOGLE_CLIENT_ID/SECRET and/or APPLE_CLIENT_ID/SECRET to enable social sign-in.');
+  app.logger.warn('OAuth endpoints available but will return configuration errors: /api/auth/sign-in/social, /api/auth/sign-in/social-v1');
 }
 
 app.withAuth({
@@ -157,6 +162,26 @@ registerHealthRoutes(app);
 registerMitzvotCategoryRoutes(app);
 registerMitzvotRoutes(app);
 registerAuthRoutes(app);
+
+// Log registered auth endpoints
+app.logger.info(
+  {
+    authEndpoints: [
+      'POST /api/auth/sign-in/social (Better Auth - automatic)',
+      'POST /api/auth/sign-in/social-v1 (custom wrapper)',
+      'POST /api/auth/sign-in/email',
+      'POST /api/auth/sign-up/email',
+      'POST /api/auth/callback',
+      'POST /api/auth/oauth-start',
+      'POST /api/auth/oauth-redirect',
+      'GET /api/auth/me',
+      'GET /api/auth/health',
+      'GET /api/auth/oauth-test',
+      'GET /api/auth/debug-session',
+    ],
+  },
+  'Authentication endpoints registered'
+);
 
 await app.run();
 app.logger.info('Application running');
