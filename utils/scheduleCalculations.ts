@@ -30,7 +30,7 @@ export interface ScheduleDetails {
 
   // Daily
   timesPerDay?: number;
-  specificTimes?: Array<{ hour: number; minute: number; conditions?: string[] }>; // e.g., 'after dawn'
+  specificTimes?: { hour: number; minute: number; conditions?: string[] }[]; // e.g., 'after dawn'
 
   // Weekly
   daysOfWeek?: number[]; // 0-6 (Sunday-Saturday)
@@ -43,20 +43,20 @@ export interface ScheduleDetails {
 
   // Monthly
   dates?: number[]; // [1, 26]
-  nthDay?: Array<{ day: string; nth: number }>; // e.g., {day: 'Tuesday', nth: 2}
+  nthDay?: { day: string; nth: number }[]; // e.g., {day: 'Tuesday', nth: 2}
   range?: { start: number; end: number };
   randomCount?: number; // e.g., 3; shuffle/select
   calendarEvent?: string; // Hebrew calendar event name (e.g., "Rosh Chodesh")
 
   // Yearly - REBUILT FROM SCRATCH (following Monthly pattern)
   // yearlyDates: Array of {month, day} objects stored as jsonb in backend
-  yearlyDates?: Array<{ month: number; day: number }>;
+  yearlyDates?: { month: number; day: number }[];
   // yearlyRanges: new range format from backend jsonb
-  yearlyRanges?: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }>;
+  yearlyRanges?: { startMonth: number; startDay: number; endMonth: number; endDay: number }[];
   // yearlyCalendarEvent: Hebrew calendar event for yearly schedules (e.g., "Yom Kippur")
   yearlyCalendarEvent?: string;
   // datesOrRanges: legacy format (kept for backward compatibility)
-  datesOrRanges?: Array<{ month: number; days?: number[]; start?: number; end?: number; endMonth?: number }>;
+  datesOrRanges?: { month: number; days?: number[]; start?: number; end?: number; endMonth?: number }[];
 }
 
 export interface GoalSchedule {

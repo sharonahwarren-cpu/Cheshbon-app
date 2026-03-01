@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import Svg, { Path, Circle, Line, G } from 'react-native-svg';
 import { colors } from '@/styles/commonStyles';
 
@@ -39,7 +39,7 @@ export function AnimatedGaugeChart({ wins, losses }: AnimatedGaugeChartProps) {
       tension: 40,
       friction: 8,
     }).start();
-  }, [wins, losses, targetAngle]);
+  }, [wins, losses, targetAngle, needleRotation]);
   
   // SVG dimensions
   const width = 300;
