@@ -173,10 +173,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
-      console.log("📧 Signing in with email:", email);
-      console.log("📧 API_URL:", API_URL);
+      console.log("📧 [EMAIL] Signing in with email:", email);
+      console.log("📧 [EMAIL] API_URL:", API_URL);
+      console.log("📧 [EMAIL] Request body:", JSON.stringify({ email, password: "***" }));
+      
       const result = await authClient.signIn.email({ email, password });
-      console.log("📧 Email sign in result:", JSON.stringify(result?.data || result?.error || "no data"));
+      
+      console.log("📧 [EMAIL] Sign in response received");
+      console.log("📧 [EMAIL] Response data:", JSON.stringify(result?.data || {}, null, 2));
+      console.log("📧 [EMAIL] Response error:", JSON.stringify(result?.error || {}, null, 2));
+
+      // Check for errors in the result FIRST
+      if (result?.error) {
+        const errMsg = (result.error as any)?.message || String(result.error);
+        console.error("❌ [EMAIL] Sign in error from server:", errMsg);
+        console.error("❌ [EMAIL] Full error object:", JSON.stringify(result.error, null, 2));
+        throw new Error(errMsg);
+      }
 
       // Extract token from all possible locations in the response
       const data = result?.data as any;
@@ -188,26 +201,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (token) {
         await setBearerToken(token);
-        console.log("💾 Token saved from email sign in:", token.substring(0, 20) + "...");
+        console.log("💾 [EMAIL] Token saved from email sign in:", token.substring(0, 20) + "...");
       } else {
-        console.warn("⚠️ No token found in email sign in response, trying getSession...");
+        console.warn("⚠️ [EMAIL] No token found in email sign in response, trying getSession...");
         // Try to get session directly after sign in
         try {
           const session = await authClient.getSession();
           if (session?.data?.session?.token) {
             await setBearerToken(session.data.session.token);
-            console.log("💾 Token saved from getSession after email sign in");
+            console.log("💾 [EMAIL] Token saved from getSession after email sign in");
           }
         } catch (sessionErr) {
-          console.warn("⚠️ getSession after email sign in failed:", sessionErr);
+          console.warn("⚠️ [EMAIL] getSession after email sign in failed:", sessionErr);
         }
-      }
-
-      // Check for errors in the result
-      if (result?.error) {
-        const errMsg = (result.error as any)?.message || String(result.error);
-        console.error("❌ Email sign in error from server:", errMsg);
-        throw new Error(errMsg);
       }
 
       await fetchUser();
@@ -217,7 +223,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         text2: "You've successfully signed in.",
       });
     } catch (error: any) {
-      console.error("❌ Email sign in failed:", error);
+      console.error("❌ [EMAIL] Email sign in failed:", error);
+      console.error("❌ [EMAIL] Error message:", error.message);
+      console.error("❌ [EMAIL] Error stack:", error.stack);
       Toast.show({
         type: "error",
         text1: "Sign In Failed",
@@ -229,14 +237,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
     try {
-      console.log("📝 Signing up with email:", email);
-      console.log("📝 API_URL:", API_URL);
+      console.log("📝 [SIGNUP] Signing up with email:", email);
+      console.log("📝 [SIGNUP] API_URL:", API_URL);
+      
       const result = await authClient.signUp.email({
         email,
         password,
         name: name || email.split("@")[0],
       });
-      console.log("📝 Email sign up result:", JSON.stringify(result?.data || result?.error || "no data"));
+      
+      console.log("📝 [SIGNUP] Sign up response received");
+      console.log("📝 [SIGNUP] Response data:", JSON.stringify(result?.data || {}, null, 2));
+      console.log("📝 [SIGNUP] Response error:", JSON.stringify(result?.error || {}, null, 2));
+
+      // Check for errors in the result FIRST
+      if (result?.error) {
+        const errMsg = (result.error as any)?.message || String(result.error);
+        console.error("❌ [SIGNUP] Sign up error from server:", errMsg);
+        console.error("❌ [SIGNUP] Full error object:", JSON.stringify(result.error, null, 2));
+        throw new Error(errMsg);
+      }
 
       // Extract token from all possible locations in the response
       const data = result?.data as any;
@@ -248,25 +268,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (token) {
         await setBearerToken(token);
-        console.log("💾 Token saved from email sign up:", token.substring(0, 20) + "...");
+        console.log("💾 [SIGNUP] Token saved from email sign up:", token.substring(0, 20) + "...");
       } else {
-        console.warn("⚠️ No token found in email sign up response, trying getSession...");
+        console.warn("⚠️ [SIGNUP] No token found in email sign up response, trying getSession...");
         try {
           const session = await authClient.getSession();
           if (session?.data?.session?.token) {
             await setBearerToken(session.data.session.token);
-            console.log("💾 Token saved from getSession after email sign up");
+            console.log("💾 [SIGNUP] Token saved from getSession after email sign up");
           }
         } catch (sessionErr) {
-          console.warn("⚠️ getSession after email sign up failed:", sessionErr);
+          console.warn("⚠️ [SIGNUP] getSession after email sign up failed:", sessionErr);
         }
-      }
-
-      // Check for errors in the result
-      if (result?.error) {
-        const errMsg = (result.error as any)?.message || String(result.error);
-        console.error("❌ Email sign up error from server:", errMsg);
-        throw new Error(errMsg);
       }
 
       await fetchUser();
@@ -276,7 +289,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         text2: "Welcome to Cheshbon.",
       });
     } catch (error: any) {
-      console.error("❌ Email sign up failed:", error);
+      console.error("❌ [SIGNUP] Email sign up failed:", error);
+      console.error("❌ [SIGNUP] Error message:", error.message);
+      console.error("❌ [SIGNUP] Error stack:", error.stack);
       Toast.show({
         type: "error",
         text1: "Sign Up Failed",
@@ -363,7 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         router.replace("/(tabs)/(home)");
       } else {
-        // Native (iOS / Android): Use WebBrowser for OAuth
+        // Native (iOS / Android): Use WebBrowser for OAuth with Better Auth
         console.log(`📱 [${provider.toUpperCase()}] Starting native OAuth flow...`);
         
         // CRITICAL: Ensure any previous browser session is dismissed first
@@ -390,64 +405,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Create the callback URL using the app scheme
         // IMPORTANT: Use lowercase "cheshbon" - must match CFBundleURLSchemes in iOS and intentFilters in Android
-        const nativeCallbackURL = `cheshbon://auth-callback`;
-        console.log(`📱 [${provider.toUpperCase()}] Native OAuth callbackURL: ${nativeCallbackURL}`);
+        const redirectUri = Linking.createURL("auth-callback");
+        console.log(`📱 [${provider.toUpperCase()}] Redirect URI: ${redirectUri}`);
 
-        // Use the /api/auth/sign-in/social-v1 endpoint to get the OAuth authorization URL.
-        // This endpoint returns the actual OAuth provider URL (Google/Apple authorization URL).
-        // The callbackURL tells the OAuth provider where to redirect after authentication.
-        console.log(`📱 [${provider.toUpperCase()}] Requesting OAuth authorization URL from backend...`);
-        let oauthUrl: string;
-        try {
-          // Try /api/auth/sign-in/social-v1 first (returns authorizationUrl directly)
-          const socialV1Response = await fetch(
-            `${API_URL}/api/auth/sign-in/social-v1?provider=${provider}&callbackURL=${encodeURIComponent(nativeCallbackURL)}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ provider, callbackURL: nativeCallbackURL }),
-            }
-          );
-          if (socialV1Response.ok) {
-            const socialV1Data = await socialV1Response.json();
-            if (socialV1Data.authorizationUrl) {
-              oauthUrl = socialV1Data.authorizationUrl;
-              console.log(`📱 [${provider.toUpperCase()}] Got authorization URL from social-v1: ${oauthUrl.substring(0, 80)}...`);
-            } else {
-              throw new Error("No authorizationUrl in social-v1 response");
-            }
-          } else {
-            const errText = await socialV1Response.text();
-            console.warn(`📱 [${provider.toUpperCase()}] social-v1 failed (${socialV1Response.status}): ${errText}`);
-            throw new Error(`social-v1 returned ${socialV1Response.status}`);
-          }
-        } catch (socialV1Error) {
-          console.warn(`📱 [${provider.toUpperCase()}] social-v1 failed, trying oauth-start:`, socialV1Error);
-          try {
-            // Fallback: try /api/auth/oauth-start
-            const oauthStartResponse = await fetch(`${API_URL}/api/auth/oauth-start`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ provider, callbackUrl: nativeCallbackURL }),
-            });
-            if (oauthStartResponse.ok) {
-              const oauthStartData = await oauthStartResponse.json();
-              if (oauthStartData.authorizationUrl) {
-                oauthUrl = oauthStartData.authorizationUrl;
-                console.log(`📱 [${provider.toUpperCase()}] Got authorization URL from oauth-start: ${oauthUrl.substring(0, 80)}...`);
-              } else {
-                throw new Error("No authorizationUrl in oauth-start response");
-              }
-            } else {
-              throw new Error(`oauth-start returned ${oauthStartResponse.status}`);
-            }
-          } catch (oauthStartError) {
-            console.warn(`📱 [${provider.toUpperCase()}] oauth-start also failed, using direct Better Auth endpoint:`, oauthStartError);
-            // Last resort: use the Better Auth direct endpoint
-            oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(nativeCallbackURL)}`;
-          }
-        }
-        console.log(`📱 [${provider.toUpperCase()}] OAuth URL: ${oauthUrl}`);
+        // Build the Better Auth OAuth URL directly
+        // Better Auth expects: /api/auth/sign-in/social?provider=google&callbackURL=...
+        const oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(redirectUri)}`;
+        console.log(`📱 [${provider.toUpperCase()}] OAuth URL: ${oauthUrl.substring(0, 100)}...`);
 
         Toast.show({
           type: "info",
@@ -461,6 +425,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Helper to extract token from a deep link URL
         const extractTokenFromUrl = (urlStr: string): string | null => {
           try {
+            console.log(`📱 [${provider.toUpperCase()}] Extracting token from URL: ${urlStr}`);
             let params: URLSearchParams;
             try {
               const parsed = new URL(urlStr);
@@ -469,20 +434,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const queryStart = urlStr.indexOf("?");
               params = new URLSearchParams(queryStart >= 0 ? urlStr.slice(queryStart + 1) : "");
             }
-            return (
+            const token = (
               params.get("token") ||
               params.get("better_auth_token") ||
               params.get("session_token") ||
               params.get("access_token")
             );
-          } catch {
+            console.log(`📱 [${provider.toUpperCase()}] Token extraction result: ${token ? "found" : "not found"}`);
+            return token;
+          } catch (err) {
+            console.error(`❌ [${provider.toUpperCase()}] Error extracting token:`, err);
             return null;
           }
         };
 
         // Helper to establish session from a token
         const establishSessionFromToken = async (token: string): Promise<boolean> => {
-          console.log(`💾 [${provider.toUpperCase()}] Saving token...`);
+          console.log(`💾 [${provider.toUpperCase()}] Saving token: ${token.substring(0, 20)}...`);
           await setBearerToken(token);
 
           // Give the backend a moment to process
@@ -536,7 +504,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Set up deep link listener BEFORE opening the browser
         const linkingSubscription = Linking.addEventListener("url", (event) => {
           console.log(`📱 [${provider.toUpperCase()}] Deep link received via Linking listener:`, event.url);
-          if (event.url && event.url.startsWith("cheshbon://auth-callback")) {
+          if (event.url && event.url.includes("auth-callback")) {
             const token = extractTokenFromUrl(event.url);
             console.log(`📱 [${provider.toUpperCase()}] Token from deep link: ${token ? "found" : "not found"}`);
             deepLinkToken = token;
@@ -550,14 +518,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           browserResult = await WebBrowser.openAuthSessionAsync(
             oauthUrl,
-            nativeCallbackURL,
+            redirectUri,
             {
               showInRecents: false,
             }
           );
+          console.log(`📱 [${provider.toUpperCase()}] Browser result type: ${browserResult.type}`);
+          if (browserResult.type === "success" && browserResult.url) {
+            console.log(`📱 [${provider.toUpperCase()}] Browser redirect URL: ${browserResult.url}`);
+          }
         } catch (browserError: any) {
           linkingSubscription.remove();
           console.error(`❌ [${provider.toUpperCase()}] WebBrowser error:`, browserError);
+          console.error(`❌ [${provider.toUpperCase()}] Error message:`, browserError.message);
 
           if (
             browserError.message?.toLowerCase().includes("webbrowser") &&
@@ -571,7 +544,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               console.log(`🔄 [${provider.toUpperCase()}] Retrying browser open after cleanup...`);
               browserResult = await WebBrowser.openAuthSessionAsync(
                 oauthUrl,
-                nativeCallbackURL,
+                redirectUri,
                 { showInRecents: false }
               );
             } catch (retryError: any) {
@@ -586,15 +559,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Remove the Linking listener after browser closes
         linkingSubscription.remove();
 
-        console.log(`📱 [${provider.toUpperCase()}] Browser result type: ${browserResult.type}`);
-
         // Try to get token from browser result URL first
         let token: string | null = null;
 
         if (browserResult.type === "success" && browserResult.url) {
-          console.log(`📱 [${provider.toUpperCase()}] Browser redirect URL received: ${browserResult.url}`);
           token = extractTokenFromUrl(browserResult.url);
-          console.log(`📱 [${provider.toUpperCase()}] Token from browser result: ${token ? "found" : "not found"}`);
         }
 
         // If no token from browser result, check if deep link listener caught it
@@ -606,8 +575,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // If still no token but browser was dismissed (Android issue), wait briefly for deep link
         if (!token && (browserResult.type === "cancel" || browserResult.type === "dismiss")) {
           console.log(`📱 [${provider.toUpperCase()}] Browser dismissed - waiting for deep link (Android fallback)...`);
-          // Wait up to 3 seconds for the deep link to arrive
-          const timeoutPromise = new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 3000));
+          // Wait up to 5 seconds for the deep link to arrive (increased from 3s)
+          const timeoutPromise = new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 5000));
           token = await Promise.race([deepLinkPromise, timeoutPromise]);
           console.log(`📱 [${provider.toUpperCase()}] Deep link wait result: ${token ? "token found" : "no token"}`);
         }
@@ -639,6 +608,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error: any) {
       console.error(`❌ [${provider.toUpperCase()}] Sign in failed:`, error);
+      console.error(`❌ [${provider.toUpperCase()}] Error message:`, error.message);
       console.error(`❌ [${provider.toUpperCase()}] Error stack:`, error.stack);
 
       // Don't show error for user cancellation
