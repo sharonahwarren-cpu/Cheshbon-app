@@ -18,7 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { IconSymbol } from "@/components/IconSymbol";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { VictoryPie, VictoryChart, VictoryLine, VictoryAxis, VictoryTheme, VictoryLabel } from "victory-native";
+import { VictoryPie, VictoryChart, VictoryLine, VictoryAxis, VictoryLabel } from "victory-native";
 import Svg, { Circle, Text as SvgText } from "react-native-svg";
 
 interface CurrencyBalance {
@@ -363,7 +363,6 @@ export default function ReportsScreen() {
         <VictoryChart
           width={screenWidth - 40}
           height={300}
-          theme={VictoryTheme.material}
           padding={{ top: 20, bottom: 60, left: 60, right: 20 }}
         >
           <VictoryAxis
