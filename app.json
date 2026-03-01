@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Cheshbon",
@@ -44,7 +45,8 @@
           "autoVerify": true,
           "data": [
             {
-              "scheme": "cheshbon"
+              "scheme": "cheshbon",
+              "host": "auth-callback"
             }
           ],
           "category": [
@@ -69,7 +71,7 @@
         }
       ]
     ],
-    "scheme": "Cheshbon",
+    "scheme": "cheshbon",
     "experiments": {
       "typedRoutes": true
     },

@@ -226,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Prevent multiple simultaneous OAuth attempts
     const now = Date.now();
     if (oauthInProgress.current) {
-      console.log(`⏸️ OAuth already in progress, ignoring ${provider} sign in request`);
+      console.log(`⏸️ [${provider.toUpperCase()}] OAuth already in progress, ignoring sign in request`);
       Toast.show({
         type: "info",
         text1: "Please wait",
@@ -238,7 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Prevent rapid successive attempts (debounce) - longer on Android
     const debounceTime = Platform.OS === "android" ? 3000 : 2000;
     if (now - lastOAuthAttempt.current < debounceTime) {
-      console.log(`⏸️ Too soon after last OAuth attempt (${now - lastOAuthAttempt.current}ms), ignoring ${provider} sign in request`);
+      console.log(`⏸️ [${provider.toUpperCase()}] Too soon after last OAuth attempt (${now - lastOAuthAttempt.current}ms), ignoring sign in request`);
       Toast.show({
         type: "info",
         text1: "Please wait",
@@ -250,26 +250,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     lastOAuthAttempt.current = now;
     oauthInProgress.current = true;
     
+    // Safety timeout to reset flag if something goes wrong
+    const safetyTimeout = setTimeout(() => {
+      if (oauthInProgress.current) {
+        console.log(`⚠️ [${provider.toUpperCase()}] Safety timeout triggered - resetting OAuth flag`);
+        oauthInProgress.current = false;
+      }
+    }, 120000); // 2 minutes
+    
     try {
-      console.log(`🔐 Starting ${provider} sign in on platform: ${Platform.OS}`);
+      console.log(`🔐 [${provider.toUpperCase()}] Starting sign in on platform: ${Platform.OS}`);
 
       if (Platform.OS === "web") {
         // Web: Use popup flow
+        console.log(`🌐 [${provider.toUpperCase()}] Opening OAuth popup...`);
         const { token, user: oauthUser } = await openOAuthPopup(provider);
         
         if (token) {
+          console.log(`💾 [${provider.toUpperCase()}] Saving token from popup...`);
           await setBearerToken(token);
         }
 
         // Retry session establishment
         let sessionEstablished = false;
         for (let i = 0; i < MAX_RETRIES && !sessionEstablished; i++) {
-          console.log(`🔄 Attempting to establish session (${i + 1}/${MAX_RETRIES})...`);
+          console.log(`🔄 [${provider.toUpperCase()}] Attempting to establish session (${i + 1}/${MAX_RETRIES})...`);
           const session = await authClient.getSession();
           if (session?.data?.user) {
             setUser(session.data.user as User);
             sessionEstablished = true;
-            console.log("✅ Session established successfully");
+            console.log(`✅ [${provider.toUpperCase()}] Session established successfully`);
             break;
           }
           if (i < MAX_RETRIES - 1) {
@@ -289,22 +299,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         router.replace("/(tabs)/(home)");
       } else {
         // Native (iOS / Android): Use WebBrowser for OAuth
+        console.log(`📱 [${provider.toUpperCase()}] Starting native OAuth flow...`);
+        
         // CRITICAL: Ensure any previous browser session is dismissed first
-        // Android requires more aggressive cleanup
         const isAndroid = Platform.OS === "android";
         
         try {
-          console.log("🧹 Attempting to dismiss any previous browser session...");
+          console.log(`🧹 [${provider.toUpperCase()}] Attempting to dismiss any previous browser session...`);
           await WebBrowser.dismissBrowser();
-          console.log("✅ Previous browser session dismissed successfully");
+          console.log(`✅ [${provider.toUpperCase()}] Previous browser session dismissed successfully`);
           
           // Android needs longer wait time for cleanup
-          const cleanupDelay = isAndroid ? 800 : 300;
-          console.log(`⏳ Waiting ${cleanupDelay}ms for cleanup...`);
+          const cleanupDelay = isAndroid ? 1000 : 500;
+          console.log(`⏳ [${provider.toUpperCase()}] Waiting ${cleanupDelay}ms for cleanup...`);
           await new Promise(resolve => setTimeout(resolve, cleanupDelay));
         } catch (dismissError: any) {
           // This is expected if no browser was open
-          console.log("ℹ️ No previous browser session to dismiss:", dismissError.message);
+          console.log(`ℹ️ [${provider.toUpperCase()}] No previous browser session to dismiss:`, dismissError.message);
           
           // On Android, still wait a bit to ensure state is clean
           if (isAndroid) {
@@ -312,63 +323,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const nativeCallbackURL = Linking.createURL("");
-        console.log(`📱 Native OAuth callbackURL: ${nativeCallbackURL}`);
+        // Create the callback URL using the app scheme
+        const nativeCallbackURL = `cheshbon://auth-callback`;
+        console.log(`📱 [${provider.toUpperCase()}] Native OAuth callbackURL: ${nativeCallbackURL}`);
+
+        // Construct the OAuth URL directly (Better Auth pattern)
+        const oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(nativeCallbackURL)}`;
+        console.log(`📱 [${provider.toUpperCase()}] OAuth URL: ${oauthUrl}`);
 
         Toast.show({
           type: "info",
           text1: "Opening browser...",
           text2: `Sign in with ${provider}`,
+          visibilityTime: 3000,
         });
 
-        // Step 1: Get the OAuth URL from Better Auth
-        const result = await authClient.signIn.social({
-          provider,
-          callbackURL: nativeCallbackURL,
-        });
-
-        console.log(`📱 ${provider} signIn.social result:`, result?.data ? "Got URL" : "No URL");
-
-        const resultData = result?.data as any;
-        
-        // Step 2: Open the OAuth URL in browser
-        let oauthUrl = resultData?.url;
-        
-        // If no URL returned, construct it manually
-        if (!oauthUrl) {
-          oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(nativeCallbackURL)}`;
-          console.log(`📱 Constructed OAuth URL: ${oauthUrl}`);
-        }
-
-        console.log(`📱 Opening OAuth URL in browser...`);
+        console.log(`📱 [${provider.toUpperCase()}] Opening OAuth URL in browser...`);
         
         // Android-specific: Add extra safeguard with try-catch
         let browserResult;
         try {
           browserResult = await WebBrowser.openAuthSessionAsync(
             oauthUrl,
-            nativeCallbackURL
+            nativeCallbackURL,
+            {
+              showInRecents: false,
+            }
           );
         } catch (browserError: any) {
+          console.error(`❌ [${provider.toUpperCase()}] WebBrowser error:`, browserError);
+          
           // Check if it's the "already open" error
           if (
             browserError.message?.toLowerCase().includes("webbrowser") && 
-            browserError.message?.toLowerCase().includes("already open")
+            (browserError.message?.toLowerCase().includes("already open") ||
+             browserError.message?.toLowerCase().includes("busy"))
           ) {
-            console.error("❌ WebBrowser already open - forcing cleanup and retry");
+            console.error(`❌ [${provider.toUpperCase()}] WebBrowser already open - forcing cleanup and retry`);
             
             // Force dismiss and retry once
             try {
               await WebBrowser.dismissBrowser();
-              await new Promise(resolve => setTimeout(resolve, 1000));
+              await new Promise(resolve => setTimeout(resolve, 1500));
               
-              console.log("🔄 Retrying browser open after cleanup...");
+              console.log(`🔄 [${provider.toUpperCase()}] Retrying browser open after cleanup...`);
               browserResult = await WebBrowser.openAuthSessionAsync(
                 oauthUrl,
-                nativeCallbackURL
+                nativeCallbackURL,
+                {
+                  showInRecents: false,
+                }
               );
             } catch (retryError: any) {
-              console.error("❌ Retry failed:", retryError);
+              console.error(`❌ [${provider.toUpperCase()}] Retry failed:`, retryError);
               throw new Error("Browser is busy. Please close any open browser windows and try again.");
             }
           } else {
@@ -376,59 +383,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        console.log(`📱 Browser result type: ${browserResult.type}`);
+        console.log(`📱 [${provider.toUpperCase()}] Browser result type: ${browserResult.type}`);
 
         if (browserResult.type === "success" && browserResult.url) {
-          console.log(`📱 Browser redirect URL received`);
+          console.log(`📱 [${provider.toUpperCase()}] Browser redirect URL received: ${browserResult.url}`);
 
           // Step 3: Extract token from the redirect URL
           const url = new URL(browserResult.url);
           const token = 
             url.searchParams.get("token") ||
             url.searchParams.get("better_auth_token") ||
-            url.searchParams.get("session_token");
+            url.searchParams.get("session_token") ||
+            url.searchParams.get("access_token");
 
-          console.log(`📱 Token from redirect: ${token ? "found" : "not found"}`);
-
-          if (token) {
-            console.log("💾 Saving token...");
-            await setBearerToken(token);
-            
-            // Give the backend a moment to process
-            await new Promise(resolve => setTimeout(resolve, 500));
+          console.log(`📱 [${provider.toUpperCase()}] Token from redirect: ${token ? "found" : "not found"}`);
+          
+          if (!token) {
+            console.error(`❌ [${provider.toUpperCase()}] No token in redirect URL. Full URL:`, browserResult.url);
+            throw new Error("No authentication token received from server. Please try again.");
           }
+
+          console.log(`💾 [${provider.toUpperCase()}] Saving token...`);
+          await setBearerToken(token);
+          
+          // Give the backend a moment to process
+          await new Promise(resolve => setTimeout(resolve, 800));
 
           // Step 4: Retry session establishment with exponential backoff
           let sessionEstablished = false;
           for (let i = 0; i < MAX_RETRIES && !sessionEstablished; i++) {
-            console.log(`🔄 Attempting to establish session (${i + 1}/${MAX_RETRIES})...`);
+            console.log(`🔄 [${provider.toUpperCase()}] Attempting to establish session (${i + 1}/${MAX_RETRIES})...`);
             
-            const session = await authClient.getSession();
-            if (session?.data?.user) {
-              setUser(session.data.user as User);
-              sessionEstablished = true;
-              console.log("✅ Session established successfully");
-              break;
+            try {
+              // Try authClient.getSession first
+              const session = await authClient.getSession();
+              if (session?.data?.user) {
+                setUser(session.data.user as User);
+                sessionEstablished = true;
+                console.log(`✅ [${provider.toUpperCase()}] Session established via authClient`);
+                break;
+              }
+            } catch (sessionError) {
+              console.warn(`⚠️ [${provider.toUpperCase()}] authClient.getSession failed:`, sessionError);
             }
 
             // Try bearer token fallback
-            const bearerSession = await getSessionWithBearerToken();
-            if (bearerSession?.user) {
-              setUser(bearerSession.user as User);
-              sessionEstablished = true;
-              console.log("✅ Session established via bearer token");
-              break;
+            try {
+              const bearerSession = await getSessionWithBearerToken();
+              if (bearerSession?.user) {
+                setUser(bearerSession.user as User);
+                sessionEstablished = true;
+                console.log(`✅ [${provider.toUpperCase()}] Session established via bearer token`);
+                break;
+              }
+            } catch (bearerError) {
+              console.warn(`⚠️ [${provider.toUpperCase()}] Bearer token session failed:`, bearerError);
             }
 
             if (i < MAX_RETRIES - 1) {
-              const delay = RETRY_INTERVAL_MS * (i + 1);
-              console.log(`⏳ Waiting ${delay}ms before retry...`);
+              const delay = RETRY_INTERVAL_MS * Math.pow(2, i); // Exponential backoff
+              console.log(`⏳ [${provider.toUpperCase()}] Waiting ${delay}ms before retry...`);
               await new Promise(resolve => setTimeout(resolve, delay));
             }
           }
 
           if (!sessionEstablished) {
-            console.error("❌ Could not establish session after OAuth");
+            console.error(`❌ [${provider.toUpperCase()}] Could not establish session after ${MAX_RETRIES} attempts`);
             throw new Error("Could not establish session. Please try again.");
           }
 
@@ -439,15 +459,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           router.replace("/(tabs)/(home)");
         } else if (browserResult.type === "cancel" || browserResult.type === "dismiss") {
-          console.log(`ℹ️ ${provider} OAuth browser was dismissed by user`);
+          console.log(`ℹ️ [${provider.toUpperCase()}] OAuth browser was dismissed by user`);
           // User cancelled - no error toast needed
         } else {
-          console.log(`⚠️ Unexpected browser result type: ${(browserResult as any).type}`);
+          console.log(`⚠️ [${provider.toUpperCase()}] Unexpected browser result type: ${(browserResult as any).type}`);
           throw new Error("Authentication was not completed");
         }
       }
     } catch (error: any) {
-      console.error(`❌ ${provider} sign in failed:`, error);
+      console.error(`❌ [${provider.toUpperCase()}] Sign in failed:`, error);
+      console.error(`❌ [${provider.toUpperCase()}] Error stack:`, error.stack);
 
       // Don't show error for user cancellation
       if (
@@ -455,16 +476,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error.message?.includes("canceled") ||
         error.message?.includes("dismissed")
       ) {
-        console.log(`ℹ️ ${provider} sign in was cancelled by user`);
+        console.log(`ℹ️ [${provider.toUpperCase()}] Sign in was cancelled by user`);
         return;
       }
 
       // Check for "WebBrowser already open" error - this is the Android issue
       if (
         error.message?.toLowerCase().includes("webbrowser") && 
-        error.message?.toLowerCase().includes("already open")
+        (error.message?.toLowerCase().includes("already open") ||
+         error.message?.toLowerCase().includes("busy"))
       ) {
-        console.error("❌ WebBrowser already open error detected - attempting recovery");
+        console.error(`❌ [${provider.toUpperCase()}] WebBrowser already open error detected - attempting recovery`);
         Toast.show({
           type: "error",
           text1: "Browser Busy",
@@ -473,24 +495,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Force dismiss any lingering browser
         try {
           await WebBrowser.dismissBrowser();
-          console.log("✅ Force dismissed lingering browser");
+          console.log(`✅ [${provider.toUpperCase()}] Force dismissed lingering browser`);
           // Wait longer on Android
           if (Platform.OS === "android") {
             await new Promise(resolve => setTimeout(resolve, 1000));
           }
         } catch (dismissErr) {
-          console.log("⚠️ Could not force dismiss browser:", dismissErr);
+          console.log(`⚠️ [${provider.toUpperCase()}] Could not force dismiss browser:`, dismissErr);
         }
-        return;
-      }
-
-      // Check for "Browser is busy" error from our retry logic
-      if (error.message?.toLowerCase().includes("browser is busy")) {
-        Toast.show({
-          type: "error",
-          text1: "Browser Busy",
-          text2: error.message,
-        });
         return;
       }
 
@@ -507,16 +519,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           text1: "Popup Blocked",
           text2: "Please allow popups for this site and try again.",
         });
+      } else if (error.message?.includes("No authentication token")) {
+        Toast.show({
+          type: "error",
+          text1: "Authentication Failed",
+          text2: error.message,
+        });
       } else {
         Toast.show({
           type: "error",
           text1: "Sign In Failed",
-          text2: error.message || `Failed to sign in with ${provider}.`,
+          text2: error.message || `Failed to sign in with ${provider}. Please try again.`,
         });
       }
       throw error;
     } finally {
+      clearTimeout(safetyTimeout);
       oauthInProgress.current = false;
+      console.log(`🏁 [${provider.toUpperCase()}] OAuth flow finished, flag reset`);
     }
   };
 
