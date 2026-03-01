@@ -337,24 +337,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           text2: `Sign in with ${provider}`,
         });
 
-        // Step 1: Get the OAuth URL from Better Auth
-        const result = await authClient.signIn.social({
-          provider,
-          callbackURL: nativeCallbackURL,
-        });
-
-        console.log(`📱 ${provider} signIn.social result:`, result?.data ? "Got URL" : "No URL");
-
-        const resultData = result?.data as any;
-        
-        // Step 2: Open the OAuth URL in browser
-        let oauthUrl = resultData?.url;
-        
-        // If no URL returned, construct it manually
-        if (!oauthUrl) {
-          oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(nativeCallbackURL)}`;
-          console.log(`📱 Constructed OAuth URL: ${oauthUrl}`);
-        }
+        // Step 1: Construct the OAuth URL directly (Better Auth endpoint)
+        // We bypass authClient.signIn.social() because it doesn't work reliably on native
+        const oauthUrl = `${API_URL}/api/auth/sign-in/social?provider=${provider}&callbackURL=${encodeURIComponent(nativeCallbackURL)}`;
+        console.log(`📱 Constructed OAuth URL: ${oauthUrl}`);
 
         console.log(`📱 Opening OAuth URL in browser...`);
         
