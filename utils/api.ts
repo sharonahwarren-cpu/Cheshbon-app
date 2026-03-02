@@ -23,6 +23,8 @@ export const setUserAuthState = (authenticated: boolean): void => {
 export const BACKEND_URL =
   Constants.expoConfig?.extra?.backendUrl || 'https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev';
 
+console.log('[API] 🌐 Backend URL configured:', BACKEND_URL);
+
 export const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
 
 // In-memory token cache to avoid SecureStore race conditions on iOS
@@ -35,7 +37,11 @@ const TOKEN_CACHE_DURATION = 30000; // 30 seconds - longer duration for better r
  * Check if backend is properly configured
  */
 export const isBackendConfigured = (): boolean => {
-  return !!BACKEND_URL && BACKEND_URL.length > 0;
+  const configured = !!BACKEND_URL && BACKEND_URL.length > 0 && !BACKEND_URL.includes('undefined');
+  if (!configured) {
+    console.error('[API] ❌ Backend URL is not properly configured:', BACKEND_URL);
+  }
+  return configured;
 };
 
 /**
@@ -276,7 +282,11 @@ const _fetchOnce = async <T = any>(
  */
 export const apiCall = async <T = any>(endpoint: string, options?: RequestInit): Promise<T> => {
   if (!isBackendConfigured()) {
-    throw new Error('Backend URL not configured. Please rebuild the app.');
+    const errorMsg = 'Backend URL is not configured. Please check your app configuration.';
+    console.error('[API] ❌', errorMsg);
+    console.error('[API] ❌ Current BACKEND_URL:', BACKEND_URL);
+    console.error('[API] ❌ Constants.expoConfig?.extra?.backendUrl:', Constants.expoConfig?.extra?.backendUrl);
+    throw new Error(errorMsg);
   }
 
   const url = `${BACKEND_URL}${endpoint}`;
