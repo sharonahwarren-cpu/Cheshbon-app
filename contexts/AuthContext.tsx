@@ -695,16 +695,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(errorMsg);
       }
 
-      const data = JSON.parse(responseText);
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error('❌ [APPLE NATIVE] Failed to parse response as JSON:', responseText.substring(0, 200));
+        throw new Error('Invalid response from server during Apple sign-in');
+      }
+
+      console.log('📞 [APPLE NATIVE] Response keys:', Object.keys(data));
+
+      // Check if backend returned an authorizationUrl instead of a token (old behavior)
+      if (data.authorizationUrl && !data.token) {
+        console.error('❌ [APPLE NATIVE] Backend returned authorizationUrl instead of token - backend needs to be updated');
+        throw new Error('Apple sign-in configuration error. Please contact support.');
+      }
+
       const token = data.token || data.session?.token || data.sessionToken || data.accessToken;
 
       if (!token) {
-        console.error('❌ [APPLE NATIVE] No token in response. Keys:', Object.keys(data));
-        throw new Error('No authentication token received from server');
+        console.error('❌ [APPLE NATIVE] No token in response. Full response:', JSON.stringify(data).substring(0, 500));
+        throw new Error('No authentication token received from server after Apple sign-in');
       }
 
-      console.log('✅ [APPLE NATIVE] Token received, saving...');
+      console.log('✅ [APPLE NATIVE] Token received (length:', token.length, '), saving...');
       await saveToken(token);
+
+      // If the response includes user data, set it immediately without waiting for fetchUser
+      if (data.user && data.user.id) {
+        console.log('📞 [APPLE NATIVE] Setting user from response directly:', data.user.id);
+        setUser(data.user);
+        setLoading(false);
+      }
+
+      // Always call fetchUser to validate the session and get full user data
       await fetchUser();
       console.log('✅ [APPLE NATIVE] Sign in successful');
     } catch (error: any) {
