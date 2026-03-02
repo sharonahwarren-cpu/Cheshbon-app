@@ -4,13 +4,16 @@ import { user, session } from '../db/auth-schema.js';
 import { eq } from 'drizzle-orm';
 
 /**
- * Enhanced authentication wrapper for iOS compatibility
- * Provides fallback session validation when framework auth fails
+ * Enhanced authentication wrapper for iOS and custom sign-in compatibility
  *
- * 1. Tries standard framework auth validation first
- * 2. If that fails, does direct database lookup
+ * Priority order:
+ * 1. Database session lookup FIRST (for custom sign-in endpoints)
+ * 2. Framework auth as fallback (for Better Auth endpoints)
  * 3. Validates session expiry
  * 4. Logs all steps for debugging
+ *
+ * This ensures valid sessions created by custom sign-in methods (Apple native, email)
+ * are recognized immediately without needing framework-level auth validation.
  */
 export function createAuthWrapper(app: App) {
   const baseRequireAuth = app.requireAuth();
@@ -25,7 +28,102 @@ export function createAuthWrapper(app: App) {
     );
 
     try {
-      // First, try the standard framework auth validation
+      // FIRST: Try direct database lookup (for sessions created by custom sign-in endpoints)
+      // Extract Bearer token from Authorization header
+      let tokenFromHeader = null;
+      if (authHeader?.startsWith('Bearer ')) {
+        tokenFromHeader = authHeader.substring(7);
+        app.logger.debug(
+          { tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
+          'Bearer token extracted from header'
+        );
+      } else if (authHeader) {
+        app.logger.warn(
+          { authFormat: authHeader.substring(0, 15) },
+          'Authorization header present but not in Bearer format'
+        );
+        // Continue to framework auth as fallback
+      }
+
+      // If we have a token, try database lookup first
+      if (tokenFromHeader) {
+        app.logger.debug(
+          { tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
+          'Attempting direct DB session lookup'
+        );
+
+        // Look up session in database
+        const dbSession = await app.db.query.session.findFirst({
+          where: eq(session.token, tokenFromHeader),
+        }).catch((err) => {
+          app.logger.error(
+            { err, tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
+            'Error querying session from database'
+          );
+          return null;
+        });
+
+        if (dbSession) {
+          app.logger.debug(
+            { sessionId: dbSession.id, userId: dbSession.userId, expiresAt: dbSession.expiresAt },
+            'Session found in database'
+          );
+
+          // Check if session is expired
+          const now = new Date();
+          if (dbSession.expiresAt < now) {
+            app.logger.warn(
+              { sessionId: dbSession.id, expiresAt: dbSession.expiresAt, now: now.toISOString() },
+              'Session found but is expired'
+            );
+          } else {
+            app.logger.debug(
+              { sessionId: dbSession.id, expiresAtMs: dbSession.expiresAt.getTime() - now.getTime() },
+              'Session is valid and not expired'
+            );
+
+            // Get the user associated with this session
+            const sessionUser = await app.db.query.user.findFirst({
+              where: eq(user.id, dbSession.userId),
+            }).catch((err) => {
+              app.logger.error(
+                { err, userId: dbSession.userId },
+                'Error querying user for valid session'
+              );
+              return null;
+            });
+
+            if (sessionUser) {
+              app.logger.info(
+                { userId: sessionUser.id, email: sessionUser.email, source: 'database' },
+                'Auth validation succeeded via database lookup'
+              );
+
+              // Return session immediately - database lookup succeeded
+              return {
+                user: sessionUser,
+                session: dbSession,
+              };
+            } else {
+              app.logger.warn(
+                { userId: dbSession.userId },
+                'Session valid but user not found in database'
+              );
+            }
+          }
+        } else {
+          app.logger.debug(
+            { tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
+            'Session not found in database, will try framework auth'
+          );
+        }
+      } else {
+        app.logger.debug({}, 'No Bearer token to check in database');
+      }
+
+      // SECOND: Fall back to framework auth validation
+      app.logger.debug({}, 'Attempting framework authentication');
+
       const authResult = await baseRequireAuth(request, reply).catch((err) => {
         app.logger.debug(
           { err, authHeader: authHeaderTruncated },
@@ -43,109 +141,20 @@ export function createAuthWrapper(app: App) {
         return authResult;
       }
 
-      // If framework auth failed or response already sent, try direct DB lookup
+      // Framework auth also failed
       if (reply.sent) {
         app.logger.debug(
           { statusCode: reply.statusCode },
           'Response already sent by framework auth'
         );
-        return null;
-      }
-
-      // Try direct database lookup as fallback
-      app.logger.debug({ authHeader: authHeaderTruncated }, 'Attempting direct DB session lookup');
-
-      let tokenFromHeader = null;
-      if (authHeader?.startsWith('Bearer ')) {
-        tokenFromHeader = authHeader.substring(7);
-        app.logger.debug(
-          { tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
-          'Bearer token extracted for DB lookup'
-        );
-      } else if (authHeader) {
-        app.logger.warn(
-          { authFormat: authHeader.substring(0, 15) },
-          'Authorization header present but not in Bearer format'
-        );
-        return null;
       } else {
-        app.logger.warn({ url: request.url }, 'No authorization header provided');
-        return null;
-      }
-
-      if (!tokenFromHeader) {
-        app.logger.warn({}, 'Could not extract token from Bearer header');
-        return null;
-      }
-
-      // Look up session in database
-      const dbSession = await app.db.query.session.findFirst({
-        where: eq(session.token, tokenFromHeader),
-      }).catch((err) => {
-        app.logger.error(
-          { err, tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
-          'Error querying session from database'
-        );
-        return null;
-      });
-
-      if (!dbSession) {
         app.logger.warn(
-          { tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
-          'Session not found in database'
+          { authHeaderPresent: !!authHeader },
+          'Auth validation failed - no valid session found'
         );
-        return null;
       }
 
-      app.logger.debug(
-        { sessionId: dbSession.id, userId: dbSession.userId, expiresAt: dbSession.expiresAt },
-        'Session found in database'
-      );
-
-      // Check if session is expired
-      const now = new Date();
-      if (dbSession.expiresAt < now) {
-        app.logger.warn(
-          { sessionId: dbSession.id, expiresAt: dbSession.expiresAt, now: now.toISOString() },
-          'Session found but is expired'
-        );
-        return null;
-      }
-
-      app.logger.debug(
-        { sessionId: dbSession.id, expiresAtMs: dbSession.expiresAt.getTime() - now.getTime() },
-        'Session is valid and not expired'
-      );
-
-      // Get the user associated with this session
-      const sessionUser = await app.db.query.user.findFirst({
-        where: eq(user.id, dbSession.userId),
-      }).catch((err) => {
-        app.logger.error(
-          { err, userId: dbSession.userId },
-          'Error querying user for valid session'
-        );
-        return null;
-      });
-
-      if (!sessionUser) {
-        app.logger.warn(
-          { userId: dbSession.userId },
-          'Session valid but user not found'
-        );
-        return null;
-      }
-
-      app.logger.info(
-        { userId: sessionUser.id, email: sessionUser.email, source: 'database' },
-        'Auth validation succeeded via database lookup'
-      );
-
-      // Return a session object in the format expected by the application
-      return {
-        user: sessionUser,
-        session: dbSession,
-      };
+      return null;
     } catch (error) {
       app.logger.error(
         { err: error, authHeaderPresent: !!authHeader },
