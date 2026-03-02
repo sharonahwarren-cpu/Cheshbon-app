@@ -436,13 +436,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
     } else {
-      // Native: Get OAuth URL from backend using /api/auth/oauth-start, then open in browser
+      // Native: Get OAuth URL from backend using /api/auth/initiate-social, then open in browser
+      // NOTE: We use initiate-social (not oauth-start) because initiate-social correctly uses
+      // BASE_URL (the actual backend URL) while oauth-start uses FRONTEND_URL (may be localhost)
       try {
         const callbackUrl = `${APP_SCHEME}://auth-callback`;
         console.log('📱 [GOOGLE NATIVE] Callback URL:', callbackUrl);
 
-        // Use /api/auth/oauth-start endpoint (correct endpoint for native)
-        const initResponse = await fetch(`${BACKEND_URL}/api/auth/oauth-start`, {
+        // Use /api/auth/initiate-social endpoint - correctly uses BASE_URL for authorization URL
+        const initResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -451,41 +453,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
           body: JSON.stringify({
             provider: 'google',
-            callbackUrl,
+            callbackURL: callbackUrl,
           }),
         });
 
-        console.log('📱 [GOOGLE NATIVE] oauth-start response status:', initResponse.status);
+        console.log('📱 [GOOGLE NATIVE] initiate-social response status:', initResponse.status);
 
         if (!initResponse.ok) {
           const errorText = await initResponse.text();
-          console.error('❌ [GOOGLE NATIVE] oauth-start failed:', errorText);
-          // Fallback: try initiate-social endpoint
-          const fallbackResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Mobile-App': 'cheshbon',
-              'Origin': BACKEND_URL,
-            },
-            body: JSON.stringify({
-              provider: 'google',
-              callbackURL: callbackUrl,
-            }),
-          });
-          if (!fallbackResponse.ok) {
-            throw new Error('Failed to initiate Google sign-in');
-          }
-          const fallbackData = await fallbackResponse.json();
-          const authUrl = fallbackData.authorizationUrl;
-          console.log('📱 [GOOGLE NATIVE] Authorization URL from fallback:', authUrl?.substring(0, 80));
-          await _openGoogleBrowser(authUrl, callbackUrl);
-          return;
+          console.error('❌ [GOOGLE NATIVE] initiate-social failed:', errorText);
+          throw new Error(`Failed to initiate Google sign-in: ${errorText}`);
         }
 
         const initData = await initResponse.json();
         const authUrl = initData.authorizationUrl;
-        console.log('📱 [GOOGLE NATIVE] Authorization URL received:', authUrl?.substring(0, 80));
+        console.log('📱 [GOOGLE NATIVE] Authorization URL received:', authUrl?.substring(0, 100));
 
         await _openGoogleBrowser(authUrl, callbackUrl);
       } catch (error) {
