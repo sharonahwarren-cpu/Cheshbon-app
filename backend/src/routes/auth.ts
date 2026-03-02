@@ -243,7 +243,7 @@ export function registerAuthRoutes(app: App) {
     }
 
     // Better Auth handles the actual OAuth redirect at /api/auth/sign-in/social
-    // Store callbackURL as query param so it can be used after OAuth completes
+    // Store callbackURL and redirectURL as query params for OAuth completion
     const authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}${callbackURL ? `&callbackURL=${encodeURIComponent(callbackURL)}` : ''}${redirectURL ? `&redirectURL=${encodeURIComponent(redirectURL)}` : ''}`;
 
     app.logger.info(
@@ -258,11 +258,22 @@ export function registerAuthRoutes(app: App) {
       `${provider} OAuth authorization URL prepared (BASE_URL source: ${urlSource})`
     );
 
-    return {
-      provider,
-      authorizationUrl,
-      message: `Redirect to this URL to sign in with ${provider}`,
-    };
+    // For mobile apps (with callbackURL): return JSON with URL so app can handle navigation
+    // For web browsers (without callbackURL): redirect to the authorization URL directly
+    if (callbackURL) {
+      // Mobile app - return JSON for app to handle navigation
+      app.logger.info({ provider, callbackURL: 'provided' }, 'Mobile OAuth - returning authorization URL for app to handle');
+      return {
+        provider,
+        authorizationUrl,
+        message: `Redirect to this URL to sign in with ${provider}`,
+      };
+    } else {
+      // Web browser - perform HTTP redirect to start OAuth flow
+      app.logger.info({ provider }, 'Web OAuth - redirecting to authorization URL');
+      reply.redirect(authorizationUrl);
+      return;
+    }
   });
 
   // POST /api/auth/sign-in/social - Handle OAuth sign-in (wrapper with error handling)
@@ -1078,16 +1089,28 @@ export function registerAuthRoutes(app: App) {
         backendBaseUrl,
         urlSource,
         detectedLocalhost,
+        isMobile: !!callbackUrl,
         authorizationUrl: authorizationUrl.split('?')[0]
       },
       `${providerName} OAuth authorization URL prepared (BASE_URL source: ${urlSource})`
     );
 
-    return {
-      provider,
-      authorizationUrl,
-      message: `Redirect user to this URL to sign in with ${providerName}`,
-    };
+    // For mobile apps (with callbackUrl): return JSON with URL so app can handle navigation
+    // For web browsers (without callbackUrl): redirect to the authorization URL directly
+    if (callbackUrl) {
+      // Mobile app - return JSON for app to handle navigation
+      app.logger.info({ provider, callbackUrl: 'provided' }, 'Mobile OAuth - returning authorization URL for app to handle');
+      return {
+        provider,
+        authorizationUrl,
+        message: `Redirect user to this URL to sign in with ${providerName}`,
+      };
+    } else {
+      // Web browser - perform HTTP redirect to start OAuth flow
+      app.logger.info({ provider }, 'Web OAuth - redirecting to authorization URL');
+      reply.redirect(authorizationUrl);
+      return;
+    }
   });
 
   // POST /api/auth/apple-callback - Handle Apple OAuth callback

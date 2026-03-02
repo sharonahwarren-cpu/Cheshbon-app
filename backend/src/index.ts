@@ -31,41 +31,91 @@ export type App = typeof app;
 
 // Enable authentication with Better Auth
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 
-// Validate that BASE_URL is set (critical for OAuth)
-if (!process.env.BASE_URL) {
-  app.logger.warn('BASE_URL environment variable not set. OAuth URLs may be incorrect. Set BASE_URL to your backend URL (e.g., https://api.example.com)');
+// Detect BASE_URL - critical for OAuth redirects
+// Priority: env var > log warning if missing
+let baseUrl = process.env.BASE_URL;
+
+if (!baseUrl) {
+  // BASE_URL not set in environment
+  // In production, Better Auth will fail to generate correct OAuth redirect URLs
+  // The custom endpoints (/api/auth/initiate-social, /api/auth/oauth-start) can derive from request headers
+  // But Better Auth's built-in /api/auth/sign-in/social endpoint needs this to be set
+  app.logger.warn(
+    {
+      missingVariable: 'BASE_URL',
+      currentDefault: 'http://localhost:3000',
+      deployment: 'Production requests may fail if this is not the actual backend URL',
+    },
+    'CRITICAL: BASE_URL environment variable is NOT set. OAuth redirects may fail. Set BASE_URL to your backend public URL (e.g., https://api.example.com)'
+  );
+  baseUrl = 'http://localhost:3000'; // Fallback for development
+} else {
+  app.logger.info(
+    { baseUrl, isProduction: process.env.NODE_ENV === 'production' },
+    'BASE_URL environment variable is set and will be used for OAuth redirects'
+  );
 }
 
-// Validate OAuth credentials
-const hasGoogleOAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
-const hasAppleOAuth = process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY;
+// Validate OAuth credentials and log configuration status
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const hasGoogleOAuth = !!googleClientId && !!googleClientSecret;
 
-if (!hasGoogleOAuth) {
-  app.logger.warn('Google OAuth credentials not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.');
+const appleClientId = process.env.APPLE_CLIENT_ID;
+const appleTeamId = process.env.APPLE_TEAM_ID;
+const appleKeyId = process.env.APPLE_KEY_ID;
+const applePrivateKey = process.env.APPLE_PRIVATE_KEY;
+const hasAppleOAuth = !!appleClientId && !!appleTeamId && !!appleKeyId && !!applePrivateKey;
+
+// Log OAuth configuration status at startup
+if (hasGoogleOAuth) {
+  app.logger.info(
+    { clientIdLength: googleClientId!.length },
+    'Google OAuth credentials configured - GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set'
+  );
+} else {
+  const missing: string[] = [];
+  if (!googleClientId) missing.push('GOOGLE_CLIENT_ID');
+  if (!googleClientSecret) missing.push('GOOGLE_CLIENT_SECRET');
+  app.logger.warn(
+    { missingVariables: missing },
+    'Google OAuth credentials NOT configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables to enable Google sign-in.'
+  );
 }
-if (!hasAppleOAuth) {
-  app.logger.warn('Apple OAuth credentials not configured. Set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, and APPLE_PRIVATE_KEY environment variables.');
+
+if (hasAppleOAuth) {
+  app.logger.info(
+    { clientIdLength: appleClientId!.length, teamIdLength: appleTeamId!.length },
+    'Apple OAuth credentials configured - all Apple OAuth environment variables are set'
+  );
+} else {
+  const missing: string[] = [];
+  if (!appleClientId) missing.push('APPLE_CLIENT_ID');
+  if (!appleTeamId) missing.push('APPLE_TEAM_ID');
+  if (!appleKeyId) missing.push('APPLE_KEY_ID');
+  if (!applePrivateKey) missing.push('APPLE_PRIVATE_KEY');
+  app.logger.warn(
+    { missingVariables: missing },
+    'Apple OAuth credentials NOT configured. Set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, and APPLE_PRIVATE_KEY environment variables to enable Apple sign-in.'
+  );
 }
 
 // Build social providers object only with configured providers
 const socialProviders: any = {};
 if (hasGoogleOAuth) {
   socialProviders.google = {
-    clientId: process.env.GOOGLE_CLIENT_ID!,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    clientId: googleClientId!,
+    clientSecret: googleClientSecret!,
   };
-  app.logger.info('Google OAuth provider enabled');
 }
 if (hasAppleOAuth) {
   socialProviders.apple = {
-    clientId: process.env.APPLE_CLIENT_ID!,
-    teamId: process.env.APPLE_TEAM_ID!,
-    keyId: process.env.APPLE_KEY_ID!,
-    privateKey: process.env.APPLE_PRIVATE_KEY!,
+    clientId: appleClientId!,
+    teamId: appleTeamId!,
+    keyId: appleKeyId!,
+    privateKey: applePrivateKey!,
   };
-  app.logger.info('Apple OAuth provider enabled');
 }
 
 // Build trusted origins including mobile app schemes
@@ -90,27 +140,46 @@ const trustedOrigins = [
 // Log the OAuth configuration at startup
 if (Object.keys(socialProviders).length > 0) {
   app.logger.info(
-    { providers: Object.keys(socialProviders), trustedOriginCount: trustedOrigins.length },
-    'OAuth configuration initialized'
+    {
+      providers: Object.keys(socialProviders),
+      trustedOriginCount: trustedOrigins.length,
+      baseUrlConfigured: !!process.env.BASE_URL,
+    },
+    'OAuth configuration initialized with configured providers'
   );
   app.logger.info(
-    { providers: Object.keys(socialProviders) },
-    'OAuth endpoints available: /api/auth/sign-in/social, /api/auth/sign-in/social-v1'
+    {
+      providers: Object.keys(socialProviders),
+      recommendedEndpoints: [
+        'POST /api/auth/initiate-social (recommended - derives BASE_URL from request headers)',
+        'POST /api/auth/oauth-start (recommended - derives BASE_URL from request headers)',
+        'POST /api/auth/sign-in/social (Better Auth built-in - uses BASE_URL environment variable)',
+      ],
+    },
+    'OAuth endpoints available'
   );
 } else {
-  app.logger.warn('No OAuth providers configured. Set GOOGLE_CLIENT_ID/SECRET and/or APPLE_CLIENT_ID/SECRET to enable social sign-in.');
-  app.logger.warn('OAuth endpoints available but will return configuration errors: /api/auth/sign-in/social, /api/auth/sign-in/social-v1');
+  app.logger.warn({
+    missingVariables: {
+      google: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+      apple: ['APPLE_CLIENT_ID', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APPLE_PRIVATE_KEY'],
+    },
+  }, 'No OAuth providers configured - set environment variables to enable social sign-in');
 }
 
-// Log environment setup at startup
+// Log environment setup at startup with detailed BASE_URL information
 app.logger.info(
   {
     baseUrl,
+    baseUrlSource: process.env.BASE_URL ? 'environment variable (BASE_URL)' : 'fallback to localhost:3000 - DEVELOPMENT ONLY',
+    baseUrlIsLocalhost: baseUrl?.includes('localhost') || false,
     frontendUrl,
-    googleOAuthConfigured: !!socialProviders.google,
-    appleOAuthConfigured: !!socialProviders.apple,
+    nodeEnv: process.env.NODE_ENV || 'development',
+    googleOAuthConfigured: hasGoogleOAuth,
+    appleOAuthConfigured: hasAppleOAuth,
+    oauthProvidersCount: Object.keys(socialProviders).length,
   },
-  'Backend configuration'
+  'Backend configuration - BASE_URL will be used for OAuth redirects'
 );
 
 app.withAuth({
@@ -212,41 +281,40 @@ registerMitzvotCategoryRoutes(app);
 registerMitzvotRoutes(app);
 registerAuthRoutes(app);
 
-// Log registered auth endpoints
+// Log registered auth endpoints with BASE_URL configuration details
 app.logger.info(
   {
-    authEndpoints: [
-      'POST /api/auth/sign-in/social (Better Auth - automatic OAuth)',
-      'POST /api/auth/sign-in/social-v1 (OAuth wrapper with error handling)',
-      'POST /api/auth/initiate-social (OAuth initiation with mobile/web support)',
-      'POST /api/auth/sign-in/email (Email/password sign-in)',
-      'POST /api/auth/sign-up/email (Email/password sign-up)',
-      'GET /api/auth/oauth-callback (OAuth provider callback - code exchange)',
-      'POST /api/auth/callback (OAuth callback handler)',
-      'POST /api/auth/oauth-start (OAuth flow initiation)',
-      'POST /api/auth/oauth-redirect (OAuth redirect handler)',
-      'POST /api/auth/apple-callback (Apple OAuth callback)',
-      'POST /api/auth/apple/native (Apple native sign-in with id_token)',
-      'GET /api/auth/me (Get current user session - protected - use Bearer token)',
-      'GET /api/auth/health (Health check)',
-      'GET /api/auth/oauth-test (OAuth configuration test)',
-      'GET /api/auth/debug-session (Debug auth information and flow)',
-    ],
+    baseUrlConfiguration: {
+      configured: !!process.env.BASE_URL,
+      value: baseUrl,
+      critical: 'BASE_URL is essential for OAuth redirects - if not set, redirects will fail',
+      detectionPriority: [
+        '1. process.env.BASE_URL (if set)',
+        '2. x-forwarded-host header (custom endpoints only)',
+        '3. host header (fallback)',
+      ],
+      note: 'Custom endpoints (/api/auth/initiate-social, /api/auth/oauth-start) detect BASE_URL from request headers. Better Auth built-in uses environment BASE_URL.',
+    },
+    oauthEndpoints: {
+      recommended: [
+        'POST /api/auth/initiate-social (detects BASE_URL from request headers)',
+        'POST /api/auth/oauth-start (detects BASE_URL from request headers)',
+      ],
+      builtin: [
+        'POST /api/auth/sign-in/social (Better Auth - uses environment BASE_URL)',
+      ],
+    },
     oauthProviders: Object.keys(socialProviders).length > 0 ? Object.keys(socialProviders) : ['NONE - check environment variables'],
-    trustedOrigins: trustedOrigins,
+    trustedOrigins: {
+      patterns: trustedOrigins,
+      count: trustedOrigins.length,
+    },
     mobileSupport: {
       deepLinkSchemes: ['cheshbon://*', 'Cheshbon://*', 'exp://*'],
-      localhostSupport: ['http://localhost', 'http://localhost:*'],
-      originHeaderHandling: 'Mobile requests without Origin header are automatically handled',
       bearerTokenSupport: 'Session tokens can be used as Bearer tokens in Authorization header',
     },
-    expectedResponseFormat: {
-      description: 'All sign-in endpoints return:',
-      token: 'SESSION_TOKEN',
-      user: '{ id, email, name }',
-    },
   },
-  'Authentication system ready'
+  'Authentication system ready - BASE_URL is critical for OAuth redirects'
 );
 
 await app.run();
