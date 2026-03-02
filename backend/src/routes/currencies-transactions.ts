@@ -2,6 +2,7 @@ import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, asc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 // Helper function to calculate current balance for a currency
 async function calculateCurrencyBalance(
@@ -39,7 +40,7 @@ async function calculateCurrencyBalance(
 }
 
 export function registerCurrenciesTransactionsRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // POST /api/currencies/:id/claim - Claim currency (add to balance)
   app.fastify.post('/api/currencies/:id/claim', async (

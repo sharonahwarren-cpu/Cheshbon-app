@@ -4,11 +4,12 @@ import { eq, and, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import fs from 'fs';
 import path from 'path';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 export function registerCheshbonRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // POST /api/cheshbon/transcribe - Transcribe audio to text
   app.fastify.post('/api/cheshbon/transcribe', async (
