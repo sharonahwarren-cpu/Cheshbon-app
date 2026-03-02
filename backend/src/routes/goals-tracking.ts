@@ -2,6 +2,7 @@ import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 // Helper function to check if a goal is active on a specific date
 function isGoalActiveOnDateHelper(goal: any, dateStr: string): boolean {
@@ -142,37 +143,23 @@ function calculateStreak(goal: any, reflections: any[]): number {
 }
 
 export function registerGoalsTrackingRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // GET /api/goals/activated-today - Get goals that are active for today
   app.fastify.get('/api/goals/activated-today', async (
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
-    const authHeader = request.headers.authorization;
-    const authHeaderTruncated = authHeader ? `${authHeader.substring(0, 20)}...` : 'none';
-
-    app.logger.info(
-      { path: request.url, authHeader: authHeaderTruncated },
-      'GET /api/goals/activated-today requested'
-    );
+    app.logger.info({ path: request.url }, 'GET /api/goals/activated-today requested');
 
     const session = await requireAuth(request, reply);
 
-    // Log authentication result
+    // Check authentication result
     if (!session) {
       if (!reply.sent) {
-        app.logger.warn(
-          {
-            path: request.url,
-            hasAuthHeader: !!authHeader,
-            reason: 'Session is null from requireAuth',
-          },
-          'Authentication failed for /api/goals/activated-today'
-        );
+        app.logger.warn({ path: request.url }, 'Authentication failed');
         return reply.status(401).send({ error: 'Unauthorized' });
       }
-      app.logger.debug({ path: request.url }, 'Response already sent by requireAuth');
       return;
     }
 
@@ -182,7 +169,7 @@ export function registerGoalsTrackingRoutes(app: App) {
     const requestedDate = date || new Date().toISOString().split('T')[0];
 
     app.logger.info(
-      { userId: session.user.id, email: session.user.email, requestedDate },
+      { userId: session.user.id, requestedDate },
       'Fetching goals activated for date'
     );
 

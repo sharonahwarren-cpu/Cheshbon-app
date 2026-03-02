@@ -2,9 +2,10 @@ import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { user, session, account } from '../db/auth-schema.js';
 import { eq, and } from 'drizzle-orm';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 export function registerAuthRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // GET /api/auth/oauth-test - Test OAuth configuration and endpoints
   app.fastify.get('/api/auth/oauth-test', {
@@ -306,58 +307,25 @@ export function registerAuthRoutes(app: App) {
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<any | void> => {
-    const authHeader = request.headers.authorization;
-    const authHeaderTruncated = authHeader ? `${authHeader.substring(0, 20)}...` : 'none';
-
-    app.logger.info(
-      { path: request.url, authHeader: authHeaderTruncated },
-      'GET /api/auth/me requested'
-    );
+    app.logger.info({ path: request.url }, 'GET /api/auth/me requested');
 
     try {
-      // Log the authorization header format
-      if (!authHeader) {
-        app.logger.warn({ url: request.url }, 'Missing Authorization header');
-      } else if (!authHeader.startsWith('Bearer ')) {
-        app.logger.warn(
-          { url: request.url, authFormat: authHeader.substring(0, 10) },
-          'Authorization header has invalid format (expected Bearer)'
-        );
-      }
-
       const session = await requireAuth(request, reply);
 
-      // If requireAuth already sent a response (e.g., 401), don't send another
+      // If requireAuth already sent a response, don't send another
       if (reply.sent) {
-        app.logger.debug(
-          { url: request.url, statusCode: reply.statusCode },
-          'Auth validation already sent response'
-        );
+        app.logger.debug({ statusCode: reply.statusCode }, 'Auth validation sent response');
         return;
       }
 
       if (!session) {
-        app.logger.warn(
-          {
-            url: request.url,
-            hasAuthHeader: !!authHeader,
-            authHeaderPresent: !!request.headers.authorization,
-            reason: 'requireAuth returned null',
-          },
-          'No valid session found after requireAuth check'
-        );
+        app.logger.warn({ url: request.url }, 'No valid session found');
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
       app.logger.info(
-        {
-          userId: session.user?.id,
-          email: session.user?.email,
-          hasToken: !!session.session?.token,
-          tokenTruncated: session.session?.token ? `${session.session.token.substring(0, 20)}...` : 'none',
-          expiresAt: session.session?.expiresAt,
-        },
-        'User session retrieved successfully'
+        { userId: session.user?.id, email: session.user?.email },
+        'User session retrieved'
       );
 
       // Return token both in session object and at root level for flexibility
@@ -372,16 +340,7 @@ export function registerAuthRoutes(app: App) {
     } catch (error) {
       // Only send error response if one hasn't been sent yet
       if (!reply.sent) {
-        app.logger.error(
-          {
-            err: error,
-            url: request.url,
-            authHeaderPresent: !!authHeader,
-            errorMessage: error instanceof Error ? error.message : 'Unknown error',
-            errorName: error instanceof Error ? error.name : 'Unknown',
-          },
-          'Error retrieving user session'
-        );
+        app.logger.error({ err: error, url: request.url }, 'Error retrieving user session');
         return reply.status(401).send({ error: 'Unauthorized' });
       }
       return;
