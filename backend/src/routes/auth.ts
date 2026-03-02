@@ -37,15 +37,18 @@ export function registerAuthRoutes(app: App) {
       status: 'ok',
       providers,
       endpoints: [
-        'POST /api/auth/sign-in/social (Better Auth automatic OAuth)',
+        'POST /api/auth/sign-in/social (Better Auth - automatic OAuth)',
         'POST /api/auth/sign-in/social-v1 (OAuth wrapper with error handling)',
         'POST /api/auth/initiate-social (OAuth initiation for mobile/web)',
         'POST /api/auth/sign-in/email (Email/password sign-in)',
         'POST /api/auth/sign-up/email (Email/password registration)',
-        'POST /api/auth/callback (OAuth callback)',
+        'GET /api/auth/oauth-callback (OAuth provider callback - code exchange)',
+        'POST /api/auth/callback (OAuth callback handler)',
         'POST /api/auth/oauth-start (OAuth flow start)',
         'POST /api/auth/oauth-redirect (OAuth redirect handler)',
-        'GET /api/auth/me (Get authenticated user)',
+        'POST /api/auth/apple-callback (Apple OAuth callback)',
+        'POST /api/auth/apple/native (Apple native sign-in with id_token)',
+        'GET /api/auth/me (Get authenticated user - use Bearer token)',
         'GET /api/auth/get-session (Get current session)',
         'POST /api/auth/sign-out (Sign out)',
         'GET /api/auth/health (Health check)',
@@ -246,14 +249,14 @@ export function registerAuthRoutes(app: App) {
     };
   });
 
-  // GET /api/auth/me - Get current user session
+  // GET /api/auth/me - Get current authenticated user session
   app.fastify.get('/api/auth/me', {
     schema: {
-      description: 'Get current authenticated user session',
+      description: 'Get current authenticated user session (use Bearer token in Authorization header)',
       tags: ['auth'],
       response: {
         200: {
-          description: 'Current user session',
+          description: 'Current user session with token',
           type: 'object',
           properties: {
             user: {
@@ -269,10 +272,11 @@ export function registerAuthRoutes(app: App) {
             session: {
               type: 'object',
               properties: {
+                token: { type: 'string', description: 'Session token for Bearer authentication' },
                 expiresAt: { type: 'string', format: 'date-time' },
-                token: { type: 'string' },
               },
             },
+            token: { type: 'string', description: 'Session token (for convenience)' },
           },
         },
         401: {
@@ -291,17 +295,26 @@ export function registerAuthRoutes(app: App) {
     try {
       const session = await requireAuth(request, reply);
       if (!session) {
-        app.logger.debug({ headers: request.headers }, 'No session found in request');
-        return;
+        app.logger.debug({ url: request.url, hasAuthHeader: !!request.headers.authorization }, 'No session found in request');
+        return reply.status(401).send({ error: 'Not authenticated' });
       }
 
-      app.logger.info({ userId: session.user.id, email: session.user.email }, 'User session retrieved');
+      app.logger.info(
+        { userId: session.user.id, email: session.user.email, hasToken: !!session.session.token },
+        'User session retrieved'
+      );
+
+      // Return token both in session object and at root level for flexibility
       return {
         user: session.user,
-        session: session.session,
+        session: {
+          token: session.session.token,
+          expiresAt: session.session.expiresAt,
+        },
+        token: session.session.token, // Convenience: also return token at root level
       };
     } catch (error) {
-      app.logger.error({ err: error }, 'Error retrieving user session');
+      app.logger.error({ err: error, url: request.url }, 'Error retrieving user session');
       throw error;
     }
   });
@@ -331,11 +344,10 @@ export function registerAuthRoutes(app: App) {
   // GET /api/auth/debug-session - Debug session information (development only)
   app.fastify.get('/api/auth/debug-session', {
     schema: {
-      description: 'Debug session information (development only)',
+      description: 'Debug session information and authentication flow (development only)',
       tags: ['auth'],
       response: {
         200: {
-          description: 'Session debug information',
           type: 'object',
         },
       },
@@ -355,22 +367,46 @@ export function registerAuthRoutes(app: App) {
 
     return {
       hasAuthHeader: !!authHeader,
+      authHeaderFormat: 'Authorization: Bearer SESSION_TOKEN',
       hasCookie: !!cookieHeader,
-      origin,
+      origin: origin || 'not sent (mobile app)',
       environment: {
         frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
         nodeEnv: process.env.NODE_ENV || 'development',
+        baseUrl: process.env.BASE_URL || 'not set',
       },
       trustedOrigins: [
+        'http://localhost',
+        'http://localhost:*',
         'http://localhost:3000',
         'http://localhost:3001',
         'http://localhost:5173',
+        'http://localhost:8081',
         'https://*.newly.dev',
         'https://*.app.specular.dev',
-        'cheshbon://',
-        'Cheshbon://',
-        'exp://',
+        'cheshbon://*',
+        'Cheshbon://*',
+        'exp://*',
       ],
+      signInFlow: {
+        email: 'POST /api/auth/sign-in/email with { email, password }',
+        googleOAuth: 'POST /api/auth/initiate-social with { provider: "google", callbackURL }',
+        appleOAuth: 'POST /api/auth/initiate-social with { provider: "apple", callbackURL }',
+        appleNative: 'POST /api/auth/apple/native with { id_token, code, user }',
+      },
+      responseFormat: {
+        description: 'All sign-in methods return:',
+        example: {
+          token: 'SESSION_TOKEN_STRING',
+          user: {
+            id: 'USER_ID',
+            email: 'user@example.com',
+            name: 'User Name',
+          },
+        },
+      },
+      bearerTokenUsage: 'Use token in Authorization header: Bearer SESSION_TOKEN',
+      mobileNote: 'Mobile apps do not need Origin header, use deep link schemes: cheshbon://, Cheshbon://, exp://',
     };
   });
 
@@ -621,6 +657,101 @@ export function registerAuthRoutes(app: App) {
       message: 'Apple OAuth token received. Session will be established by Better Auth.',
       idToken: id_token ? 'received' : undefined,
       code: code ? 'received' : undefined,
+    };
+  });
+
+  // POST /api/auth/apple/native - Handle Apple native sign-in (from native iOS app)
+  app.fastify.post('/api/auth/apple/native', {
+    schema: {
+      description: 'Handle Apple native sign-in with identity token from native iOS app',
+      tags: ['auth'],
+      body: {
+        type: 'object',
+        properties: {
+          id_token: { type: 'string', description: 'Apple identity token from native Sign In with Apple' },
+          code: { type: 'string', description: 'Authorization code from Apple' },
+          user: { type: 'string', description: 'User data (JSON string) - only on first sign-in' },
+        },
+        required: ['id_token'],
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            token: { type: 'string', description: 'Session token for Bearer authentication' },
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                email: { type: 'string' },
+                name: { type: 'string' },
+              },
+            },
+            message: { type: 'string' },
+          },
+        },
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const { id_token, code, user: userData } = request.body as any;
+    const origin = request.headers.origin || request.headers.host;
+
+    app.logger.info(
+      { origin, hasIdToken: !!id_token, hasCode: !!code, hasUserData: !!userData },
+      'Apple native sign-in received'
+    );
+
+    if (!id_token) {
+      app.logger.warn({ origin }, 'Apple native sign-in missing id_token');
+      return reply.status(400).send({
+        error: 'MISSING_ID_TOKEN',
+        message: 'Apple identity token (id_token) is required',
+      });
+    }
+
+    // Parse user data if provided (only on first sign-in)
+    let userInfo = null;
+    if (userData) {
+      try {
+        userInfo = typeof userData === 'string' ? JSON.parse(userData) : userData;
+        app.logger.info(
+          { userEmail: userInfo?.email, userName: userInfo?.name },
+          'Apple user data parsed'
+        );
+      } catch (err) {
+        app.logger.warn({ error: err }, 'Failed to parse user data');
+      }
+    }
+
+    // Better Auth will handle:
+    // 1. Verifying the id_token with Apple's public keys
+    // 2. Creating or updating the user based on the token
+    // 3. Creating a session
+    // We return a message that the client should complete the OAuth flow
+    // by redirecting to our OAuth endpoint
+
+    const authorizationUrl = `${process.env.BASE_URL || `http://${origin}`}/api/auth/sign-in/social?provider=apple&code=${encodeURIComponent(code || '')}&id_token=${encodeURIComponent(id_token)}`;
+
+    app.logger.info(
+      { origin, authorizationUrl: authorizationUrl.split('?')[0] },
+      'Apple native sign-in will complete OAuth flow'
+    );
+
+    // Return instructions for completing the OAuth flow
+    return {
+      success: true,
+      authorizationUrl,
+      message: 'Apple identity token received. Complete authentication by visiting the authorizationUrl.',
     };
   });
 
