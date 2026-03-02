@@ -127,8 +127,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Only clear tokens on 401 (unauthorized), not on network errors
         if (response.status === 401 || response.status === 403) {
           await clearTokens();
+          setUser(null);
         }
-        setUser(null);
         setLoading(false);
         return null;
       }
@@ -136,10 +136,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = await response.json();
       console.log('✅ [AUTH] User session validated. Keys:', Object.keys(userData));
 
-      // Better Auth returns { user: {...}, session: { token: '...', expiresAt: '...' }, token: '...' }
+      // Backend returns { user: {...}, session: { token: '...', expiresAt: '...' }, token: '...' }
       const userObj = userData.user || userData;
 
-      // If the backend returned a refreshed token, update our stored token
+      // If the backend returned a refreshed/updated token, update our stored token
       const refreshedToken = userData.token || userData.session?.token;
       if (refreshedToken && refreshedToken !== token) {
         console.log('🔄 [AUTH] Updating stored token with refreshed token');
@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('❌ [AUTH] Failed to fetch user:', error);
       // Don't clear tokens on network errors - user might just be offline
-      setUser(null);
+      // Keep existing user state if we have one
       setLoading(false);
       return null;
     }
@@ -196,8 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = JSON.parse(responseText);
       console.log('📧 [EMAIL] Parsed response keys:', Object.keys(data));
 
-      // Better Auth returns token in multiple possible locations:
-      // { token: '...', user: {...} } OR { session: { token: '...' }, user: {...} }
+      // Backend returns { token, user } - extract token from standard locations
       const token =
         data.token ||
         data.session?.token ||
@@ -210,31 +209,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!token) {
         console.error('❌ [EMAIL] No token in response. Full response:', JSON.stringify(data).substring(0, 500));
-        // Try to get session via /api/auth/me using cookie-based session (web only)
-        if (Platform.OS === 'web') {
-          console.log('📧 [EMAIL] Trying to get session via /api/auth/me...');
-          const meResponse = await fetch(`${BACKEND_URL}/api/auth/me`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (meResponse.ok) {
-            const meData = await meResponse.json();
-            const meToken = meData.token || meData.session?.token;
-            if (meToken) {
-              console.log('📧 [EMAIL] Got token from /api/auth/me');
-              await saveToken(meToken);
-              const userObj = meData.user || meData;
-              setUser(userObj);
-              setLoading(false);
-              return;
-            }
-          }
-        }
         throw new Error('No authentication token received from server. Please try again.');
       }
 
       await saveToken(token);
+
+      // Set user immediately from sign-in response to avoid extra round-trip
+      const userObj = data.user || null;
+      if (userObj && userObj.id) {
+        console.log('📧 [EMAIL] Setting user from sign-in response:', userObj.id);
+        setUser(userObj);
+        setLoading(false);
+      }
 
       // Store credentials for biometric login (native only)
       if (Platform.OS !== 'web') {
@@ -247,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // Validate session with backend to ensure token works
       await fetchUser();
       console.log('✅ [EMAIL] Sign in successful');
     } catch (error) {
@@ -311,6 +298,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       await saveToken(token);
+
+      // Set user immediately from sign-up response
+      const userObj = data.user || null;
+      if (userObj && userObj.id) {
+        console.log('📧 [EMAIL] Setting user from sign-up response:', userObj.id);
+        setUser(userObj);
+        setLoading(false);
+      }
 
       // Store credentials for biometric login (native only)
       if (Platform.OS !== 'web') {
@@ -705,12 +700,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('📞 [APPLE NATIVE] Response keys:', Object.keys(data));
 
-      // Check if backend returned an authorizationUrl instead of a token (old behavior)
-      if (data.authorizationUrl && !data.token) {
-        console.error('❌ [APPLE NATIVE] Backend returned authorizationUrl instead of token - backend needs to be updated');
-        throw new Error('Apple sign-in configuration error. Please contact support.');
-      }
-
+      // Backend returns { token, user } consistently
       const token = data.token || data.session?.token || data.sessionToken || data.accessToken;
 
       if (!token) {
@@ -721,14 +711,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('✅ [APPLE NATIVE] Token received (length:', token.length, '), saving...');
       await saveToken(token);
 
-      // If the response includes user data, set it immediately without waiting for fetchUser
+      // Set user immediately from sign-in response to avoid extra round-trip
       if (data.user && data.user.id) {
         console.log('📞 [APPLE NATIVE] Setting user from response directly:', data.user.id);
         setUser(data.user);
         setLoading(false);
       }
 
-      // Always call fetchUser to validate the session and get full user data
+      // Validate session with backend to ensure token works
       await fetchUser();
       console.log('✅ [APPLE NATIVE] Sign in successful');
     } catch (error: any) {
