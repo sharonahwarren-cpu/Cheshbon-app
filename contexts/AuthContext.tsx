@@ -142,7 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('❌ [AUTH] Session validation failed:', response.status);
         const errorText = await response.text();
         console.error('❌ [AUTH] Error response:', errorText);
-        // Only clear tokens on 401 (unauthorized), not on network errors
+        
+        // Clear invalid token on 401/403
         if (response.status === 401 || response.status === 403) {
           console.log('🗑️ [AUTH] Clearing invalid token due to 401/403');
           await clearTokens();

@@ -2,6 +2,7 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { router } from 'expo-router';
 
 /**
  * Backend URL is configured in app.json under expo.extra.backendUrl
@@ -76,13 +77,38 @@ export const setBearerToken = async (token: string): Promise<void> => {
  */
 export const clearBearerToken = async (): Promise<void> => {
   try {
+    console.log('[API] 🗑️ Clearing bearer token...');
     if (Platform.OS === 'web') {
       localStorage.removeItem(BEARER_TOKEN_KEY);
     } else {
       await SecureStore.deleteItemAsync(BEARER_TOKEN_KEY);
     }
+    console.log('[API] ✅ Bearer token cleared');
   } catch (error) {
     console.error('[API] Error clearing bearer token:', error);
+  }
+};
+
+/**
+ * Handle 401 Unauthorized errors by clearing token and redirecting to auth
+ */
+const handle401Error = async () => {
+  console.error('[API] 🚨 401 Unauthorized - Token is invalid or expired');
+  console.log('[API] Clearing invalid token and redirecting to auth...');
+  
+  try {
+    await clearBearerToken();
+    
+    // Use setTimeout to avoid navigation during render
+    setTimeout(() => {
+      try {
+        router.replace('/auth');
+      } catch (navError) {
+        console.error('[API] Navigation error:', navError);
+      }
+    }, 100);
+  } catch (error) {
+    console.error('[API] Error handling 401:', error);
   }
 };
 
@@ -133,6 +159,12 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
     if (!response.ok) {
       const text = await response.text();
       console.error('[API] Error response:', response.status, text);
+      
+      // Handle 401 Unauthorized - token is invalid or expired
+      if (response.status === 401) {
+        await handle401Error();
+      }
+      
       throw new Error(`API error: ${response.status} - ${text}`);
     }
 
