@@ -5,7 +5,13 @@ import * as SecureStore from 'expo-secure-store';
 const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
 
 /**
+ * DEPRECATED: Use getBearerToken from utils/api.ts instead
+ * This file is kept for backward compatibility only
+ */
+
+/**
  * Save bearer token to secure storage
+ * @deprecated Use setBearerToken from utils/api.ts instead
  */
 export async function setBearerToken(token: string | null): Promise<void> {
   console.log('💾 [AUTH LIB] Saving bearer token...');
@@ -29,6 +35,7 @@ export async function setBearerToken(token: string | null): Promise<void> {
 
 /**
  * Get bearer token from secure storage
+ * @deprecated Use getBearerToken from utils/api.ts instead
  */
 export async function getBearerToken(): Promise<string | null> {
   try {
@@ -45,6 +52,7 @@ export async function getBearerToken(): Promise<string | null> {
 
 /**
  * Remove bearer token from secure storage
+ * @deprecated Use clearBearerToken from utils/api.ts instead
  */
 export async function removeBearerToken(): Promise<void> {
   console.log('🗑️ [AUTH LIB] Removing bearer token...');

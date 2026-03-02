@@ -6,6 +6,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import Constants from 'expo-constants';
+import { getBearerToken, setBearerToken, clearBearerToken } from '@/utils/api';
 
 // Essential for auth session cleanup on web
 WebBrowser.maybeCompleteAuthSession();
@@ -13,7 +14,6 @@ WebBrowser.maybeCompleteAuthSession();
 const BACKEND_URL =
   Constants.expoConfig?.extra?.backendUrl ||
   'https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev';
-const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
 const BIOMETRIC_EMAIL_KEY = 'cheshbon_biometric_email';
 const BIOMETRIC_PASSWORD_KEY = 'cheshbon_biometric_password';
 
@@ -42,67 +42,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper to get token from storage
-async function getStoredToken(): Promise<string | null> {
-  try {
-    if (Platform.OS === 'web') {
-      return localStorage.getItem(BEARER_TOKEN_KEY);
-    } else {
-      return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
-    }
-  } catch (error) {
-    console.error('❌ [AUTH] Error getting stored token:', error);
-    return null;
-  }
-}
-
-// Helper to save token to storage
-async function saveToken(token: string): Promise<void> {
-  console.log('💾 [AUTH] Saving token to storage...');
-  try {
-    if (Platform.OS === 'web') {
-      localStorage.setItem(BEARER_TOKEN_KEY, token);
-    } else {
-      await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
-      // CRITICAL iOS FIX: Add delay to ensure SecureStore write completes
-      // This prevents race conditions where subsequent API calls try to read
-      // the token before it's fully persisted
-      if (Platform.OS === 'ios') {
-        console.log('⏳ [AUTH] iOS: Waiting for SecureStore to persist...');
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Verify the token was actually saved
-        const verifyToken = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
-        if (verifyToken === token) {
-          console.log('✅ [AUTH] iOS: Token verified in SecureStore');
-        } else {
-          console.error('❌ [AUTH] iOS: Token verification failed!');
-          throw new Error('Failed to persist token to SecureStore');
-        }
-      }
-    }
-    console.log('✅ [AUTH] Token saved successfully');
-  } catch (error) {
-    console.error('❌ [AUTH] Error saving token:', error);
-    throw error;
-  }
-}
-
-// Helper to clear all auth tokens
-async function clearTokens(): Promise<void> {
-  console.log('🗑️ [AUTH] Clearing all tokens...');
-  try {
-    if (Platform.OS === 'web') {
-      localStorage.removeItem(BEARER_TOKEN_KEY);
-    } else {
-      await SecureStore.deleteItemAsync(BEARER_TOKEN_KEY);
-    }
-    console.log('✅ [AUTH] Tokens cleared');
-  } catch (error) {
-    console.error('❌ [AUTH] Error clearing tokens:', error);
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,8 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('🔄 [AUTH] Fetching user session...');
     try {
       // Use provided token if available (for immediate validation after sign-in)
-      // Otherwise retrieve from storage
-      const token = providedToken || await getStoredToken();
+      // Otherwise retrieve from storage (uses cache on iOS)
+      const token = providedToken || await getBearerToken();
       if (!token) {
         console.log('⚠️ [AUTH] No token found, user not authenticated');
         setUser(null);
@@ -146,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Clear invalid token on 401/403
         if (response.status === 401 || response.status === 403) {
           console.log('🗑️ [AUTH] Clearing invalid token due to 401/403');
-          await clearTokens();
+          await clearBearerToken();
           setUser(null);
         }
         setLoading(false);
@@ -163,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const refreshedToken = userData.token || userData.session?.token;
       if (refreshedToken && refreshedToken !== token) {
         console.log('🔄 [AUTH] Updating stored token with refreshed token');
-        await saveToken(refreshedToken);
+        await setBearerToken(refreshedToken);
       }
 
       setUser(userObj);
@@ -232,7 +171,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('No authentication token received from server. Please try again.');
       }
 
-      await saveToken(token);
+      // CRITICAL: Save token using the centralized function with caching
+      await setBearerToken(token);
 
       // Set user immediately from sign-in response to avoid extra round-trip
       const userObj = data.user || null;
@@ -254,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Validate session with backend to ensure token works
-      // Pass the token directly to avoid SecureStore timing issues on iOS
+      // Pass the token directly - it's now cached in memory on iOS
       await fetchUser(token);
       console.log('✅ [EMAIL] Sign in successful');
     } catch (error) {
@@ -318,7 +258,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      await saveToken(token);
+      // CRITICAL: Save token using the centralized function with caching
+      await setBearerToken(token);
 
       // Set user immediately from sign-up response
       const userObj = data.user || null;
@@ -339,7 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Pass the token directly to avoid SecureStore timing issues on iOS
+      // Pass the token directly - it's now cached in memory on iOS
       await fetchUser(token);
       console.log('✅ [EMAIL] Sign up successful');
     } catch (error) {
@@ -357,8 +298,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const callbackURL = `${window.location.origin}/auth-popup-callback`;
           
-          // Use the correct OAuth initiation endpoint: /api/auth/initiate-social
-          // This returns { authorizationUrl: '...' } which we then open in a popup
           console.log('📱 [GOOGLE WEB] Fetching authorization URL from backend...');
 
           fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
@@ -406,8 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   try { popup.close(); } catch (e) { /* ignore */ }
 
                   try {
-                    await saveToken(event.data.token);
-                    // Pass token directly to avoid storage timing issues
+                    await setBearerToken(event.data.token);
                     await fetchUser(event.data.token);
                     resolve();
                   } catch (err) {
@@ -454,14 +392,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       });
     } else {
-      // Native: Get OAuth URL from backend using /api/auth/initiate-social, then open in browser
-      // NOTE: We use initiate-social (not oauth-start) because initiate-social correctly uses
-      // BASE_URL (the actual backend URL) while oauth-start uses FRONTEND_URL (may be localhost)
+      // Native: Get OAuth URL from backend, then open in browser
       try {
         const callbackUrl = `${APP_SCHEME}://auth-callback`;
         console.log('📱 [GOOGLE NATIVE] Callback URL:', callbackUrl);
 
-        // Use /api/auth/initiate-social endpoint - correctly uses BASE_URL for authorization URL
         const initResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
           method: 'POST',
           headers: {
@@ -519,8 +454,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (token) {
         console.log('✅ [GOOGLE NATIVE] Token extracted from callback URL');
-        await saveToken(token);
-        // Pass token directly to avoid SecureStore timing issues on iOS
+        await setBearerToken(token);
         await fetchUser(token);
       } else {
         console.error('❌ [GOOGLE NATIVE] No token in callback URL. Params:', urlObj.searchParams.toString());
@@ -537,7 +471,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('📞 [APPLE] Initiating Apple sign-in...');
 
     if (Platform.OS === 'web') {
-      // Web: Use Better Auth OAuth flow via initiate-social endpoint
+      // Web: Use Better Auth OAuth flow
       return new Promise<void>((resolve, reject) => {
         try {
           const callbackURL = `${window.location.origin}/auth-popup-callback`;
@@ -586,8 +520,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   try { popup.close(); } catch (e) { /* ignore */ }
 
                   try {
-                    await saveToken(event.data.token);
-                    // Pass token directly to avoid storage timing issues
+                    await setBearerToken(event.data.token);
                     await fetchUser(event.data.token);
                     resolve();
                   } catch (err) {
@@ -734,7 +667,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       console.log('✅ [APPLE NATIVE] Token received (length:', token.length, '), saving...');
-      await saveToken(token);
+      
+      // CRITICAL: Save token using the centralized function with caching
+      await setBearerToken(token);
 
       // Set user immediately from sign-in response to avoid extra round-trip
       if (data.user && data.user.id) {
@@ -743,8 +678,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
 
-      // Validate session with backend to ensure token works
-      // Pass the token directly to avoid SecureStore timing issues on iOS
+      // Validate session with backend - token is now cached in memory on iOS
       await fetchUser(token);
       console.log('✅ [APPLE NATIVE] Sign in successful');
     } catch (error: any) {
@@ -785,8 +719,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error('No stored credentials. Sign in with email first.');
     }
 
-    // Attempt biometric authentication - disable device fallback to avoid
-    // immediately showing passcode prompt when biometrics aren't set up
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: 'Sign in to Cheshbon',
       fallbackLabel: 'Use Passcode',
@@ -796,7 +728,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.success) {
       await signInWithEmail(email, password);
     } else if (result.error === 'user_fallback') {
-      // User explicitly chose to use passcode - allow it
       const passcodeResult = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Sign in to Cheshbon',
         disableDeviceFallback: false,
@@ -814,7 +745,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     console.log('🚪 [AUTH] Signing out...');
     try {
-      const token = await getStoredToken();
+      const token = await getBearerToken();
       if (token) {
         await fetch(`${BACKEND_URL}/api/auth/sign-out`, {
           method: 'POST',
@@ -828,7 +759,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('⚠️ [AUTH] Sign out API error:', error);
     } finally {
-      await clearTokens();
+      await clearBearerToken();
       setUser(null);
       console.log('✅ [AUTH] Signed out');
     }

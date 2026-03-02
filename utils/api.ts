@@ -13,6 +13,11 @@ export const BACKEND_URL =
 
 export const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
 
+// In-memory token cache to avoid SecureStore race conditions on iOS
+let tokenCache: string | null = null;
+let tokenCacheTimestamp: number = 0;
+const TOKEN_CACHE_DURATION = 5000; // 5 seconds
+
 /**
  * Check if backend is properly configured
  */
@@ -21,14 +26,20 @@ export const isBackendConfigured = (): boolean => {
 };
 
 /**
- * Get bearer token from platform-specific storage
+ * Get bearer token from platform-specific storage with caching
  * Web: localStorage
- * Native: SecureStore
+ * Native: SecureStore with in-memory cache
  *
  * @returns Bearer token or null if not found
  */
 export const getBearerToken = async (): Promise<string | null> => {
   try {
+    // Use cache if available and fresh (iOS optimization)
+    if (Platform.OS === 'ios' && tokenCache && (Date.now() - tokenCacheTimestamp < TOKEN_CACHE_DURATION)) {
+      console.log('[API] Using cached token (iOS optimization)');
+      return tokenCache;
+    }
+
     if (Platform.OS === 'web') {
       const token = localStorage.getItem(BEARER_TOKEN_KEY);
       console.log('[API] Web token retrieved:', token ? 'YES' : 'NO');
@@ -38,14 +49,10 @@ export const getBearerToken = async (): Promise<string | null> => {
       const token = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
       console.log('[API] SecureStore token retrieved:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
       
-      // iOS-specific: If no token found, wait a bit and try again
-      // This handles race conditions where token is being written
-      if (!token && Platform.OS === 'ios') {
-        console.log('[API] iOS: No token found, retrying after delay...');
-        await new Promise(resolve => setTimeout(resolve, 200));
-        const retryToken = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
-        console.log('[API] iOS retry result:', retryToken ? 'YES' : 'NO');
-        return retryToken;
+      // Update cache on iOS
+      if (Platform.OS === 'ios' && token) {
+        tokenCache = token;
+        tokenCacheTimestamp = Date.now();
       }
       
       return token;
@@ -57,14 +64,37 @@ export const getBearerToken = async (): Promise<string | null> => {
 };
 
 /**
- * Set bearer token in platform-specific storage
+ * Set bearer token in platform-specific storage with immediate caching
  */
 export const setBearerToken = async (token: string): Promise<void> => {
   try {
+    console.log('[API] 💾 Saving bearer token...');
+    
+    // CRITICAL iOS FIX: Update cache IMMEDIATELY before async storage
+    if (Platform.OS === 'ios') {
+      tokenCache = token;
+      tokenCacheTimestamp = Date.now();
+      console.log('[API] iOS: Token cached in memory');
+    }
+    
     if (Platform.OS === 'web') {
       localStorage.setItem(BEARER_TOKEN_KEY, token);
+      console.log('[API] ✅ Token saved to localStorage');
     } else {
       await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
+      console.log('[API] ✅ Token saved to SecureStore');
+      
+      // iOS: Verify the token was actually saved
+      if (Platform.OS === 'ios') {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const verifyToken = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+        if (verifyToken === token) {
+          console.log('[API] ✅ iOS: Token verified in SecureStore');
+        } else {
+          console.error('[API] ❌ iOS: Token verification failed!');
+          throw new Error('Failed to persist token to SecureStore');
+        }
+      }
     }
   } catch (error) {
     console.error('[API] Error saving bearer token:', error);
@@ -73,11 +103,16 @@ export const setBearerToken = async (token: string): Promise<void> => {
 };
 
 /**
- * Clear bearer token from storage
+ * Clear bearer token from storage and cache
  */
 export const clearBearerToken = async (): Promise<void> => {
   try {
     console.log('[API] 🗑️ Clearing bearer token...');
+    
+    // Clear cache immediately
+    tokenCache = null;
+    tokenCacheTimestamp = 0;
+    
     if (Platform.OS === 'web') {
       localStorage.removeItem(BEARER_TOKEN_KEY);
     } else {
@@ -129,7 +164,8 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
   console.log('[API] Calling:', url, options?.method || 'GET');
 
   try {
-    // CRITICAL: Retrieve token BEFORE building fetch options to avoid race conditions
+    // CRITICAL: Retrieve token BEFORE building fetch options
+    // This uses the in-memory cache on iOS to avoid SecureStore race conditions
     const token = await getBearerToken();
     console.log('[API] Token retrieved:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
 
@@ -151,8 +187,6 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
     } else {
       console.warn('[API] ⚠️ No token available for authenticated request');
     }
-
-    console.log('[API] Request headers:', JSON.stringify(fetchOptions.headers));
 
     const response = await fetch(url, fetchOptions);
 
