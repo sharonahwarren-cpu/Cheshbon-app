@@ -124,7 +124,7 @@ export function registerAuthRoutes(app: App) {
       app.logger.warn({ origin }, 'Google OAuth not configured');
       return reply.status(400).send({
         error: 'OAUTH_NOT_CONFIGURED',
-        message: 'Google OAuth not configured',
+        message: 'Google OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.',
       });
     }
 
@@ -132,16 +132,26 @@ export function registerAuthRoutes(app: App) {
       app.logger.warn({ origin }, 'Apple OAuth not configured');
       return reply.status(400).send({
         error: 'OAUTH_NOT_CONFIGURED',
-        message: 'Apple OAuth not configured',
+        message: 'Apple OAuth not configured. Set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, and APPLE_PRIVATE_KEY.',
       });
     }
 
-    const baseUrl = process.env.BASE_URL || `http://${request.headers.host}`;
+    // Use BASE_URL from environment (CRITICAL: must not be localhost for production)
+    const backendBaseUrl = process.env.BASE_URL;
+    if (!backendBaseUrl) {
+      app.logger.error({ provider }, 'BASE_URL not configured - OAuth URLs will be incorrect');
+      return reply.status(500).send({
+        error: 'SERVER_ERROR',
+        message: 'Backend BASE_URL not configured',
+      });
+    }
+
     // Better Auth handles the actual OAuth redirect at /api/auth/sign-in/social
-    const authorizationUrl = `${baseUrl}/api/auth/sign-in/social?provider=${provider}${callbackURL ? `&callbackURL=${encodeURIComponent(callbackURL)}` : ''}${redirectURL ? `&redirectURL=${encodeURIComponent(redirectURL)}` : ''}`;
+    // Store callbackURL as query param so it can be used after OAuth completes
+    const authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}${callbackURL ? `&callbackURL=${encodeURIComponent(callbackURL)}` : ''}${redirectURL ? `&redirectURL=${encodeURIComponent(redirectURL)}` : ''}`;
 
     app.logger.info(
-      { provider, origin, isMobile: !!callbackURL },
+      { provider, backendBaseUrl, isMobile: !!callbackURL, authorizationUrl: authorizationUrl.split('?')[0] },
       `${provider} OAuth authorization URL prepared`
     );
 
@@ -515,19 +525,44 @@ export function registerAuthRoutes(app: App) {
     }
 
     // Better Auth handles the code exchange and session creation
-    // The session should be established by Better Auth internally
-    // For mobile deep links, we need to construct the redirect URL with the token
+    // After Better Auth processes the OAuth code, we need to:
+    // 1. Extract the session token from the authenticated request
+    // 2. Redirect to the callback URL with the token
 
     const finalCallbackUrl = callbackURL || redirectURL || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/`;
 
-    app.logger.info(
-      { provider, origin, finalCallbackUrl: finalCallbackUrl.split('?')[0] },
-      'OAuth code exchange initiated, will redirect to callback URL'
-    );
+    try {
+      // Try to get the session that was just created by Better Auth
+      // The session should be available in the request context after OAuth processing
+      const session = await requireAuth(request, reply);
 
-    // For Better Auth's automatic handling, redirect to the callback URL
-    // Better Auth will handle setting the session cookie
-    return reply.redirect(finalCallbackUrl);
+      if (session && session.session.token) {
+        // Session was successfully created, include token in redirect
+        const separator = finalCallbackUrl.includes('?') ? '&' : '?';
+        const redirectWithToken = `${finalCallbackUrl}${separator}token=${encodeURIComponent(session.session.token)}`;
+
+        app.logger.info(
+          { provider, origin, finalCallbackUrl: finalCallbackUrl.split('?')[0], hasToken: true },
+          'OAuth code exchange completed, redirecting with session token'
+        );
+
+        return reply.redirect(redirectWithToken);
+      } else {
+        // No session yet, redirect and let client call /api/auth/me to get token
+        app.logger.warn(
+          { provider, origin, finalCallbackUrl: finalCallbackUrl.split('?')[0] },
+          'OAuth code exchange completed, session not immediately available'
+        );
+        return reply.redirect(finalCallbackUrl);
+      }
+    } catch (error) {
+      // Session might not be available yet, redirect without token
+      app.logger.warn(
+        { error, provider, origin, finalCallbackUrl: finalCallbackUrl.split('?')[0] },
+        'Could not extract session token from OAuth callback'
+      );
+      return reply.redirect(finalCallbackUrl);
+    }
   });
 
   // POST /api/auth/oauth-start - Initiate OAuth flow with provider and callback URL
@@ -578,14 +613,23 @@ export function registerAuthRoutes(app: App) {
     }
 
     const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+    // Use BASE_URL from environment, not FRONTEND_URL
+    const backendBaseUrl = process.env.BASE_URL;
+    if (!backendBaseUrl) {
+      app.logger.error({ provider }, 'BASE_URL environment variable not set');
+      return reply.status(500).send({
+        error: 'SERVER_ERROR',
+        message: 'Backend BASE_URL not configured',
+      });
+    }
 
     // The OAuth authorization URL will be generated by Better Auth
     // The /api/auth/sign-in/social endpoint handles the actual OAuth flow
-    const authorizationUrl = `${frontendUrl}/api/auth/sign-in/social?provider=${provider}${callbackUrl ? `&callbackURL=${encodeURIComponent(callbackUrl)}` : ''}`;
+    const authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}${callbackUrl ? `&callbackURL=${encodeURIComponent(callbackUrl)}` : ''}`;
 
     app.logger.info(
-      { provider, authorizationUrl: authorizationUrl.split('?')[0] },
+      { provider, backendBaseUrl, authorizationUrl: authorizationUrl.split('?')[0] },
       `${providerName} OAuth authorization URL prepared`
     );
 
@@ -740,10 +784,17 @@ export function registerAuthRoutes(app: App) {
     // We return a message that the client should complete the OAuth flow
     // by redirecting to our OAuth endpoint
 
-    const authorizationUrl = `${process.env.BASE_URL || `http://${origin}`}/api/auth/sign-in/social?provider=apple&code=${encodeURIComponent(code || '')}&id_token=${encodeURIComponent(id_token)}`;
+    const backendBaseUrl = process.env.BASE_URL || `http://${origin}`;
+
+    // Ensure we don't have double protocol prefixes (e.g., http://https://)
+    const cleanBaseUrl = backendBaseUrl.startsWith('http://') || backendBaseUrl.startsWith('https://')
+      ? backendBaseUrl
+      : `https://${backendBaseUrl}`;
+
+    const authorizationUrl = `${cleanBaseUrl}/api/auth/sign-in/social?provider=apple&code=${encodeURIComponent(code || '')}&id_token=${encodeURIComponent(id_token)}`;
 
     app.logger.info(
-      { origin, authorizationUrl: authorizationUrl.split('?')[0] },
+      { origin, baseUrl: cleanBaseUrl, authorizationUrl: authorizationUrl.split('?')[0] },
       'Apple native sign-in will complete OAuth flow'
     );
 
@@ -751,7 +802,7 @@ export function registerAuthRoutes(app: App) {
     return {
       success: true,
       authorizationUrl,
-      message: 'Apple identity token received. Complete authentication by visiting the authorizationUrl.',
+      message: 'Apple identity token received. Redirect to authorizationUrl to complete authentication.',
     };
   });
 
