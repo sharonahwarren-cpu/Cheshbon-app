@@ -64,6 +64,12 @@ async function saveToken(token: string): Promise<void> {
       localStorage.setItem(BEARER_TOKEN_KEY, token);
     } else {
       await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
+      // Add a small delay on iOS to ensure SecureStore write completes
+      // This prevents race conditions where subsequent API calls try to read
+      // the token before it's fully persisted
+      if (Platform.OS === 'ios') {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
     console.log('✅ [AUTH] Token saved successfully');
   } catch (error) {
@@ -97,10 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchUser();
   }, []);
 
-  const fetchUser = async (): Promise<User | null> => {
+  const fetchUser = async (providedToken?: string): Promise<User | null> => {
     console.log('🔄 [AUTH] Fetching user session...');
     try {
-      const token = await getStoredToken();
+      // Use provided token if available (for immediate validation after sign-in)
+      // Otherwise retrieve from storage
+      const token = providedToken || await getStoredToken();
       if (!token) {
         console.log('⚠️ [AUTH] No token found, user not authenticated');
         setUser(null);
@@ -126,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.error('❌ [AUTH] Error response:', errorText);
         // Only clear tokens on 401 (unauthorized), not on network errors
         if (response.status === 401 || response.status === 403) {
+          console.log('🗑️ [AUTH] Clearing invalid token due to 401/403');
           await clearTokens();
           setUser(null);
         }
@@ -234,7 +243,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Validate session with backend to ensure token works
-      await fetchUser();
+      // Pass the token directly to avoid SecureStore timing issues on iOS
+      await fetchUser(token);
       console.log('✅ [EMAIL] Sign in successful');
     } catch (error) {
       console.error('❌ [EMAIL] Sign in error:', error);
@@ -318,7 +328,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      await fetchUser();
+      // Pass the token directly to avoid SecureStore timing issues on iOS
+      await fetchUser(token);
       console.log('✅ [EMAIL] Sign up successful');
     } catch (error) {
       console.error('❌ [EMAIL] Sign up error:', error);
@@ -385,7 +396,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                   try {
                     await saveToken(event.data.token);
-                    await fetchUser();
+                    // Pass token directly to avoid storage timing issues
+                    await fetchUser(event.data.token);
                     resolve();
                   } catch (err) {
                     reject(err);
@@ -497,7 +509,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) {
         console.log('✅ [GOOGLE NATIVE] Token extracted from callback URL');
         await saveToken(token);
-        await fetchUser();
+        // Pass token directly to avoid SecureStore timing issues on iOS
+        await fetchUser(token);
       } else {
         console.error('❌ [GOOGLE NATIVE] No token in callback URL. Params:', urlObj.searchParams.toString());
         throw new Error('No authentication token received from Google sign-in');
@@ -563,7 +576,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                   try {
                     await saveToken(event.data.token);
-                    await fetchUser();
+                    // Pass token directly to avoid storage timing issues
+                    await fetchUser(event.data.token);
                     resolve();
                   } catch (err) {
                     reject(err);
@@ -719,7 +733,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Validate session with backend to ensure token works
-      await fetchUser();
+      // Pass the token directly to avoid SecureStore timing issues on iOS
+      await fetchUser(token);
       console.log('✅ [APPLE NATIVE] Sign in successful');
     } catch (error: any) {
       if (error.code === 'ERR_CANCELED') {

@@ -44,8 +44,8 @@ export default function AuthCallbackScreen() {
 
         console.log('✅ [AUTH CALLBACK] Token saved, fetching user...');
 
-        // Fetch user data
-        await fetchUser();
+        // Fetch user data - pass token directly to avoid SecureStore timing issues on iOS
+        await fetchUser(token);
 
         console.log('✅ [AUTH CALLBACK] User fetched, redirecting to app...');
 
