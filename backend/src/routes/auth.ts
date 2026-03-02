@@ -262,13 +262,14 @@ export function registerAuthRoutes(app: App) {
       const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
 
       googleAuthUrl.searchParams.append('client_id', clientId);
-      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/oauth-callback`);
+      // Use Better Auth's callback pattern: /api/auth/callback/google
+      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/callback/google`);
       googleAuthUrl.searchParams.append('response_type', 'code');
       googleAuthUrl.searchParams.append('scope', 'openid email profile');
       googleAuthUrl.searchParams.append('state', state);
 
       // Pass custom parameters through the OAuth URL
-      // These will be preserved in the redirect back to our callback endpoint
+      // These will be preserved in the redirect back to Better Auth's callback endpoint
       if (callbackURL) {
         googleAuthUrl.searchParams.append('callbackURL', callbackURL);
       }
@@ -286,10 +287,11 @@ export function registerAuthRoutes(app: App) {
           detectedLocalhost,
           isMobile: !!callbackURL,
           hasCallbackURL: !!callbackURL,
-          redirectUri: `${backendBaseUrl}/api/auth/oauth-callback`,
-          oauthProviderHost: 'accounts.google.com'
+          redirectUri: `${backendBaseUrl}/api/auth/callback/google`,
+          oauthProviderHost: 'accounts.google.com',
+          betterAuthCallback: true
         },
-        `Google OAuth authorization URL generated (BASE_URL source: ${urlSource})`
+        `Google OAuth authorization URL generated with Better Auth callback (BASE_URL source: ${urlSource})`
       );
     } else if (provider === 'apple') {
       // Generate Apple OAuth authorization URL directly from Apple's endpoint
@@ -307,7 +309,8 @@ export function registerAuthRoutes(app: App) {
       const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
 
       appleAuthUrl.searchParams.append('client_id', clientId);
-      appleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/oauth-callback`);
+      // Use Better Auth's callback pattern: /api/auth/callback/apple
+      appleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/callback/apple`);
       appleAuthUrl.searchParams.append('response_type', 'code id_token');
       appleAuthUrl.searchParams.append('scope', 'openid email name');
       appleAuthUrl.searchParams.append('state', state);
@@ -330,10 +333,11 @@ export function registerAuthRoutes(app: App) {
           detectedLocalhost,
           isMobile: !!callbackURL,
           hasCallbackURL: !!callbackURL,
-          redirectUri: `${backendBaseUrl}/api/auth/oauth-callback`,
-          oauthProviderHost: 'appleid.apple.com'
+          redirectUri: `${backendBaseUrl}/api/auth/callback/apple`,
+          oauthProviderHost: 'appleid.apple.com',
+          betterAuthCallback: true
         },
-        `Apple OAuth authorization URL generated (BASE_URL source: ${urlSource})`
+        `Apple OAuth authorization URL generated with Better Auth callback (BASE_URL source: ${urlSource})`
       );
     } else {
       app.logger.warn({ provider, origin }, 'Unsupported OAuth provider');
@@ -1190,7 +1194,8 @@ export function registerAuthRoutes(app: App) {
       const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
 
       googleAuthUrl.searchParams.append('client_id', clientId);
-      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/oauth-callback`);
+      // Use Better Auth's callback pattern: /api/auth/callback/google
+      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/callback/google`);
       googleAuthUrl.searchParams.append('response_type', 'code');
       googleAuthUrl.searchParams.append('scope', 'openid email profile');
       googleAuthUrl.searchParams.append('state', state);
@@ -1209,10 +1214,11 @@ export function registerAuthRoutes(app: App) {
           detectedLocalhost,
           isMobile: !!callbackUrl,
           hasCallbackUrl: !!callbackUrl,
-          redirectUri: `${backendBaseUrl}/api/auth/oauth-callback`,
-          oauthProviderHost: 'accounts.google.com'
+          redirectUri: `${backendBaseUrl}/api/auth/callback/google`,
+          oauthProviderHost: 'accounts.google.com',
+          betterAuthCallback: true
         },
-        `Google OAuth authorization URL generated (BASE_URL source: ${urlSource})`
+        `Google OAuth authorization URL generated with Better Auth callback (BASE_URL source: ${urlSource})`
       );
     } else if (provider === 'apple') {
       // Generate Apple OAuth authorization URL directly from Apple's endpoint
@@ -1230,7 +1236,8 @@ export function registerAuthRoutes(app: App) {
       const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
 
       appleAuthUrl.searchParams.append('client_id', clientId);
-      appleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/oauth-callback`);
+      // Use Better Auth's callback pattern: /api/auth/callback/apple
+      appleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/callback/apple`);
       appleAuthUrl.searchParams.append('response_type', 'code id_token');
       appleAuthUrl.searchParams.append('scope', 'openid email name');
       appleAuthUrl.searchParams.append('state', state);
@@ -1250,10 +1257,11 @@ export function registerAuthRoutes(app: App) {
           detectedLocalhost,
           isMobile: !!callbackUrl,
           hasCallbackUrl: !!callbackUrl,
-          redirectUri: `${backendBaseUrl}/api/auth/oauth-callback`,
-          oauthProviderHost: 'appleid.apple.com'
+          redirectUri: `${backendBaseUrl}/api/auth/callback/apple`,
+          oauthProviderHost: 'appleid.apple.com',
+          betterAuthCallback: true
         },
-        `Apple OAuth authorization URL generated (BASE_URL source: ${urlSource})`
+        `Apple OAuth authorization URL generated with Better Auth callback (BASE_URL source: ${urlSource})`
       );
     } else {
       app.logger.warn({ provider }, 'Unsupported OAuth provider');
