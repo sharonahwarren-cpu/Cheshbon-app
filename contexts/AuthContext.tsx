@@ -453,7 +453,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 try {
                   const errData = JSON.parse(errText);
                   if (errData.error === 'OAUTH_NOT_CONFIGURED') {
-                    errorMessage = 'Google Sign-In is not configured on this server. Please contact the administrator or use email/password sign-in.';
+                    errorMessage = 'Google Sign-In is not available. Please use email/password sign-in.';
                   } else if (errData.message) {
                     errorMessage = errData.message;
                   }
@@ -465,6 +465,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .then((data) => {
               const authUrl = data.authorizationUrl;
               console.log('📱 [GOOGLE WEB] Opening popup with URL:', authUrl?.substring(0, 80));
+
+              if (!authUrl) {
+                throw new Error('No authorization URL received from server');
+              }
 
               const width = 500;
               const height = 600;
@@ -570,7 +574,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const errData = JSON.parse(errorText);
             if (errData.error === 'OAUTH_NOT_CONFIGURED') {
-              errorMessage = 'Google Sign-In is not configured on this server. Please contact the administrator or use email/password sign-in.';
+              errorMessage = 'Google Sign-In is not available. Please use email/password sign-in.';
             } else if (errData.message) {
               errorMessage = errData.message;
             } else if (errData.error) {
@@ -583,6 +587,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const initData = await initResponse.json();
         const authUrl = initData.authorizationUrl;
         console.log('📱 [GOOGLE NATIVE] Authorization URL received:', authUrl?.substring(0, 100));
+
+        if (!authUrl) {
+          throw new Error('No authorization URL received from server');
+        }
 
         await _openGoogleBrowser(authUrl, callbackUrl);
       } catch (error) {
