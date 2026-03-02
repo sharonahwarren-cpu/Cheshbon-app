@@ -6,7 +6,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import Constants from 'expo-constants';
-import { getBearerToken, setBearerToken, clearBearerToken } from '@/utils/api';
+import { getBearerToken, setBearerToken, clearBearerToken, markAuthSuccess } from '@/utils/api';
 
 // Essential for auth session cleanup on web
 WebBrowser.maybeCompleteAuthSession();
@@ -52,8 +52,101 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchUser();
   }, []);
 
+  /**
+   * Validate session token with backend with retry logic for iOS race conditions.
+   * After Apple sign-in, the session may not be immediately available in the DB,
+   * so we retry up to maxRetries times with exponential backoff.
+   */
+  const validateSessionWithRetry = async (
+    token: string,
+    maxRetries: number = 4,
+    initialDelayMs: number = 300
+  ): Promise<{ ok: boolean; data?: any; status?: number; errorText?: string }> => {
+    let lastStatus = 0;
+    let lastErrorText = '';
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        // Exponential backoff: 300ms, 600ms, 1200ms, 2400ms
+        const delay = initialDelayMs * Math.pow(2, attempt - 1);
+        console.log(`🔄 [AUTH] Retry attempt ${attempt}/${maxRetries} after ${delay}ms delay...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+      try {
+        const headers: Record<string, string> = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Platform': Platform.OS,
+          'X-Retry-Attempt': String(attempt),
+        };
+
+        if (Platform.OS !== 'web') {
+          headers['X-Mobile-App'] = 'cheshbon';
+          headers['Origin'] = BACKEND_URL;
+        }
+
+        console.log(`🔄 [AUTH] /api/auth/me attempt ${attempt + 1}/${maxRetries + 1}`);
+        console.log(`🔄 [AUTH] Token (first 50 chars): ${token.substring(0, 50)}`);
+        console.log(`🔄 [AUTH] Authorization header: Bearer ${token.substring(0, 30)}...`);
+
+        const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
+          method: 'GET',
+          headers,
+        });
+
+        console.log(`🔄 [AUTH] /api/auth/me response status (attempt ${attempt + 1}):`, response.status);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`✅ [AUTH] Session validated on attempt ${attempt + 1}`);
+          return { ok: true, data, status: response.status };
+        }
+
+        lastStatus = response.status;
+        lastErrorText = await response.text();
+        console.error(`❌ [AUTH] Attempt ${attempt + 1} failed: ${response.status} - ${lastErrorText.substring(0, 300)}`);
+
+        // Only retry on 401 (session might not be committed yet)
+        // Don't retry on 403 (forbidden) or other errors
+        if (response.status !== 401) {
+          console.error(`❌ [AUTH] Non-401 error (${response.status}), not retrying`);
+          return { ok: false, status: lastStatus, errorText: lastErrorText };
+        }
+
+        // On last attempt, don't retry
+        if (attempt === maxRetries) {
+          console.error(`❌ [AUTH] All ${maxRetries + 1} attempts failed with 401`);
+          // Run session diagnostic to help debug
+          try {
+            const diagResponse = await fetch(`${BACKEND_URL}/api/auth/session-diagnostic`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+                'X-Mobile-App': 'cheshbon',
+              },
+            });
+            const diagText = await diagResponse.text();
+            console.log(`🔍 [AUTH] Session diagnostic response (${diagResponse.status}):`, diagText.substring(0, 500));
+          } catch (diagError) {
+            console.error('❌ [AUTH] Session diagnostic failed:', diagError);
+          }
+          return { ok: false, status: lastStatus, errorText: lastErrorText };
+        }
+      } catch (networkError) {
+        console.error(`❌ [AUTH] Network error on attempt ${attempt + 1}:`, networkError);
+        // Don't retry on network errors
+        return { ok: false, status: 0, errorText: String(networkError) };
+      }
+    }
+
+    return { ok: false, status: lastStatus, errorText: lastErrorText };
+  };
+
   const fetchUser = async (providedToken?: string): Promise<User | null> => {
     console.log('🔄 [AUTH] Fetching user session...');
+    console.log('🔄 [AUTH] providedToken:', providedToken ? `YES (${providedToken.substring(0, 20)}...)` : 'NO');
     try {
       // Use provided token if available (for immediate validation after sign-in)
       // Otherwise retrieve from storage (uses cache on iOS)
@@ -65,34 +158,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return null;
       }
 
-      console.log('🔄 [AUTH] Token found, validating with backend...');
-      const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
-        method: 'GET',
-        headers: {
+      console.log('🔄 [AUTH] Token to use:', token.substring(0, 30) + '...');
+      console.log('🔄 [AUTH] Token length:', token.length);
+      console.log('🔄 [AUTH] Platform:', Platform.OS);
+      console.log('🔄 [AUTH] Validating with backend...');
+
+      // Use retry logic for native platforms to handle DB commit race conditions after sign-in
+      // On iOS/Android, the session token may be created but not yet committed to DB when /api/auth/me is called
+      // This is especially important for Apple sign-in on iOS
+      const useRetry = Platform.OS !== 'web' && !!providedToken;
+      console.log('🔄 [AUTH] Using retry logic:', useRetry, '(native platform with provided token)');
+
+      let result: { ok: boolean; data?: any; status?: number; errorText?: string };
+
+      if (useRetry) {
+        // iOS with a freshly-created token: use retry with backoff
+        result = await validateSessionWithRetry(token, 4, 300);
+      } else {
+        // Web or token from storage: single attempt
+        const headers: Record<string, string> = {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          ...(Platform.OS !== 'web' ? { 'X-Mobile-App': 'cheshbon', 'Origin': BACKEND_URL } : {}),
-        },
-      });
+        };
 
-      console.log('🔄 [AUTH] /api/auth/me response status:', response.status);
+        if (Platform.OS !== 'web') {
+          headers['X-Mobile-App'] = 'cheshbon';
+          headers['Origin'] = BACKEND_URL;
+        }
 
-      if (!response.ok) {
-        console.error('❌ [AUTH] Session validation failed:', response.status);
-        const errorText = await response.text();
-        console.error('❌ [AUTH] Error response:', errorText);
-        
-        // Clear invalid token on 401/403
-        if (response.status === 401 || response.status === 403) {
-          console.log('🗑️ [AUTH] Clearing invalid token due to 401/403');
-          await clearBearerToken();
-          setUser(null);
+        console.log('🔄 [AUTH] Request headers:', Object.keys(headers));
+        console.log('🔄 [AUTH] Authorization header:', headers['Authorization'].substring(0, 50) + '...');
+
+        const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
+          method: 'GET',
+          headers,
+        });
+
+        console.log('🔄 [AUTH] /api/auth/me response status:', response.status);
+
+        if (response.ok) {
+          const data = await response.json();
+          result = { ok: true, data, status: response.status };
+        } else {
+          const errorText = await response.text();
+          result = { ok: false, status: response.status, errorText };
+        }
+      }
+
+      if (!result.ok) {
+        console.error('❌ [AUTH] Session validation failed:', result.status);
+        console.error('❌ [AUTH] Error response:', result.errorText?.substring(0, 200));
+
+        if (!providedToken) {
+          // Stored token failed - clear it and log out
+          if (result.status === 401 || result.status === 403) {
+            console.log('🗑️ [AUTH] Clearing invalid stored token due to 401/403');
+            await clearBearerToken();
+            setUser(null);
+          }
+        } else {
+          // Fresh sign-in token failed even with retries
+          // IMPORTANT: Do NOT clear the token or user here if user was already set from sign-in response
+          // The user object was set directly from the sign-in API response, which is authoritative
+          // Only log the error - the user is already authenticated via the sign-in response
+          console.error('❌ [AUTH] Fresh token rejected by /api/auth/me after retries');
+          console.error('❌ [AUTH] Status:', result.status, '- Error:', result.errorText?.substring(0, 200));
+          console.log('⚠️ [AUTH] User was set from sign-in response - keeping user authenticated');
+          console.log('⚠️ [AUTH] Token is still valid for API calls (was just created by sign-in endpoint)');
+          // Don't clear token or user - the sign-in was successful, /api/auth/me may have a timing issue
         }
         setLoading(false);
         return null;
       }
 
-      const userData = await response.json();
+      const userData = result.data;
       console.log('✅ [AUTH] User session validated. Keys:', Object.keys(userData));
 
       // Backend returns { user: {...}, session: { token: '...', expiresAt: '...' }, token: '...' }
@@ -165,14 +304,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data.data?.session?.token;
 
       console.log('📧 [EMAIL] Token extracted:', token ? 'YES (length: ' + token.length + ')' : 'NO');
+      if (token) {
+        console.log('📧 [EMAIL] Token value:', token.substring(0, 30) + '...');
+      }
 
       if (!token) {
         console.error('❌ [EMAIL] No token in response. Full response:', JSON.stringify(data).substring(0, 500));
         throw new Error('No authentication token received from server. Please try again.');
       }
 
-      // CRITICAL: Save token using the centralized function with caching
+      // CRITICAL iOS FIX: Save token using the centralized function with caching
+      console.log('📧 [EMAIL] Saving token to storage...');
       await setBearerToken(token);
+      console.log('📧 [EMAIL] Token saved successfully');
+
+      // Mark auth success to start grace period (prevents 401 race conditions)
+      markAuthSuccess();
 
       // Set user immediately from sign-in response to avoid extra round-trip
       const userObj = data.user || null;
@@ -193,8 +340,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Validate session with backend to ensure token works
-      // Pass the token directly - it's now cached in memory on iOS
+      // CRITICAL: Pass the token directly to fetchUser to avoid retrieval race condition
+      // On iOS, add a small delay to ensure the session is committed to DB
+      if (Platform.OS === 'ios') {
+        console.log('📧 [EMAIL] iOS: Waiting 200ms for DB session to commit...');
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      console.log('📧 [EMAIL] Validating session with token:', token.substring(0, 30) + '...');
       await fetchUser(token);
       console.log('✅ [EMAIL] Sign in successful');
     } catch (error) {
@@ -260,6 +412,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // CRITICAL: Save token using the centralized function with caching
       await setBearerToken(token);
+
+      // Mark auth success to start grace period (prevents 401 race conditions)
+      markAuthSuccess();
 
       // Set user immediately from sign-up response
       const userObj = data.user || null;
@@ -346,6 +501,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                   try {
                     await setBearerToken(event.data.token);
+                    markAuthSuccess();
                     await fetchUser(event.data.token);
                     resolve();
                   } catch (err) {
@@ -455,6 +611,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) {
         console.log('✅ [GOOGLE NATIVE] Token extracted from callback URL');
         await setBearerToken(token);
+        markAuthSuccess();
         await fetchUser(token);
       } else {
         console.error('❌ [GOOGLE NATIVE] No token in callback URL. Params:', urlObj.searchParams.toString());
@@ -521,6 +678,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                   try {
                     await setBearerToken(event.data.token);
+                    markAuthSuccess();
                     await fetchUser(event.data.token);
                     resolve();
                   } catch (err) {
@@ -657,28 +815,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       console.log('📞 [APPLE NATIVE] Response keys:', Object.keys(data));
+      console.log('📞 [APPLE NATIVE] Full response (first 500 chars):', JSON.stringify(data).substring(0, 500));
 
       // Backend returns { token, user } consistently
       const token = data.token || data.session?.token || data.sessionToken || data.accessToken;
 
       if (!token) {
-        console.error('❌ [APPLE NATIVE] No token in response. Full response:', JSON.stringify(data).substring(0, 500));
+        console.error('❌ [APPLE NATIVE] No token in response. Full response:', JSON.stringify(data).substring(0, 1000));
+        console.error('❌ [APPLE NATIVE] data.token:', data.token);
+        console.error('❌ [APPLE NATIVE] data.session:', data.session);
+        console.error('❌ [APPLE NATIVE] data.sessionToken:', data.sessionToken);
+        console.error('❌ [APPLE NATIVE] data.accessToken:', data.accessToken);
         throw new Error('No authentication token received from server after Apple sign-in');
       }
 
-      console.log('✅ [APPLE NATIVE] Token received (length:', token.length, '), saving...');
+      console.log('✅ [APPLE NATIVE] Token received (length:', token.length, ')');
+      console.log('✅ [APPLE NATIVE] Token value:', token.substring(0, 50) + '...');
+      console.log('✅ [APPLE NATIVE] Token type:', typeof token);
       
-      // CRITICAL: Save token using the centralized function with caching
+      // CRITICAL iOS FIX: Save token using the centralized function with caching
+      console.log('📞 [APPLE NATIVE] Saving token to storage...');
       await setBearerToken(token);
+      console.log('📞 [APPLE NATIVE] Token saved successfully');
+
+      // Mark auth success to start grace period (prevents 401 race conditions on iOS)
+      // This is CRITICAL for iOS - prevents other API calls from clearing the token
+      // during the window between session creation and DB commit
+      markAuthSuccess();
 
       // Set user immediately from sign-in response to avoid extra round-trip
+      // This ensures the UI updates even if /api/auth/me validation takes time
       if (data.user && data.user.id) {
         console.log('📞 [APPLE NATIVE] Setting user from response directly:', data.user.id);
         setUser(data.user);
         setLoading(false);
       }
 
-      // Validate session with backend - token is now cached in memory on iOS
+      // CRITICAL iOS FIX: Add a small delay before calling /api/auth/me
+      // The session is created in the DB by /api/auth/apple/native, but there can be
+      // a brief window where the DB transaction hasn't fully committed yet.
+      // The retry logic in fetchUser will handle any remaining race conditions.
+      console.log('📞 [APPLE NATIVE] Waiting 200ms for DB session to commit...');
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // CRITICAL: Pass the token directly to fetchUser to avoid retrieval race condition
+      // fetchUser will use retry logic on iOS for freshly-created tokens
+      console.log('📞 [APPLE NATIVE] Validating session with token:', token.substring(0, 30) + '...');
       await fetchUser(token);
       console.log('✅ [APPLE NATIVE] Sign in successful');
     } catch (error: any) {

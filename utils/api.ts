@@ -14,9 +14,10 @@ export const BACKEND_URL =
 export const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
 
 // In-memory token cache to avoid SecureStore race conditions on iOS
+// Also improves performance on all platforms by reducing storage I/O
 let tokenCache: string | null = null;
 let tokenCacheTimestamp: number = 0;
-const TOKEN_CACHE_DURATION = 5000; // 5 seconds
+const TOKEN_CACHE_DURATION = 30000; // 30 seconds - longer duration for better reliability
 
 /**
  * Check if backend is properly configured
@@ -34,31 +35,43 @@ export const isBackendConfigured = (): boolean => {
  */
 export const getBearerToken = async (): Promise<string | null> => {
   try {
-    // Use cache if available and fresh (iOS optimization)
-    if (Platform.OS === 'ios' && tokenCache && (Date.now() - tokenCacheTimestamp < TOKEN_CACHE_DURATION)) {
-      console.log('[API] Using cached token (iOS optimization)');
-      return tokenCache;
+    // Use cache if available and fresh (Native optimization for iOS and Android)
+    if (Platform.OS !== 'web') {
+      const cacheAge = Date.now() - tokenCacheTimestamp;
+      const isCacheFresh = cacheAge < TOKEN_CACHE_DURATION;
+      console.log('[API] 📱 Native: Cache check - exists:', !!tokenCache, 'age:', cacheAge + 'ms', 'fresh:', isCacheFresh);
+      
+      if (tokenCache && isCacheFresh) {
+        console.log('[API] ✅ Using cached token (Native optimization)');
+        console.log('[API] 🔑 Cached token:', tokenCache.substring(0, 30) + '...');
+        return tokenCache;
+      } else if (tokenCache && !isCacheFresh) {
+        console.log('[API] ⚠️ Cache expired, fetching from SecureStore...');
+      } else {
+        console.log('[API] ⚠️ No cache available, fetching from SecureStore...');
+      }
     }
 
     if (Platform.OS === 'web') {
       const token = localStorage.getItem(BEARER_TOKEN_KEY);
-      console.log('[API] Web token retrieved:', token ? 'YES' : 'NO');
+      console.log('[API] 🌐 Web token retrieved:', token ? 'YES' : 'NO');
       return token;
     } else {
-      console.log('[API] Retrieving token from SecureStore...');
+      console.log('[API] 📱 Retrieving token from SecureStore...');
       const token = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
-      console.log('[API] SecureStore token retrieved:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
+      console.log('[API] 📱 SecureStore token retrieved:', token ? `YES (${token.substring(0, 30)}...)` : 'NO');
       
-      // Update cache on iOS
-      if (Platform.OS === 'ios' && token) {
+      // Update cache on Native platforms
+      if (token) {
         tokenCache = token;
         tokenCacheTimestamp = Date.now();
+        console.log('[API] 📱 Native: Token cached from SecureStore');
       }
       
       return token;
     }
   } catch (error) {
-    console.error('[API] Error retrieving bearer token:', error);
+    console.error('[API] ❌ Error retrieving bearer token:', error);
     return null;
   }
 };
@@ -68,36 +81,44 @@ export const getBearerToken = async (): Promise<string | null> => {
  */
 export const setBearerToken = async (token: string): Promise<void> => {
   try {
-    console.log('[API] 💾 Saving bearer token...');
+    console.log('[API] 💾 Saving bearer token (length:', token.length, ')...');
+    console.log('[API] 💾 Token value:', token.substring(0, 30) + '...');
     
-    // CRITICAL iOS FIX: Update cache IMMEDIATELY before async storage
-    if (Platform.OS === 'ios') {
+    // CRITICAL FIX: Update cache IMMEDIATELY before async storage
+    // This ensures subsequent API calls can use the token right away on ALL platforms
+    if (Platform.OS !== 'web') {
       tokenCache = token;
       tokenCacheTimestamp = Date.now();
-      console.log('[API] iOS: Token cached in memory');
+      console.log('[API] ✅ Native: Token cached in memory IMMEDIATELY');
+      console.log('[API] 📱 Native: Cache timestamp:', tokenCacheTimestamp);
     }
     
     if (Platform.OS === 'web') {
       localStorage.setItem(BEARER_TOKEN_KEY, token);
       console.log('[API] ✅ Token saved to localStorage');
     } else {
+      console.log('[API] 📱 Starting SecureStore.setItemAsync...');
       await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
       console.log('[API] ✅ Token saved to SecureStore');
       
-      // iOS: Verify the token was actually saved
-      if (Platform.OS === 'ios') {
+      // Native: Verify the token was actually saved (iOS and Android)
+      if (Platform.OS === 'ios' || Platform.OS === 'android') {
+        console.log('[API] 📱 Native: Waiting 100ms for SecureStore to settle...');
         await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('[API] 📱 Native: Verifying token in SecureStore...');
         const verifyToken = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
         if (verifyToken === token) {
-          console.log('[API] ✅ iOS: Token verified in SecureStore');
+          console.log('[API] ✅ Native: Token verified in SecureStore');
         } else {
-          console.error('[API] ❌ iOS: Token verification failed!');
+          console.error('[API] ❌ Native: Token verification failed!');
+          console.error('[API] ❌ Native: Expected:', token.substring(0, 30) + '...');
+          console.error('[API] ❌ Native: Got:', verifyToken ? verifyToken.substring(0, 30) + '...' : 'NULL');
           throw new Error('Failed to persist token to SecureStore');
         }
       }
     }
   } catch (error) {
-    console.error('[API] Error saving bearer token:', error);
+    console.error('[API] ❌ Error saving bearer token:', error);
     throw error;
   }
 };
@@ -109,26 +130,59 @@ export const clearBearerToken = async (): Promise<void> => {
   try {
     console.log('[API] 🗑️ Clearing bearer token...');
     
-    // Clear cache immediately
+    // Clear cache immediately on all platforms
     tokenCache = null;
     tokenCacheTimestamp = 0;
+    console.log('[API] ✅ Token cache cleared');
     
     if (Platform.OS === 'web') {
       localStorage.removeItem(BEARER_TOKEN_KEY);
+      console.log('[API] ✅ Token removed from localStorage');
     } else {
       await SecureStore.deleteItemAsync(BEARER_TOKEN_KEY);
+      console.log('[API] ✅ Token removed from SecureStore');
     }
-    console.log('[API] ✅ Bearer token cleared');
+    console.log('[API] ✅ Bearer token cleared completely');
   } catch (error) {
-    console.error('[API] Error clearing bearer token:', error);
+    console.error('[API] ❌ Error clearing bearer token:', error);
   }
+};
+
+// Track the last successful authentication time to implement a grace period
+// This prevents 401 errors from clearing the token immediately after sign-in
+// (race condition: session created but not yet committed to DB)
+let lastAuthSuccessTime: number = 0;
+const AUTH_GRACE_PERIOD_MS = 10000; // 10 seconds grace period after sign-in
+
+/**
+ * Mark that authentication was just successful (call after sign-in)
+ * This starts a grace period during which 401 errors won't clear the token
+ */
+export const markAuthSuccess = (): void => {
+  lastAuthSuccessTime = Date.now();
+  console.log('[API] ✅ Auth success marked - grace period started (10s)');
 };
 
 /**
  * Handle 401 Unauthorized errors by clearing token and redirecting to auth
+ * Implements a grace period after sign-in to handle DB commit race conditions
  */
 const handle401Error = async () => {
+  const timeSinceAuth = Date.now() - lastAuthSuccessTime;
+  const inGracePeriod = lastAuthSuccessTime > 0 && timeSinceAuth < AUTH_GRACE_PERIOD_MS;
+  
   console.error('[API] 🚨 401 Unauthorized - Token is invalid or expired');
+  console.log('[API] Time since last auth success:', timeSinceAuth + 'ms');
+  console.log('[API] In grace period:', inGracePeriod);
+  
+  if (inGracePeriod) {
+    // Within grace period after sign-in - don't clear token, just log
+    // This handles the race condition where session is created but not yet committed to DB
+    console.warn('[API] ⚠️ 401 received within grace period after sign-in - NOT clearing token');
+    console.warn('[API] ⚠️ This is likely a DB commit race condition - token should be valid');
+    return;
+  }
+  
   console.log('[API] Clearing invalid token and redirecting to auth...');
   
   try {
@@ -161,13 +215,19 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
   }
 
   const url = `${BACKEND_URL}${endpoint}`;
-  console.log('[API] Calling:', url, options?.method || 'GET');
+  console.log('[API] 🌐 Calling:', url, options?.method || 'GET');
 
   try {
     // CRITICAL: Retrieve token BEFORE building fetch options
     // This uses the in-memory cache on iOS to avoid SecureStore race conditions
     const token = await getBearerToken();
-    console.log('[API] Token retrieved:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
+    console.log('[API] 🔑 Token retrieved for', endpoint, ':', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
+    
+    // Log cache status on iOS
+    if (Platform.OS === 'ios') {
+      console.log('[API] 📱 iOS cache status:', tokenCache ? 'CACHED' : 'NOT CACHED');
+      console.log('[API] 📱 iOS cache age:', tokenCache ? `${Date.now() - tokenCacheTimestamp}ms` : 'N/A');
+    }
 
     const fetchOptions: RequestInit = {
       ...options,
@@ -183,19 +243,23 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
         ...fetchOptions.headers,
         Authorization: `Bearer ${token}`,
       };
-      console.log('[API] Authorization header added');
+      console.log('[API] ✅ Authorization header added to', endpoint);
     } else {
-      console.warn('[API] ⚠️ No token available for authenticated request');
+      console.warn('[API] ⚠️ No token available for', endpoint);
     }
 
+    console.log('[API] 📤 Sending request to', endpoint, 'with headers:', Object.keys(fetchOptions.headers || {}));
     const response = await fetch(url, fetchOptions);
+    console.log('[API] 📥 Response received from', endpoint, '- Status:', response.status);
 
     if (!response.ok) {
       const text = await response.text();
-      console.error('[API] Error response:', response.status, text);
+      console.error('[API] ❌ Error response from', endpoint, ':', response.status, text.substring(0, 200));
       
       // Handle 401 Unauthorized - token is invalid or expired
       if (response.status === 401) {
+        console.error('[API] 🚨 401 Unauthorized on', endpoint);
+        console.error('[API] 🚨 Token was:', token ? token.substring(0, 30) + '...' : 'NONE');
         await handle401Error();
       }
       
@@ -203,7 +267,7 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
     }
 
     const data = await response.json();
-    console.log('[API] Success:', endpoint);
+    console.log('[API] ✅ Success:', endpoint);
     return data;
   } catch (error) {
     console.error('[API] Request failed:', error);

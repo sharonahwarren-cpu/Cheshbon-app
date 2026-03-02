@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { colors } from '@/styles/commonStyles';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+import { markAuthSuccess } from '@/utils/api';
 
 const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
 
@@ -41,6 +42,9 @@ export default function AuthCallbackScreen() {
         } else {
           await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
         }
+
+        // Mark auth success to start grace period (prevents 401 race conditions)
+        markAuthSuccess();
 
         console.log('✅ [AUTH CALLBACK] Token saved, fetching user...');
 
