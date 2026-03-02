@@ -428,6 +428,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * Fix authorization URL to ensure it uses the correct backend URL.
+   * The backend may return a localhost URL if BASE_URL env var is misconfigured.
+   * We detect this and replace with the known BACKEND_URL.
+   */
+  const fixAuthorizationUrl = (authUrl: string): string => {
+    if (!authUrl) return authUrl;
+    try {
+      const parsed = new URL(authUrl);
+      // If the URL points to localhost or 127.0.0.1, replace with the real backend URL
+      if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+        console.warn('📱 [OAUTH] Authorization URL points to localhost - replacing with real backend URL');
+        console.warn('📱 [OAUTH] Original URL:', authUrl.substring(0, 100));
+        const backendParsed = new URL(BACKEND_URL);
+        parsed.hostname = backendParsed.hostname;
+        parsed.port = backendParsed.port || '';
+        parsed.protocol = backendParsed.protocol;
+        const fixed = parsed.toString();
+        console.log('📱 [OAUTH] Fixed URL:', fixed.substring(0, 100));
+        return fixed;
+      }
+    } catch (e) {
+      console.error('📱 [OAUTH] Error parsing authorization URL:', e);
+    }
+    return authUrl;
+  };
+
   const signInWithGoogle = async () => {
     console.log('📱 [GOOGLE] Initiating Google sign-in...');
 
@@ -463,7 +490,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return res.json();
             })
             .then((data) => {
-              const authUrl = data.authorizationUrl;
+              // Fix authorization URL in case backend returned localhost URL
+              const authUrl = fixAuthorizationUrl(data.authorizationUrl);
               console.log('📱 [GOOGLE WEB] Opening popup with URL:', authUrl?.substring(0, 80));
 
               if (!authUrl) {
@@ -585,7 +613,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const initData = await initResponse.json();
-        const authUrl = initData.authorizationUrl;
+        // Fix authorization URL in case backend returned localhost URL
+        const authUrl = fixAuthorizationUrl(initData.authorizationUrl);
         console.log('📱 [GOOGLE NATIVE] Authorization URL received:', authUrl?.substring(0, 100));
 
         if (!authUrl) {
@@ -663,7 +692,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return res.json();
             })
             .then((data) => {
-              const authUrl = data.authorizationUrl;
+              // Fix authorization URL in case backend returned localhost URL
+              const authUrl = fixAuthorizationUrl(data.authorizationUrl);
               console.log('📞 [APPLE WEB] Opening popup...');
 
               const width = 500;
