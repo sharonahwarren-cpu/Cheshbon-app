@@ -9,7 +9,9 @@ import { createAuthWrapper } from '../utils/auth-wrapper.js';
  * Priority order:
  * 1. x-forwarded-host header (highest priority for proxy detection)
  * 2. BASE_URL environment variable (explicit user configuration)
- * 3. host header (fallback when not behind proxy)
+ * 3. origin header (from request - contains public URL if available)
+ * 4. referer header (fallback from request)
+ * 5. host header (fallback when not behind proxy)
  */
 function deriveBASEUrl(
   request: FastifyRequest,
@@ -21,6 +23,8 @@ function deriveBASEUrl(
   // Handle case where header might be string or string[] (multi-value)
   const xForwardedHostHeader = Array.isArray(xForwardedHostRaw) ? xForwardedHostRaw[0] : xForwardedHostRaw;
   const envBaseUrl = process.env.BASE_URL;
+  const originHeader = request.headers.origin;
+  const refererHeader = request.headers.referer;
 
   // Check if host is localhost (indicates proxied/tunneled environment)
   const isHostLocalhost = hostHeader && (hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1'));
@@ -57,8 +61,42 @@ function deriveBASEUrl(
       return { url: null, source: 'invalid BASE_URL format', detectedLocalhost: false };
     }
   }
-  // Priority 3: host header (fallback when not behind proxy)
-  else if (hostHeader && !isHostLocalhost) {
+  // Priority 3: origin header (from request - contains public URL if available)
+  else if (originHeader && !originHeader.includes('localhost') && !originHeader.includes('127.0.0.1')) {
+    try {
+      const originUrl = new URL(originHeader);
+      resolvedHost = originUrl.host;
+      source = 'origin header';
+      logger.info(
+        { originHeader, resolvedHost, proto },
+        'BASE_URL derived from origin header'
+      );
+    } catch (error) {
+      logger.debug(
+        { originHeader, err: error },
+        'Could not parse origin header'
+      );
+    }
+  }
+  // Priority 4: referer header (fallback from request)
+  if (!resolvedHost && refererHeader && !refererHeader.includes('localhost') && !refererHeader.includes('127.0.0.1')) {
+    try {
+      const refererUrl = new URL(refererHeader);
+      resolvedHost = refererUrl.host;
+      source = 'referer header';
+      logger.info(
+        { refererHeader, resolvedHost, proto },
+        'BASE_URL derived from referer header'
+      );
+    } catch (error) {
+      logger.debug(
+        { refererHeader, err: error },
+        'Could not parse referer header'
+      );
+    }
+  }
+  // Priority 5: host header (fallback when not behind proxy)
+  if (!resolvedHost && hostHeader && !isHostLocalhost) {
     resolvedHost = hostHeader;
     source = 'host header';
     logger.info(
@@ -66,30 +104,41 @@ function deriveBASEUrl(
       'BASE_URL derived from host header'
     );
   }
-  // Error case: localhost detected but can't determine public URL
-  else if (isHostLocalhost) {
+  // Error case: localhost detected but can't determine public URL from fallbacks
+  if (!resolvedHost && isHostLocalhost) {
     detectedLocalhost = true;
     logger.error(
-      { hostHeader, xForwardedHostHeader, envBaseUrl },
+      {
+        hostHeader,
+        xForwardedHostHeader,
+        originHeader,
+        refererHeader,
+        envBaseUrl,
+        availableHeaders: {
+          host: !!hostHeader,
+          'x-forwarded-host': !!xForwardedHostHeader,
+          origin: !!originHeader,
+          referer: !!refererHeader,
+          'BASE_URL env': !!envBaseUrl
+        }
+      },
       'Detected localhost in host header - cannot determine public URL. Set BASE_URL environment variable or configure x-forwarded-host in proxy.'
     );
-    return { url: null, source: 'none - localhost detected without x-forwarded-host or BASE_URL', detectedLocalhost: true };
+    return { url: null, source: 'none - localhost detected without fallback sources', detectedLocalhost: true };
   }
   // Final error: no host information available
-  else {
-    logger.error(
-      { hostHeader, xForwardedHostHeader },
-      'Could not determine BASE_URL - no host, x-forwarded-host, or BASE_URL available'
-    );
-    return { url: null, source: 'none - headers missing', detectedLocalhost: false };
-  }
-
   if (!resolvedHost) {
     logger.error(
-      { hostHeader, xForwardedHostHeader, envBaseUrl },
-      'Could not determine BASE_URL host'
+      {
+        hostHeader,
+        xForwardedHostHeader,
+        originHeader,
+        refererHeader,
+        envBaseUrl
+      },
+      'Could not determine BASE_URL - no host, x-forwarded-host, origin, referer, or BASE_URL available'
     );
-    return { url: null, source: 'none - could not extract host', detectedLocalhost };
+    return { url: null, source: 'none - no sources available', detectedLocalhost: false };
   }
 
   const url = `${proto}://${resolvedHost}`;
