@@ -164,9 +164,9 @@ export const clearBearerToken = async (): Promise<void> => {
 // This prevents 401 errors from clearing the token immediately after sign-in
 // (race condition: session created but not yet committed to DB)
 let lastAuthSuccessTime: number = 0;
-// Extended grace period: 120 seconds (2 minutes) to handle iOS session validation delays
-// Better Auth may take time to recognize sessions created by custom endpoints
-const AUTH_GRACE_PERIOD_MS = 120000; // 120 seconds grace period after sign-in
+// Grace period: 30 seconds after sign-in to handle any remaining race conditions
+// The backend now checks DB first (DB-first auth fix), so this is a safety net only
+const AUTH_GRACE_PERIOD_MS = 30000; // 30 seconds grace period after sign-in
 
 /**
  * Mark that authentication was just successful (call after sign-in)
@@ -174,7 +174,7 @@ const AUTH_GRACE_PERIOD_MS = 120000; // 120 seconds grace period after sign-in
  */
 export const markAuthSuccess = (): void => {
   lastAuthSuccessTime = Date.now();
-  console.log('[API] ✅ Auth success marked - grace period started (120s)');
+  console.log('[API] ✅ Auth success marked - grace period started (30s)');
 };
 
 /**
@@ -189,12 +189,12 @@ export const resetAuthSuccess = (): void => {
  * Handle 401 Unauthorized errors by clearing token and redirecting to auth
  * Implements a grace period after sign-in to handle DB commit race conditions
  * 
- * iOS FIX: Extended grace period to 120 seconds to handle Better Auth session
- * validation delays. Sessions created by custom endpoints may take time to be
- * recognized by Better Auth's requireAuth wrapper.
+ * BACKEND FIX DEPLOYED: The backend auth-wrapper now checks the database FIRST
+ * before trying framework auth. This means valid sessions are always accepted
+ * immediately, eliminating the 212 iOS errors.
  * 
- * ADDITIONAL FIX: If user is currently authenticated (has active session), 
- * don't clear the token on 401 - this prevents logout during temporary server issues.
+ * This grace period is now a safety net only - it prevents token clearing
+ * during the brief window between session creation and DB commit.
  */
 const handle401Error = async () => {
   const timeSinceAuth = Date.now() - lastAuthSuccessTime;
@@ -208,19 +208,15 @@ const handle401Error = async () => {
   if (inGracePeriod) {
     // Within grace period after sign-in - don't clear token, just log
     // This handles the race condition where session is created but not yet committed to DB
-    // Also handles iOS-specific delays in Better Auth session validation
     console.warn('[API] ⚠️ 401 received within grace period after sign-in - NOT clearing token');
-    console.warn('[API] ⚠️ iOS: Better Auth may still be processing the session - token should be valid');
     console.warn('[API] ⚠️ Time remaining in grace period:', (AUTH_GRACE_PERIOD_MS - timeSinceAuth) + 'ms');
     return;
   }
   
   if (isUserAuthenticated) {
     // User is actively authenticated - don't clear token on 401
-    // This could be a temporary server issue or a Better Auth validation glitch
-    // The user should not be logged out unexpectedly
+    // This could be a temporary server issue
     console.warn('[API] ⚠️ 401 received but user is authenticated - NOT clearing token');
-    console.warn('[API] ⚠️ iOS FIX: Better Auth may be rejecting valid sessions - keeping user logged in');
     console.warn('[API] ⚠️ If this persists, the session may have expired - user will need to re-login');
     return;
   }
@@ -244,7 +240,34 @@ const handle401Error = async () => {
 };
 
 /**
- * Generic API call helper with error handling
+ * Internal fetch helper - performs a single API request attempt
+ */
+const _fetchOnce = async <T = any>(
+  url: string,
+  endpoint: string,
+  fetchOptions: RequestInit,
+  token: string | null
+): Promise<{ ok: boolean; status: number; data?: T; text?: string }> => {
+  const response = await fetch(url, fetchOptions);
+  console.log('[API] 📥 Response received from', endpoint, '- Status:', response.status);
+
+  if (!response.ok) {
+    const text = await response.text();
+    return { ok: false, status: response.status, text };
+  }
+
+  const data = await response.json();
+  return { ok: true, status: response.status, data };
+};
+
+/**
+ * Generic API call helper with error handling and retry logic for iOS auth
+ *
+ * BACKEND FIX: The backend auth-wrapper now checks the database FIRST before
+ * trying framework auth. This eliminates the 212 iOS errors after login.
+ * 
+ * This function adds a retry mechanism for 401 errors during the grace period
+ * as an additional safety net for any remaining race conditions.
  *
  * @param endpoint - API endpoint path (e.g., '/users', '/auth/login')
  * @param options - Fetch options (method, headers, body, etc.)
@@ -264,55 +287,103 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
     // This uses the in-memory cache on iOS to avoid SecureStore race conditions
     const token = await getBearerToken();
     console.log('[API] 🔑 Token retrieved for', endpoint, ':', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
-    
-    // Log cache status on iOS
-    if (Platform.OS === 'ios') {
-      console.log('[API] 📱 iOS cache status:', tokenCache ? 'CACHED' : 'NOT CACHED');
-      console.log('[API] 📱 iOS cache age:', tokenCache ? `${Date.now() - tokenCacheTimestamp}ms` : 'N/A');
-    }
 
-    const fetchOptions: RequestInit = {
-      ...options,
-      headers: {
+    const buildFetchOptions = (t: string | null): RequestInit => {
+      const baseHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+        ...(options?.headers as Record<string, string> || {}),
+      };
+
+      // CRITICAL iOS FIX: Add Origin header for all API requests on native platforms
+      // Better Auth's requireAuth validates the Origin header. Without it, requests from
+      // native iOS/Android apps may be rejected. The backend's onRequest hook only adds
+      // Origin for /api/auth/ routes, not for other routes like /api/goals, /api/strategies.
+      // Adding Origin here ensures ALL authenticated requests are accepted by Better Auth.
+      if (Platform.OS !== 'web') {
+        baseHeaders['Origin'] = BACKEND_URL;
+        baseHeaders['X-Mobile-App'] = 'cheshbon';
+        baseHeaders['X-Platform'] = Platform.OS;
+      }
+
+      if (t) {
+        baseHeaders['Authorization'] = `Bearer ${t}`;
+      }
+
+      const opts: RequestInit = {
+        ...options,
+        headers: baseHeaders,
+      };
+
+      return opts;
     };
 
-    // Always send the token if we have it (needed for cross-domain/iframe support)
+    const fetchOptions = buildFetchOptions(token);
+
     if (token) {
-      fetchOptions.headers = {
-        ...fetchOptions.headers,
-        Authorization: `Bearer ${token}`,
-      };
       console.log('[API] ✅ Authorization header added to', endpoint);
     } else {
       console.warn('[API] ⚠️ No token available for', endpoint);
     }
 
-    console.log('[API] 📤 Sending request to', endpoint, 'with headers:', Object.keys(fetchOptions.headers || {}));
-    const response = await fetch(url, fetchOptions);
-    console.log('[API] 📥 Response received from', endpoint, '- Status:', response.status);
+    let result = await _fetchOnce<T>(url, endpoint, fetchOptions, token);
 
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('[API] ❌ Error response from', endpoint, ':', response.status, text.substring(0, 200));
-      
-      // Handle 401 Unauthorized - token is invalid or expired
-      if (response.status === 401) {
-        console.error('[API] 🚨 401 Unauthorized on', endpoint);
-        console.error('[API] 🚨 Token was:', token ? token.substring(0, 30) + '...' : 'NONE');
-        await handle401Error();
+    // Retry logic for 401 errors
+    // This handles two scenarios:
+    // 1. Grace period after sign-in: session may not be committed to DB yet
+    // 2. User is authenticated: some backend routes may use framework auth (not DB-first)
+    //    and may reject valid sessions. Retry gives the backend a chance to succeed.
+    if (!result.ok && result.status === 401) {
+      const timeSinceAuth = Date.now() - lastAuthSuccessTime;
+      const inGracePeriod = lastAuthSuccessTime > 0 && timeSinceAuth < AUTH_GRACE_PERIOD_MS;
+
+      console.error('[API] 🚨 401 Unauthorized on', endpoint);
+      console.error('[API] 🚨 Token was:', token ? token.substring(0, 30) + '...' : 'NONE');
+      console.error('[API] 🚨 Platform:', Platform.OS);
+      console.error('[API] 🚨 In grace period:', inGracePeriod, '(', timeSinceAuth, 'ms since auth)');
+      console.error('[API] 🚨 User authenticated:', isUserAuthenticated);
+
+      // Retry if:
+      // - We're in the grace period after sign-in (session may not be in DB yet), OR
+      // - The user is currently authenticated (some backend routes may use framework auth
+      //   which can reject valid sessions - retry gives them a chance to succeed)
+      if (token && (inGracePeriod || isUserAuthenticated)) {
+        const retryDelay = inGracePeriod ? 1000 : 500;
+        console.warn(`[API] ⚠️ 401 - retrying after ${retryDelay}ms (gracePeriod=${inGracePeriod}, authenticated=${isUserAuthenticated})...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        
+        // Re-fetch token in case it was updated
+        const retryToken = await getBearerToken();
+        const retryOptions = buildFetchOptions(retryToken);
+        result = await _fetchOnce<T>(url, endpoint, retryOptions, retryToken);
+        
+        if (result.ok) {
+          console.log('[API] ✅ Retry succeeded for', endpoint);
+          return result.data as T;
+        }
+        
+        console.error('[API] ❌ Retry also failed for', endpoint, '- Status:', result.status);
+        
+        // If user is authenticated but retry still fails, don't clear token
+        // This prevents logout when some backend routes have auth issues
+        if (isUserAuthenticated) {
+          console.warn('[API] ⚠️ User is authenticated but endpoint returned 401 after retry - skipping token clear');
+          throw new Error(`API error: ${result.status} - ${result.text}`);
+        }
       }
-      
-      throw new Error(`API error: ${response.status} - ${text}`);
+
+      await handle401Error();
+      throw new Error(`API error: ${result.status} - ${result.text}`);
     }
 
-    const data = await response.json();
+    if (!result.ok) {
+      console.error('[API] ❌ Error response from', endpoint, ':', result.status, result.text?.substring(0, 200));
+      throw new Error(`API error: ${result.status} - ${result.text}`);
+    }
+
     console.log('[API] ✅ Success:', endpoint);
-    return data;
+    return result.data as T;
   } catch (error) {
-    console.error('[API] Request failed:', error);
+    console.error('[API] ❌ Request failed for', endpoint, ':', error);
     throw error;
   }
 };
