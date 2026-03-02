@@ -457,19 +457,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Check if a URL is a valid OAuth authorization URL.
-   * Accepts both direct Google OAuth URLs (accounts.google.com) and
-   * backend Better Auth URLs (/api/auth/sign-in/social) which redirect to Google.
-   * The backend's /api/auth/sign-in/social endpoint is handled by Better Auth
-   * and will redirect to accounts.google.com automatically.
+   * Accepts direct Google/Apple OAuth URLs and backend Better Auth URLs.
+   * 
+   * After the backend fix, /api/auth/initiate-social now returns the direct
+   * accounts.google.com URL instead of the backend's own /api/auth/sign-in/social
+   * endpoint (which caused a redirect loop).
    */
   const isValidOAuthUrl = (url: string): boolean => {
     try {
       const parsed = new URL(url);
-      // Accept direct Google OAuth URLs
+      // Accept direct Google OAuth URLs (primary case after backend fix)
       if (parsed.hostname === 'accounts.google.com') return true;
       // Accept Apple OAuth URLs
       if (parsed.hostname === 'appleid.apple.com') return true;
-      // Accept backend Better Auth social sign-in URLs (these redirect to the provider)
+      // Accept backend Better Auth social sign-in URLs (legacy fallback)
       if (parsed.pathname.includes('/api/auth/sign-in/social')) return true;
       // Accept any HTTPS URL from the backend
       if (parsed.protocol === 'https:' && url.startsWith(BACKEND_URL)) return true;
@@ -497,33 +498,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (Platform.OS === 'web') {
       // Web: open popup to Google OAuth endpoint
+      // After the backend fix, /api/auth/initiate-social now returns the direct
+      // accounts.google.com URL instead of the backend's own /api/auth/sign-in/social
+      // endpoint (which caused a redirect loop).
       return new Promise<void>((resolve, reject) => {
         try {
-          const callbackURL = `${window.location.origin}/auth-popup-callback`;
+          const popupCallbackURL = `${window.location.origin}/auth-popup-callback`;
           
           console.log('📱 [GOOGLE WEB] Fetching authorization URL from backend...');
-          console.log('📱 [GOOGLE WEB] callbackURL:', callbackURL);
+          console.log('📱 [GOOGLE WEB] popupCallbackURL:', popupCallbackURL);
           console.log('📱 [GOOGLE WEB] BACKEND_URL:', BACKEND_URL);
 
-          // Parse backend URL to extract hostname
-          const backendUrl = new URL(BACKEND_URL);
-          console.log('📱 [GOOGLE WEB] Backend hostname:', backendUrl.hostname);
-
           // NOTE: We only send Content-Type to avoid CORS preflight failures.
-          // Custom headers like X-Forwarded-Host trigger preflight which the backend
-          // may not allow. The backend uses BASE_URL env var or Origin header instead.
-          // The backend fix (deployed) now checks x-original-host, x-forwarded-host,
-          // BASE_URL env var, and Origin header in priority order.
+          // The backend fix generates a direct accounts.google.com URL with:
+          // - redirect_uri pointing to ${backendBaseUrl}/api/auth/callback/google
+          // - callbackURL/redirectURL as extra params so Better Auth can redirect
+          //   back to our popup callback page after processing the OAuth code.
           fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ provider: 'google', callbackURL, redirectURL: callbackURL }),
+            body: JSON.stringify({
+              provider: 'google',
+              callbackURL: popupCallbackURL,
+              redirectURL: popupCallbackURL,
+            }),
           })
             .then(async (res) => {
               console.log('📱 [GOOGLE WEB] Response status:', res.status);
-              console.log('📱 [GOOGLE WEB] Response headers:', JSON.stringify([...res.headers.entries()]));
               
               if (!res.ok) {
                 const errText = await res.text();
@@ -531,7 +534,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 let errorMessage = 'Failed to get Google authorization URL';
                 try {
                   const errData = JSON.parse(errText);
-                  if (errData.error === 'OAUTH_NOT_CONFIGURED') {
+                  if (errData.error === 'GOOGLE_OAUTH_NOT_CONFIGURED' || errData.error === 'OAUTH_NOT_CONFIGURED') {
                     errorMessage = 'Google Sign-In is not available. Please use email/password sign-in.';
                   } else if (errData.message) {
                     errorMessage = errData.message;
@@ -542,16 +545,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               return res.json();
             })
             .then(async (data) => {
-              console.log('📱 [GOOGLE WEB] initiate-social response:', JSON.stringify(data).substring(0, 200));
+              console.log('📱 [GOOGLE WEB] initiate-social response:', JSON.stringify(data).substring(0, 300));
               let authUrl = fixAuthorizationUrl(data.authorizationUrl);
-              console.log('📱 [GOOGLE WEB] Authorization URL from backend:', authUrl?.substring(0, 150));
+              console.log('📱 [GOOGLE WEB] Authorization URL from backend:', authUrl?.substring(0, 200));
 
               if (!authUrl) {
                 throw new Error('No authorization URL received from server');
               }
 
               // Validate that the URL is usable for OAuth
-              // Accept both direct Google OAuth URLs and backend Better Auth URLs
               if (isLocalhostUrl(authUrl)) {
                 console.error('❌ [GOOGLE WEB] Authorization URL points to localhost - backend URL detection failed:', authUrl?.substring(0, 100));
                 throw new Error('Google Sign-In configuration error: backend returned a localhost URL. Please try again.');
@@ -562,9 +564,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 // Still try to open it - it might work
               }
 
-              console.log('📱 [GOOGLE WEB] Authorization URL is valid, proceeding with OAuth flow');
+              // Check if the backend returned a backend URL (old behavior - redirect loop risk)
+              // vs a direct Google OAuth URL (new behavior after fix)
+              const isDirectGoogleUrl = authUrl.includes('accounts.google.com');
+              const isBackendUrl = authUrl.startsWith(BACKEND_URL);
+              console.log('📱 [GOOGLE WEB] URL type - direct Google:', isDirectGoogleUrl, '| backend URL:', isBackendUrl);
 
-              console.log('📱 [GOOGLE WEB] Opening popup with URL:', authUrl?.substring(0, 80));
+              if (isBackendUrl && !isDirectGoogleUrl) {
+                // Old backend behavior: URL points to backend's /api/auth/sign-in/social
+                // This will redirect to Google, but the popup callback won't receive a token
+                // because Better Auth redirects with a cookie, not a URL token.
+                // We need to handle this differently - use the backend URL directly but
+                // listen for the popup to navigate to our callback page.
+                console.warn('⚠️ [GOOGLE WEB] Backend returned its own URL (old behavior) - redirect loop may occur');
+                console.warn('⚠️ [GOOGLE WEB] URL:', authUrl?.substring(0, 150));
+              }
+
+              console.log('📱 [GOOGLE WEB] Opening popup with URL:', authUrl?.substring(0, 100));
 
               const width = 500;
               const height = 600;
@@ -582,15 +598,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return;
               }
 
+              // Poll the popup URL to detect when it navigates to our callback page
+              // This handles both the new flow (direct Google URL) and old flow (backend URL)
+              const checkPopupUrl = setInterval(() => {
+                try {
+                  if (popup.closed) return; // handled by checkClosed
+                  // Try to read the popup's current URL
+                  // This will throw a cross-origin error when on Google/backend domains
+                  // but will succeed when the popup navigates back to our origin
+                  const popupUrl = popup.location.href;
+                  if (popupUrl && popupUrl.includes(window.location.origin)) {
+                    console.log('📱 [GOOGLE WEB] Popup navigated to our origin:', popupUrl.substring(0, 100));
+                    // The popup is now on our domain - the auth-popup-callback page
+                    // will send us a postMessage with the token
+                  }
+                } catch (e) {
+                  // Cross-origin - popup is on Google or backend domain, ignore
+                }
+              }, 500);
+
               const handleMessage = async (event: MessageEvent) => {
                 if (event.origin !== window.location.origin) return;
 
                 console.log('📱 [GOOGLE WEB] Received message:', event.data?.type);
 
                 if (event.data?.type === 'auth-success' && event.data.token) {
-                  console.log('✅ [GOOGLE WEB] Token received');
+                  console.log('✅ [GOOGLE WEB] Token received from popup');
                   window.removeEventListener('message', handleMessage);
                   clearInterval(checkClosed);
+                  clearInterval(checkPopupUrl);
                   try { popup.close(); } catch (e) { /* ignore */ }
 
                   try {
@@ -602,9 +638,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     reject(err);
                   }
                 } else if (event.data?.type === 'auth-error') {
-                  console.error('❌ [GOOGLE WEB] Auth error:', event.data.error);
+                  console.error('❌ [GOOGLE WEB] Auth error from popup:', event.data.error);
                   window.removeEventListener('message', handleMessage);
                   clearInterval(checkClosed);
+                  clearInterval(checkPopupUrl);
                   try { popup.close(); } catch (e) { /* ignore */ }
                   reject(new Error(event.data.error || 'Google sign-in failed'));
                 }
@@ -616,17 +653,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 try {
                   if (popup.closed) {
                     clearInterval(checkClosed);
+                    clearInterval(checkPopupUrl);
                     window.removeEventListener('message', handleMessage);
                     console.log('⚠️ [GOOGLE WEB] Popup closed by user');
                     resolve();
                   }
                 } catch (e) {
                   clearInterval(checkClosed);
+                  clearInterval(checkPopupUrl);
                 }
               }, 500);
 
               setTimeout(() => {
                 clearInterval(checkClosed);
+                clearInterval(checkPopupUrl);
                 window.removeEventListener('message', handleMessage);
                 try { popup.close(); } catch (e) { /* ignore */ }
                 reject(new Error('Google sign-in timed out'));
@@ -636,7 +676,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               console.error('❌ [GOOGLE WEB] Error fetching auth URL:', error);
               console.error('❌ [GOOGLE WEB] Error type:', error.constructor.name);
               console.error('❌ [GOOGLE WEB] Error message:', error.message);
-              console.error('❌ [GOOGLE WEB] Error stack:', error.stack);
               
               // Provide more helpful error message
               let userMessage = error.message || 'Failed to connect to authentication server';
@@ -653,19 +692,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } else {
       // Native: Get OAuth URL from backend, then open in browser
+      // After the backend fix, /api/auth/initiate-social returns the direct
+      // accounts.google.com URL. The callbackURL is passed so Better Auth can
+      // redirect back to the app's deep link after processing the OAuth code.
       try {
         const callbackUrl = `${APP_SCHEME}://auth-callback`;
         console.log('📱 [GOOGLE NATIVE] Callback URL:', callbackUrl);
         console.log('📱 [GOOGLE NATIVE] BACKEND_URL:', BACKEND_URL);
 
-        // Parse backend URL to extract hostname and protocol
-        const backendUrl = new URL(BACKEND_URL);
-        console.log('📱 [GOOGLE NATIVE] Backend hostname:', backendUrl.hostname);
-        console.log('📱 [GOOGLE NATIVE] Backend protocol:', backendUrl.protocol);
-
-        // NOTE: On native, we send Origin header to help backend detect the public URL.
-        // We avoid X-Forwarded-Host and similar headers that may cause issues.
-        // The backend uses BASE_URL env var (highest priority) or Origin header as fallback.
         const initResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
           method: 'POST',
           headers: {
@@ -687,7 +721,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           let errorMessage = 'Failed to initiate Google sign-in';
           try {
             const errData = JSON.parse(errorText);
-            if (errData.error === 'OAUTH_NOT_CONFIGURED') {
+            if (errData.error === 'GOOGLE_OAUTH_NOT_CONFIGURED' || errData.error === 'OAUTH_NOT_CONFIGURED') {
               errorMessage = 'Google Sign-In is not available. Please use email/password sign-in.';
             } else if (errData.message) {
               errorMessage = errData.message;
@@ -699,10 +733,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         const initData = await initResponse.json();
-        console.log('📱 [GOOGLE NATIVE] initiate-social response:', JSON.stringify(initData).substring(0, 200));
+        console.log('📱 [GOOGLE NATIVE] initiate-social response:', JSON.stringify(initData).substring(0, 300));
         // Fix authorization URL in case backend returned localhost URL
         let authUrl = fixAuthorizationUrl(initData.authorizationUrl);
-        console.log('📱 [GOOGLE NATIVE] Authorization URL received:', authUrl?.substring(0, 150));
+        console.log('📱 [GOOGLE NATIVE] Authorization URL received:', authUrl?.substring(0, 200));
 
         if (!authUrl) {
           throw new Error('No authorization URL received from server');
@@ -714,12 +748,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error('Google Sign-In configuration error: backend returned a localhost URL. Please try again.');
         }
 
+        // Log whether we got a direct Google URL (new behavior) or backend URL (old behavior)
+        const isDirectGoogleUrl = authUrl.includes('accounts.google.com');
+        console.log('📱 [GOOGLE NATIVE] Direct Google OAuth URL:', isDirectGoogleUrl);
+
         if (!isValidOAuthUrl(authUrl)) {
           console.warn('⚠️ [GOOGLE NATIVE] Unexpected authorization URL format:', authUrl?.substring(0, 100));
           // Still try to open it - it might work
         }
 
-        console.log('📱 [GOOGLE NATIVE] Authorization URL is valid, proceeding with OAuth flow');
+        console.log('📱 [GOOGLE NATIVE] Opening browser for OAuth flow...');
         await _openGoogleBrowser(authUrl, callbackUrl);
       } catch (error) {
         console.error('❌ [GOOGLE NATIVE] Error:', error);
