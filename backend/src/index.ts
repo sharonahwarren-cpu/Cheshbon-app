@@ -31,6 +31,12 @@ export type App = typeof app;
 
 // Enable authentication with Better Auth
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+
+// Validate that BASE_URL is set (critical for OAuth)
+if (!process.env.BASE_URL) {
+  app.logger.warn('BASE_URL environment variable not set. OAuth URLs may be incorrect. Set BASE_URL to your backend URL (e.g., https://api.example.com)');
+}
 
 // Validate OAuth credentials
 const hasGoogleOAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
@@ -95,6 +101,17 @@ if (Object.keys(socialProviders).length > 0) {
   app.logger.warn('No OAuth providers configured. Set GOOGLE_CLIENT_ID/SECRET and/or APPLE_CLIENT_ID/SECRET to enable social sign-in.');
   app.logger.warn('OAuth endpoints available but will return configuration errors: /api/auth/sign-in/social, /api/auth/sign-in/social-v1');
 }
+
+// Log environment setup at startup
+app.logger.info(
+  {
+    baseUrl,
+    frontendUrl,
+    googleOAuthConfigured: !!socialProviders.google,
+    appleOAuthConfigured: !!socialProviders.apple,
+  },
+  'Backend configuration'
+);
 
 app.withAuth({
   emailAndPassword: {
