@@ -7,75 +7,89 @@ import { createAuthWrapper } from '../utils/auth-wrapper.js';
 /**
  * Helper function to derive BASE_URL with proper handling for proxied/tunneled environments
  * Priority order:
- * 1. BASE_URL environment variable (if explicitly set)
- * 2. x-forwarded-host header (if host is localhost/127.0.0.1 - indicates proxy)
- * 3. host header (if x-forwarded-host not available or host is not localhost)
- * 4. localhost fallback (should rarely be used in production)
+ * 1. x-forwarded-host header (highest priority for proxy detection)
+ * 2. BASE_URL environment variable (explicit user configuration)
+ * 3. host header (fallback when not behind proxy)
  */
 function deriveBASEUrl(
   request: FastifyRequest,
   logger: any
 ): { url: string | null; source: string; detectedLocalhost: boolean } {
-  // Priority 1: Environment variable
-  const envBaseUrl = process.env.BASE_URL;
-  if (envBaseUrl) {
-    logger.info(
-      { baseUrl: envBaseUrl },
-      'BASE_URL resolved from environment variable'
-    );
-    return { url: envBaseUrl, source: 'environment variable', detectedLocalhost: false };
-  }
-
   const proto = request.headers['x-forwarded-proto'] || 'https';
   const hostHeader = request.headers.host;
   const xForwardedHostRaw = request.headers['x-forwarded-host'];
   // Handle case where header might be string or string[] (multi-value)
   const xForwardedHostHeader = Array.isArray(xForwardedHostRaw) ? xForwardedHostRaw[0] : xForwardedHostRaw;
+  const envBaseUrl = process.env.BASE_URL;
 
   // Check if host is localhost (indicates proxied/tunneled environment)
   const isHostLocalhost = hostHeader && (hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1'));
 
   let resolvedHost: string | undefined;
   let source: string;
+  let detectedLocalhost = false;
 
-  if (isHostLocalhost) {
-    // Host is localhost - we're likely in a proxied environment
-    // Priority 2a: Use x-forwarded-host if available (real public hostname)
-    if (xForwardedHostHeader) {
-      resolvedHost = xForwardedHostHeader;
-      source = 'x-forwarded-host header (host was localhost)';
-      logger.info(
-        { hostHeader, xForwardedHostHeader, resolvedHost, proto },
-        'Detected localhost in host header - using x-forwarded-host for public hostname'
-      );
-    } else {
-      // No x-forwarded-host available, fall back to localhost
-      resolvedHost = hostHeader;
-      source = 'host header (localhost, no x-forwarded-host available)';
-      logger.warn(
-        { hostHeader, proto },
-        'Detected localhost in host header but no x-forwarded-host available - using localhost'
-      );
-    }
-  } else {
-    // Host is not localhost
-    // Priority 2b: Use x-forwarded-host if available, otherwise use host
-    resolvedHost = xForwardedHostHeader || hostHeader;
-    source = xForwardedHostHeader
-      ? 'x-forwarded-host header'
-      : 'host header';
+  // Priority 1: x-forwarded-host header (for proxy detection - highest priority)
+  if (xForwardedHostHeader) {
+    resolvedHost = xForwardedHostHeader;
+    source = 'x-forwarded-host header';
     logger.info(
       { hostHeader, xForwardedHostHeader, resolvedHost, proto },
-      `BASE_URL derived from ${source}`
+      'BASE_URL derived from x-forwarded-host (proxy detected)'
     );
+  }
+  // Priority 2: BASE_URL environment variable (explicit user configuration)
+  else if (envBaseUrl) {
+    // Extract host from BASE_URL
+    try {
+      const baseUrlObj = new URL(envBaseUrl);
+      resolvedHost = baseUrlObj.host;
+      source = 'BASE_URL environment variable';
+      logger.info(
+        { baseUrl: envBaseUrl, resolvedHost, proto },
+        'BASE_URL resolved from environment variable'
+      );
+    } catch (error) {
+      logger.error(
+        { baseUrl: envBaseUrl, err: error },
+        'Invalid BASE_URL format'
+      );
+      return { url: null, source: 'invalid BASE_URL format', detectedLocalhost: false };
+    }
+  }
+  // Priority 3: host header (fallback when not behind proxy)
+  else if (hostHeader && !isHostLocalhost) {
+    resolvedHost = hostHeader;
+    source = 'host header';
+    logger.info(
+      { hostHeader, proto },
+      'BASE_URL derived from host header'
+    );
+  }
+  // Error case: localhost detected but can't determine public URL
+  else if (isHostLocalhost) {
+    detectedLocalhost = true;
+    logger.error(
+      { hostHeader, xForwardedHostHeader, envBaseUrl },
+      'Detected localhost in host header - cannot determine public URL. Set BASE_URL environment variable or configure x-forwarded-host in proxy.'
+    );
+    return { url: null, source: 'none - localhost detected without x-forwarded-host or BASE_URL', detectedLocalhost: true };
+  }
+  // Final error: no host information available
+  else {
+    logger.error(
+      { hostHeader, xForwardedHostHeader },
+      'Could not determine BASE_URL - no host, x-forwarded-host, or BASE_URL available'
+    );
+    return { url: null, source: 'none - headers missing', detectedLocalhost: false };
   }
 
   if (!resolvedHost) {
     logger.error(
-      { hostHeader, xForwardedHostHeader },
-      'Could not determine BASE_URL - no host or x-forwarded-host header present'
+      { hostHeader, xForwardedHostHeader, envBaseUrl },
+      'Could not determine BASE_URL host'
     );
-    return { url: null, source: 'none - headers missing', detectedLocalhost: false };
+    return { url: null, source: 'none - could not extract host', detectedLocalhost };
   }
 
   const url = `${proto}://${resolvedHost}`;
@@ -89,7 +103,7 @@ function deriveBASEUrl(
     );
   }
 
-  return { url, source, detectedLocalhost: isHostLocalhost };
+  return { url, source, detectedLocalhost };
 }
 
 export function registerAuthRoutes(app: App) {
