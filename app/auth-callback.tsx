@@ -1,83 +1,88 @@
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
-import { setBearerToken } from '@/utils/api';
-import { useAuth } from '@/contexts/AuthContext';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
+const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
+
+/**
+ * OAuth Callback Handler for Native Apps (iOS/Android)
+ * 
+ * This screen handles deep link callbacks from OAuth providers:
+ * - cheshbon://auth-callback?token=SESSION_TOKEN
+ * - cheshbon://auth-callback?session_token=SESSION_TOKEN
+ * 
+ * The token is extracted from the URL and saved to secure storage,
+ * then the user is redirected to the home screen.
+ */
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { fetchUser } = useAuth();
-  const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
-  const [errorMsg, setErrorMsg] = useState('');
+  const handledRef = useRef(false);
 
   useEffect(() => {
-    console.log('🔄 [AUTH CALLBACK] Screen mounted');
-    console.log('🔄 [AUTH CALLBACK] Params:', params);
-    handleCallback();
-  }, []);
-
-  const handleCallback = async () => {
-    try {
-      // Extract token from URL params (deep link: cheshbon://auth-callback?token=xxx)
-      const token = params.token as string;
-      const error = params.error as string;
-
-      if (error) {
-        console.error('❌ [AUTH CALLBACK] Error in callback:', error);
-        setErrorMsg(error);
-        setStatus('error');
-        setTimeout(() => router.replace('/auth'), 2000);
-        return;
-      }
-
-      if (token) {
-        console.log('✅ [AUTH CALLBACK] Token received, saving...');
-        await setBearerToken(token);
-        await fetchUser();
-        setStatus('success');
-        console.log('✅ [AUTH CALLBACK] Auth complete, redirecting to home...');
-        setTimeout(() => {
-          router.replace('/(tabs)/(home)');
-        }, 500);
-      } else {
-        console.log('⚠️ [AUTH CALLBACK] No token in params, redirecting to home...');
-        // No token - might be a direct navigation, just go home
-        setTimeout(() => {
-          router.replace('/(tabs)/(home)');
-        }, 1000);
-      }
-    } catch (err: any) {
-      console.error('❌ [AUTH CALLBACK] Error processing callback:', err);
-      setErrorMsg(err.message || 'Authentication failed');
-      setStatus('error');
-      setTimeout(() => router.replace('/auth'), 2000);
+    // Prevent double-handling
+    if (handledRef.current) {
+      console.log('⚠️ [AUTH CALLBACK] Already handled, skipping');
+      return;
     }
-  };
+
+    console.log('🔄 [AUTH CALLBACK] Processing OAuth callback...');
+    console.log('🔄 [AUTH CALLBACK] Params:', JSON.stringify(params));
+
+    const handleCallback = async () => {
+      try {
+        // Extract token from various possible parameter names
+        const token = 
+          (params.token as string) || 
+          (params.session_token as string) || 
+          (params.sessionToken as string) ||
+          (params.access_token as string) ||
+          (params.accessToken as string);
+
+        console.log('🔄 [AUTH CALLBACK] Token found:', token ? 'YES' : 'NO');
+
+        if (!token) {
+          console.error('❌ [AUTH CALLBACK] No token in callback URL');
+          console.error('❌ [AUTH CALLBACK] Available params:', Object.keys(params));
+          throw new Error('No authentication token received');
+        }
+
+        // Save token to secure storage
+        console.log('💾 [AUTH CALLBACK] Saving token...');
+        if (Platform.OS === 'web') {
+          localStorage.setItem(BEARER_TOKEN_KEY, token);
+        } else {
+          await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
+        }
+        console.log('✅ [AUTH CALLBACK] Token saved');
+
+        handledRef.current = true;
+
+        // Small delay to ensure token is saved
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Redirect to home - AuthBootstrap will detect the token and show the app
+        console.log('🔄 [AUTH CALLBACK] Redirecting to home...');
+        router.replace('/');
+      } catch (error) {
+        console.error('❌ [AUTH CALLBACK] Error:', error);
+        handledRef.current = true;
+        // Redirect to auth screen on error
+        router.replace('/auth');
+      }
+    };
+
+    handleCallback();
+  }, [params, router]);
 
   return (
     <View style={styles.container}>
-      {status === 'error' ? (
-        <>
-          <Text style={styles.errorIcon}>❌</Text>
-          <Text style={styles.errorMessage}>Authentication failed</Text>
-          <Text style={styles.errorDetail}>{errorMsg}</Text>
-          <Text style={styles.subMessage}>Redirecting to sign in...</Text>
-        </>
-      ) : status === 'success' ? (
-        <>
-          <Text style={styles.successIcon}>✅</Text>
-          <Text style={styles.message}>Sign in successful!</Text>
-          <Text style={styles.subMessage}>Redirecting...</Text>
-        </>
-      ) : (
-        <>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.message}>Completing sign in...</Text>
-        </>
-      )}
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={styles.text}>Completing sign in...</Text>
     </View>
   );
 }
@@ -88,40 +93,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: colors.background,
-    padding: 20,
+    padding: 24,
   },
-  message: {
-    fontSize: 18,
-    marginTop: 20,
-    textAlign: 'center',
+  text: {
+    marginTop: 16,
+    fontSize: 16,
     color: colors.text,
-    fontWeight: '600',
-  },
-  subMessage: {
-    fontSize: 14,
-    marginTop: 8,
     textAlign: 'center',
-    color: colors.textSecondary,
-  },
-  successIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  errorMessage: {
-    fontSize: 18,
-    marginTop: 8,
-    textAlign: 'center',
-    color: '#ef4444',
-    fontWeight: '600',
-  },
-  errorDetail: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-    color: colors.textSecondary,
   },
 });
