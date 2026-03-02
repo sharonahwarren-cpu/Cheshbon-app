@@ -455,11 +455,114 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return authUrl;
   };
 
+  /**
+   * Check if a URL is a real Google OAuth authorization URL
+   * (i.e., points to accounts.google.com, not a backend self-referencing URL)
+   */
+  const isRealGoogleOAuthUrl = (url: string): boolean => {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname === 'accounts.google.com';
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Check if a URL is a backend self-referencing URL that won't redirect to Google
+   * (e.g., https://backend.com/api/auth/sign-in/social?provider=google)
+   */
+  const isBackendSocialSignInUrl = (url: string): boolean => {
+    try {
+      const parsed = new URL(url);
+      return parsed.pathname.includes('/api/auth/sign-in/social') || 
+             parsed.pathname.includes('/api/auth/sign-in/');
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Build a Google OAuth URL by POSTing to Better Auth's sign-in/social endpoint
+   * and following the redirect. This is needed when the backend returns a self-referencing
+   * URL instead of the actual Google OAuth URL.
+   * 
+   * Better Auth's /api/auth/sign-in/social endpoint responds with a redirect (302)
+   * to the actual Google OAuth URL when called with POST.
+   */
+  const resolveGoogleOAuthUrl = async (backendSocialUrl: string): Promise<string> => {
+    console.log('📱 [GOOGLE] Resolving actual Google OAuth URL from backend social URL...');
+    console.log('📱 [GOOGLE] Backend social URL:', backendSocialUrl.substring(0, 100));
+    
+    try {
+      // Parse the backend URL to extract provider and callbackURL params
+      const parsed = new URL(backendSocialUrl);
+      const provider = parsed.searchParams.get('provider') || 'google';
+      const callbackURL = parsed.searchParams.get('callbackURL');
+      const redirectURL = parsed.searchParams.get('redirectURL');
+      
+      // POST to Better Auth's sign-in/social endpoint - it should return a redirect
+      // We use fetch with redirect: 'manual' to capture the redirect URL
+      const postBody: any = { provider };
+      if (callbackURL) postBody.callbackURL = callbackURL;
+      if (redirectURL) postBody.redirectURL = redirectURL;
+      
+      console.log('📱 [GOOGLE] POSTing to Better Auth sign-in/social endpoint...');
+      const response = await fetch(`${BACKEND_URL}/api/auth/sign-in/social`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Origin': BACKEND_URL,
+        },
+        body: JSON.stringify(postBody),
+        redirect: 'manual', // Don't follow redirects - capture the Location header
+      });
+      
+      console.log('📱 [GOOGLE] Better Auth response status:', response.status);
+      
+      // Better Auth should respond with 302 redirect to Google OAuth URL
+      if (response.status === 302 || response.status === 301) {
+        const location = response.headers.get('location');
+        console.log('📱 [GOOGLE] Redirect location:', location?.substring(0, 100));
+        if (location && isRealGoogleOAuthUrl(location)) {
+          console.log('✅ [GOOGLE] Got real Google OAuth URL from redirect');
+          return location;
+        }
+        if (location) {
+          console.log('📱 [GOOGLE] Got redirect but not to Google, using it anyway:', location.substring(0, 100));
+          return location;
+        }
+      }
+      
+      // Try to parse response body for URL
+      try {
+        const responseText = await response.text();
+        console.log('📱 [GOOGLE] Response body:', responseText.substring(0, 300));
+        const data = JSON.parse(responseText);
+        if (data.url && isRealGoogleOAuthUrl(data.url)) {
+          console.log('✅ [GOOGLE] Got real Google OAuth URL from response body');
+          return data.url;
+        }
+        if (data.authorizationUrl && isRealGoogleOAuthUrl(data.authorizationUrl)) {
+          console.log('✅ [GOOGLE] Got real Google OAuth URL from authorizationUrl field');
+          return data.authorizationUrl;
+        }
+      } catch { /* ignore parse errors */ }
+      
+      // Could not resolve - return original URL as fallback
+      console.warn('⚠️ [GOOGLE] Could not resolve real Google OAuth URL, using original');
+      return backendSocialUrl;
+    } catch (error) {
+      console.error('❌ [GOOGLE] Error resolving Google OAuth URL:', error);
+      return backendSocialUrl;
+    }
+  };
+
   const signInWithGoogle = async () => {
     console.log('📱 [GOOGLE] Initiating Google sign-in...');
 
     if (Platform.OS === 'web') {
-      // Web: open popup to Better Auth OAuth endpoint
+      // Web: open popup to Google OAuth endpoint
       return new Promise<void>((resolve, reject) => {
         try {
           const callbackURL = `${window.location.origin}/auth-popup-callback`;
@@ -475,7 +578,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (!res.ok) {
                 const errText = await res.text();
                 console.error('❌ [GOOGLE WEB] initiate-social failed:', errText);
-                // Parse the error response to provide a better message
                 let errorMessage = 'Failed to get Google authorization URL';
                 try {
                   const errData = JSON.parse(errText);
@@ -489,14 +591,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
               return res.json();
             })
-            .then((data) => {
-              // Fix authorization URL in case backend returned localhost URL
-              const authUrl = fixAuthorizationUrl(data.authorizationUrl);
-              console.log('📱 [GOOGLE WEB] Opening popup with URL:', authUrl?.substring(0, 80));
+            .then(async (data) => {
+              let authUrl = fixAuthorizationUrl(data.authorizationUrl);
+              console.log('📱 [GOOGLE WEB] Authorization URL from backend:', authUrl?.substring(0, 100));
 
               if (!authUrl) {
                 throw new Error('No authorization URL received from server');
               }
+
+              // If the backend returned a self-referencing URL (not a real Google OAuth URL),
+              // we need to resolve the actual Google OAuth URL by following the redirect
+              if (!isRealGoogleOAuthUrl(authUrl) && isBackendSocialSignInUrl(authUrl)) {
+                console.log('📱 [GOOGLE WEB] Backend returned self-referencing URL, resolving actual Google OAuth URL...');
+                authUrl = await resolveGoogleOAuthUrl(authUrl);
+                console.log('📱 [GOOGLE WEB] Resolved URL:', authUrl?.substring(0, 100));
+              }
+
+              // If still not a real Google OAuth URL, try direct POST to Better Auth
+              if (!isRealGoogleOAuthUrl(authUrl)) {
+                console.log('📱 [GOOGLE WEB] Still not a Google URL, trying direct Better Auth POST...');
+                const directUrl = await resolveGoogleOAuthUrl(
+                  `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackURL)}&redirectURL=${encodeURIComponent(callbackURL)}`
+                );
+                if (isRealGoogleOAuthUrl(directUrl)) {
+                  authUrl = directUrl;
+                  console.log('✅ [GOOGLE WEB] Got real Google OAuth URL via direct POST');
+                }
+              }
+
+              console.log('📱 [GOOGLE WEB] Opening popup with URL:', authUrl?.substring(0, 80));
 
               const width = 500;
               const height = 600;
@@ -597,7 +720,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!initResponse.ok) {
           const errorText = await initResponse.text();
           console.error('❌ [GOOGLE NATIVE] initiate-social failed:', errorText);
-          // Parse the error response to provide a better message
           let errorMessage = 'Failed to initiate Google sign-in';
           try {
             const errData = JSON.parse(errorText);
@@ -614,11 +736,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const initData = await initResponse.json();
         // Fix authorization URL in case backend returned localhost URL
-        const authUrl = fixAuthorizationUrl(initData.authorizationUrl);
+        let authUrl = fixAuthorizationUrl(initData.authorizationUrl);
         console.log('📱 [GOOGLE NATIVE] Authorization URL received:', authUrl?.substring(0, 100));
 
         if (!authUrl) {
           throw new Error('No authorization URL received from server');
+        }
+
+        // If the backend returned a self-referencing URL (not a real Google OAuth URL),
+        // resolve the actual Google OAuth URL by following the redirect
+        if (!isRealGoogleOAuthUrl(authUrl) && isBackendSocialSignInUrl(authUrl)) {
+          console.log('📱 [GOOGLE NATIVE] Backend returned self-referencing URL, resolving actual Google OAuth URL...');
+          authUrl = await resolveGoogleOAuthUrl(authUrl);
+          console.log('📱 [GOOGLE NATIVE] Resolved URL:', authUrl?.substring(0, 100));
+        }
+
+        // If still not a real Google OAuth URL, try direct POST to Better Auth
+        if (!isRealGoogleOAuthUrl(authUrl)) {
+          console.log('📱 [GOOGLE NATIVE] Still not a Google URL, trying direct Better Auth POST...');
+          const directUrl = await resolveGoogleOAuthUrl(
+            `${BACKEND_URL}/api/auth/sign-in/social?provider=google&callbackURL=${encodeURIComponent(callbackUrl)}`
+          );
+          if (isRealGoogleOAuthUrl(directUrl)) {
+            authUrl = directUrl;
+            console.log('✅ [GOOGLE NATIVE] Got real Google OAuth URL via direct POST');
+          }
         }
 
         await _openGoogleBrowser(authUrl, callbackUrl);
