@@ -149,15 +149,42 @@ export function registerGoalsTrackingRoutes(app: App) {
     request: FastifyRequest,
     reply: FastifyReply
   ) => {
+    const authHeader = request.headers.authorization;
+    const authHeaderTruncated = authHeader ? `${authHeader.substring(0, 20)}...` : 'none';
+
+    app.logger.info(
+      { path: request.url, authHeader: authHeaderTruncated },
+      'GET /api/goals/activated-today requested'
+    );
+
     const session = await requireAuth(request, reply);
-    if (!session) return;
+
+    // Log authentication result
+    if (!session) {
+      if (!reply.sent) {
+        app.logger.warn(
+          {
+            path: request.url,
+            hasAuthHeader: !!authHeader,
+            reason: 'Session is null from requireAuth',
+          },
+          'Authentication failed for /api/goals/activated-today'
+        );
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+      app.logger.debug({ path: request.url }, 'Response already sent by requireAuth');
+      return;
+    }
 
     const { date } = request.query as { date?: string };
 
     // Use provided date or default to today
     const requestedDate = date || new Date().toISOString().split('T')[0];
 
-    app.logger.info({ userId: session.user.id, requestedDate }, 'Fetching goals activated for date');
+    app.logger.info(
+      { userId: session.user.id, email: session.user.email, requestedDate },
+      'Fetching goals activated for date'
+    );
 
     try {
       const goals = await app.db
