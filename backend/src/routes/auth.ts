@@ -1,5 +1,7 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { user, session, account } from '../db/auth-schema.js';
+import { eq, and } from 'drizzle-orm';
 
 export function registerAuthRoutes(app: App) {
   const requireAuth = app.requireAuth();
@@ -731,7 +733,6 @@ export function registerAuthRoutes(app: App) {
                 name: { type: 'string' },
               },
             },
-            message: { type: 'string' },
           },
         },
         400: {
@@ -747,11 +748,11 @@ export function registerAuthRoutes(app: App) {
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<any> => {
-    const { id_token, code, user: userData } = request.body as any;
+    const { id_token, user: userData } = request.body as any;
     const origin = request.headers.origin || request.headers.host;
 
     app.logger.info(
-      { origin, hasIdToken: !!id_token, hasCode: !!code, hasUserData: !!userData },
+      { origin, hasIdToken: !!id_token, hasUserData: !!userData },
       'Apple native sign-in received'
     );
 
@@ -763,47 +764,171 @@ export function registerAuthRoutes(app: App) {
       });
     }
 
-    // Parse user data if provided (only on first sign-in)
-    let userInfo = null;
-    if (userData) {
-      try {
-        userInfo = typeof userData === 'string' ? JSON.parse(userData) : userData;
-        app.logger.info(
-          { userEmail: userInfo?.email, userName: userInfo?.name },
-          'Apple user data parsed'
-        );
-      } catch (err) {
-        app.logger.warn({ error: err }, 'Failed to parse user data');
+    try {
+      // Decode Apple id_token to extract claims
+      // Apple id_token is a JWT with format: header.payload.signature
+      const tokenParts = id_token.split('.');
+      if (tokenParts.length !== 3) {
+        app.logger.warn({ origin }, 'Apple id_token has invalid format');
+        return reply.status(400).send({
+          error: 'INVALID_TOKEN_FORMAT',
+          message: 'Apple identity token has invalid format',
+        });
       }
+
+      // Decode the payload (second part)
+      const payloadBase64 = tokenParts[1];
+      const payloadJson = Buffer.from(payloadBase64, 'base64').toString('utf-8');
+      const payload = JSON.parse(payloadJson);
+
+      app.logger.info(
+        { appleUserId: payload.sub, email: payload.email, emailVerified: payload.email_verified },
+        'Apple identity token decoded'
+      );
+
+      // Extract Apple User ID (sub claim) and email
+      const appleUserId = payload.sub;
+      let email = payload.email || userData?.email;
+      const name = userData?.name || payload.name;
+
+      if (!appleUserId) {
+        app.logger.warn({ origin }, 'Apple id_token missing sub claim');
+        return reply.status(400).send({
+          error: 'INVALID_TOKEN',
+          message: 'Apple identity token missing user identifier',
+        });
+      }
+
+      // Find or create user in database
+      // Look for existing user with this Apple account
+      let existingAccount = await app.db.query.account.findFirst({
+        where: and(eq(account.providerId, 'apple'), eq(account.accountId, appleUserId)),
+        with: { user: true },
+      }).catch(() => null);
+
+      let userId: string;
+
+      if (existingAccount?.user?.id) {
+        userId = existingAccount.user.id;
+        app.logger.info({ userId, appleUserId }, 'Existing user found for Apple account');
+      } else {
+        // Check if email-based user exists
+        let existingUser = null;
+        if (email) {
+          existingUser = await app.db.query.user.findFirst({
+            where: eq(user.email, email),
+          }).catch(() => null);
+        }
+
+        if (existingUser?.id) {
+          userId = existingUser.id;
+          app.logger.info({ userId, email }, 'Existing user found by email');
+        } else {
+          // Create new user
+          if (!email) {
+            app.logger.warn({ origin, appleUserId }, 'Cannot create user without email');
+            return reply.status(400).send({
+              error: 'MISSING_EMAIL',
+              message: 'Email is required for new user registration. On first sign-in, Apple should provide user email.',
+            });
+          }
+
+          userId = `user_${Math.random().toString(36).substr(2, 9)}`;
+
+          await app.db.insert(user).values({
+            id: userId,
+            name: name || email.split('@')[0],
+            email,
+            emailVerified: !!payload.email_verified,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+
+          app.logger.info(
+            { userId, email, appleUserId },
+            'New user created for Apple sign-in'
+          );
+        }
+      }
+
+      // Update user name if provided
+      if (name && email) {
+        const currentUser = await app.db.query.user.findFirst({
+          where: eq(user.id, userId),
+        }).catch(() => null);
+
+        if (currentUser && (!currentUser.name || currentUser.name.includes('@'))) {
+          await app.db.update(user).set({ name, updatedAt: new Date() }).where(eq(user.id, userId));
+        }
+      }
+
+      // Link Apple account if not already linked
+      const alreadyLinked = await app.db.query.account.findFirst({
+        where: and(eq(account.providerId, 'apple'), eq(account.accountId, appleUserId)),
+      }).catch(() => null);
+
+      if (!alreadyLinked) {
+        const accountId = `account_${Math.random().toString(36).substr(2, 9)}`;
+        await app.db.insert(account).values({
+          id: accountId,
+          accountId: appleUserId,
+          providerId: 'apple',
+          userId,
+          idToken: id_token,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        app.logger.info(
+          { userId, appleUserId, accountId },
+          'Apple account linked to user'
+        );
+      }
+
+      // Create session
+      const sessionToken = `session_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
+      const sessionId = `session_${Math.random().toString(36).substr(2, 9)}`;
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+      await app.db.insert(session).values({
+        id: sessionId,
+        token: sessionToken,
+        expiresAt,
+        userId,
+        ipAddress: (request.headers['x-forwarded-for'] as string) || request.socket.remoteAddress || null,
+        userAgent: request.headers['user-agent'] || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      app.logger.info(
+        { userId, sessionId, expiresAt: expiresAt.toISOString() },
+        'Session created for Apple sign-in'
+      );
+
+      // Fetch user data to return
+      const finalUser = await app.db.query.user.findFirst({
+        where: eq(user.id, userId),
+      });
+
+      return {
+        token: sessionToken,
+        user: {
+          id: finalUser?.id,
+          email: finalUser?.email,
+          name: finalUser?.name,
+        },
+      };
+    } catch (error) {
+      app.logger.error(
+        { err: error, origin },
+        'Error processing Apple native sign-in'
+      );
+      return reply.status(400).send({
+        error: 'AUTHENTICATION_FAILED',
+        message: 'Failed to process Apple identity token',
+      });
     }
-
-    // Better Auth will handle:
-    // 1. Verifying the id_token with Apple's public keys
-    // 2. Creating or updating the user based on the token
-    // 3. Creating a session
-    // We return a message that the client should complete the OAuth flow
-    // by redirecting to our OAuth endpoint
-
-    const backendBaseUrl = process.env.BASE_URL || `http://${origin}`;
-
-    // Ensure we don't have double protocol prefixes (e.g., http://https://)
-    const cleanBaseUrl = backendBaseUrl.startsWith('http://') || backendBaseUrl.startsWith('https://')
-      ? backendBaseUrl
-      : `https://${backendBaseUrl}`;
-
-    const authorizationUrl = `${cleanBaseUrl}/api/auth/sign-in/social?provider=apple&code=${encodeURIComponent(code || '')}&id_token=${encodeURIComponent(id_token)}`;
-
-    app.logger.info(
-      { origin, baseUrl: cleanBaseUrl, authorizationUrl: authorizationUrl.split('?')[0] },
-      'Apple native sign-in will complete OAuth flow'
-    );
-
-    // Return instructions for completing the OAuth flow
-    return {
-      success: true,
-      authorizationUrl,
-      message: 'Apple identity token received. Redirect to authorizationUrl to complete authentication.',
-    };
   });
 
   // POST /api/auth/oauth-redirect - Handle OAuth redirect with query parameters
