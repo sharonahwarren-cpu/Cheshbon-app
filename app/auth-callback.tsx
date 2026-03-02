@@ -23,7 +23,15 @@ export default function AuthCallbackScreen() {
 
     const handleCallback = async () => {
       try {
-        const token = params.token as string | undefined;
+        // Try to extract token from various possible parameter names
+        // Better Auth may use different parameter names depending on version/config
+        const token = (params.token as string | undefined) ||
+          (params.session_token as string | undefined) ||
+          (params.sessionToken as string | undefined) ||
+          (params.access_token as string | undefined);
+
+        console.log('🔗 [AUTH CALLBACK] Token found in params:', !!token);
+        console.log('🔗 [AUTH CALLBACK] All params:', JSON.stringify(params));
 
         if (!token) {
           console.error('❌ [AUTH CALLBACK] No token in URL params');

@@ -448,7 +448,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               if (!res.ok) {
                 const errText = await res.text();
                 console.error('❌ [GOOGLE WEB] initiate-social failed:', errText);
-                throw new Error('Failed to get Google authorization URL');
+                // Parse the error response to provide a better message
+                let errorMessage = 'Failed to get Google authorization URL';
+                try {
+                  const errData = JSON.parse(errText);
+                  if (errData.error === 'OAUTH_NOT_CONFIGURED') {
+                    errorMessage = 'Google Sign-In is not configured on this server. Please contact the administrator or use email/password sign-in.';
+                  } else if (errData.message) {
+                    errorMessage = errData.message;
+                  }
+                } catch { /* ignore parse errors */ }
+                throw new Error(errorMessage);
               }
               return res.json();
             })
@@ -555,7 +565,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!initResponse.ok) {
           const errorText = await initResponse.text();
           console.error('❌ [GOOGLE NATIVE] initiate-social failed:', errorText);
-          throw new Error(`Failed to initiate Google sign-in: ${errorText}`);
+          // Parse the error response to provide a better message
+          let errorMessage = 'Failed to initiate Google sign-in';
+          try {
+            const errData = JSON.parse(errorText);
+            if (errData.error === 'OAUTH_NOT_CONFIGURED') {
+              errorMessage = 'Google Sign-In is not configured on this server. Please contact the administrator or use email/password sign-in.';
+            } else if (errData.message) {
+              errorMessage = errData.message;
+            } else if (errData.error) {
+              errorMessage = `Failed to initiate Google sign-in: ${errData.error}`;
+            }
+          } catch { /* ignore parse errors */ }
+          throw new Error(errorMessage);
         }
 
         const initData = await initResponse.json();
