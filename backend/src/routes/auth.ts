@@ -309,19 +309,38 @@ export function registerAuthRoutes(app: App) {
     let authorizationUrl: string;
 
     if (provider === 'google') {
-      // Google OAuth is handled by Better Auth - delegate to Better Auth's social sign-in route
-      // Better Auth supports Google OAuth with platform-level configuration
-      // No need to check for explicit GOOGLE_CLIENT_ID/SECRET environment variables
+      // Generate direct Google OAuth authorization URL
+      const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 
-      authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}`;
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      if (!clientId) {
+        app.logger.error({ origin }, 'Google OAuth not configured - GOOGLE_CLIENT_ID not set');
+        return reply.status(400).send({
+          error: 'GOOGLE_OAUTH_NOT_CONFIGURED',
+          message: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID environment variable.',
+        });
+      }
+
+      // Generate a state parameter for CSRF protection
+      const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
+
+      googleAuthUrl.searchParams.append('client_id', clientId);
+      // Better Auth's callback endpoint
+      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/callback/google`);
+      googleAuthUrl.searchParams.append('response_type', 'code');
+      googleAuthUrl.searchParams.append('scope', 'openid email profile');
+      googleAuthUrl.searchParams.append('state', state);
 
       // Add custom parameters for frontend callback handling
+      // These will be preserved in the redirect back to our callback endpoint
       if (callbackURL) {
-        authorizationUrl += `&callbackURL=${encodeURIComponent(callbackURL)}`;
+        googleAuthUrl.searchParams.append('callbackURL', callbackURL);
       }
       if (redirectURL) {
-        authorizationUrl += `&redirectURL=${encodeURIComponent(redirectURL)}`;
+        googleAuthUrl.searchParams.append('redirectURL', redirectURL);
       }
+
+      authorizationUrl = googleAuthUrl.toString();
 
       app.logger.info(
         {
@@ -331,9 +350,11 @@ export function registerAuthRoutes(app: App) {
           detectedLocalhost,
           isMobile: !!callbackURL,
           hasCallbackURL: !!callbackURL,
-          betterAuthRoute: '/api/auth/sign-in/social'
+          redirectUri: `${backendBaseUrl}/api/auth/callback/google`,
+          oauthProviderHost: 'accounts.google.com',
+          authorizationUrl: authorizationUrl.substring(0, 100) + '...' // Log first 100 chars
         },
-        `Google OAuth delegated to Better Auth social sign-in route (BASE_URL source: ${urlSource})`
+        `Direct Google OAuth URL generated (BASE_URL source: ${urlSource})`
       );
     } else if (provider === 'apple') {
       // Generate Apple OAuth authorization URL directly from Apple's endpoint
@@ -1221,16 +1242,34 @@ export function registerAuthRoutes(app: App) {
     let authorizationUrl: string;
 
     if (provider === 'google') {
-      // Google OAuth is handled by Better Auth - delegate to Better Auth's social sign-in route
-      // Better Auth supports Google OAuth with platform-level configuration
-      // No need to check for explicit GOOGLE_CLIENT_ID/SECRET environment variables
+      // Generate direct Google OAuth authorization URL
+      const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 
-      authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}`;
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      if (!clientId) {
+        app.logger.error({}, 'Google OAuth not configured - GOOGLE_CLIENT_ID not set');
+        return reply.status(400).send({
+          error: 'GOOGLE_OAUTH_NOT_CONFIGURED',
+          message: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID environment variable.',
+        });
+      }
+
+      // Generate a state parameter for CSRF protection
+      const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
+
+      googleAuthUrl.searchParams.append('client_id', clientId);
+      // Better Auth's callback endpoint
+      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/callback/google`);
+      googleAuthUrl.searchParams.append('response_type', 'code');
+      googleAuthUrl.searchParams.append('scope', 'openid email profile');
+      googleAuthUrl.searchParams.append('state', state);
 
       // Add custom parameters for mobile app callback handling
       if (callbackUrl) {
-        authorizationUrl += `&callbackURL=${encodeURIComponent(callbackUrl)}`;
+        googleAuthUrl.searchParams.append('callbackURL', callbackUrl);
       }
+
+      authorizationUrl = googleAuthUrl.toString();
 
       app.logger.info(
         {
@@ -1240,9 +1279,11 @@ export function registerAuthRoutes(app: App) {
           detectedLocalhost,
           isMobile: !!callbackUrl,
           hasCallbackUrl: !!callbackUrl,
-          betterAuthRoute: '/api/auth/sign-in/social'
+          redirectUri: `${backendBaseUrl}/api/auth/callback/google`,
+          oauthProviderHost: 'accounts.google.com',
+          authorizationUrl: authorizationUrl.substring(0, 100) + '...' // Log first 100 chars
         },
-        `Google OAuth delegated to Better Auth social sign-in route (BASE_URL source: ${urlSource})`
+        `Direct Google OAuth URL generated (BASE_URL source: ${urlSource})`
       );
     } else if (provider === 'apple') {
       // Generate Apple OAuth authorization URL directly from Apple's endpoint
