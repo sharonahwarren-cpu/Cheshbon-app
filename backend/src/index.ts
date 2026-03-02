@@ -137,23 +137,25 @@ app.withAuth({
   },
   socialProviders,
   trustedOrigins: [
-    // Always allow localhost
+    // Localhost for development (all ports)
     "http://localhost",
+    "http://localhost:*",
+    // Specific localhost ports
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:5173",
     "http://localhost:8081",
-    // Allow specific origins
+    // Specific origins
     "https://520cd74e-164f-40c1-aec1-273dae601c20.newly.dev",
-    // Allow environment-configured origin
+    // Environment-configured origin
     ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
-    // Allow wildcard subdomains
+    // Wildcard subdomains with protocol
     "https://*.newly.dev",
     "https://*.app.specular.dev",
-    // Allow mobile app schemes (don't require exact match for these)
-    "cheshbon://",
-    "Cheshbon://",
-    "exp://",
+    // Mobile app deep link schemes (with wildcard for path)
+    "cheshbon://*",
+    "Cheshbon://*",
+    "exp://*",
   ],
 });
 
@@ -207,20 +209,27 @@ app.logger.info(
       'POST /api/auth/oauth-start (OAuth flow initiation)',
       'POST /api/auth/oauth-redirect (OAuth redirect handler)',
       'POST /api/auth/apple-callback (Apple OAuth callback)',
+      'POST /api/auth/apple/native (Apple native sign-in with id_token)',
       'GET /api/auth/me (Get current user session - protected - use Bearer token)',
       'GET /api/auth/health (Health check)',
       'GET /api/auth/oauth-test (OAuth configuration test)',
-      'GET /api/auth/debug-session (Debug auth headers)',
+      'GET /api/auth/debug-session (Debug auth information and flow)',
     ],
     oauthProviders: Object.keys(socialProviders).length > 0 ? Object.keys(socialProviders) : ['NONE - check environment variables'],
     trustedOrigins: trustedOrigins,
     mobileSupport: {
-      deepLinkSchemes: ['cheshbon://', 'Cheshbon://', 'exp://'],
+      deepLinkSchemes: ['cheshbon://*', 'Cheshbon://*', 'exp://*'],
+      localhostSupport: ['http://localhost', 'http://localhost:*'],
       originHeaderHandling: 'Mobile requests without Origin header are automatically handled',
       bearerTokenSupport: 'Session tokens can be used as Bearer tokens in Authorization header',
     },
+    expectedResponseFormat: {
+      description: 'All sign-in endpoints return:',
+      token: 'SESSION_TOKEN',
+      user: '{ id, email, name }',
+    },
   },
-  'Authentication endpoints and OAuth configured'
+  'Authentication system ready'
 );
 
 await app.run();
