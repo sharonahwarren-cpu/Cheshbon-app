@@ -55,6 +55,8 @@ export function registerAuthRoutes(app: App) {
         'POST /api/auth/sign-out (Sign out)',
         'GET /api/auth/health (Health check)',
         'GET /api/auth/debug-session (Debug auth headers)',
+        'POST /api/auth/test-session (Create test session for debugging)',
+        'GET /api/auth/session-diagnostic (Diagnose session validation issues)',
       ],
       message: `OAuth configured for: ${providers.length > 0 ? providers.join(', ') : 'NONE - check environment variables'}`,
       configuration: {
@@ -304,24 +306,57 @@ export function registerAuthRoutes(app: App) {
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<any | void> => {
-    app.logger.info({ path: request.url }, 'GET /api/auth/me requested');
+    const authHeader = request.headers.authorization;
+    const authHeaderTruncated = authHeader ? `${authHeader.substring(0, 20)}...` : 'none';
+
+    app.logger.info(
+      { path: request.url, authHeader: authHeaderTruncated },
+      'GET /api/auth/me requested'
+    );
 
     try {
+      // Log the authorization header format
+      if (!authHeader) {
+        app.logger.warn({ url: request.url }, 'Missing Authorization header');
+      } else if (!authHeader.startsWith('Bearer ')) {
+        app.logger.warn(
+          { url: request.url, authFormat: authHeader.substring(0, 10) },
+          'Authorization header has invalid format (expected Bearer)'
+        );
+      }
+
       const session = await requireAuth(request, reply);
 
       // If requireAuth already sent a response (e.g., 401), don't send another
       if (reply.sent) {
-        app.logger.debug({ url: request.url }, 'Auth validation already sent response');
+        app.logger.debug(
+          { url: request.url, statusCode: reply.statusCode },
+          'Auth validation already sent response'
+        );
         return;
       }
 
       if (!session) {
-        app.logger.debug({ url: request.url, hasAuthHeader: !!request.headers.authorization }, 'No session found in request');
+        app.logger.warn(
+          {
+            url: request.url,
+            hasAuthHeader: !!authHeader,
+            authHeaderPresent: !!request.headers.authorization,
+            reason: 'requireAuth returned null',
+          },
+          'No valid session found after requireAuth check'
+        );
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
       app.logger.info(
-        { userId: session.user.id, email: session.user.email, hasToken: !!session.session.token },
+        {
+          userId: session.user?.id,
+          email: session.user?.email,
+          hasToken: !!session.session?.token,
+          tokenTruncated: session.session?.token ? `${session.session.token.substring(0, 20)}...` : 'none',
+          expiresAt: session.session?.expiresAt,
+        },
         'User session retrieved successfully'
       );
 
@@ -337,10 +372,229 @@ export function registerAuthRoutes(app: App) {
     } catch (error) {
       // Only send error response if one hasn't been sent yet
       if (!reply.sent) {
-        app.logger.error({ err: error, url: request.url }, 'Error retrieving user session');
+        app.logger.error(
+          {
+            err: error,
+            url: request.url,
+            authHeaderPresent: !!authHeader,
+            errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            errorName: error instanceof Error ? error.name : 'Unknown',
+          },
+          'Error retrieving user session'
+        );
         return reply.status(401).send({ error: 'Unauthorized' });
       }
       return;
+    }
+  });
+
+  // POST /api/auth/test-session - Test session creation and validation
+  app.fastify.post('/api/auth/test-session', {
+    schema: {
+      description: 'Test endpoint for session creation and validation (development only)',
+      tags: ['auth'],
+      body: {
+        type: 'object',
+        properties: {
+          userId: { type: 'string', description: 'User ID to test with' },
+        },
+        required: ['userId'],
+      },
+      response: {
+        200: {
+          type: 'object',
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const { userId } = request.body as { userId: string };
+
+    try {
+      app.logger.info({ userId }, 'Test session endpoint called');
+
+      // Create a test session
+      const testToken = `test_session_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
+      const testSessionId = `test_${Math.random().toString(36).substr(2, 9)}`;
+      const testExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      app.logger.debug({ testSessionId, userId, testToken: `${testToken.substring(0, 30)}...` }, 'Creating test session');
+
+      // Verify user exists
+      const userExists = await app.db.query.user.findFirst({
+        where: eq(user.id, userId),
+      }).catch(() => null);
+
+      if (!userExists) {
+        app.logger.warn({ userId }, 'Test user does not exist');
+        return reply.status(400).send({ error: 'User not found' });
+      }
+
+      // Create session
+      await app.db.insert(session).values({
+        id: testSessionId,
+        token: testToken,
+        expiresAt: testExpiresAt,
+        userId,
+        ipAddress: request.socket.remoteAddress || null,
+        userAgent: request.headers['user-agent'] || null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      app.logger.info({ testSessionId, userId }, 'Test session created');
+
+      // Verify it can be read back
+      const retrievedSession = await app.db.query.session.findFirst({
+        where: eq(session.token, testToken),
+      }).catch((err) => {
+        app.logger.error({ err }, 'Error retrieving test session');
+        return null;
+      });
+
+      if (!retrievedSession) {
+        app.logger.error({ testToken: `${testToken.substring(0, 30)}...` }, 'Test session could not be retrieved');
+        return reply.status(500).send({
+          error: 'Session validation failed',
+          message: 'Created session could not be retrieved from database',
+        });
+      }
+
+      app.logger.info(
+        { testSessionId, userId: retrievedSession.userId, expiresAt: retrievedSession.expiresAt },
+        'Test session retrieved successfully'
+      );
+
+      // Clean up - delete test session
+      await app.db.delete(session).where(eq(session.id, testSessionId)).catch(() => null);
+
+      return {
+        success: true,
+        testResults: {
+          sessionCreated: true,
+          sessionRetrieved: true,
+          userId: retrievedSession.userId,
+          expiresAt: retrievedSession.expiresAt,
+          message: 'Session creation and retrieval working correctly',
+          testToken: testToken,
+          bearerToken: `Bearer ${testToken}`,
+          usage: 'Use the bearerToken above in Authorization header to test authenticated requests',
+        },
+      };
+    } catch (error) {
+      app.logger.error({ err: error }, 'Test session endpoint error');
+      return reply.status(500).send({
+        error: 'Test failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // GET /api/auth/session-diagnostic - Diagnostic endpoint for session debugging
+  app.fastify.get('/api/auth/session-diagnostic', {
+    schema: {
+      description: 'Diagnostic endpoint to debug session and authentication issues (development only)',
+      tags: ['auth'],
+      response: {
+        200: {
+          type: 'object',
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const authHeader = request.headers.authorization;
+    const authHeaderTruncated = authHeader ? `${authHeader.substring(0, 30)}...` : 'none';
+
+    app.logger.info({ path: request.url, authHeader: authHeaderTruncated }, 'Session diagnostic requested');
+
+    try {
+      // Extract token from Authorization header
+      let tokenFromHeader = null;
+      if (authHeader?.startsWith('Bearer ')) {
+        tokenFromHeader = authHeader.substring(7);
+        app.logger.debug(
+          { tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
+          'Bearer token extracted from header'
+        );
+      }
+
+      // Try to find the session in the database
+      let sessionInDb = null;
+      if (tokenFromHeader) {
+        sessionInDb = await app.db.query.session.findFirst({
+          where: eq(session.token, tokenFromHeader),
+        }).catch((err) => {
+          app.logger.error({ err }, 'Error querying session by token');
+          return null;
+        });
+
+        if (sessionInDb) {
+          app.logger.info(
+            { sessionId: sessionInDb.id, userId: sessionInDb.userId, expiresAt: sessionInDb.expiresAt },
+            'Session found in database'
+          );
+        } else {
+          app.logger.warn(
+            { tokenTruncated: `${tokenFromHeader.substring(0, 30)}...` },
+            'Session token not found in database'
+          );
+        }
+      }
+
+      // Try requireAuth to see what it returns
+      const authResult = await requireAuth(request, reply).catch((err) => {
+        app.logger.error({ err }, 'requireAuth threw an error');
+        return null;
+      });
+
+      app.logger.info(
+        { hasAuthResult: !!authResult, replySent: reply.sent },
+        'requireAuth check completed'
+      );
+
+      if (reply.sent) {
+        return { diagnostic: 'requireAuth already sent a response', statusCode: reply.statusCode };
+      }
+
+      // Get all sessions for debugging (limit to 5 most recent)
+      const allSessions = await app.db.query.session.findMany({
+        orderBy: (session, { desc }) => [desc(session.createdAt)],
+        limit: 5,
+      }).catch(() => []);
+
+      return {
+        diagnostic: {
+          timestamp: new Date().toISOString(),
+          authHeaderPresent: !!authHeader,
+          authHeaderFormat: authHeader?.substring(0, 10) || 'none',
+          tokenExtracted: !!tokenFromHeader,
+          sessionFoundInDb: !!sessionInDb,
+          requireAuthResult: {
+            hasSession: !!authResult,
+            hasUser: !!authResult?.user,
+            userId: authResult?.user?.id || 'none',
+          },
+          recentSessions: allSessions.map((s) => ({
+            id: s.id,
+            userId: s.userId,
+            tokenTruncated: `${s.token?.substring(0, 20)}...` || 'none',
+            expiresAt: s.expiresAt,
+            createdAt: s.createdAt,
+          })),
+          message: 'Use this endpoint to diagnose session and authentication issues',
+        },
+      };
+    } catch (error) {
+      app.logger.error({ err: error }, 'Error in session diagnostic endpoint');
+      return {
+        error: 'Diagnostic failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
     }
   });
 
@@ -432,6 +686,11 @@ export function registerAuthRoutes(app: App) {
       },
       bearerTokenUsage: 'Use token in Authorization header: Bearer SESSION_TOKEN',
       mobileNote: 'Mobile apps do not need Origin header, use deep link schemes: cheshbon://, Cheshbon://, exp://',
+      diagnosticEndpoints: {
+        sessionDiagnostic: 'GET /api/auth/session-diagnostic - Debug session validation with your current token',
+        testSession: 'POST /api/auth/test-session with { userId } - Create and validate a test session',
+        description: 'Use these endpoints to diagnose 401 authentication failures',
+      },
     };
   });
 
@@ -902,6 +1161,11 @@ export function registerAuthRoutes(app: App) {
       const sessionId = `session_${Math.random().toString(36).substr(2, 9)}`;
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
+      app.logger.debug(
+        { sessionToken: `${sessionToken.substring(0, 20)}...`, sessionId, userId },
+        'Preparing to create session'
+      );
+
       await app.db.insert(session).values({
         id: sessionId,
         token: sessionToken,
@@ -914,21 +1178,51 @@ export function registerAuthRoutes(app: App) {
       });
 
       app.logger.info(
-        { userId, sessionId, expiresAt: expiresAt.toISOString() },
-        'Session created for Apple sign-in'
+        { userId, sessionId, sessionTokenTruncated: `${sessionToken.substring(0, 20)}...`, expiresAt: expiresAt.toISOString() },
+        'Session created successfully for Apple sign-in'
       );
+
+      // Verify session was created
+      const verifySession = await app.db.query.session.findFirst({
+        where: eq(session.id, sessionId),
+      }).catch(() => null);
+
+      if (verifySession) {
+        app.logger.debug(
+          { sessionId, verifiedToken: !!verifySession.token, userId: verifySession.userId },
+          'Session creation verified in database'
+        );
+      } else {
+        app.logger.warn(
+          { sessionId, userId },
+          'Session creation could not be verified in database'
+        );
+      }
 
       // Fetch user data to return
       const finalUser = await app.db.query.user.findFirst({
         where: eq(user.id, userId),
       });
 
+      if (!finalUser) {
+        app.logger.error({ userId }, 'User not found after session creation');
+        return reply.status(400).send({
+          error: 'USER_NOT_FOUND',
+          message: 'User data could not be retrieved',
+        });
+      }
+
+      app.logger.info(
+        { userId: finalUser.id, email: finalUser.email, tokenTruncated: `${sessionToken.substring(0, 20)}...` },
+        'Apple native sign-in completed successfully'
+      );
+
       return {
         token: sessionToken,
         user: {
-          id: finalUser?.id,
-          email: finalUser?.email,
-          name: finalUser?.name,
+          id: finalUser.id,
+          email: finalUser.email,
+          name: finalUser.name,
         },
       };
     } catch (error) {
