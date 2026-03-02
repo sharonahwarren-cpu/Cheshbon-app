@@ -456,27 +456,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Check if a URL is a real Google OAuth authorization URL
-   * (i.e., points to accounts.google.com, not a backend self-referencing URL)
+   * Check if a URL is a valid OAuth authorization URL.
+   * Accepts both direct Google OAuth URLs (accounts.google.com) and
+   * backend Better Auth URLs (/api/auth/sign-in/social) which redirect to Google.
+   * The backend's /api/auth/sign-in/social endpoint is handled by Better Auth
+   * and will redirect to accounts.google.com automatically.
    */
-  const isRealGoogleOAuthUrl = (url: string): boolean => {
+  const isValidOAuthUrl = (url: string): boolean => {
     try {
       const parsed = new URL(url);
-      return parsed.hostname === 'accounts.google.com';
+      // Accept direct Google OAuth URLs
+      if (parsed.hostname === 'accounts.google.com') return true;
+      // Accept Apple OAuth URLs
+      if (parsed.hostname === 'appleid.apple.com') return true;
+      // Accept backend Better Auth social sign-in URLs (these redirect to the provider)
+      if (parsed.pathname.includes('/api/auth/sign-in/social')) return true;
+      // Accept any HTTPS URL from the backend
+      if (parsed.protocol === 'https:' && url.startsWith(BACKEND_URL)) return true;
+      return false;
     } catch {
       return false;
     }
   };
 
   /**
-   * Check if a URL is a backend self-referencing URL that won't redirect to Google
-   * (e.g., https://backend.com/api/auth/sign-in/social?provider=google)
+   * Check if a URL is a localhost URL that cannot be used for OAuth
+   * (indicates the backend failed to detect the public URL)
    */
-  const isBackendSocialSignInUrl = (url: string): boolean => {
+  const isLocalhostUrl = (url: string): boolean => {
     try {
       const parsed = new URL(url);
-      return parsed.pathname.includes('/api/auth/sign-in/social') || 
-             parsed.pathname.includes('/api/auth/sign-in/');
+      return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
     } catch {
       return false;
     }
@@ -496,7 +506,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Forwarded-Host': new URL(BACKEND_URL).hostname,
+              'X-Forwarded-Proto': 'https',
+            },
             body: JSON.stringify({ provider: 'google', callbackURL, redirectURL: callbackURL }),
           })
             .then(async (res) => {
@@ -525,16 +539,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 throw new Error('No authorization URL received from server');
               }
 
-              // Validate that the backend returned a real Google OAuth URL
-              // The backend fix ensures /api/auth/initiate-social returns accounts.google.com URL
-              if (!isRealGoogleOAuthUrl(authUrl)) {
-                console.warn('⚠️ [GOOGLE WEB] Backend did not return a Google OAuth URL:', authUrl?.substring(0, 100));
-                // If it's a backend self-referencing URL, it means the backend fix hasn't taken effect
-                // In this case, we cannot proceed - the backend must return the Google OAuth URL
-                if (isBackendSocialSignInUrl(authUrl)) {
-                  throw new Error('Google Sign-In is not properly configured on the server. Please try again later or use email/password sign-in.');
-                }
+              // Validate that the URL is usable for OAuth
+              // Accept both direct Google OAuth URLs and backend Better Auth URLs
+              if (isLocalhostUrl(authUrl)) {
+                console.error('❌ [GOOGLE WEB] Authorization URL points to localhost - backend URL detection failed:', authUrl?.substring(0, 100));
+                throw new Error('Google Sign-In configuration error: backend returned a localhost URL. Please try again.');
               }
+
+              if (!isValidOAuthUrl(authUrl)) {
+                console.warn('⚠️ [GOOGLE WEB] Unexpected authorization URL format:', authUrl?.substring(0, 100));
+                // Still try to open it - it might work
+              }
+
+              console.log('📱 [GOOGLE WEB] Authorization URL is valid, proceeding with OAuth flow');
 
               console.log('📱 [GOOGLE WEB] Opening popup with URL:', authUrl?.substring(0, 80));
 
@@ -625,6 +642,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             'Content-Type': 'application/json',
             'X-Mobile-App': 'cheshbon',
             'Origin': BACKEND_URL,
+            'X-Forwarded-Host': new URL(BACKEND_URL).hostname,
+            'X-Forwarded-Proto': 'https',
           },
           body: JSON.stringify({
             provider: 'google',
@@ -661,14 +680,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           throw new Error('No authorization URL received from server');
         }
 
-        // Validate that the backend returned a real Google OAuth URL
-        if (!isRealGoogleOAuthUrl(authUrl)) {
-          console.warn('⚠️ [GOOGLE NATIVE] Backend did not return a Google OAuth URL:', authUrl?.substring(0, 100));
-          if (isBackendSocialSignInUrl(authUrl)) {
-            throw new Error('Google Sign-In is not properly configured on the server. Please try again later or use email/password sign-in.');
-          }
+        // Validate that the URL is usable for OAuth
+        if (isLocalhostUrl(authUrl)) {
+          console.error('❌ [GOOGLE NATIVE] Authorization URL points to localhost - backend URL detection failed:', authUrl?.substring(0, 100));
+          throw new Error('Google Sign-In configuration error: backend returned a localhost URL. Please try again.');
         }
 
+        if (!isValidOAuthUrl(authUrl)) {
+          console.warn('⚠️ [GOOGLE NATIVE] Unexpected authorization URL format:', authUrl?.substring(0, 100));
+          // Still try to open it - it might work
+        }
+
+        console.log('📱 [GOOGLE NATIVE] Authorization URL is valid, proceeding with OAuth flow');
         await _openGoogleBrowser(authUrl, callbackUrl);
       } catch (error) {
         console.error('❌ [GOOGLE NATIVE] Error:', error);
@@ -728,7 +751,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Forwarded-Host': new URL(BACKEND_URL).hostname,
+              'X-Forwarded-Proto': 'https',
+            },
             body: JSON.stringify({ provider: 'apple', callbackURL, redirectURL: callbackURL }),
           })
             .then(async (res) => {
