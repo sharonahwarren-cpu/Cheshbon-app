@@ -503,17 +503,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           console.log('📱 [GOOGLE WEB] Fetching authorization URL from backend...');
           console.log('📱 [GOOGLE WEB] callbackURL:', callbackURL);
+          console.log('📱 [GOOGLE WEB] BACKEND_URL:', BACKEND_URL);
 
+          // Parse backend URL to extract hostname
+          const backendUrl = new URL(BACKEND_URL);
+          console.log('📱 [GOOGLE WEB] Backend hostname:', backendUrl.hostname);
+
+          // NOTE: We only send Content-Type to avoid CORS preflight failures.
+          // Custom headers like X-Forwarded-Host trigger preflight which the backend
+          // may not allow. The backend uses BASE_URL env var or Origin header instead.
+          // The backend fix (deployed) now checks x-original-host, x-forwarded-host,
+          // BASE_URL env var, and Origin header in priority order.
           fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Forwarded-Host': new URL(BACKEND_URL).hostname,
-              'X-Forwarded-Proto': 'https',
             },
             body: JSON.stringify({ provider: 'google', callbackURL, redirectURL: callbackURL }),
           })
             .then(async (res) => {
+              console.log('📱 [GOOGLE WEB] Response status:', res.status);
+              console.log('📱 [GOOGLE WEB] Response headers:', JSON.stringify([...res.headers.entries()]));
+              
               if (!res.ok) {
                 const errText = await res.text();
                 console.error('❌ [GOOGLE WEB] initiate-social failed:', errText);
@@ -623,7 +634,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             })
             .catch((error) => {
               console.error('❌ [GOOGLE WEB] Error fetching auth URL:', error);
-              reject(error);
+              console.error('❌ [GOOGLE WEB] Error type:', error.constructor.name);
+              console.error('❌ [GOOGLE WEB] Error message:', error.message);
+              console.error('❌ [GOOGLE WEB] Error stack:', error.stack);
+              
+              // Provide more helpful error message
+              let userMessage = error.message || 'Failed to connect to authentication server';
+              if (error.message === 'Load failed' || error.message === 'Failed to fetch') {
+                userMessage = 'Network error: Could not connect to authentication server. Please check your internet connection and try again.';
+              }
+              
+              reject(new Error(userMessage));
             });
         } catch (error) {
           console.error('❌ [GOOGLE WEB] Error:', error);
@@ -635,15 +656,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const callbackUrl = `${APP_SCHEME}://auth-callback`;
         console.log('📱 [GOOGLE NATIVE] Callback URL:', callbackUrl);
+        console.log('📱 [GOOGLE NATIVE] BACKEND_URL:', BACKEND_URL);
 
+        // Parse backend URL to extract hostname and protocol
+        const backendUrl = new URL(BACKEND_URL);
+        console.log('📱 [GOOGLE NATIVE] Backend hostname:', backendUrl.hostname);
+        console.log('📱 [GOOGLE NATIVE] Backend protocol:', backendUrl.protocol);
+
+        // NOTE: On native, we send Origin header to help backend detect the public URL.
+        // We avoid X-Forwarded-Host and similar headers that may cause issues.
+        // The backend uses BASE_URL env var (highest priority) or Origin header as fallback.
         const initResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Mobile-App': 'cheshbon',
             'Origin': BACKEND_URL,
-            'X-Forwarded-Host': new URL(BACKEND_URL).hostname,
-            'X-Forwarded-Proto': 'https',
           },
           body: JSON.stringify({
             provider: 'google',
@@ -748,13 +776,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const callbackURL = `${window.location.origin}/auth-popup-callback`;
 
           console.log('📞 [APPLE WEB] Fetching authorization URL from backend...');
+          console.log('📞 [APPLE WEB] BACKEND_URL:', BACKEND_URL);
 
+          // Parse backend URL to extract hostname
+          const backendUrl = new URL(BACKEND_URL);
+          console.log('📞 [APPLE WEB] Backend hostname:', backendUrl.hostname);
+
+          // NOTE: We only send Content-Type to avoid CORS preflight failures.
+          // Custom headers like X-Forwarded-Host trigger preflight which the backend
+          // may not allow. The backend uses BASE_URL env var or Origin header instead.
           fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-Forwarded-Host': new URL(BACKEND_URL).hostname,
-              'X-Forwarded-Proto': 'https',
             },
             body: JSON.stringify({ provider: 'apple', callbackURL, redirectURL: callbackURL }),
           })
