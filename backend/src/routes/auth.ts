@@ -4,6 +4,94 @@ import { user, session, account } from '../db/auth-schema.js';
 import { eq, and } from 'drizzle-orm';
 import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
+/**
+ * Helper function to derive BASE_URL with proper handling for proxied/tunneled environments
+ * Priority order:
+ * 1. BASE_URL environment variable (if explicitly set)
+ * 2. x-forwarded-host header (if host is localhost/127.0.0.1 - indicates proxy)
+ * 3. host header (if x-forwarded-host not available or host is not localhost)
+ * 4. localhost fallback (should rarely be used in production)
+ */
+function deriveBASEUrl(
+  request: FastifyRequest,
+  logger: any
+): { url: string | null; source: string; detectedLocalhost: boolean } {
+  // Priority 1: Environment variable
+  const envBaseUrl = process.env.BASE_URL;
+  if (envBaseUrl) {
+    logger.info(
+      { baseUrl: envBaseUrl },
+      'BASE_URL resolved from environment variable'
+    );
+    return { url: envBaseUrl, source: 'environment variable', detectedLocalhost: false };
+  }
+
+  const proto = request.headers['x-forwarded-proto'] || 'https';
+  const hostHeader = request.headers.host;
+  const xForwardedHostRaw = request.headers['x-forwarded-host'];
+  // Handle case where header might be string or string[] (multi-value)
+  const xForwardedHostHeader = Array.isArray(xForwardedHostRaw) ? xForwardedHostRaw[0] : xForwardedHostRaw;
+
+  // Check if host is localhost (indicates proxied/tunneled environment)
+  const isHostLocalhost = hostHeader && (hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1'));
+
+  let resolvedHost: string | undefined;
+  let source: string;
+
+  if (isHostLocalhost) {
+    // Host is localhost - we're likely in a proxied environment
+    // Priority 2a: Use x-forwarded-host if available (real public hostname)
+    if (xForwardedHostHeader) {
+      resolvedHost = xForwardedHostHeader;
+      source = 'x-forwarded-host header (host was localhost)';
+      logger.info(
+        { hostHeader, xForwardedHostHeader, resolvedHost, proto },
+        'Detected localhost in host header - using x-forwarded-host for public hostname'
+      );
+    } else {
+      // No x-forwarded-host available, fall back to localhost
+      resolvedHost = hostHeader;
+      source = 'host header (localhost, no x-forwarded-host available)';
+      logger.warn(
+        { hostHeader, proto },
+        'Detected localhost in host header but no x-forwarded-host available - using localhost'
+      );
+    }
+  } else {
+    // Host is not localhost
+    // Priority 2b: Use x-forwarded-host if available, otherwise use host
+    resolvedHost = xForwardedHostHeader || hostHeader;
+    source = xForwardedHostHeader
+      ? 'x-forwarded-host header'
+      : 'host header';
+    logger.info(
+      { hostHeader, xForwardedHostHeader, resolvedHost, proto },
+      `BASE_URL derived from ${source}`
+    );
+  }
+
+  if (!resolvedHost) {
+    logger.error(
+      { hostHeader, xForwardedHostHeader },
+      'Could not determine BASE_URL - no host or x-forwarded-host header present'
+    );
+    return { url: null, source: 'none - headers missing', detectedLocalhost: false };
+  }
+
+  const url = `${proto}://${resolvedHost}`;
+
+  // Check if resolved URL is localhost in production
+  const isResolvedLocalhost = resolvedHost.includes('localhost') || resolvedHost.includes('127.0.0.1');
+  if (isResolvedLocalhost && process.env.NODE_ENV === 'production') {
+    logger.warn(
+      { url, nodeEnv: process.env.NODE_ENV, source },
+      'WARNING: BASE_URL resolved to localhost in production - OAuth redirects may fail'
+    );
+  }
+
+  return { url, source, detectedLocalhost: isHostLocalhost };
+}
+
 export function registerAuthRoutes(app: App) {
   const requireAuth = createAuthWrapper(app);
 
@@ -140,32 +228,18 @@ export function registerAuthRoutes(app: App) {
       app.logger.info({ origin }, 'Google OAuth requested - delegating to Better Auth');
     }
 
-    // Derive BASE_URL: use environment variable if set, otherwise derive from request headers
-    let backendBaseUrl = process.env.BASE_URL;
-    let urlSource = 'environment';
+    // Derive BASE_URL with proper handling for proxied environments
+    const { url: backendBaseUrl, source: urlSource, detectedLocalhost } = deriveBASEUrl(request, app.logger);
 
     if (!backendBaseUrl) {
-      // Try to derive from request headers
-      const proto = request.headers['x-forwarded-proto'] || 'https';
-      const host = request.headers['x-forwarded-host'] || request.headers.host;
-
-      if (host) {
-        backendBaseUrl = `${proto}://${host}`;
-        urlSource = 'derived from request headers';
-        app.logger.info(
-          { provider, derivedUrl: backendBaseUrl, proto, host },
-          'BASE_URL derived from request headers'
-        );
-      } else {
-        app.logger.error(
-          { provider, headers: { host: request.headers.host, xForwardedHost: request.headers['x-forwarded-host'] } },
-          'Could not determine BASE_URL from environment or request headers'
-        );
-        return reply.status(500).send({
-          error: 'SERVER_ERROR',
-          message: 'Backend URL could not be determined. Set BASE_URL environment variable or ensure Host header is present.',
-        });
-      }
+      app.logger.error(
+        { provider, headers: { host: request.headers.host, xForwardedHost: request.headers['x-forwarded-host'] } },
+        'Could not determine BASE_URL from environment or request headers'
+      );
+      return reply.status(500).send({
+        error: 'SERVER_ERROR',
+        message: 'Backend URL could not be determined. Set BASE_URL environment variable or ensure Host header is present.',
+      });
     }
 
     // Better Auth handles the actual OAuth redirect at /api/auth/sign-in/social
@@ -173,8 +247,15 @@ export function registerAuthRoutes(app: App) {
     const authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}${callbackURL ? `&callbackURL=${encodeURIComponent(callbackURL)}` : ''}${redirectURL ? `&redirectURL=${encodeURIComponent(redirectURL)}` : ''}`;
 
     app.logger.info(
-      { provider, backendBaseUrl, urlSource, isMobile: !!callbackURL, authorizationUrl: authorizationUrl.split('?')[0] },
-      `${provider} OAuth authorization URL prepared`
+      {
+        provider,
+        backendBaseUrl,
+        urlSource,
+        detectedLocalhost,
+        isMobile: !!callbackURL,
+        authorizationUrl: authorizationUrl.split('?')[0]
+      },
+      `${provider} OAuth authorization URL prepared (BASE_URL source: ${urlSource})`
     );
 
     return {
@@ -973,32 +1054,18 @@ export function registerAuthRoutes(app: App) {
 
     const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 
-    // Derive BASE_URL: use environment variable if set, otherwise derive from request headers
-    let backendBaseUrl = process.env.BASE_URL;
-    let urlSource = 'environment';
+    // Derive BASE_URL with proper handling for proxied environments
+    const { url: backendBaseUrl, source: urlSource, detectedLocalhost } = deriveBASEUrl(request, app.logger);
 
     if (!backendBaseUrl) {
-      // Try to derive from request headers
-      const proto = request.headers['x-forwarded-proto'] || 'https';
-      const host = request.headers['x-forwarded-host'] || request.headers.host;
-
-      if (host) {
-        backendBaseUrl = `${proto}://${host}`;
-        urlSource = 'derived from request headers';
-        app.logger.info(
-          { provider, derivedUrl: backendBaseUrl, proto, host },
-          'BASE_URL derived from request headers'
-        );
-      } else {
-        app.logger.error(
-          { provider, headers: { host: request.headers.host, xForwardedHost: request.headers['x-forwarded-host'] } },
-          'Could not determine BASE_URL from environment or request headers'
-        );
-        return reply.status(500).send({
-          error: 'SERVER_ERROR',
-          message: 'Backend URL could not be determined. Set BASE_URL environment variable or ensure Host header is present.',
-        });
-      }
+      app.logger.error(
+        { provider, headers: { host: request.headers.host, xForwardedHost: request.headers['x-forwarded-host'] } },
+        'Could not determine BASE_URL from environment or request headers'
+      );
+      return reply.status(500).send({
+        error: 'SERVER_ERROR',
+        message: 'Backend URL could not be determined. Set BASE_URL environment variable or ensure Host header is present.',
+      });
     }
 
     // The OAuth authorization URL will be generated by Better Auth
@@ -1006,8 +1073,14 @@ export function registerAuthRoutes(app: App) {
     const authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}${callbackUrl ? `&callbackURL=${encodeURIComponent(callbackUrl)}` : ''}`;
 
     app.logger.info(
-      { provider, backendBaseUrl, urlSource, authorizationUrl: authorizationUrl.split('?')[0] },
-      `${providerName} OAuth authorization URL prepared`
+      {
+        provider,
+        backendBaseUrl,
+        urlSource,
+        detectedLocalhost,
+        authorizationUrl: authorizationUrl.split('?')[0]
+      },
+      `${providerName} OAuth authorization URL prepared (BASE_URL source: ${urlSource})`
     );
 
     return {
