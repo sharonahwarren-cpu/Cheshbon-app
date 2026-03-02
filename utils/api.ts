@@ -29,9 +29,25 @@ export const isBackendConfigured = (): boolean => {
 export const getBearerToken = async (): Promise<string | null> => {
   try {
     if (Platform.OS === 'web') {
-      return localStorage.getItem(BEARER_TOKEN_KEY);
+      const token = localStorage.getItem(BEARER_TOKEN_KEY);
+      console.log('[API] Web token retrieved:', token ? 'YES' : 'NO');
+      return token;
     } else {
-      return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+      console.log('[API] Retrieving token from SecureStore...');
+      const token = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+      console.log('[API] SecureStore token retrieved:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
+      
+      // iOS-specific: If no token found, wait a bit and try again
+      // This handles race conditions where token is being written
+      if (!token && Platform.OS === 'ios') {
+        console.log('[API] iOS: No token found, retrying after delay...');
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const retryToken = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+        console.log('[API] iOS retry result:', retryToken ? 'YES' : 'NO');
+        return retryToken;
+      }
+      
+      return token;
     }
   } catch (error) {
     console.error('[API] Error retrieving bearer token:', error);
@@ -87,6 +103,10 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
   console.log('[API] Calling:', url, options?.method || 'GET');
 
   try {
+    // CRITICAL: Retrieve token BEFORE building fetch options to avoid race conditions
+    const token = await getBearerToken();
+    console.log('[API] Token retrieved:', token ? `YES (${token.substring(0, 20)}...)` : 'NO');
+
     const fetchOptions: RequestInit = {
       ...options,
       headers: {
@@ -95,16 +115,18 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
       },
     };
 
-    console.log('[API] Fetch options:', fetchOptions);
-
     // Always send the token if we have it (needed for cross-domain/iframe support)
-    const token = await getBearerToken();
     if (token) {
       fetchOptions.headers = {
         ...fetchOptions.headers,
         Authorization: `Bearer ${token}`,
       };
+      console.log('[API] Authorization header added');
+    } else {
+      console.warn('[API] ⚠️ No token available for authenticated request');
     }
+
+    console.log('[API] Request headers:', JSON.stringify(fetchOptions.headers));
 
     const response = await fetch(url, fetchOptions);
 
@@ -115,7 +137,7 @@ export const apiCall = async <T = any>(endpoint: string, options?: RequestInit):
     }
 
     const data = await response.json();
-    console.log('[API] Success:', data);
+    console.log('[API] Success:', endpoint);
     return data;
   } catch (error) {
     console.error('[API] Request failed:', error);

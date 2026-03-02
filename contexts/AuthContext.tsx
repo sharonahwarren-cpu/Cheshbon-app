@@ -64,11 +64,21 @@ async function saveToken(token: string): Promise<void> {
       localStorage.setItem(BEARER_TOKEN_KEY, token);
     } else {
       await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
-      // Add a small delay on iOS to ensure SecureStore write completes
+      // CRITICAL iOS FIX: Add delay to ensure SecureStore write completes
       // This prevents race conditions where subsequent API calls try to read
       // the token before it's fully persisted
       if (Platform.OS === 'ios') {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        console.log('⏳ [AUTH] iOS: Waiting for SecureStore to persist...');
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Verify the token was actually saved
+        const verifyToken = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+        if (verifyToken === token) {
+          console.log('✅ [AUTH] iOS: Token verified in SecureStore');
+        } else {
+          console.error('❌ [AUTH] iOS: Token verification failed!');
+          throw new Error('Failed to persist token to SecureStore');
+        }
       }
     }
     console.log('✅ [AUTH] Token saved successfully');
