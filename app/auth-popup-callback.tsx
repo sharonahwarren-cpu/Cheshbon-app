@@ -12,12 +12,19 @@ const BACKEND_URL =
 /**
  * OAuth Popup Callback Handler for Web
  * This page is opened in a popup window during Google/Apple OAuth on web.
- * It extracts the token from URL params and sends it back to the parent window.
  * 
- * Better Auth may return the token in different ways:
- * - As a query param: ?token=...
- * - As a session_token param: ?session_token=...
- * - Via a cookie (handled by fetching /api/auth/me)
+ * Flow:
+ * 1. User clicks "Continue with Google" in the parent window
+ * 2. Parent opens this page in a popup
+ * 3. This page redirects to Google OAuth (via backend's /api/auth/initiate-social)
+ * 4. Google redirects back to backend's /api/auth/callback/google
+ * 5. Backend processes the OAuth code, creates a session, and redirects to this page
+ *    with a token parameter: /auth-popup-callback?token=...
+ * 6. This page extracts the token and sends it to the parent window via postMessage
+ * 7. Parent window receives the token, saves it, and closes the popup
+ * 
+ * The backend (after the fix) returns the actual Google OAuth URL from /api/auth/initiate-social,
+ * so the popup goes directly to accounts.google.com instead of a backend self-referencing URL.
  */
 export default function AuthPopupCallbackScreen() {
   const params = useLocalSearchParams();
@@ -29,13 +36,15 @@ export default function AuthPopupCallbackScreen() {
 
     const handleCallback = async () => {
       try {
+        // Check for OAuth error first
         const error = params.error as string | undefined;
+        const errorDescription = params.error_description as string | undefined;
 
         if (error) {
-          console.error('❌ [POPUP CALLBACK] OAuth error:', error);
+          console.error('❌ [POPUP CALLBACK] OAuth error:', error, errorDescription);
           if (window.opener) {
             window.opener.postMessage(
-              { type: 'auth-error', error },
+              { type: 'auth-error', error: errorDescription || error },
               window.location.origin
             );
           }
@@ -43,13 +52,17 @@ export default function AuthPopupCallbackScreen() {
         }
 
         // Try to extract token from various possible parameter names
-        // Better Auth may use different parameter names depending on version/config
+        // The backend (after the fix) redirects to this page with a token parameter
+        // after successfully processing the Google OAuth callback
         const token = (params.token as string | undefined) ||
           (params.session_token as string | undefined) ||
           (params.sessionToken as string | undefined) ||
           (params.access_token as string | undefined);
 
         console.log('🪟 [POPUP CALLBACK] Token found in params:', !!token);
+        if (token) {
+          console.log('🪟 [POPUP CALLBACK] Token length:', token.length);
+        }
 
         if (token) {
           console.log('✅ [POPUP CALLBACK] Token received from URL params, sending to parent window...');
@@ -61,15 +74,25 @@ export default function AuthPopupCallbackScreen() {
               window.location.origin
             );
             console.log('✅ [POPUP CALLBACK] Message sent to parent, closing popup...');
-            window.close();
+            // Small delay to ensure message is received before closing
+            setTimeout(() => {
+              try { window.close(); } catch (e) { /* ignore */ }
+            }, 300);
           } else {
             console.error('❌ [POPUP CALLBACK] No window.opener available');
+            // If no opener, we might be in a redirect flow - try to handle gracefully
+            // Store token in sessionStorage so the main window can pick it up
+            try {
+              sessionStorage.setItem('oauth_token', token);
+              console.log('🪟 [POPUP CALLBACK] Token stored in sessionStorage as fallback');
+            } catch (e) { /* ignore */ }
           }
           return;
         }
 
         // No token in URL params - try fetching from /api/auth/me using cookies
-        // Better Auth may have set a session cookie after OAuth
+        // This handles the case where Better Auth sets a session cookie after OAuth
+        // instead of redirecting with a token parameter
         console.log('🪟 [POPUP CALLBACK] No token in URL params, trying /api/auth/me with cookies...');
         try {
           const meResponse = await fetch(`${BACKEND_URL}/api/auth/me`, {
@@ -92,7 +115,9 @@ export default function AuthPopupCallbackScreen() {
                   window.location.origin
                 );
                 console.log('✅ [POPUP CALLBACK] Message sent to parent, closing popup...');
-                window.close();
+                setTimeout(() => {
+                  try { window.close(); } catch (e) { /* ignore */ }
+                }, 300);
               }
               return;
             }
@@ -101,9 +126,22 @@ export default function AuthPopupCallbackScreen() {
           console.error('❌ [POPUP CALLBACK] Error fetching /api/auth/me:', meError);
         }
 
+        // Check if this is an intermediate page (e.g., the popup was opened with the Google OAuth URL
+        // and Google hasn't redirected back yet). In this case, we just wait.
+        const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+        const isGoogleCallback = currentUrl.includes('code=') || currentUrl.includes('state=');
+        
+        if (isGoogleCallback) {
+          console.log('🪟 [POPUP CALLBACK] Detected Google OAuth callback params (code/state) - backend should process these');
+          // The backend should have processed the code and redirected here with a token
+          // If we're here without a token, something went wrong with the backend processing
+          console.error('❌ [POPUP CALLBACK] Google OAuth code received but no token - backend may not have processed it correctly');
+        }
+
         // Still no token - report error
         console.error('❌ [POPUP CALLBACK] No token found in URL params or /api/auth/me');
         console.error('❌ [POPUP CALLBACK] URL params:', JSON.stringify(params));
+        console.error('❌ [POPUP CALLBACK] Full URL:', currentUrl.substring(0, 200));
         if (window.opener) {
           window.opener.postMessage(
             { type: 'auth-error', error: 'No authentication token received. Please try again.' },
