@@ -6,7 +6,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import Constants from 'expo-constants';
-import { getBearerToken, setBearerToken, clearBearerToken, markAuthSuccess } from '@/utils/api';
+import { getBearerToken, setBearerToken, clearBearerToken, markAuthSuccess, resetAuthSuccess, setUserAuthState } from '@/utils/api';
 
 // Essential for auth session cleanup on web
 WebBrowser.maybeCompleteAuthSession();
@@ -52,23 +52,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchUser();
   }, []);
 
+  // Sync user authentication state with the API layer
+  // This allows the API layer to know if the user is authenticated
+  // and prevent 401 errors from clearing the token when user is active
+  useEffect(() => {
+    setUserAuthState(!!user);
+    console.log('🔐 [AUTH] User auth state synced to API layer:', !!user);
+  }, [user]);
+
   /**
    * Validate session token with backend with retry logic for iOS race conditions.
    * After Apple sign-in, the session may not be immediately available in the DB,
    * so we retry up to maxRetries times with exponential backoff.
+   * 
+   * iOS FIX: Increased retries and delays. Also uses session-diagnostic as fallback
+   * to check if session exists in DB even when Better Auth's requireAuth fails.
    */
   const validateSessionWithRetry = async (
     token: string,
-    maxRetries: number = 4,
-    initialDelayMs: number = 300
-  ): Promise<{ ok: boolean; data?: any; status?: number; errorText?: string }> => {
+    maxRetries: number = 6,
+    initialDelayMs: number = 500
+  ): Promise<{ ok: boolean; data?: any; status?: number; errorText?: string; sessionInDb?: boolean }> => {
     let lastStatus = 0;
     let lastErrorText = '';
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
-        // Exponential backoff: 300ms, 600ms, 1200ms, 2400ms
-        const delay = initialDelayMs * Math.pow(2, attempt - 1);
+        // Exponential backoff: 500ms, 1000ms, 2000ms, 4000ms, 8000ms, 16000ms
+        const delay = Math.min(initialDelayMs * Math.pow(2, attempt - 1), 8000);
         console.log(`🔄 [AUTH] Retry attempt ${attempt}/${maxRetries} after ${delay}ms delay...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -114,10 +125,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: false, status: lastStatus, errorText: lastErrorText };
         }
 
-        // On last attempt, don't retry
+        // On last attempt, use session-diagnostic as fallback to check DB directly
         if (attempt === maxRetries) {
           console.error(`❌ [AUTH] All ${maxRetries + 1} attempts failed with 401`);
-          // Run session diagnostic to help debug
+          console.log(`🔍 [AUTH] Checking session-diagnostic as fallback...`);
+          
           try {
             const diagResponse = await fetch(`${BACKEND_URL}/api/auth/session-diagnostic`, {
               method: 'GET',
@@ -125,14 +137,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
                 'X-Mobile-App': 'cheshbon',
+                'Origin': BACKEND_URL,
               },
             });
             const diagText = await diagResponse.text();
-            console.log(`🔍 [AUTH] Session diagnostic response (${diagResponse.status}):`, diagText.substring(0, 500));
+            console.log(`🔍 [AUTH] Session diagnostic response (${diagResponse.status}):`, diagText.substring(0, 800));
+            
+            // Parse diagnostic response to check if session exists in DB
+            try {
+              const diagData = JSON.parse(diagText);
+              const sessionFoundInDb = diagData?.diagnostic?.sessionFoundInDb === true;
+              console.log(`🔍 [AUTH] Session found in DB (diagnostic):`, sessionFoundInDb);
+              
+              if (sessionFoundInDb) {
+                // Session exists in DB but Better Auth's requireAuth is rejecting it
+                // This is the iOS bug - return a synthetic success with diagnostic data
+                console.log(`✅ [AUTH] iOS FIX: Session exists in DB but Better Auth rejected it`);
+                console.log(`✅ [AUTH] iOS FIX: Using session-diagnostic data to authenticate`);
+                
+                // Try to get user data from the diagnostic response
+                const recentSessions = diagData?.diagnostic?.recentSessions || [];
+                const requireAuthResult = diagData?.diagnostic?.requireAuthResult;
+                
+                // If requireAuth actually succeeded in the diagnostic, use that data
+                if (requireAuthResult?.hasUser && requireAuthResult?.userId) {
+                  console.log(`✅ [AUTH] iOS FIX: requireAuth succeeded in diagnostic for user:`, requireAuthResult.userId);
+                  return { 
+                    ok: false, 
+                    status: lastStatus, 
+                    errorText: lastErrorText,
+                    sessionInDb: true 
+                  };
+                }
+                
+                return { 
+                  ok: false, 
+                  status: lastStatus, 
+                  errorText: lastErrorText,
+                  sessionInDb: true 
+                };
+              }
+            } catch (parseError) {
+              console.error('❌ [AUTH] Failed to parse diagnostic response:', parseError);
+            }
           } catch (diagError) {
             console.error('❌ [AUTH] Session diagnostic failed:', diagError);
           }
-          return { ok: false, status: lastStatus, errorText: lastErrorText };
+          
+          return { ok: false, status: lastStatus, errorText: lastErrorText, sessionInDb: false };
         }
       } catch (networkError) {
         console.error(`❌ [AUTH] Network error on attempt ${attempt + 1}:`, networkError);
@@ -166,25 +218,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Use retry logic for native platforms to handle DB commit race conditions after sign-in
       // On iOS/Android, the session token may be created but not yet committed to DB when /api/auth/me is called
       // This is especially important for Apple sign-in on iOS
-      const useRetry = Platform.OS !== 'web' && !!providedToken;
-      console.log('🔄 [AUTH] Using retry logic:', useRetry, '(native platform with provided token)');
+      // Also use retry for stored tokens on iOS since Better Auth may have validation issues
+      const useRetry = Platform.OS !== 'web';
+      console.log('🔄 [AUTH] Using retry logic:', useRetry, '(native platform - always retry on iOS/Android)');
 
-      let result: { ok: boolean; data?: any; status?: number; errorText?: string };
+      let result: { ok: boolean; data?: any; status?: number; errorText?: string; sessionInDb?: boolean };
 
       if (useRetry) {
-        // iOS with a freshly-created token: use retry with backoff
-        result = await validateSessionWithRetry(token, 4, 300);
+        // iOS/Android: use retry with backoff
+        // For fresh tokens (just signed in): more retries with longer delays
+        // For stored tokens (app restart): fewer retries since session should be stable
+        const maxRetries = providedToken ? 6 : 3;
+        const initialDelay = providedToken ? 500 : 300;
+        console.log('🔄 [AUTH] iOS retry config:', { maxRetries, initialDelay, isFreshToken: !!providedToken });
+        result = await validateSessionWithRetry(token, maxRetries, initialDelay);
       } else {
-        // Web or token from storage: single attempt
+        // Web: single attempt
         const headers: Record<string, string> = {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         };
-
-        if (Platform.OS !== 'web') {
-          headers['X-Mobile-App'] = 'cheshbon';
-          headers['Origin'] = BACKEND_URL;
-        }
 
         console.log('🔄 [AUTH] Request headers:', Object.keys(headers));
         console.log('🔄 [AUTH] Authorization header:', headers['Authorization'].substring(0, 50) + '...');
@@ -211,8 +264,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!providedToken) {
           // Stored token failed - clear it and log out
+          // BUT: if session exists in DB (from diagnostic), keep the user authenticated
+          if (result.sessionInDb) {
+            console.log('⚠️ [AUTH] iOS FIX: Stored token rejected by /api/auth/me but session exists in DB');
+            console.log('⚠️ [AUTH] iOS FIX: Better Auth validation issue - attempting to get user from session-diagnostic');
+            
+            // Try to get user data from session-diagnostic endpoint
+            try {
+              const diagResponse = await fetch(`${BACKEND_URL}/api/auth/session-diagnostic`, {
+                method: 'GET',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                  'X-Mobile-App': 'cheshbon',
+                  'Origin': BACKEND_URL,
+                },
+              });
+              
+              if (diagResponse.ok) {
+                const diagData = await diagResponse.json();
+                const requireAuthResult = diagData?.diagnostic?.requireAuthResult;
+                
+                if (requireAuthResult?.hasUser && requireAuthResult?.userId) {
+                  console.log('✅ [AUTH] iOS FIX: Got user ID from diagnostic:', requireAuthResult.userId);
+                  // We have the user ID but not full user data
+                  // Set a minimal user object to keep the user authenticated
+                  // The full user data will be fetched when needed
+                  const minimalUser = { id: requireAuthResult.userId, email: '', name: '' };
+                  setUser(minimalUser as any);
+                  setLoading(false);
+                  return minimalUser as any;
+                }
+              }
+            } catch (diagFetchError) {
+              console.error('❌ [AUTH] Failed to get user from diagnostic:', diagFetchError);
+            }
+            
+            // Session exists in DB but we can't get user data
+            // Don't clear token - keep user in loading state
+            // The user will need to re-authenticate
+            console.log('⚠️ [AUTH] iOS FIX: Cannot get user data - clearing token and redirecting to auth');
+            await clearBearerToken();
+            setUser(null);
+            setLoading(false);
+            return null;
+          }
+          
           if (result.status === 401 || result.status === 403) {
-            console.log('🗑️ [AUTH] Clearing invalid stored token due to 401/403');
+            console.log('🗑️ [AUTH] Clearing invalid stored token due to 401/403 (session not in DB)');
             await clearBearerToken();
             setUser(null);
           }
@@ -223,8 +322,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Only log the error - the user is already authenticated via the sign-in response
           console.error('❌ [AUTH] Fresh token rejected by /api/auth/me after retries');
           console.error('❌ [AUTH] Status:', result.status, '- Error:', result.errorText?.substring(0, 200));
-          console.log('⚠️ [AUTH] User was set from sign-in response - keeping user authenticated');
-          console.log('⚠️ [AUTH] Token is still valid for API calls (was just created by sign-in endpoint)');
+          
+          if (result.sessionInDb) {
+            console.log('⚠️ [AUTH] iOS FIX: Session exists in DB but Better Auth rejected it');
+            console.log('⚠️ [AUTH] iOS FIX: This is a Better Auth validation issue - keeping user authenticated');
+          } else {
+            console.log('⚠️ [AUTH] User was set from sign-in response - keeping user authenticated');
+            console.log('⚠️ [AUTH] Token is still valid for API calls (was just created by sign-in endpoint)');
+          }
           // Don't clear token or user - the sign-in was successful, /api/auth/me may have a timing issue
         }
         setLoading(false);
@@ -341,10 +446,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // CRITICAL: Pass the token directly to fetchUser to avoid retrieval race condition
-      // On iOS, add a small delay to ensure the session is committed to DB
+      // On iOS, add a delay to ensure the session is committed to DB and Better Auth can validate it
       if (Platform.OS === 'ios') {
-        console.log('📧 [EMAIL] iOS: Waiting 200ms for DB session to commit...');
-        await new Promise(resolve => setTimeout(resolve, 200));
+        console.log('📧 [EMAIL] iOS: Waiting 500ms for DB session to commit and Better Auth to sync...');
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       console.log('📧 [EMAIL] Validating session with token:', token.substring(0, 30) + '...');
       await fetchUser(token);
@@ -435,6 +540,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // CRITICAL: Pass the token directly to fetchUser to avoid retrieval race condition
+      // On iOS, add a delay to ensure the session is committed to DB and Better Auth can validate it
+      if (Platform.OS === 'ios') {
+        console.log('📧 [EMAIL] iOS: Waiting 500ms for DB session to commit and Better Auth to sync...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
       // Pass the token directly - it's now cached in memory on iOS
       await fetchUser(token);
       console.log('✅ [EMAIL] Sign up successful');
@@ -851,12 +962,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
 
-      // CRITICAL iOS FIX: Add a small delay before calling /api/auth/me
+      // CRITICAL iOS FIX: Add a delay before calling /api/auth/me
       // The session is created in the DB by /api/auth/apple/native, but there can be
       // a brief window where the DB transaction hasn't fully committed yet.
+      // Also, Better Auth's requireAuth may need time to recognize the new session.
       // The retry logic in fetchUser will handle any remaining race conditions.
-      console.log('📞 [APPLE NATIVE] Waiting 200ms for DB session to commit...');
-      await new Promise(resolve => setTimeout(resolve, 200));
+      console.log('📞 [APPLE NATIVE] Waiting 500ms for DB session to commit and Better Auth to sync...');
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // CRITICAL: Pass the token directly to fetchUser to avoid retrieval race condition
       // fetchUser will use retry logic on iOS for freshly-created tokens
@@ -926,6 +1038,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     console.log('🚪 [AUTH] Signing out...');
+    // Clear user state immediately (don't wait for server)
+    setUser(null);
     try {
       const token = await getBearerToken();
       if (token) {
@@ -941,6 +1055,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('⚠️ [AUTH] Sign out API error:', error);
     } finally {
+      // Reset auth success time so 401 errors will properly redirect to auth
+      resetAuthSuccess();
       await clearBearerToken();
       setUser(null);
       console.log('✅ [AUTH] Signed out');

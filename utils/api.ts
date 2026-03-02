@@ -4,6 +4,18 @@ import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 
+// Track if user is currently authenticated (set by AuthContext)
+// This prevents 401 errors from clearing the token when the user is actively using the app
+let isUserAuthenticated: boolean = false;
+
+/**
+ * Set the current authentication state (called by AuthContext)
+ */
+export const setUserAuthState = (authenticated: boolean): void => {
+  isUserAuthenticated = authenticated;
+  console.log('[API] 🔐 User auth state updated:', authenticated);
+};
+
 /**
  * Backend URL is configured in app.json under expo.extra.backendUrl
  * It is set automatically when the backend is deployed
@@ -152,7 +164,9 @@ export const clearBearerToken = async (): Promise<void> => {
 // This prevents 401 errors from clearing the token immediately after sign-in
 // (race condition: session created but not yet committed to DB)
 let lastAuthSuccessTime: number = 0;
-const AUTH_GRACE_PERIOD_MS = 10000; // 10 seconds grace period after sign-in
+// Extended grace period: 120 seconds (2 minutes) to handle iOS session validation delays
+// Better Auth may take time to recognize sessions created by custom endpoints
+const AUTH_GRACE_PERIOD_MS = 120000; // 120 seconds grace period after sign-in
 
 /**
  * Mark that authentication was just successful (call after sign-in)
@@ -160,12 +174,27 @@ const AUTH_GRACE_PERIOD_MS = 10000; // 10 seconds grace period after sign-in
  */
 export const markAuthSuccess = (): void => {
   lastAuthSuccessTime = Date.now();
-  console.log('[API] ✅ Auth success marked - grace period started (10s)');
+  console.log('[API] ✅ Auth success marked - grace period started (120s)');
+};
+
+/**
+ * Reset the auth success time (call when explicitly signing out)
+ */
+export const resetAuthSuccess = (): void => {
+  lastAuthSuccessTime = 0;
+  console.log('[API] 🔄 Auth success time reset');
 };
 
 /**
  * Handle 401 Unauthorized errors by clearing token and redirecting to auth
  * Implements a grace period after sign-in to handle DB commit race conditions
+ * 
+ * iOS FIX: Extended grace period to 120 seconds to handle Better Auth session
+ * validation delays. Sessions created by custom endpoints may take time to be
+ * recognized by Better Auth's requireAuth wrapper.
+ * 
+ * ADDITIONAL FIX: If user is currently authenticated (has active session), 
+ * don't clear the token on 401 - this prevents logout during temporary server issues.
  */
 const handle401Error = async () => {
   const timeSinceAuth = Date.now() - lastAuthSuccessTime;
@@ -173,17 +202,30 @@ const handle401Error = async () => {
   
   console.error('[API] 🚨 401 Unauthorized - Token is invalid or expired');
   console.log('[API] Time since last auth success:', timeSinceAuth + 'ms');
-  console.log('[API] In grace period:', inGracePeriod);
+  console.log('[API] In grace period:', inGracePeriod, '(grace period:', AUTH_GRACE_PERIOD_MS + 'ms)');
+  console.log('[API] User currently authenticated:', isUserAuthenticated);
   
   if (inGracePeriod) {
     // Within grace period after sign-in - don't clear token, just log
     // This handles the race condition where session is created but not yet committed to DB
+    // Also handles iOS-specific delays in Better Auth session validation
     console.warn('[API] ⚠️ 401 received within grace period after sign-in - NOT clearing token');
-    console.warn('[API] ⚠️ This is likely a DB commit race condition - token should be valid');
+    console.warn('[API] ⚠️ iOS: Better Auth may still be processing the session - token should be valid');
+    console.warn('[API] ⚠️ Time remaining in grace period:', (AUTH_GRACE_PERIOD_MS - timeSinceAuth) + 'ms');
     return;
   }
   
-  console.log('[API] Clearing invalid token and redirecting to auth...');
+  if (isUserAuthenticated) {
+    // User is actively authenticated - don't clear token on 401
+    // This could be a temporary server issue or a Better Auth validation glitch
+    // The user should not be logged out unexpectedly
+    console.warn('[API] ⚠️ 401 received but user is authenticated - NOT clearing token');
+    console.warn('[API] ⚠️ iOS FIX: Better Auth may be rejecting valid sessions - keeping user logged in');
+    console.warn('[API] ⚠️ If this persists, the session may have expired - user will need to re-login');
+    return;
+  }
+  
+  console.log('[API] Grace period expired and user not authenticated, clearing invalid token and redirecting to auth...');
   
   try {
     await clearBearerToken();

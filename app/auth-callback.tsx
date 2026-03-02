@@ -4,11 +4,8 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { colors } from '@/styles/commonStyles';
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { markAuthSuccess } from '@/utils/api';
-
-const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
+import { markAuthSuccess, setBearerToken } from '@/utils/api';
 
 /**
  * OAuth Callback Handler for Native Mobile (iOS/Android)
@@ -36,17 +33,20 @@ export default function AuthCallbackScreen() {
 
         console.log('✅ [AUTH CALLBACK] Token received, saving...');
 
-        // Save token to secure storage
-        if (Platform.OS === 'web') {
-          localStorage.setItem(BEARER_TOKEN_KEY, token);
-        } else {
-          await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
-        }
+        // Save token using centralized function (includes in-memory cache for iOS)
+        await setBearerToken(token);
 
         // Mark auth success to start grace period (prevents 401 race conditions)
         markAuthSuccess();
 
-        console.log('✅ [AUTH CALLBACK] Token saved, fetching user...');
+        console.log('✅ [AUTH CALLBACK] Token saved, waiting for DB commit...');
+
+        // On iOS, add a delay to ensure the session is committed to DB
+        if (Platform.OS === 'ios') {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        console.log('✅ [AUTH CALLBACK] Fetching user...');
 
         // Fetch user data - pass token directly to avoid SecureStore timing issues on iOS
         await fetchUser(token);
