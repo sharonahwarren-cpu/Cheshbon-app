@@ -3,6 +3,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { getNextActivations, type ScheduleConfig } from '../utils/goal-scheduler.js';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 // Helper function to safely parse JSONB fields
 function parseJsonbField(value: any): any {
@@ -18,7 +19,7 @@ function parseJsonbField(value: any): any {
 }
 
 export function registerMitzvotRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // GET /api/mitzvot - Get all mitzvot for the user
   app.fastify.get('/api/mitzvot', async (

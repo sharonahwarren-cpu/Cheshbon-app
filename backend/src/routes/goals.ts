@@ -4,6 +4,7 @@ import { eq, desc, asc, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { getNextActivations, calculateAstronomicalTimes, applyTimeOffset, type ScheduleConfig } from '../utils/goal-scheduler.js';
 import { getScheduleSummaryWithOccurrences } from '../utils/schedule-summary.js';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 // Helper function to safely handle JSONB fields
 // For JSONB columns: if the value is a string, parse it to an object; otherwise, use as-is
@@ -24,7 +25,7 @@ function parseJsonbField(value: any): any {
 }
 
 export function registerGoalRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // GET /api/goals/hierarchy - Get goals organized in parent-child hierarchy
   app.fastify.get('/api/goals/hierarchy', async (

@@ -2,9 +2,10 @@ import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, desc, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 export function registerLifeAreasRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // Helper function to calculate success percentage
   function calculateSuccessPercentage(successCount: number, struggleCount: number): { percentage: number; status: 'green' | 'red' } {

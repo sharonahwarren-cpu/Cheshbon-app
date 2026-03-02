@@ -2,9 +2,10 @@ import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, and } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 export function registerReflectionsRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // Helper function to calculate currency change based on goal and outcome
   async function calculateCurrencyChange(

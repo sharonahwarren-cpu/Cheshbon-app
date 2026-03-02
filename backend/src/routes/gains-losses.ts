@@ -2,9 +2,10 @@ import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 export function registerGainsLossesRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // GET /api/gains-losses - Get all gains and losses for authenticated user
   app.fastify.get('/api/gains-losses', async (

@@ -3,6 +3,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, and, desc, gt } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
 // Initialize Gemini client lazily - only when needed
 let genAI: GoogleGenerativeAI | null = null;
@@ -36,7 +37,7 @@ function getRandomGreeting(): string {
 }
 
 export function registerReflectionChatRoutes(app: App) {
-  const requireAuth = app.requireAuth();
+  const requireAuth = createAuthWrapper(app);
 
   // Validate Gemini API configuration on startup
   if (!process.env.GOOGLE_API_KEY) {
