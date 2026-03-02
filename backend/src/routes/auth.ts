@@ -242,34 +242,115 @@ export function registerAuthRoutes(app: App) {
       });
     }
 
-    // Construct the authorization URL
-    // For Better Auth's /api/auth/sign-in/social:
-    // - provider is passed as query parameter
-    // - callbackURL is passed as query parameter (will be preserved through OAuth flow)
-    // - redirectURL is passed as query parameter (for web browser redirects)
-    const authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}${callbackURL ? `&callbackURL=${encodeURIComponent(callbackURL)}` : ''}${redirectURL ? `&redirectURL=${encodeURIComponent(redirectURL)}` : ''}`;
+    // Generate the actual OAuth provider authorization URL directly
+    let authorizationUrl: string;
 
-    app.logger.info(
-      {
-        provider,
-        backendBaseUrl,
-        urlSource,
-        detectedLocalhost,
-        isMobile: !!callbackURL,
-        hasCallbackURL: !!callbackURL,
-        authorizationUrl: authorizationUrl.split('?')[0]
-      },
-      `${provider} OAuth authorization URL prepared (BASE_URL source: ${urlSource})`
-    );
+    if (provider === 'google') {
+      // Generate Google OAuth authorization URL directly from Google's endpoint
+      const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 
-    // For mobile apps (with callbackURL): return JSON with URL so app can handle navigation
-    // For web browsers (without callbackURL): redirect to the authorization URL directly
-    if (callbackURL) {
-      // Mobile app or popup - return JSON with authorization URL
-      // Frontend will navigate to this URL which initiates the OAuth flow
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      if (!clientId) {
+        app.logger.error({ origin }, 'Google OAuth not configured - GOOGLE_CLIENT_ID not set');
+        return reply.status(400).send({
+          error: 'GOOGLE_OAUTH_NOT_CONFIGURED',
+          message: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID environment variable.',
+        });
+      }
+
+      // Generate a state parameter for CSRF protection
+      const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
+
+      googleAuthUrl.searchParams.append('client_id', clientId);
+      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/oauth-callback`);
+      googleAuthUrl.searchParams.append('response_type', 'code');
+      googleAuthUrl.searchParams.append('scope', 'openid email profile');
+      googleAuthUrl.searchParams.append('state', state);
+
+      // Pass custom parameters through the OAuth URL
+      // These will be preserved in the redirect back to our callback endpoint
+      if (callbackURL) {
+        googleAuthUrl.searchParams.append('callbackURL', callbackURL);
+      }
+      if (redirectURL) {
+        googleAuthUrl.searchParams.append('redirectURL', redirectURL);
+      }
+
+      authorizationUrl = googleAuthUrl.toString();
+
       app.logger.info(
-        { provider, clientType: 'mobile/popup', callbackURL: 'provided' },
-        'Returning OAuth authorization URL for mobile/popup client'
+        {
+          provider: 'google',
+          backendBaseUrl,
+          urlSource,
+          detectedLocalhost,
+          isMobile: !!callbackURL,
+          hasCallbackURL: !!callbackURL,
+          redirectUri: `${backendBaseUrl}/api/auth/oauth-callback`,
+          oauthProviderHost: 'accounts.google.com'
+        },
+        `Google OAuth authorization URL generated (BASE_URL source: ${urlSource})`
+      );
+    } else if (provider === 'apple') {
+      // Generate Apple OAuth authorization URL directly from Apple's endpoint
+      const appleAuthUrl = new URL('https://appleid.apple.com/auth/authorize');
+
+      const clientId = process.env.APPLE_CLIENT_ID;
+      if (!clientId) {
+        app.logger.error({ origin }, 'Apple OAuth not configured - APPLE_CLIENT_ID not set');
+        return reply.status(400).send({
+          error: 'APPLE_OAUTH_NOT_CONFIGURED',
+          message: 'Apple OAuth is not configured. Set APPLE_CLIENT_ID and other Apple OAuth environment variables.',
+        });
+      }
+
+      const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
+
+      appleAuthUrl.searchParams.append('client_id', clientId);
+      appleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/oauth-callback`);
+      appleAuthUrl.searchParams.append('response_type', 'code id_token');
+      appleAuthUrl.searchParams.append('scope', 'openid email name');
+      appleAuthUrl.searchParams.append('state', state);
+      appleAuthUrl.searchParams.append('response_mode', 'form_post');
+
+      if (callbackURL) {
+        appleAuthUrl.searchParams.append('callbackURL', callbackURL);
+      }
+      if (redirectURL) {
+        appleAuthUrl.searchParams.append('redirectURL', redirectURL);
+      }
+
+      authorizationUrl = appleAuthUrl.toString();
+
+      app.logger.info(
+        {
+          provider: 'apple',
+          backendBaseUrl,
+          urlSource,
+          detectedLocalhost,
+          isMobile: !!callbackURL,
+          hasCallbackURL: !!callbackURL,
+          redirectUri: `${backendBaseUrl}/api/auth/oauth-callback`,
+          oauthProviderHost: 'appleid.apple.com'
+        },
+        `Apple OAuth authorization URL generated (BASE_URL source: ${urlSource})`
+      );
+    } else {
+      app.logger.warn({ provider, origin }, 'Unsupported OAuth provider');
+      return reply.status(400).send({
+        error: 'UNSUPPORTED_PROVIDER',
+        message: `Unsupported OAuth provider: ${provider}. Use 'google' or 'apple'.`,
+      });
+    }
+
+    // Return the actual OAuth provider authorization URL to the frontend
+    // For mobile apps (with callbackURL): return JSON with URL
+    // For web browsers (without callbackURL): redirect directly
+    if (callbackURL) {
+      // Mobile app or popup - return JSON with the direct OAuth provider URL
+      app.logger.info(
+        { provider, clientType: 'mobile/popup', callbackURL: 'provided', oauthProviderHost: authorizationUrl.split('/')[2] },
+        'Returning direct OAuth provider authorization URL for mobile/popup client'
       );
       return {
         provider,
@@ -277,10 +358,10 @@ export function registerAuthRoutes(app: App) {
         message: `Redirect to this URL to sign in with ${provider}`,
       };
     } else {
-      // Web browser - perform HTTP redirect to start OAuth flow immediately
+      // Web browser - perform HTTP redirect to the OAuth provider directly
       app.logger.info(
-        { provider, clientType: 'web' },
-        'Web client - redirecting to OAuth authorization URL'
+        { provider, clientType: 'web', oauthProviderHost: authorizationUrl.split('/')[2] },
+        'Web client - redirecting directly to OAuth provider'
       );
       reply.redirect(authorizationUrl);
       return;
@@ -1090,30 +1171,104 @@ export function registerAuthRoutes(app: App) {
       });
     }
 
-    // Construct the authorization URL for Better Auth's /api/auth/sign-in/social endpoint
-    // This endpoint handles the OAuth flow and will redirect to the OAuth provider
-    const authorizationUrl = `${backendBaseUrl}/api/auth/sign-in/social?provider=${provider}${callbackUrl ? `&callbackURL=${encodeURIComponent(callbackUrl)}` : ''}`;
+    // Generate the actual OAuth provider authorization URL directly
+    let authorizationUrl: string;
 
-    app.logger.info(
-      {
-        provider,
-        backendBaseUrl,
-        urlSource,
-        detectedLocalhost,
-        isMobile: !!callbackUrl,
-        hasCallbackUrl: !!callbackUrl,
-        authorizationUrl: authorizationUrl.split('?')[0]
-      },
-      `${providerName} OAuth authorization URL prepared (BASE_URL source: ${urlSource})`
-    );
+    if (provider === 'google') {
+      // Generate Google OAuth authorization URL directly from Google's endpoint
+      const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 
-    // For mobile apps (with callbackUrl): return JSON with URL so app can handle navigation
-    // For web browsers (without callbackUrl): redirect to the authorization URL directly
-    if (callbackUrl) {
-      // Mobile app - return JSON for app to handle navigation
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      if (!clientId) {
+        app.logger.error({}, 'Google OAuth not configured - GOOGLE_CLIENT_ID not set');
+        return reply.status(400).send({
+          error: 'GOOGLE_OAUTH_NOT_CONFIGURED',
+          message: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID environment variable.',
+        });
+      }
+
+      const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
+
+      googleAuthUrl.searchParams.append('client_id', clientId);
+      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/oauth-callback`);
+      googleAuthUrl.searchParams.append('response_type', 'code');
+      googleAuthUrl.searchParams.append('scope', 'openid email profile');
+      googleAuthUrl.searchParams.append('state', state);
+
+      if (callbackUrl) {
+        googleAuthUrl.searchParams.append('callbackURL', callbackUrl);
+      }
+
+      authorizationUrl = googleAuthUrl.toString();
+
       app.logger.info(
-        { provider, clientType: 'mobile', callbackUrl: 'provided' },
-        'Returning OAuth authorization URL for mobile client'
+        {
+          provider: 'google',
+          backendBaseUrl,
+          urlSource,
+          detectedLocalhost,
+          isMobile: !!callbackUrl,
+          hasCallbackUrl: !!callbackUrl,
+          redirectUri: `${backendBaseUrl}/api/auth/oauth-callback`,
+          oauthProviderHost: 'accounts.google.com'
+        },
+        `Google OAuth authorization URL generated (BASE_URL source: ${urlSource})`
+      );
+    } else if (provider === 'apple') {
+      // Generate Apple OAuth authorization URL directly from Apple's endpoint
+      const appleAuthUrl = new URL('https://appleid.apple.com/auth/authorize');
+
+      const clientId = process.env.APPLE_CLIENT_ID;
+      if (!clientId) {
+        app.logger.error({}, 'Apple OAuth not configured - APPLE_CLIENT_ID not set');
+        return reply.status(400).send({
+          error: 'APPLE_OAUTH_NOT_CONFIGURED',
+          message: 'Apple OAuth is not configured. Set APPLE_CLIENT_ID and other Apple OAuth environment variables.',
+        });
+      }
+
+      const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
+
+      appleAuthUrl.searchParams.append('client_id', clientId);
+      appleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/oauth-callback`);
+      appleAuthUrl.searchParams.append('response_type', 'code id_token');
+      appleAuthUrl.searchParams.append('scope', 'openid email name');
+      appleAuthUrl.searchParams.append('state', state);
+      appleAuthUrl.searchParams.append('response_mode', 'form_post');
+
+      if (callbackUrl) {
+        appleAuthUrl.searchParams.append('callbackURL', callbackUrl);
+      }
+
+      authorizationUrl = appleAuthUrl.toString();
+
+      app.logger.info(
+        {
+          provider: 'apple',
+          backendBaseUrl,
+          urlSource,
+          detectedLocalhost,
+          isMobile: !!callbackUrl,
+          hasCallbackUrl: !!callbackUrl,
+          redirectUri: `${backendBaseUrl}/api/auth/oauth-callback`,
+          oauthProviderHost: 'appleid.apple.com'
+        },
+        `Apple OAuth authorization URL generated (BASE_URL source: ${urlSource})`
+      );
+    } else {
+      app.logger.warn({ provider }, 'Unsupported OAuth provider');
+      return reply.status(400).send({
+        error: 'UNSUPPORTED_PROVIDER',
+        message: `Unsupported OAuth provider: ${provider}. Use 'google' or 'apple'.`,
+      });
+    }
+
+    // Return the actual OAuth provider authorization URL
+    if (callbackUrl) {
+      // Mobile app - return JSON with direct OAuth provider URL
+      app.logger.info(
+        { provider, clientType: 'mobile', callbackUrl: 'provided', oauthProviderHost: authorizationUrl.split('/')[2] },
+        'Returning direct OAuth provider authorization URL for mobile client'
       );
       return {
         provider,
@@ -1121,10 +1276,10 @@ export function registerAuthRoutes(app: App) {
         message: `Redirect user to this URL to sign in with ${providerName}`,
       };
     } else {
-      // Web browser - perform HTTP redirect to start OAuth flow immediately
+      // Web browser - perform HTTP redirect directly to OAuth provider
       app.logger.info(
-        { provider, clientType: 'web' },
-        'Web client - redirecting to OAuth authorization URL'
+        { provider, clientType: 'web', oauthProviderHost: authorizationUrl.split('/')[2] },
+        'Web client - redirecting directly to OAuth provider'
       );
       reply.redirect(authorizationUrl);
       return;
