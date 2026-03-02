@@ -731,6 +731,7 @@ export default function SettingsScreen() {
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
+      { title: 'OAuth Configuration', icon: 'vpn-key', section: null, route: '/oauth-config-check' },
     ];
 
     return (
@@ -740,7 +741,13 @@ export default function SettingsScreen() {
           <React.Fragment key={index}>
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={() => setCurrentSection(item.section)}
+              onPress={() => {
+                if (item.route) {
+                  router.push(item.route);
+                } else if (item.section) {
+                  setCurrentSection(item.section);
+                }
+              }}
             >
               <View style={styles.menuItemLeft}>
                 <IconSymbol
