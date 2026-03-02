@@ -813,16 +813,15 @@ export function registerAuthRoutes(app: App) {
       }
 
       // Find or create user in database
-      // Look for existing user with this Apple account
+      // Look for existing user with this Apple account (without relational query)
       let existingAccount = await app.db.query.account.findFirst({
         where: and(eq(account.providerId, 'apple'), eq(account.accountId, appleUserId)),
-        with: { user: true },
       }).catch(() => null);
 
       let userId: string;
 
-      if (existingAccount?.user?.id) {
-        userId = existingAccount.user.id;
+      if (existingAccount?.userId) {
+        userId = existingAccount.userId;
         app.logger.info({ userId, appleUserId }, 'Existing user found for Apple account');
       } else {
         // Check if email-based user exists
