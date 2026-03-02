@@ -1,7 +1,8 @@
 
-import { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
 import { colors } from '@/styles/commonStyles';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
@@ -9,75 +10,55 @@ import { Platform } from 'react-native';
 const BEARER_TOKEN_KEY = 'cheshbon_bearer_token';
 
 /**
- * OAuth Callback Handler for Native Apps (iOS/Android)
- * 
- * This screen handles deep link callbacks from OAuth providers:
- * - cheshbon://auth-callback?token=SESSION_TOKEN
- * - cheshbon://auth-callback?session_token=SESSION_TOKEN
- * 
- * The token is extracted from the URL and saved to secure storage,
- * then the user is redirected to the home screen.
+ * OAuth Callback Handler for Native Mobile (iOS/Android)
+ * Handles deep link callbacks from Google/Apple OAuth:
+ * cheshbon://auth-callback?token={token}
  */
 export default function AuthCallbackScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const handledRef = useRef(false);
+  const { fetchUser } = useAuth();
 
   useEffect(() => {
-    // Prevent double-handling
-    if (handledRef.current) {
-      console.log('⚠️ [AUTH CALLBACK] Already handled, skipping');
-      return;
-    }
-
-    console.log('🔄 [AUTH CALLBACK] Processing OAuth callback...');
-    console.log('🔄 [AUTH CALLBACK] Params:', JSON.stringify(params));
+    console.log('🔗 [AUTH CALLBACK] Screen mounted');
+    console.log('🔗 [AUTH CALLBACK] Params:', params);
 
     const handleCallback = async () => {
       try {
-        // Extract token from various possible parameter names
-        const token = 
-          (params.token as string) || 
-          (params.session_token as string) || 
-          (params.sessionToken as string) ||
-          (params.access_token as string) ||
-          (params.accessToken as string);
-
-        console.log('🔄 [AUTH CALLBACK] Token found:', token ? 'YES' : 'NO');
+        const token = params.token as string | undefined;
 
         if (!token) {
-          console.error('❌ [AUTH CALLBACK] No token in callback URL');
-          console.error('❌ [AUTH CALLBACK] Available params:', Object.keys(params));
-          throw new Error('No authentication token received');
+          console.error('❌ [AUTH CALLBACK] No token in URL params');
+          router.replace('/auth');
+          return;
         }
 
+        console.log('✅ [AUTH CALLBACK] Token received, saving...');
+
         // Save token to secure storage
-        console.log('💾 [AUTH CALLBACK] Saving token...');
         if (Platform.OS === 'web') {
           localStorage.setItem(BEARER_TOKEN_KEY, token);
         } else {
           await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
         }
-        console.log('✅ [AUTH CALLBACK] Token saved');
 
-        handledRef.current = true;
+        console.log('✅ [AUTH CALLBACK] Token saved, fetching user...');
 
-        // Small delay to ensure token is saved
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Fetch user data
+        await fetchUser();
 
-        // Redirect to home - AuthBootstrap will detect the token and show the app
-        console.log('🔄 [AUTH CALLBACK] Redirecting to home...');
-        router.replace('/');
+        console.log('✅ [AUTH CALLBACK] User fetched, redirecting to app...');
+
+        // Redirect to app
+        router.replace('/(tabs)/(home)');
       } catch (error) {
-        console.error('❌ [AUTH CALLBACK] Error:', error);
-        handledRef.current = true;
-        // Redirect to auth screen on error
+        console.error('❌ [AUTH CALLBACK] Error handling callback:', error);
         router.replace('/auth');
       }
     };
 
     handleCallback();
-  }, [params, router]);
+  }, [params]);
 
   return (
     <View style={styles.container}>
@@ -99,6 +80,5 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: colors.text,
-    textAlign: 'center',
   },
 });

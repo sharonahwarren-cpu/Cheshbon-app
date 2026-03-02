@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Cheshbon",
@@ -27,10 +28,14 @@
           {
             "CFBundleURLSchemes": [
               "cheshbon"
-            ]
+            ],
+            "CFBundleURLName": "com.anonymous.Natively"
           }
         ]
-      }
+      },
+      "associatedDomains": [
+        "applinks:a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -51,6 +56,21 @@
             {
               "scheme": "cheshbon",
               "host": "auth-callback"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev",
+              "pathPrefix": "/auth-callback"
             }
           ],
           "category": [
@@ -78,7 +98,7 @@
         }
       ]
     ],
-    "scheme": "Cheshbon",
+    "scheme": "cheshbon",
     "experiments": {
       "typedRoutes": true
     },
