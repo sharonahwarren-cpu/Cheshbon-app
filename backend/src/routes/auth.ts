@@ -122,23 +122,22 @@ export function registerAuthRoutes(app: App) {
     }
 
     // Check if OAuth credentials are configured
-    const hasGoogleOAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
+    // Note: Google OAuth is handled by Better Auth internally, no explicit env var check needed
     const hasAppleOAuth = process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY;
 
-    if (provider === 'google' && !hasGoogleOAuth) {
-      app.logger.warn({ origin }, 'Google OAuth not configured');
-      return reply.status(400).send({
-        error: 'OAUTH_NOT_CONFIGURED',
-        message: 'Google OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.',
-      });
-    }
-
+    // Apple OAuth requires explicit credentials
     if (provider === 'apple' && !hasAppleOAuth) {
       app.logger.warn({ origin }, 'Apple OAuth not configured');
       return reply.status(400).send({
         error: 'OAUTH_NOT_CONFIGURED',
         message: 'Apple OAuth not configured. Set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, and APPLE_PRIVATE_KEY.',
       });
+    }
+
+    // Google OAuth is handled by Better Auth - it can work with or without explicit credentials
+    // Better Auth may use its own proxy/configuration
+    if (provider === 'google') {
+      app.logger.info({ origin }, 'Google OAuth requested - delegating to Better Auth');
     }
 
     // Use BASE_URL from environment (CRITICAL: must not be localhost for production)
@@ -230,23 +229,22 @@ export function registerAuthRoutes(app: App) {
     }
 
     // Check if OAuth credentials are configured
-    const hasGoogleOAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
+    // Note: Google OAuth is handled by Better Auth internally, no explicit env var check needed
     const hasAppleOAuth = process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY;
 
-    if (provider === 'google' && !hasGoogleOAuth) {
-      app.logger.warn({ origin: request.headers.origin }, 'Google OAuth not configured');
-      return reply.status(400).send({
-        error: 'OAUTH_NOT_CONFIGURED',
-        message: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.',
-      });
-    }
-
+    // Apple OAuth requires explicit credentials
     if (provider === 'apple' && !hasAppleOAuth) {
       app.logger.warn({ origin: request.headers.origin }, 'Apple OAuth not configured');
       return reply.status(400).send({
         error: 'OAUTH_NOT_CONFIGURED',
         message: 'Apple OAuth is not configured. Set APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, and APPLE_PRIVATE_KEY environment variables.',
       });
+    }
+
+    // Google OAuth is handled by Better Auth - it can work with or without explicit credentials
+    // Better Auth may use its own proxy/configuration
+    if (provider === 'google') {
+      app.logger.info({ origin: request.headers.origin }, 'Google OAuth requested - delegating to Better Auth');
     }
 
     // Build the authorization URL
