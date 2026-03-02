@@ -304,16 +304,25 @@ export function registerAuthRoutes(app: App) {
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<any | void> => {
+    app.logger.info({ path: request.url }, 'GET /api/auth/me requested');
+
     try {
       const session = await requireAuth(request, reply);
+
+      // If requireAuth already sent a response (e.g., 401), don't send another
+      if (reply.sent) {
+        app.logger.debug({ url: request.url }, 'Auth validation already sent response');
+        return;
+      }
+
       if (!session) {
         app.logger.debug({ url: request.url, hasAuthHeader: !!request.headers.authorization }, 'No session found in request');
-        return reply.status(401).send({ error: 'Not authenticated' });
+        return reply.status(401).send({ error: 'Unauthorized' });
       }
 
       app.logger.info(
         { userId: session.user.id, email: session.user.email, hasToken: !!session.session.token },
-        'User session retrieved'
+        'User session retrieved successfully'
       );
 
       // Return token both in session object and at root level for flexibility
@@ -323,11 +332,15 @@ export function registerAuthRoutes(app: App) {
           token: session.session.token,
           expiresAt: session.session.expiresAt,
         },
-        token: session.session.token, // Convenience: also return token at root level
+        token: session.session.token,
       };
     } catch (error) {
-      app.logger.error({ err: error, url: request.url }, 'Error retrieving user session');
-      throw error;
+      // Only send error response if one hasn't been sent yet
+      if (!reply.sent) {
+        app.logger.error({ err: error, url: request.url }, 'Error retrieving user session');
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+      return;
     }
   });
 
