@@ -579,6 +579,116 @@ export function registerAuthRoutes(app: App) {
     return { status: 'ok' };
   });
 
+  // GET /api/env-check - Check environment variable configuration (public endpoint - no auth required)
+  app.fastify.get('/api/env-check', {
+    schema: {
+      description: 'Check OAuth and environment configuration (public - no auth required)',
+      tags: ['auth'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            google: {
+              type: 'object',
+              properties: {
+                clientIdSet: { type: 'boolean' },
+                clientIdPreview: { type: 'string' },
+                clientSecretSet: { type: 'boolean' },
+              },
+            },
+            apple: {
+              type: 'object',
+              properties: {
+                clientIdSet: { type: 'boolean' },
+                clientIdPreview: { type: 'string' },
+                teamIdSet: { type: 'boolean' },
+                keyIdSet: { type: 'boolean' },
+                privateKeySet: { type: 'boolean' },
+              },
+            },
+            urls: {
+              type: 'object',
+              properties: {
+                baseUrl: { type: 'string' },
+                frontendUrl: { type: 'string' },
+              },
+            },
+            instructions: { type: 'string' },
+            summary: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const appleClientId = process.env.APPLE_CLIENT_ID;
+    const appleTeamId = process.env.APPLE_TEAM_ID;
+    const appleKeyId = process.env.APPLE_KEY_ID;
+    const applePrivateKey = process.env.APPLE_PRIVATE_KEY;
+    const baseUrl = process.env.BASE_URL || 'NOT SET';
+    const frontendUrl = process.env.FRONTEND_URL || 'NOT SET';
+
+    const googleConfigured = !!googleClientId && !!googleClientSecret;
+    const appleConfigured = !!appleClientId && !!appleTeamId && !!appleKeyId && !!applePrivateKey;
+
+    app.logger.info(
+      {
+        googleConfigured,
+        appleConfigured,
+        baseUrlSet: baseUrl !== 'NOT SET',
+        frontendUrlSet: frontendUrl !== 'NOT SET',
+      },
+      'Environment check requested'
+    );
+
+    const missingVars: string[] = [];
+    if (!googleClientId) missingVars.push('GOOGLE_CLIENT_ID');
+    if (!googleClientSecret) missingVars.push('GOOGLE_CLIENT_SECRET');
+    if (!appleClientId) missingVars.push('APPLE_CLIENT_ID');
+    if (!appleTeamId) missingVars.push('APPLE_TEAM_ID');
+    if (!appleKeyId) missingVars.push('APPLE_KEY_ID');
+    if (!applePrivateKey) missingVars.push('APPLE_PRIVATE_KEY');
+    if (baseUrl === 'NOT SET') missingVars.push('BASE_URL');
+    if (frontendUrl === 'NOT SET') missingVars.push('FRONTEND_URL');
+
+    let summary = '';
+    if (googleConfigured && appleConfigured && baseUrl !== 'NOT SET' && frontendUrl !== 'NOT SET') {
+      summary = '✅ All OAuth configurations are set and ready';
+    } else if (missingVars.length > 0) {
+      summary = `❌ Missing: ${missingVars.join(', ')}`;
+    } else {
+      summary = '⚠️  Partial configuration - some providers may not work';
+    }
+
+    return {
+      google: {
+        clientIdSet: !!googleClientId,
+        clientIdPreview: googleClientId ? `${googleClientId.substring(0, 10)}...` : 'NOT SET',
+        clientSecretSet: !!googleClientSecret,
+      },
+      apple: {
+        clientIdSet: !!appleClientId,
+        clientIdPreview: appleClientId ? `${appleClientId.substring(0, 10)}...` : 'NOT SET',
+        teamIdSet: !!appleTeamId,
+        keyIdSet: !!appleKeyId,
+        privateKeySet: !!applePrivateKey,
+      },
+      urls: {
+        baseUrl,
+        frontendUrl,
+      },
+      instructions:
+        missingVars.length > 0
+          ? `Missing environment variables: ${missingVars.join(', ')}. Add them in the Specular dashboard under Project Settings > Environment Variables. After adding, restart your backend.`
+          : 'All required environment variables are configured. OAuth should work correctly.',
+      summary,
+    };
+  });
+
   // GET /api/auth/debug-session - Debug session information (development only)
   app.fastify.get('/api/auth/debug-session', {
     schema: {
