@@ -1,0 +1,1 @@
+ALTER TABLE "gains_losses" ADD COLUMN "term" text;

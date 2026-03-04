@@ -585,4 +585,141 @@ export function registerReportsRoutes(app: App) {
       throw error;
     }
   });
+
+  // GET /api/reports/gains-losses-distribution - Get gains and losses distribution analysis
+  app.fastify.get('/api/reports/gains-losses-distribution', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Fetching gains losses distribution');
+
+    try {
+      const gainsLosses = await app.db
+        .select()
+        .from(schema.gainsLosses)
+        .where(eq(schema.gainsLosses.userId, session.user.id));
+
+      // Separate gains and losses
+      const gains = gainsLosses.filter(item => item.type === 'Gain');
+      const losses = gainsLosses.filter(item => item.type === 'Loss');
+
+      const totalGains = gains.length;
+      const totalLosses = losses.length;
+
+      // Helper function to calculate percentage
+      const getPercentage = (count: number, total: number): number => {
+        return total > 0 ? Math.round((count / total) * 1000) / 10 : 0;
+      };
+
+      // Calculate term distribution for gains
+      const gainsTermDist = {
+        short: {
+          count: gains.filter(g => g.term === 'short').length,
+          percentage: 0,
+        },
+        medium: {
+          count: gains.filter(g => g.term === 'medium').length,
+          percentage: 0,
+        },
+        long: {
+          count: gains.filter(g => g.term === 'long').length,
+          percentage: 0,
+        },
+      };
+
+      // Calculate percentages for gains terms
+      Object.keys(gainsTermDist).forEach(key => {
+        gainsTermDist[key as keyof typeof gainsTermDist].percentage = getPercentage(
+          gainsTermDist[key as keyof typeof gainsTermDist].count,
+          totalGains
+        );
+      });
+
+      // Calculate term distribution for losses
+      const lossesTermDist = {
+        short: {
+          count: losses.filter(l => l.term === 'short').length,
+          percentage: 0,
+        },
+        medium: {
+          count: losses.filter(l => l.term === 'medium').length,
+          percentage: 0,
+        },
+        long: {
+          count: losses.filter(l => l.term === 'long').length,
+          percentage: 0,
+        },
+      };
+
+      // Calculate percentages for losses terms
+      Object.keys(lossesTermDist).forEach(key => {
+        lossesTermDist[key as keyof typeof lossesTermDist].percentage = getPercentage(
+          lossesTermDist[key as keyof typeof lossesTermDist].count,
+          totalLosses
+        );
+      });
+
+      // Calculate category distribution for gains
+      const gainsCategoryMap = new Map<string, number>();
+      gains.forEach(g => {
+        const cat = g.category || 'Uncategorized';
+        gainsCategoryMap.set(cat, (gainsCategoryMap.get(cat) || 0) + 1);
+      });
+
+      const gainsCategoryDist = Array.from(gainsCategoryMap.entries())
+        .map(([category, count]) => ({
+          category,
+          count,
+          percentage: getPercentage(count, totalGains),
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      // Calculate category distribution for losses
+      const lossesCategoryMap = new Map<string, number>();
+      losses.forEach(l => {
+        const cat = l.category || 'Uncategorized';
+        lossesCategoryMap.set(cat, (lossesCategoryMap.get(cat) || 0) + 1);
+      });
+
+      const lossesCategoryDist = Array.from(lossesCategoryMap.entries())
+        .map(([category, count]) => ({
+          category,
+          count,
+          percentage: getPercentage(count, totalLosses),
+        }))
+        .sort((a, b) => b.count - a.count);
+
+      // Get top 5 categories for gains
+      const topGains = gainsCategoryDist.slice(0, 5);
+
+      // Get top 5 categories for losses
+      const topLosses = lossesCategoryDist.slice(0, 5);
+
+      const result = {
+        totalGains,
+        totalLosses,
+        termDistribution: {
+          gains: gainsTermDist,
+          losses: lossesTermDist,
+        },
+        categoryDistribution: {
+          gains: gainsCategoryDist,
+          losses: lossesCategoryDist,
+        },
+        topCategories: {
+          gains: topGains,
+          losses: topLosses,
+        },
+      };
+
+      app.logger.info({ userId: session.user.id, totalGains, totalLosses }, 'Gains losses distribution report generated');
+      return result;
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to generate gains losses distribution report');
+      throw error;
+    }
+  });
 }
