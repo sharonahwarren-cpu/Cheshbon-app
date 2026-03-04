@@ -70,20 +70,21 @@ function isGoalActiveTodayHelper(goal: any): boolean {
 }
 
 // Helper function to calculate streak for a goal
-function calculateStreak(goal: any, reflections: any[]): number {
+function calculateStreak(goal: any, reflections: any[], fromDate?: string): number {
+  const successDates = reflections
+    .filter(r => r.linkedGoalId === goal.id && r.outcome === 'success')
+    .map(r => r.entryDate)
+    .filter((date, index, self) => self.indexOf(date) === index) // Get unique dates
+    .sort();
+
+  if (successDates.length === 0) return 0;
+
+  let currentDate = new Date(fromDate || new Date().toISOString().split('T')[0]);
+  currentDate.setUTCHours(0, 0, 0, 0);
+
   if (goal.scheduleType === 'Always Active') {
     // For always active goals, count consecutive days with success
-    const successDates = reflections
-      .filter(r => r.linkedGoalId === goal.id && r.outcome === 'success')
-      .map(r => r.entryDate)
-      .sort()
-      .reverse();
-
-    if (successDates.length === 0) return 0;
-
     let streak = 0;
-    let currentDate = new Date();
-    currentDate.setHours(0, 0, 0, 0);
 
     for (let i = 0; i < 365; i++) {
       const dateStr = currentDate.toISOString().split('T')[0];
@@ -100,17 +101,7 @@ function calculateStreak(goal: any, reflections: any[]): number {
 
   // For scheduled goals, count consecutive periods with success
   const scheduleType = goal.scheduleType;
-  const successDates = reflections
-    .filter(r => r.linkedGoalId === goal.id && r.outcome === 'success')
-    .map(r => r.entryDate)
-    .sort()
-    .reverse();
-
-  if (successDates.length === 0) return 0;
-
   let streak = 0;
-  let currentDate = new Date();
-  currentDate.setHours(0, 0, 0, 0);
 
   for (let i = 0; i < 365; i++) {
     const dateStr = currentDate.toISOString().split('T')[0];
@@ -238,7 +229,7 @@ export function registerGoalsTrackingRoutes(app: App) {
           dailyEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
           const lifeArea = goal.lifeAreaId ? lifeAreaMap.get(goal.lifeAreaId) : null;
-          const streak = calculateStreak(goal, reflections);
+          const streak = calculateStreak(goal, reflections, requestedDate);
 
           return {
             id: goal.id,
@@ -283,7 +274,7 @@ export function registerGoalsTrackingRoutes(app: App) {
     const { id } = request.params as { id: string };
     const body = request.body as { timestamp: string };
 
-    app.logger.info({ userId: session.user.id, goalId: id }, 'Recording goal success');
+    app.logger.info({ userId: session.user.id, goalId: id, timestamp: body.timestamp }, 'Recording goal success');
 
     try {
       // Check if goal exists and belongs to user
@@ -306,8 +297,8 @@ export function registerGoalsTrackingRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
-      // Get today's date
-      const today = new Date().toISOString().split('T')[0];
+      // Extract date from timestamp (ISO 8601 format)
+      const entryDate = body.timestamp ? body.timestamp.split('T')[0] : new Date().toISOString().split('T')[0];
 
       // Calculate currency change based on goal and currency settings
       let currencyChange = null;
@@ -345,7 +336,7 @@ export function registerGoalsTrackingRoutes(app: App) {
         .insert(schema.reflections)
         .values({
           userId: session.user.id,
-          entryDate: today,
+          entryDate: entryDate,
           linkedGoalId: id,
           outcome: 'success',
           type: 'Proactive',
@@ -361,14 +352,14 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       app.logger.info({ userId: session.user.id, goalId: id, reflectionId: reflections[0].id, currencyChange }, 'Reflection entry created for success');
 
-      // Count today's successes after creating the new entry
+      // Count the day's successes after creating the new entry
       const todayReflections = await app.db
         .select()
         .from(schema.reflections)
         .where(and(
           eq(schema.reflections.userId, session.user.id),
           eq(schema.reflections.linkedGoalId, id),
-          eq(schema.reflections.entryDate, today),
+          eq(schema.reflections.entryDate, entryDate),
           eq(schema.reflections.outcome, 'success')
         ));
 
@@ -385,6 +376,87 @@ export function registerGoalsTrackingRoutes(app: App) {
         ));
 
       const totalSuccessCount = allSuccessReflections.length;
+
+      // Calculate streak based on consecutive days with successes
+      try {
+        const allReflections = await app.db
+          .select()
+          .from(schema.reflections)
+          .where(and(
+            eq(schema.reflections.linkedGoalId, id),
+            eq(schema.reflections.outcome, 'success')
+          ));
+
+        // Sort by entry date descending (most recent first)
+        const sortedDates = allReflections
+          .map(r => r.entryDate)
+          .filter((date, index, self) => self.indexOf(date) === index) // Get unique dates
+          .sort()
+          .reverse();
+
+        let currentStreak = 0;
+        let bestStreak = goals[0].bestStreak || 0;
+
+        if (sortedDates.length > 0) {
+          // Find the most recent success date
+          const mostRecentDate = new Date(sortedDates[0]);
+          const entryDateObj = new Date(entryDate);
+
+          // Calculate current streak (consecutive days from the provided date backwards)
+          let checkDate = new Date(entryDate);
+          checkDate.setUTCHours(0, 0, 0, 0);
+
+          for (let i = 0; i < 365; i++) {
+            const checkDateStr = checkDate.toISOString().split('T')[0];
+            if (sortedDates.includes(checkDateStr)) {
+              currentStreak++;
+            } else {
+              break;
+            }
+            checkDate.setDate(checkDate.getDate() - 1);
+          }
+
+          // Calculate best streak by finding the longest consecutive sequence
+          if (sortedDates.length > 0) {
+            let tempStreak = 1;
+            for (let i = 0; i < sortedDates.length - 1; i++) {
+              const currentDate = new Date(sortedDates[i]);
+              const nextDate = new Date(sortedDates[i + 1]);
+              const diffDays = (currentDate.getTime() - nextDate.getTime()) / (1000 * 60 * 60 * 24);
+
+              if (diffDays === 1) {
+                tempStreak++;
+              } else {
+                if (tempStreak > bestStreak) {
+                  bestStreak = tempStreak;
+                }
+                tempStreak = 1;
+              }
+            }
+            if (tempStreak > bestStreak) {
+              bestStreak = tempStreak;
+            }
+          }
+        }
+
+        // Update goal with new streak values
+        await app.db
+          .update(schema.goals)
+          .set({
+            currentStreak,
+            bestStreak,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.goals.id, id));
+
+        app.logger.info(
+          { userId: session.user.id, goalId: id, currentStreak, bestStreak },
+          'Goal streak updated on success'
+        );
+      } catch (error) {
+        app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to calculate streak on success');
+        // Continue despite streak calculation error
+      }
 
       // Check if threshold is reached for currency reward
       // Award currency for every X successes (use modulo to detect milestone)
@@ -448,8 +520,18 @@ export function registerGoalsTrackingRoutes(app: App) {
         }
       }
 
-      app.logger.info({ userId: session.user.id, goalId: id, todaySuccessCount, totalSuccessCount }, 'Goal success recorded');
-      return { success: true, todaySuccessCount, successCount: totalSuccessCount };
+      // Fetch updated goal to get streak values
+      const updatedGoal = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.id, id))
+        .limit(1);
+
+      const currentStreak = updatedGoal.length ? updatedGoal[0].currentStreak || 0 : 0;
+      const bestStreak = updatedGoal.length ? updatedGoal[0].bestStreak || 0 : 0;
+
+      app.logger.info({ userId: session.user.id, goalId: id, todaySuccessCount, totalSuccessCount, currentStreak, bestStreak }, 'Goal success recorded');
+      return { entryId: reflections[0].id, todaySuccessCount, successCount: totalSuccessCount, currentStreak, bestStreak };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to record goal success');
       throw error;
@@ -467,7 +549,7 @@ export function registerGoalsTrackingRoutes(app: App) {
     const { id } = request.params as { id: string };
     const body = request.body as { timestamp: string };
 
-    app.logger.info({ userId: session.user.id, goalId: id }, 'Recording goal struggle');
+    app.logger.info({ userId: session.user.id, goalId: id, timestamp: body.timestamp }, 'Recording goal struggle');
 
     try {
       // Check if goal exists and belongs to user
@@ -490,8 +572,8 @@ export function registerGoalsTrackingRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
-      // Get today's date
-      const today = new Date().toISOString().split('T')[0];
+      // Extract date from timestamp (ISO 8601 format)
+      const entryDate = body.timestamp ? body.timestamp.split('T')[0] : new Date().toISOString().split('T')[0];
 
       // Calculate currency change based on goal and currency settings
       let currencyChange = null;
@@ -529,7 +611,7 @@ export function registerGoalsTrackingRoutes(app: App) {
         .insert(schema.reflections)
         .values({
           userId: session.user.id,
-          entryDate: today,
+          entryDate: entryDate,
           linkedGoalId: id,
           outcome: 'struggled',
           type: 'Restraint',
@@ -545,14 +627,14 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       app.logger.info({ userId: session.user.id, goalId: id, reflectionId: reflections[0].id, currencyChange }, 'Reflection entry created for struggle');
 
-      // Count today's struggles after creating the new entry
+      // Count the day's struggles after creating the new entry
       const todayReflections = await app.db
         .select()
         .from(schema.reflections)
         .where(and(
           eq(schema.reflections.userId, session.user.id),
           eq(schema.reflections.linkedGoalId, id),
-          eq(schema.reflections.entryDate, today),
+          eq(schema.reflections.entryDate, entryDate),
           eq(schema.reflections.outcome, 'struggled')
         ));
 
@@ -569,6 +651,38 @@ export function registerGoalsTrackingRoutes(app: App) {
         ));
 
       const totalStruggleCount = allStruggleReflections.length;
+
+      // Reset streak if this is a struggle on the entry date (only if no successes on that date)
+      try {
+        const successOnDate = await app.db
+          .select()
+          .from(schema.reflections)
+          .where(and(
+            eq(schema.reflections.linkedGoalId, id),
+            eq(schema.reflections.entryDate, entryDate),
+            eq(schema.reflections.outcome, 'success')
+          ));
+
+        // Only reset streak if there are no successes on this date
+        if (successOnDate.length === 0) {
+          // Reset current streak to 0 on a struggle day
+          await app.db
+            .update(schema.goals)
+            .set({
+              currentStreak: 0,
+              updatedAt: new Date(),
+            })
+            .where(eq(schema.goals.id, id));
+
+          app.logger.info(
+            { userId: session.user.id, goalId: id },
+            'Goal streak reset to 0 on struggle'
+          );
+        }
+      } catch (error) {
+        app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to reset streak on struggle');
+        // Continue despite streak calculation error
+      }
 
       // Check if threshold is reached for currency consequence
       // Apply consequence for every X failures (use modulo to detect milestone)
@@ -632,8 +746,18 @@ export function registerGoalsTrackingRoutes(app: App) {
         }
       }
 
-      app.logger.info({ userId: session.user.id, goalId: id, todayStruggleCount, totalStruggleCount }, 'Goal struggle recorded');
-      return { success: true, todayStruggleCount, struggleCount: totalStruggleCount };
+      // Fetch updated goal to get streak values
+      const updatedGoal = await app.db
+        .select()
+        .from(schema.goals)
+        .where(eq(schema.goals.id, id))
+        .limit(1);
+
+      const currentStreak = updatedGoal.length ? updatedGoal[0].currentStreak || 0 : 0;
+      const bestStreak = updatedGoal.length ? updatedGoal[0].bestStreak || 0 : 0;
+
+      app.logger.info({ userId: session.user.id, goalId: id, todayStruggleCount, totalStruggleCount, currentStreak, bestStreak }, 'Goal struggle recorded');
+      return { entryId: reflections[0].id, todayStruggleCount, struggleCount: totalStruggleCount, currentStreak, bestStreak };
     } catch (error) {
       app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to record goal struggle');
       throw error;
