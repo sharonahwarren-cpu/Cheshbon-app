@@ -365,7 +365,9 @@ export default function HomeScreen() {
   };
 
   const handleGoalSuccess = async (goalId: string) => {
-    console.log("[Home iOS] Recording success for goal:", goalId);
+    console.log("[Home iOS] ========== RECORDING SUCCESS ==========");
+    console.log("[Home iOS] Goal ID:", goalId);
+    console.log("[Home iOS] Selected Date:", selectedDate.toISOString());
     
     // Create UTC timestamp for the selected date at current time in local timezone
     // This ensures the backend extracts the correct local date from the timestamp
@@ -382,8 +384,9 @@ export default function HomeScreen() {
       timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
-    console.log("[Home iOS] Creating temp entry:", newEntry);
+    console.log("[Home iOS] Creating temp entry:", JSON.stringify(newEntry, null, 2));
     
+    // Optimistic UI update
     setActivatedGoals(prevGoals => 
       prevGoals.map(goal => {
         if (goal.id === goalId) {
@@ -401,10 +404,20 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
-      console.log("[Home iOS] Calling API: POST /api/goals/" + goalId + "/success with timestamp:", timestamp);
-      const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
-      console.log("[Home iOS] API response:", response);
+      const apiEndpoint = `/api/goals/${goalId}/success`;
+      const apiPayload = { timestamp };
       
+      console.log("[Home iOS] ========== MAKING API CALL ==========");
+      console.log("[Home iOS] Endpoint:", apiEndpoint);
+      console.log("[Home iOS] Payload:", JSON.stringify(apiPayload, null, 2));
+      console.log("[Home iOS] Calling authenticatedPost...");
+      
+      const response = await authenticatedPost(apiEndpoint, apiPayload);
+      
+      console.log("[Home iOS] ========== API CALL SUCCESSFUL ==========");
+      console.log("[Home iOS] Response:", JSON.stringify(response, null, 2));
+      
+      // Update with real entry ID from backend
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
           if (goal.id === goalId) {
@@ -422,12 +435,20 @@ export default function HomeScreen() {
           return goal;
         })
       );
-      console.log("[Home iOS] Success recorded successfully, entry ID:", response.entryId);
-    } catch (error: any) {
-      console.error("[Home iOS] Error recording success:", error);
-      console.error("[Home iOS] Error details:", JSON.stringify(error, null, 2));
-      showError(error.message || "Failed to record success");
       
+      console.log("[Home iOS] Success recorded successfully, entry ID:", response.entryId);
+      console.log("[Home iOS] ========== SUCCESS COMPLETE ==========");
+      
+      // Reload data to ensure everything is in sync
+      await loadData(true, true);
+    } catch (error: any) {
+      console.error("[Home iOS] ========== API CALL FAILED ==========");
+      console.error("[Home iOS] Error:", error);
+      console.error("[Home iOS] Error message:", error.message);
+      console.error("[Home iOS] Error stack:", error.stack);
+      console.error("[Home iOS] Full error object:", JSON.stringify(error, null, 2));
+      
+      // Rollback optimistic update
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
           if (goal.id === goalId) {
@@ -441,11 +462,15 @@ export default function HomeScreen() {
           return goal;
         })
       );
+      
+      showError(`Failed to record success: ${error.message || 'Unknown error'}`);
     }
   };
 
   const handleGoalStruggle = async (goalId: string) => {
-    console.log("[Home iOS] Recording struggle for goal:", goalId);
+    console.log("[Home iOS] ========== RECORDING STRUGGLE ==========");
+    console.log("[Home iOS] Goal ID:", goalId);
+    console.log("[Home iOS] Selected Date:", selectedDate.toISOString());
     
     // Create UTC timestamp for the selected date at current time in local timezone
     // This ensures the backend extracts the correct local date from the timestamp
@@ -462,8 +487,9 @@ export default function HomeScreen() {
       timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
-    console.log("[Home iOS] Creating temp entry:", newEntry);
+    console.log("[Home iOS] Creating temp entry:", JSON.stringify(newEntry, null, 2));
     
+    // Optimistic UI update
     setActivatedGoals(prevGoals => 
       prevGoals.map(goal => {
         if (goal.id === goalId) {
@@ -481,10 +507,20 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
-      console.log("[Home iOS] Calling API: POST /api/goals/" + goalId + "/struggle with timestamp:", timestamp);
-      const response: any = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
-      console.log("[Home iOS] API response:", response);
+      const apiEndpoint = `/api/goals/${goalId}/struggle`;
+      const apiPayload = { timestamp };
       
+      console.log("[Home iOS] ========== MAKING API CALL ==========");
+      console.log("[Home iOS] Endpoint:", apiEndpoint);
+      console.log("[Home iOS] Payload:", JSON.stringify(apiPayload, null, 2));
+      console.log("[Home iOS] Calling authenticatedPost...");
+      
+      const response: any = await authenticatedPost(apiEndpoint, apiPayload);
+      
+      console.log("[Home iOS] ========== API CALL SUCCESSFUL ==========");
+      console.log("[Home iOS] Response:", JSON.stringify(response, null, 2));
+      
+      // Update with real entry ID from backend
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
           if (goal.id === goalId) {
@@ -502,12 +538,20 @@ export default function HomeScreen() {
           return goal;
         })
       );
-      console.log("[Home iOS] Struggle recorded successfully, entry ID:", response?.entryId);
-    } catch (error: any) {
-      console.error("[Home iOS] Error recording struggle:", error);
-      console.error("[Home iOS] Error details:", JSON.stringify(error, null, 2));
-      showError(error.message || "Failed to record struggle");
       
+      console.log("[Home iOS] Struggle recorded successfully, entry ID:", response?.entryId);
+      console.log("[Home iOS] ========== STRUGGLE COMPLETE ==========");
+      
+      // Reload data to ensure everything is in sync
+      await loadData(true, true);
+    } catch (error: any) {
+      console.error("[Home iOS] ========== API CALL FAILED ==========");
+      console.error("[Home iOS] Error:", error);
+      console.error("[Home iOS] Error message:", error.message);
+      console.error("[Home iOS] Error stack:", error.stack);
+      console.error("[Home iOS] Full error object:", JSON.stringify(error, null, 2));
+      
+      // Rollback optimistic update
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
           if (goal.id === goalId) {
@@ -521,6 +565,8 @@ export default function HomeScreen() {
           return goal;
         })
       );
+      
+      showError(`Failed to record struggle: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -562,7 +608,7 @@ export default function HomeScreen() {
       
       // CRITICAL FIX: Reload data in the background to update streak values
       // This ensures streak values are updated from the backend without disrupting the user
-      await loadData(true); // isRefreshing=true
+      await loadData(true, true); // isRefreshing=true, preserveView=true
       console.log("[Home iOS] Data reloaded after deletion");
     } catch (error: any) {
       console.error("[Home iOS] Error deleting entry:", error);
@@ -573,7 +619,7 @@ export default function HomeScreen() {
       showError(errorMsg);
       
       // Revert optimistic update by reloading data
-      await loadData(true);
+      await loadData(true, true);
     }
   };
 
@@ -650,7 +696,7 @@ export default function HomeScreen() {
     
     // CRITICAL FIX: Reload data in the background to update Reflect section
     // This ensures that when a success/struggle is recorded in Express, the Reflect section updates immediately
-    await loadData(true); // isRefreshing=true
+    await loadData(true, true); // isRefreshing=true, preserveView=true
     console.log('[Home iOS] Data reloaded after reflection saved, Reflect section updated');
   };
 
