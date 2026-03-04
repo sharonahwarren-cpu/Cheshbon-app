@@ -117,9 +117,13 @@ interface AddReflectionModalProps {
   prefilledGoalId?: string;
   sourceScreen?: 'express' | 'reflect';
   prefilledGoalData?: {
+    id?: string;
     category?: string;
     type?: 'Restraint' | 'Proactive';
     description?: string;
+    behaviorCategories?: string[];
+    outcome?: 'success' | 'struggled';
+    selectedDate?: Date;
   };
 }
 
@@ -730,11 +734,19 @@ export function AddReflectionModal({
       // When prefilledGoalData is provided, it means we're creating a new reflection from a Quick Entry
       // The prefilledGoalData contains the goal's behavior category, type, and description
       console.log('[AddReflectionModal] Quick Entry detected, setting category from prefilledGoalData:', prefilledGoalData.category);
-      setCategory(prefilledGoalData.category);
+      console.log('[AddReflectionModal] Full prefilledGoalData:', prefilledGoalData);
+      
+      // CRITICAL FIX: Use behaviorCategories array if available, otherwise fall back to category field
+      const behaviorCategory = prefilledGoalData.behaviorCategories && prefilledGoalData.behaviorCategories.length > 0
+        ? prefilledGoalData.behaviorCategories[0]
+        : prefilledGoalData.category;
+      
+      console.log('[AddReflectionModal] Setting behavior category to:', behaviorCategory);
+      setCategory(behaviorCategory);
       setType(prefilledGoalData.type || 'Proactive');
       setDescription(prefilledGoalData.description || '');
-      setLinkedGoalId(prefilledGoalId);
-      setOutcome(undefined); // Outcome will be set in Step 3
+      setLinkedGoalId(prefilledGoalData.id || prefilledGoalId);
+      setOutcome(prefilledGoalData.outcome); // Pre-fill outcome if provided by quick entry
       // Clear other fields for new reflection
       setGainedIds([]);
       setLostIds([]);
