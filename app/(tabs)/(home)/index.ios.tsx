@@ -661,13 +661,31 @@ export default function HomeScreen() {
     
     try {
       // Call the backend API to delete the entry
-      await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
-      console.log("[Home iOS] Entry deleted successfully via API");
+      console.log(`[Home iOS] [API] Deleting entry ${entryId} for goal ${goalId}`);
+      const response: any = await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
+      console.log("[Home iOS] Entry deleted successfully via API, response:", response);
       
-      // CRITICAL FIX: Reload data in the background to update streak values
-      // This ensures streak values are updated from the backend without disrupting the user
-      await loadData(true, true); // isRefreshing=true, preserveView=true
-      console.log("[Home iOS] Data reloaded after deletion");
+      // CRITICAL FIX: Update streak values from the backend response
+      // The backend now recalculates streaks after deletion and returns the new values
+      if (response && (response.currentStreak !== undefined || response.bestStreak !== undefined)) {
+        console.log(`[Home iOS] [API] Updating streaks from backend: current=${response.currentStreak}, best=${response.bestStreak}`);
+        setActivatedGoals(prevGoals => 
+          prevGoals.map(g => {
+            if (g.id === goalId) {
+              return {
+                ...g,
+                currentStreak: response.currentStreak !== undefined ? response.currentStreak : g.currentStreak,
+                bestStreak: response.bestStreak !== undefined ? response.bestStreak : g.bestStreak,
+              };
+            }
+            return g;
+          })
+        );
+      } else {
+        // Fallback: reload data if backend doesn't return streak values
+        console.log(`[Home iOS] [API] No streak values in response, reloading data`);
+        await loadData(true, true);
+      }
     } catch (error: any) {
       console.error("[Home iOS] Error deleting entry:", error);
       console.error("[Home iOS] Error details:", JSON.stringify(error, null, 2));
@@ -1003,6 +1021,21 @@ export default function HomeScreen() {
     );
   }
 
+  // Helper: check if selected date is today
+  const isViewingToday = (): boolean => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const selectedStr = formatDateLocal(selectedDate);
+    return todayStr === selectedStr;
+  };
+
+  // Helper: determine if streak should be faded (today's screen, no success yet)
+  const shouldFadeStreakIOS = (goal: ActivatedGoal): boolean => {
+    if (!isViewingToday()) return false;
+    const todaySuccessCount = goal.dailyEntries?.filter(e => e.type === 'success').length || 0;
+    return todaySuccessCount === 0;
+  };
+
   const renderGoalCard = (goal: ActivatedGoal) => {
     const typeIcon = goal.type === 'RESTRAINING' ? 'cancel' : 'check-circle';
     const typeColor = goal.type === 'RESTRAINING' ? colors.error : colors.success;
@@ -1016,6 +1049,14 @@ export default function HomeScreen() {
     
     const currencyTallies = calculateDailyCurrencyTallies(goal);
     const hasCurrencyTallies = currencyTallies.length > 0;
+
+    // CRITICAL FIX: Streak display logic
+    // - On today's screen: always show streak (even 0 for broken streaks), faded if no success yet
+    // - On past/future dates: only show streak if > 0, never faded
+    const currentStreak = goal.currentStreak !== undefined ? goal.currentStreak : 0;
+    const isFaded = shouldFadeStreakIOS(goal);
+    const streakColor = isFaded ? colors.textSecondary : '#FF6B35';
+    const streakOpacity = isFaded ? 0.5 : 1.0;
     
     return (
       <View key={goal.id} style={styles.goalCard}>
@@ -1083,16 +1124,31 @@ export default function HomeScreen() {
               color={colors.error}
             />
           </View>
-          {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
-            <View style={styles.tallySection}>
+          {isViewingToday() ? (
+            // On today's screen: always show streak icon (even 0 for broken streaks)
+            // Faded = streak before today's entry (potential), bright = confirmed streak
+            <View style={[styles.tallySection, { opacity: streakOpacity }]}>
               <IconSymbol
                 ios_icon_name="flame.fill"
                 android_material_icon_name="local-fire-department"
                 size={16}
-                color="#FF6B35"
+                color={streakColor}
               />
-              <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{goal.currentStreak}</Text>
+              <Text style={[styles.tallyCount, { color: streakColor }]}>{currentStreak}</Text>
             </View>
+          ) : (
+            // On past/future dates: only show streak if > 0
+            currentStreak > 0 && (
+              <View style={styles.tallySection}>
+                <IconSymbol
+                  ios_icon_name="flame.fill"
+                  android_material_icon_name="local-fire-department"
+                  size={16}
+                  color="#FF6B35"
+                />
+                <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{currentStreak}</Text>
+              </View>
+            )
           )}
           {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
             <View style={styles.tallySection}>
@@ -1221,6 +1277,12 @@ export default function HomeScreen() {
     const struggleCount = dailyStruggleEntries.length;
     
     const currencyTallies = calculateDailyCurrencyTallies(goal);
+
+    // CRITICAL FIX: Streak display logic for concise view
+    const currentStreak = goal.currentStreak !== undefined ? goal.currentStreak : 0;
+    const isFadedConcise = shouldFadeStreakIOS(goal);
+    const streakColorConcise = isFadedConcise ? colors.textSecondary : '#FF6B35';
+    const streakOpacityConcise = isFadedConcise ? 0.5 : 1.0;
     
     return (
       <TouchableOpacity 
@@ -1237,10 +1299,18 @@ export default function HomeScreen() {
           <View style={styles.conciseCounter}>
             <Text style={[styles.conciseCounterText, { color: colors.error }]}>✗{struggleCount}</Text>
           </View>
-          {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
-            <View style={styles.conciseCounter}>
-              <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{goal.currentStreak}</Text>
+          {isViewingToday() ? (
+            // On today's screen: always show streak (even 0 for broken streaks)
+            <View style={[styles.conciseCounter, { opacity: streakOpacityConcise }]}>
+              <Text style={[styles.conciseCounterText, { color: streakColorConcise }]}>🔥{currentStreak}</Text>
             </View>
+          ) : (
+            // On past/future dates: only show streak if > 0
+            currentStreak > 0 && (
+              <View style={styles.conciseCounter}>
+                <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{currentStreak}</Text>
+              </View>
+            )
           )}
           {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
             <View style={styles.conciseCounter}>

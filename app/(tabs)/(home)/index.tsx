@@ -1,4 +1,5 @@
 
+import { getLocalTimezone } from '@/utils/dateUtils';
 import {
   StyleSheet,
   View,
@@ -12,16 +13,15 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from "react-native";
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from "@/utils/api";
-import React, { useState, useEffect, useRef } from "react";
-import { colors } from "@/styles/commonStyles";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
+import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
+import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from "@/utils/api";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { DateTime } from 'luxon';
+import React, { useState, useEffect, useRef } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { DatePickerModal } from "@/components/DatePickerModal";
-import { DateTime } from 'luxon';
-import { getLocalTimezone } from '@/utils/dateUtils';
 
 interface DailyEntry {
   id: string;
@@ -184,6 +184,12 @@ function formatAlternativeDate(date: Date, calendarType: string): string {
     console.error('Error formatting alternative date:', error);
     return 'Date unavailable';
   }
+}
+
+// Helper function to check if a date is today
+function isToday(date: Date): boolean {
+  const today = new Date();
+  return formatDateLocal(date) === formatDateLocal(today);
 }
 
 export default function HomeScreen() {
@@ -631,11 +637,30 @@ export default function HomeScreen() {
     
     try {
       console.log(`[API] Deleting entry ${entryId} for goal ${goalId}`);
-      await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
-      console.log(`[API] Entry deleted successfully`);
-      // Reload data after deletion to get updated streak values from backend
-      // (streak recalculation happens server-side)
-      await loadData();
+      const response: any = await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
+      console.log(`[API] Entry deleted successfully, response:`, response);
+      
+      // CRITICAL FIX: Update streak values from the backend response
+      // The backend now recalculates streaks after deletion and returns the new values
+      if (response && (response.currentStreak !== undefined || response.bestStreak !== undefined)) {
+        console.log(`[API] Updating streaks from backend: current=${response.currentStreak}, best=${response.bestStreak}`);
+        setActivatedGoals(prevGoals => 
+          prevGoals.map(goal => {
+            if (goal.id === goalId) {
+              return {
+                ...goal,
+                currentStreak: response.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
+                bestStreak: response.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
+              };
+            }
+            return goal;
+          })
+        );
+      } else {
+        // Fallback: reload data if backend doesn't return streak values
+        console.log(`[API] No streak values in response, reloading data`);
+        await loadData();
+      }
     } catch (error: any) {
       console.error("Error deleting entry:", error);
       showError(error.message || "Failed to delete entry");
@@ -940,6 +965,44 @@ export default function HomeScreen() {
     return lifetimeSuccesses;
   };
 
+  // CRITICAL FIX: Helper function to calculate the "streak before today"
+  // This is the streak value that should be displayed in faded color before the user clicks "success"
+  const getStreakBeforeToday = (goal: ActivatedGoal): number => {
+    // If we're viewing today's date
+    if (isToday(selectedDate)) {
+      // Check if there are any success entries for today
+      const todaySuccessCount = goal.dailyEntries?.filter(e => e.type === 'success').length || 0;
+      
+      if (todaySuccessCount === 0) {
+        // No success today yet - show the streak from yesterday (which is currentStreak)
+        // BUT if the streak was broken (no success on previous scheduled day), show 0
+        // The backend already handles this logic - if streak is broken, currentStreak will be 0
+        return goal.currentStreak || 0;
+      } else {
+        // User already succeeded today - show the full current streak (not faded)
+        return goal.currentStreak || 0;
+      }
+    } else {
+      // Viewing a past or future date - show the actual streak for that date
+      return goal.currentStreak || 0;
+    }
+  };
+
+  // CRITICAL FIX: Helper function to determine if streak should be faded
+  // Streak should be faded on "today" if the user hasn't succeeded yet
+  const shouldFadeStreak = (goal: ActivatedGoal): boolean => {
+    if (!isToday(selectedDate)) {
+      // Not viewing today - never fade
+      return false;
+    }
+    
+    // Check if there are any success entries for today
+    const todaySuccessCount = goal.dailyEntries?.filter(e => e.type === 'success').length || 0;
+    
+    // Fade if no success today yet
+    return todaySuccessCount === 0;
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -964,6 +1027,12 @@ export default function HomeScreen() {
     
     const successButtonText = 'Success';
     const struggleButtonText = 'Struggle';
+    
+    // CRITICAL FIX: Calculate streak display values
+    const streakBeforeToday = getStreakBeforeToday(goal);
+    const isFaded = shouldFadeStreak(goal);
+    const streakColor = isFaded ? colors.textSecondary : '#FF6B35';
+    const streakOpacity = isFaded ? 0.5 : 1.0;
     
     return (
       <View key={goal.id} style={styles.goalCard}>
@@ -1031,16 +1100,31 @@ export default function HomeScreen() {
               color={colors.error}
             />
           </View>
-          {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
-            <View style={styles.tallySection}>
+          {isToday(selectedDate) ? (
+            // On today's screen: always show the streak icon (even if 0 for broken streaks)
+            // Faded = streak before today's entry (potential streak), bright = confirmed streak
+            <View style={[styles.tallySection, { opacity: streakOpacity }]}>
               <IconSymbol
                 ios_icon_name="flame.fill"
                 android_material_icon_name="local-fire-department"
                 size={16}
-                color="#FF6B35"
+                color={streakColor}
               />
-              <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{goal.currentStreak}</Text>
+              <Text style={[styles.tallyCount, { color: streakColor }]}>{streakBeforeToday}</Text>
             </View>
+          ) : (
+            // On past/future dates: only show streak if > 0
+            streakBeforeToday > 0 && (
+              <View style={styles.tallySection}>
+                <IconSymbol
+                  ios_icon_name="flame.fill"
+                  android_material_icon_name="local-fire-department"
+                  size={16}
+                  color="#FF6B35"
+                />
+                <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{streakBeforeToday}</Text>
+              </View>
+            )
           )}
           {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
             <View style={styles.tallySection}>
@@ -1170,6 +1254,12 @@ export default function HomeScreen() {
     
     const currencyTallies = calculateDailyCurrencyTallies(goal);
     
+    // CRITICAL FIX: Calculate streak display values
+    const streakBeforeToday = getStreakBeforeToday(goal);
+    const isFaded = shouldFadeStreak(goal);
+    const streakColor = isFaded ? colors.textSecondary : '#FF6B35';
+    const streakOpacity = isFaded ? 0.5 : 1.0;
+    
     return (
       <TouchableOpacity 
         key={goal.id} 
@@ -1185,10 +1275,19 @@ export default function HomeScreen() {
           <View style={styles.conciseCounter}>
             <Text style={[styles.conciseCounterText, { color: colors.error }]}>✗{struggleCount}</Text>
           </View>
-          {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
-            <View style={styles.conciseCounter}>
-              <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{goal.currentStreak}</Text>
+          {isToday(selectedDate) ? (
+            // On today's screen: always show the streak (even if 0 for broken streaks)
+            // Faded = streak before today's entry, bright = confirmed streak
+            <View style={[styles.conciseCounter, { opacity: streakOpacity }]}>
+              <Text style={[styles.conciseCounterText, { color: streakColor }]}>🔥{streakBeforeToday}</Text>
             </View>
+          ) : (
+            // On past/future dates: only show streak if > 0
+            streakBeforeToday > 0 && (
+              <View style={styles.conciseCounter}>
+                <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{streakBeforeToday}</Text>
+              </View>
+            )
           )}
           {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
             <View style={styles.conciseCounter}>
