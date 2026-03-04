@@ -660,35 +660,17 @@ export function AddReflectionModal({
   const initialStep = prefilledGoalData ? 3 : 1;
   
   const [step, setStep] = useState(initialStep);
-  const [category, setCategory] = useState<string | undefined>(
-    editingReflection?.category || prefilledGoalData?.category
-  );
-  const [type, setType] = useState<'Restraint' | 'Proactive'>(
-    editingReflection?.type || prefilledGoalData?.type || 'Proactive'
-  );
-  const [description, setDescription] = useState(
-    editingReflection?.description || prefilledGoalData?.description || ''
-  );
-  const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId || prefilledGoalId);
-  // CRITICAL FIX: Initialize outcome from editingReflection
-  const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(() => {
-    console.log('[AddReflectionModal] Initializing outcome state:', {
-      editingReflection: editingReflection ? {
-        id: editingReflection.id,
-        outcome: editingReflection.outcome,
-        linkedGoalId: editingReflection.linkedGoalId,
-      } : null,
-    });
-    return editingReflection?.outcome;
-  });
-  const [gainedIds, setGainedIds] = useState<string[]>(editingReflection?.gainedIds || []);
-  const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
-  const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(editingReflection?.wasWorthIt);
-  const [additionalThoughts, setAdditionalThoughts] = useState(editingReflection?.additionalThoughts || '');
-  const [selectedMotivationIds, setSelectedMotivationIds] = useState<string[]>(editingReflection?.motivationIds || []);
-  const [strategyEffectiveness, setStrategyEffectiveness] = useState<{strategyId: string; worked: boolean | null}[]>(
-    editingReflection?.strategyEffectiveness?.map(se => ({ strategyId: se.strategyId, worked: se.worked })) || []
-  );
+  const [category, setCategory] = useState<string | undefined>(undefined);
+  const [type, setType] = useState<'Restraint' | 'Proactive'>('Proactive');
+  const [description, setDescription] = useState('');
+  const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(undefined);
+  const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(undefined);
+  const [gainedIds, setGainedIds] = useState<string[]>([]);
+  const [lostIds, setLostIds] = useState<string[]>([]);
+  const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(undefined);
+  const [additionalThoughts, setAdditionalThoughts] = useState('');
+  const [selectedMotivationIds, setSelectedMotivationIds] = useState<string[]>([]);
+  const [strategyEffectiveness, setStrategyEffectiveness] = useState<{strategyId: string; worked: boolean | null}[]>([]);
   const [futureStrategyId, setFutureStrategyId] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
@@ -729,6 +711,7 @@ export function AddReflectionModal({
     
     if (editingReflection) {
       // Editing an existing reflection - populate all fields from the reflection
+      console.log('[AddReflectionModal] Editing reflection, setting all fields from editingReflection');
       setOutcome(editingReflection.outcome);
       setLinkedGoalId(editingReflection.linkedGoalId);
       setCategory(editingReflection.category);
@@ -752,6 +735,14 @@ export function AddReflectionModal({
       setDescription(prefilledGoalData.description || '');
       setLinkedGoalId(prefilledGoalId);
       setOutcome(undefined); // Outcome will be set in Step 3
+      // Clear other fields for new reflection
+      setGainedIds([]);
+      setLostIds([]);
+      setWasWorthIt(undefined);
+      setAdditionalThoughts('');
+      setSelectedMotivationIds([]);
+      setStrategyEffectiveness([]);
+      setFutureStrategyId(undefined);
     } else if (prefilledGoalId) {
       // CRITICAL FIX: When only prefilledGoalId is provided (without prefilledGoalData),
       // we need to look up the goal's behavior category
@@ -767,8 +758,19 @@ export function AddReflectionModal({
       }
       setLinkedGoalId(prefilledGoalId);
       setOutcome(undefined);
+      // Clear other fields for new reflection
+      setType('Proactive');
+      setDescription('');
+      setGainedIds([]);
+      setLostIds([]);
+      setWasWorthIt(undefined);
+      setAdditionalThoughts('');
+      setSelectedMotivationIds([]);
+      setStrategyEffectiveness([]);
+      setFutureStrategyId(undefined);
     } else {
       // Clear all fields for a new reflection
+      console.log('[AddReflectionModal] No prefill data, clearing all fields');
       setOutcome(undefined);
       setLinkedGoalId(undefined);
       setCategory(undefined);
@@ -780,6 +782,7 @@ export function AddReflectionModal({
       setAdditionalThoughts('');
       setSelectedMotivationIds([]);
       setStrategyEffectiveness([]);
+      setFutureStrategyId(undefined);
     }
   }, [editingReflection, prefilledGoalId, prefilledGoalData, goals]);
 
