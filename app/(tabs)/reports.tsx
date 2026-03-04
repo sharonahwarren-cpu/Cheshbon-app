@@ -56,6 +56,42 @@ interface GainsLossesSummary {
   topLosses: { id: string; name: string; count: number }[];
 }
 
+interface TermDistributionItem {
+  count: number;
+  percentage: number;
+}
+
+interface CategoryDistributionItem {
+  category: string;
+  count: number;
+  percentage: number;
+}
+
+interface GainsLossesDistribution {
+  totalGains: number;
+  totalLosses: number;
+  termDistribution: {
+    gains: {
+      short: TermDistributionItem;
+      medium: TermDistributionItem;
+      long: TermDistributionItem;
+    };
+    losses: {
+      short: TermDistributionItem;
+      medium: TermDistributionItem;
+      long: TermDistributionItem;
+    };
+  };
+  categoryDistribution: {
+    gains: CategoryDistributionItem[];
+    losses: CategoryDistributionItem[];
+  };
+  topCategories: {
+    gains: CategoryDistributionItem[];
+    losses: CategoryDistributionItem[];
+  };
+}
+
 interface BehaviorCounts {
   actionEntries: number;
   speechEntries: number;
@@ -94,6 +130,7 @@ export default function ReportsScreen() {
   const [reflectionStats, setReflectionStats] = useState<ReflectionStats | null>(null);
   const [journalCount, setJournalCount] = useState<JournalCount | null>(null);
   const [gainsLossesSummary, setGainsLossesSummary] = useState<GainsLossesSummary | null>(null);
+  const [gainsLossesDistribution, setGainsLossesDistribution] = useState<GainsLossesDistribution | null>(null);
   const [behaviorCounts, setBehaviorCounts] = useState<BehaviorCounts | null>(null);
   const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);
   
@@ -124,6 +161,7 @@ export default function ReportsScreen() {
         reflectionStatsRes,
         journalCountRes,
         gainsLossesRes,
+        gainsLossesDistRes,
         behaviorCountsRes,
         goalProgressRes,
       ] = await Promise.all([
@@ -134,6 +172,7 @@ export default function ReportsScreen() {
         authenticatedGet('/api/reports/reflection-stats'),
         authenticatedGet('/api/reports/journal-count'),
         authenticatedGet('/api/reports/gains-losses-summary'),
+        authenticatedGet('/api/reports/gains-losses-distribution'),
         authenticatedGet('/api/reports/behavior-counts'),
         authenticatedGet('/api/reports/goal-progress'),
       ]);
@@ -145,6 +184,7 @@ export default function ReportsScreen() {
       const reflectionStatsData = reflectionStatsRes?.data || reflectionStatsRes || null;
       const journalCountData = journalCountRes?.data || journalCountRes || null;
       const gainsLossesData = gainsLossesRes?.data || gainsLossesRes || null;
+      const gainsLossesDistData = gainsLossesDistRes?.data || gainsLossesDistRes || null;
       const behaviorCountsData = behaviorCountsRes?.data || behaviorCountsRes || null;
       const goalProgressData = Array.isArray(goalProgressRes) ? goalProgressRes : (goalProgressRes?.data || []);
 
@@ -155,6 +195,7 @@ export default function ReportsScreen() {
       setReflectionStats(reflectionStatsData);
       setJournalCount(journalCountData);
       setGainsLossesSummary(gainsLossesData);
+      setGainsLossesDistribution(gainsLossesDistData);
       setBehaviorCounts(behaviorCountsData);
       setGoalProgress(goalProgressData);
 
@@ -525,6 +566,131 @@ export default function ReportsScreen() {
                 <Text style={styles.drillDownText}>Tap to view reflections</Text>
               </View>
             </TouchableOpacity>
+          </>
+        )}
+
+        {gainsLossesDistribution && (
+          <>
+            <Text style={styles.sectionTitle}>Gains & Losses Distribution</Text>
+            <View style={styles.reportCard}>
+              <Text style={styles.reportSubtitle}>By Term</Text>
+              
+              <Text style={styles.termHeader}>Gains:</Text>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Short Term:</Text>
+                <View style={styles.distributionValue}>
+                  <Text style={[styles.reportValue, { color: colors.success }]}>
+                    {gainsLossesDistribution.termDistribution.gains.short.count}
+                  </Text>
+                  <Text style={styles.percentageText}>
+                    ({gainsLossesDistribution.termDistribution.gains.short.percentage}%)
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Medium Term:</Text>
+                <View style={styles.distributionValue}>
+                  <Text style={[styles.reportValue, { color: colors.success }]}>
+                    {gainsLossesDistribution.termDistribution.gains.medium.count}
+                  </Text>
+                  <Text style={styles.percentageText}>
+                    ({gainsLossesDistribution.termDistribution.gains.medium.percentage}%)
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Long Term:</Text>
+                <View style={styles.distributionValue}>
+                  <Text style={[styles.reportValue, { color: colors.success }]}>
+                    {gainsLossesDistribution.termDistribution.gains.long.count}
+                  </Text>
+                  <Text style={styles.percentageText}>
+                    ({gainsLossesDistribution.termDistribution.gains.long.percentage}%)
+                  </Text>
+                </View>
+              </View>
+              
+              <Text style={[styles.termHeader, { marginTop: 12 }]}>Losses:</Text>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Short Term:</Text>
+                <View style={styles.distributionValue}>
+                  <Text style={[styles.reportValue, { color: colors.error }]}>
+                    {gainsLossesDistribution.termDistribution.losses.short.count}
+                  </Text>
+                  <Text style={styles.percentageText}>
+                    ({gainsLossesDistribution.termDistribution.losses.short.percentage}%)
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Medium Term:</Text>
+                <View style={styles.distributionValue}>
+                  <Text style={[styles.reportValue, { color: colors.error }]}>
+                    {gainsLossesDistribution.termDistribution.losses.medium.count}
+                  </Text>
+                  <Text style={styles.percentageText}>
+                    ({gainsLossesDistribution.termDistribution.losses.medium.percentage}%)
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Long Term:</Text>
+                <View style={styles.distributionValue}>
+                  <Text style={[styles.reportValue, { color: colors.error }]}>
+                    {gainsLossesDistribution.termDistribution.losses.long.count}
+                  </Text>
+                  <Text style={styles.percentageText}>
+                    ({gainsLossesDistribution.termDistribution.losses.long.percentage}%)
+                  </Text>
+                </View>
+              </View>
+              
+              {gainsLossesDistribution.topCategories.gains.length > 0 && (
+                <>
+                  <Text style={[styles.reportSubtitle, { marginTop: 16 }]}>Top Gain Categories</Text>
+                  {gainsLossesDistribution.topCategories.gains.map((item, idx) => {
+                    const categoryName = item.category || 'Uncategorized';
+                    
+                    return (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{categoryName}:</Text>
+                        <View style={styles.distributionValue}>
+                          <Text style={[styles.reportValue, { color: colors.success }]}>
+                            {item.count}
+                          </Text>
+                          <Text style={styles.percentageText}>
+                            ({item.percentage}%)
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+              
+              {gainsLossesDistribution.topCategories.losses.length > 0 && (
+                <>
+                  <Text style={[styles.reportSubtitle, { marginTop: 16 }]}>Top Loss Categories</Text>
+                  {gainsLossesDistribution.topCategories.losses.map((item, idx) => {
+                    const categoryName = item.category || 'Uncategorized';
+                    
+                    return (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{categoryName}:</Text>
+                        <View style={styles.distributionValue}>
+                          <Text style={[styles.reportValue, { color: colors.error }]}>
+                            {item.count}
+                          </Text>
+                          <Text style={styles.percentageText}>
+                            ({item.percentage}%)
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+            </View>
           </>
         )}
 
@@ -1118,5 +1284,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
+  },
+  termHeader: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  distributionValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  percentageText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
 });
