@@ -690,10 +690,8 @@ export default function SettingsScreen() {
     const menuItems = [
       { title: 'Goals', icon: 'flag', section: 'goals' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
-      { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
-      { title: 'Gain/Loss Categories', icon: 'category', section: 'gainLossCategories' as SettingsSection },
-      { title: 'Reflection Motivations', icon: 'flash-on', section: 'reflectionMotivations' as SettingsSection },
-      { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
+      { title: 'Gains & Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
+      { title: 'Life Areas', icon: 'apps', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
     ];
 
@@ -710,26 +708,25 @@ export default function SettingsScreen() {
           />
         }
       >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Settings</Text>
-        </View>
         {menuItems.map((item, index) => (
           <React.Fragment key={index}>
             <TouchableOpacity
-              style={styles.menuButton}
+              style={styles.menuCard}
               onPress={() => setCurrentSection(item.section)}
             >
-              <IconSymbol
-                ios_icon_name="gear"
-                android_material_icon_name={item.icon}
-                size={20}
-                color={colors.primary}
-              />
-              <Text style={styles.menuButtonText}>{item.title}</Text>
+              <View style={styles.menuCardIconContainer}>
+                <IconSymbol
+                  ios_icon_name="gear"
+                  android_material_icon_name={item.icon}
+                  size={24}
+                  color={colors.primary}
+                />
+              </View>
+              <Text style={styles.menuCardText}>{item.title}</Text>
               <IconSymbol
                 ios_icon_name="chevron.right"
                 android_material_icon_name="chevron-right"
-                size={20}
+                size={24}
                 color={colors.textSecondary}
               />
             </TouchableOpacity>
@@ -2710,23 +2707,30 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 16,
   },
-  menuButton: {
+  menuCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: colors.cardBorder,
   },
-  menuButtonText: {
+  menuCardIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  menuCardText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     color: colors.text,
-    marginLeft: 12,
   },
   menuItem: {
     flexDirection: 'row',
