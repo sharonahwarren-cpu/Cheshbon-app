@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     maxHeight: 200,
   },
   pickerList: {
-    maxHeight: 280,
+    maxHeight: 240,
   },
   goalItem: {
     padding: 14,
@@ -800,6 +800,13 @@ export function AddReflectionModal({
   const filteredMotivations = (motivations || []).filter(motivation => {
     if (!motivationsSearchQuery) return true;
     return motivation.name.toLowerCase().includes(motivationsSearchQuery.toLowerCase());
+  });
+
+  console.log('[AddReflectionModal] Step 4 - Motivations data:', {
+    motivationsCount: motivations?.length || 0,
+    filteredCount: filteredMotivations.length,
+    selectedCount: selectedMotivationIds.length,
+    showPicker: showMotivationsPicker,
   });
 
   // Filter strategies by search query
@@ -1545,7 +1552,7 @@ export function AddReflectionModal({
                   />
                 </View>
 
-                {/* MOTIVATIONS SECTION - NEW */}
+                {/* MOTIVATIONS SECTION - FIXED FOR iOS */}
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
@@ -1561,7 +1568,10 @@ export function AddReflectionModal({
                   </Text>
                   <TouchableOpacity
                     style={styles.goalPickerButton}
-                    onPress={() => setShowMotivationsPicker(!showMotivationsPicker)}
+                    onPress={() => {
+                      console.log('[AddReflectionModal] Toggling motivations picker, current state:', showMotivationsPicker);
+                      setShowMotivationsPicker(!showMotivationsPicker);
+                    }}
                   >
                     <Text style={styles.goalPickerText}>
                       {selectedMotivationIds.length > 0 ? `${selectedMotivationIds.length} motivations selected` : 'Select motivations...'}
@@ -1583,31 +1593,37 @@ export function AddReflectionModal({
                         placeholder="Search motivations..."
                         placeholderTextColor={colors.textSecondary}
                       />
-                      <ScrollView style={styles.pickerList}>
-                        {filteredMotivations.map((motivation, index) => {
-                          const isSelected = selectedMotivationIds.includes(motivation.id);
-                          
-                          return (
-                            <React.Fragment key={index}>
-                              <TouchableOpacity
-                                style={[styles.goalItem, isSelected && styles.goalItemSelected]}
-                                onPress={() => toggleMotivation(motivation.id)}
-                              >
-                                <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
-                                  {motivation.name}
-                                </Text>
-                                {isSelected && (
-                                  <IconSymbol
-                                    ios_icon_name="checkmark.circle.fill"
-                                    android_material_icon_name="check-circle"
-                                    size={20}
-                                    color={colors.primary}
-                                  />
-                                )}
-                              </TouchableOpacity>
-                            </React.Fragment>
-                          );
-                        })}
+                      <ScrollView style={styles.pickerList} nestedScrollEnabled={true}>
+                        {filteredMotivations.length === 0 ? (
+                          <View style={styles.goalItem}>
+                            <Text style={styles.goalItemText}>No motivations available</Text>
+                          </View>
+                        ) : (
+                          filteredMotivations.map((motivation, index) => {
+                            const isSelected = selectedMotivationIds.includes(motivation.id);
+                            
+                            return (
+                              <React.Fragment key={index}>
+                                <TouchableOpacity
+                                  style={[styles.goalItem, isSelected && styles.goalItemSelected]}
+                                  onPress={() => toggleMotivation(motivation.id)}
+                                >
+                                  <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
+                                    {motivation.name}
+                                  </Text>
+                                  {isSelected && (
+                                    <IconSymbol
+                                      ios_icon_name="checkmark.circle.fill"
+                                      android_material_icon_name="check-circle"
+                                      size={20}
+                                      color={colors.primary}
+                                    />
+                                  )}
+                                </TouchableOpacity>
+                              </React.Fragment>
+                            );
+                          })
+                        )}
                       </ScrollView>
                     </View>
                   )}
@@ -1648,7 +1664,7 @@ export function AddReflectionModal({
                         placeholder="Search gains..."
                         placeholderTextColor={colors.textSecondary}
                       />
-                      <ScrollView style={styles.pickerList}>
+                      <ScrollView style={styles.pickerList} nestedScrollEnabled={true}>
                         {filteredGains.map((gain, index) => {
                           const isSelected = gainedIds.includes(gain.id);
                           
@@ -1732,7 +1748,7 @@ export function AddReflectionModal({
                         placeholder="Search losses..."
                         placeholderTextColor={colors.textSecondary}
                       />
-                      <ScrollView style={styles.pickerList}>
+                      <ScrollView style={styles.pickerList} nestedScrollEnabled={true}>
                         {filteredLosses.map((loss, index) => {
                           const isSelected = lostIds.includes(loss.id);
                           
@@ -1866,7 +1882,7 @@ export function AddReflectionModal({
                         placeholder="Search strategies..."
                         placeholderTextColor={colors.textSecondary}
                       />
-                      <ScrollView style={styles.pickerList}>
+                      <ScrollView style={styles.pickerList} nestedScrollEnabled={true}>
                         {filteredStrategies.map((strategy, index) => {
                           const effectiveness = strategyEffectiveness.find(se => se.strategyId === strategy.id);
                           const isSelected = !!effectiveness;
@@ -1982,7 +1998,7 @@ export function AddReflectionModal({
                         placeholder="Search strategies..."
                         placeholderTextColor={colors.textSecondary}
                       />
-                      <ScrollView style={styles.pickerList}>
+                      <ScrollView style={styles.pickerList} nestedScrollEnabled={true}>
                         <TouchableOpacity
                           style={styles.goalItem}
                           onPress={() => {
