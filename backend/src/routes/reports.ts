@@ -722,4 +722,159 @@ export function registerReportsRoutes(app: App) {
       throw error;
     }
   });
+
+  // GET /api/reports/top-motivations-by-type - Get top motivations by reflection type
+  app.fastify.get('/api/reports/top-motivations-by-type', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Fetching top motivations by type');
+
+    try {
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(eq(schema.reflections.userId, session.user.id));
+
+      const motivations = await app.db
+        .select()
+        .from(schema.reflectionMotivations)
+        .where(eq(schema.reflectionMotivations.userId, session.user.id));
+
+      // Create motivation map for name lookup
+      const motivationMap = new Map(motivations.map(m => [m.id, m.name]));
+
+      // Count motivations by type
+      const proactiveCounts = new Map<string, { id: string; name: string; count: number }>();
+      const restraintCounts = new Map<string, { id: string; name: string; count: number }>();
+
+      reflections.forEach(reflection => {
+        if (reflection.motivationIds && Array.isArray(reflection.motivationIds)) {
+          reflection.motivationIds.forEach((motivationId: any) => {
+            const motivationName = motivationMap.get(motivationId);
+            if (motivationName) {
+              if (reflection.type === 'Proactive') {
+                const current = proactiveCounts.get(motivationId) || { id: motivationId, name: motivationName, count: 0 };
+                current.count++;
+                proactiveCounts.set(motivationId, current);
+              } else if (reflection.type === 'Restraint') {
+                const current = restraintCounts.get(motivationId) || { id: motivationId, name: motivationName, count: 0 };
+                current.count++;
+                restraintCounts.set(motivationId, current);
+              }
+            }
+          });
+        }
+      });
+
+      // Convert to arrays and sort by count
+      const proactiveResult = Array.from(proactiveCounts.values())
+        .sort((a, b) => b.count - a.count)
+        .map(({ id, name, count }) => ({
+          motivationId: id,
+          motivationName: name,
+          count,
+        }));
+
+      const restraintResult = Array.from(restraintCounts.values())
+        .sort((a, b) => b.count - a.count)
+        .map(({ id, name, count }) => ({
+          motivationId: id,
+          motivationName: name,
+          count,
+        }));
+
+      const result = {
+        proactive: proactiveResult,
+        restraint: restraintResult,
+      };
+
+      app.logger.info({ userId: session.user.id, proactiveCount: proactiveResult.length, restraintCount: restraintResult.length }, 'Top motivations by type generated');
+      return result;
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to generate top motivations by type');
+      throw error;
+    }
+  });
+
+  // GET /api/reports/top-motivations-by-outcome - Get top motivations by outcome
+  app.fastify.get('/api/reports/top-motivations-by-outcome', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Fetching top motivations by outcome');
+
+    try {
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(eq(schema.reflections.userId, session.user.id));
+
+      const motivations = await app.db
+        .select()
+        .from(schema.reflectionMotivations)
+        .where(eq(schema.reflectionMotivations.userId, session.user.id));
+
+      // Create motivation map for name lookup
+      const motivationMap = new Map(motivations.map(m => [m.id, m.name]));
+
+      // Count motivations by outcome (only for reflections with linkedGoalId)
+      const successCounts = new Map<string, { id: string; name: string; count: number }>();
+      const struggleCounts = new Map<string, { id: string; name: string; count: number }>();
+
+      reflections.forEach(reflection => {
+        // Only process reflections with linkedGoalId
+        if (reflection.linkedGoalId && reflection.motivationIds && Array.isArray(reflection.motivationIds)) {
+          reflection.motivationIds.forEach((motivationId: any) => {
+            const motivationName = motivationMap.get(motivationId);
+            if (motivationName) {
+              if (reflection.outcome === 'success') {
+                const current = successCounts.get(motivationId) || { id: motivationId, name: motivationName, count: 0 };
+                current.count++;
+                successCounts.set(motivationId, current);
+              } else if (reflection.outcome === 'struggled') {
+                const current = struggleCounts.get(motivationId) || { id: motivationId, name: motivationName, count: 0 };
+                current.count++;
+                struggleCounts.set(motivationId, current);
+              }
+            }
+          });
+        }
+      });
+
+      // Convert to arrays and sort by count
+      const successResult = Array.from(successCounts.values())
+        .sort((a, b) => b.count - a.count)
+        .map(({ id, name, count }) => ({
+          motivationId: id,
+          motivationName: name,
+          count,
+        }));
+
+      const struggleResult = Array.from(struggleCounts.values())
+        .sort((a, b) => b.count - a.count)
+        .map(({ id, name, count }) => ({
+          motivationId: id,
+          motivationName: name,
+          count,
+        }));
+
+      const result = {
+        success: successResult,
+        struggle: struggleResult,
+      };
+
+      app.logger.info({ userId: session.user.id, successCount: successResult.length, struggleCount: struggleResult.length }, 'Top motivations by outcome generated');
+      return result;
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to generate top motivations by outcome');
+      throw error;
+    }
+  });
 }

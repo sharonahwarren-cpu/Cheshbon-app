@@ -143,6 +143,7 @@ export const reflections = pgTable('reflections', {
   currencyChange: jsonb('currency_change'),
   gainedIds: uuid('gained_ids').array(),
   lostIds: uuid('lost_ids').array(),
+  motivationIds: uuid('motivation_ids').array(),
   wasWorthIt: boolean('was_worth_it'),
   additionalThoughts: text('additional_thoughts'),
   strategyEffectiveness: jsonb('strategy_effectiveness'),
@@ -331,4 +332,14 @@ export const gainLossCategories = pgTable('gain_loss_categories', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 }, (table) => ({
   userNameUnique: uniqueIndex('gain_loss_categories_user_id_name_unique').on(table.userId, table.name),
+}));
+
+export const reflectionMotivations = pgTable('reflection_motivations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => ({
+  userNameUnique: uniqueIndex('reflection_motivations_user_id_name_unique').on(table.userId, table.name),
 }));
