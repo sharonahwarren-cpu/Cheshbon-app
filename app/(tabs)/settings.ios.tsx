@@ -690,15 +690,17 @@ export default function SettingsScreen() {
     const menuItems = [
       { title: 'Goals', icon: 'flag', section: 'goals' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
-      { title: 'Gains & Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
-      { title: 'Life Areas', icon: 'apps', section: 'lifeAreas' as SettingsSection },
+      { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
+      { title: 'Gain/Loss Categories', icon: 'category', section: 'gainLossCategories' as SettingsSection },
+      { title: 'Reflection Motivations', icon: 'flash-on', section: 'reflectionMotivations' as SettingsSection },
+      { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
     ];
 
     return (
       <ScrollView 
         style={styles.container}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -708,25 +710,26 @@ export default function SettingsScreen() {
           />
         }
       >
+        <Text style={styles.sectionTitle}>Settings</Text>
         {menuItems.map((item, index) => (
           <React.Fragment key={index}>
             <TouchableOpacity
-              style={styles.menuCard}
+              style={styles.menuItem}
               onPress={() => setCurrentSection(item.section)}
             >
-              <View style={styles.menuCardIconContainer}>
+              <View style={styles.menuItemLeft}>
                 <IconSymbol
                   ios_icon_name="gear"
                   android_material_icon_name={item.icon}
                   size={24}
-                  color={colors.primary}
+                  color={colors.text}
                 />
+                <Text style={styles.menuItemText}>{item.title}</Text>
               </View>
-              <Text style={styles.menuCardText}>{item.title}</Text>
               <IconSymbol
                 ios_icon_name="chevron.right"
-                android_material_icon_name="chevron-right"
-                size={24}
+                android_material_icon_name="arrow-forward"
+                size={20}
                 color={colors.textSecondary}
               />
             </TouchableOpacity>
@@ -2692,9 +2695,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scrollContent: {
-    paddingBottom: 100,
-  },
   sectionTitle: {
     fontSize: 32,
     fontWeight: 'bold',
@@ -2706,31 +2706,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginBottom: 16,
-  },
-  menuCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  menuCardIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.primary + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  menuCardText: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text,
   },
   menuItem: {
     flexDirection: 'row',
