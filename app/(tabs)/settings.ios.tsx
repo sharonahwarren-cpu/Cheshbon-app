@@ -142,8 +142,8 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ section?: string; from?: string }>();
   
-  // Track if this is the initial mount to prevent double loading
-  const isInitialMount = useRef(true);
+  // Track if data has been loaded to prevent unnecessary reloads
+  const hasLoadedData = useRef(false);
   
   // Determine initial section from URL params
   const getInitialSection = (): SettingsSection => {
@@ -347,8 +347,11 @@ export default function SettingsScreen() {
 
   // Initial data load on mount
   useEffect(() => {
-    console.log('[Settings iOS] Component mounted, calling loadData() from useEffect');
-    loadDataMemoized();
+    if (!hasLoadedData.current) {
+      console.log('[Settings iOS] Component mounted, calling loadData() from useEffect');
+      hasLoadedData.current = true;
+      loadDataMemoized();
+    }
   }, [loadDataMemoized]);
 
   // React to URL param changes (e.g., when navigating from settings-menu)
@@ -361,24 +364,21 @@ export default function SettingsScreen() {
         setCurrentSection(section as SettingsSection);
       }
     }
-  }, [params.section]);
-
-  // Reload data when screen comes into focus (e.g., returning from life-area-wizard)
-  // Skip on initial mount to prevent double loading
-  useFocusEffect(
-    useCallback(() => {
-      if (isInitialMount.current) {
-        console.log('[Settings iOS] Skipping useFocusEffect on initial mount');
-        isInitialMount.current = false;
-        return;
-      }
-      console.log('[Settings iOS] Screen focused (not initial mount), reloading data...');
+    
+    // Check if we should reload data (e.g., returning from life-area-wizard with refresh=true)
+    if (params.refresh === 'true' && hasLoadedData.current) {
+      console.log('[Settings iOS] Refresh param detected, reloading data...');
       loadDataMemoized();
-    }, [loadDataMemoized])
-  );
+    }
+  }, [params.section, params.refresh, loadDataMemoized]);
+
+  // DO NOT use useFocusEffect for tab screens - it causes unnecessary reloads
+  // Data will be loaded on mount via useEffect, and can be refreshed via pull-to-refresh
+  // Child screens (life-area-wizard, create-goal) should navigate back with a refresh param if needed
 
   const handleRefresh = async () => {
     console.log('[Settings iOS] Pull-to-refresh triggered');
+    hasLoadedData.current = true; // Mark as loaded to prevent conflicts
     await loadDataMemoized(true);
     if (currentSection === 'reports') {
       await loadCurrencyBalances();
