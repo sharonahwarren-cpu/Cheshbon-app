@@ -78,6 +78,8 @@ interface Goal {
   successCount?: number;
   struggleCount?: number;
   lifeAreaId?: string;
+  currentStreak?: number;
+  bestStreak?: number;
 }
 
 interface NotificationAlarm {
@@ -306,7 +308,7 @@ export default function SettingsScreen() {
         ? goalProgressRes 
         : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
 
-      // Merge goal progress data (which includes per-goal currency balances) with goals
+      // Merge goal progress data (which includes per-goal currency balances and streaks) with goals
       const goalsWithBalances = goalsData.map((goal: Goal) => {
         const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
         if (progressInfo) {
@@ -319,9 +321,16 @@ export default function SettingsScreen() {
             successCount: progressInfo.successCount || 0,
             struggleCount: progressInfo.struggleCount || 0,
             status: progressInfo.status || goal.status || 'ACTIVE',
+            currentStreak: progressInfo.currentStreak ?? goal.currentStreak ?? 0,
+            bestStreak: progressInfo.bestStreak ?? goal.bestStreak ?? 0,
           };
         }
-        return { ...goal, status: goal.status || 'ACTIVE' };
+        return {
+          ...goal,
+          status: goal.status || 'ACTIVE',
+          currentStreak: goal.currentStreak ?? 0,
+          bestStreak: goal.bestStreak ?? 0,
+        };
       });
       
       setGoals(goalsWithBalances);
@@ -1085,6 +1094,32 @@ export default function SettingsScreen() {
                           {struggleCount}
                         </Text>
                       </View>
+                      {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
+                        <View style={styles.goalStatItem}>
+                          <IconSymbol
+                            ios_icon_name="flame.fill"
+                            android_material_icon_name="local-fire-department"
+                            size={16}
+                            color={colors.primary}
+                          />
+                          <Text style={[styles.goalStatText, { color: colors.primary }]}>
+                            {goal.currentStreak}
+                          </Text>
+                        </View>
+                      )}
+                      {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
+                        <View style={styles.goalStatItem}>
+                          <IconSymbol
+                            ios_icon_name="star.fill"
+                            android_material_icon_name="star"
+                            size={16}
+                            color="#FFD700"
+                          />
+                          <Text style={[styles.goalStatText, { color: '#FFD700' }]}>
+                            {goal.bestStreak}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                     
                     {/* Per-goal currency balance (not total) */}
