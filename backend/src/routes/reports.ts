@@ -563,6 +563,8 @@ export function registerReportsRoutes(app: App) {
             struggleCount,
             successReflectionIds,
             struggleReflectionIds,
+            currentStreak: goal.currentStreak || 0,
+            bestStreak: goal.bestStreak || 0,
             rewardCurrencyBalance,
             rewardCurrencySymbol,
             consequenceCurrencyBalance,
