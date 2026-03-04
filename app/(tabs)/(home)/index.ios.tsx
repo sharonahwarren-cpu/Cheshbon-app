@@ -216,8 +216,8 @@ export default function HomeScreen() {
     description?: string;
   } | undefined>(undefined);
 
-  const loadData = React.useCallback(async (isRefreshing: boolean = false) => {
-    console.log("[Home iOS] Loading home screen data, isRefreshing:", isRefreshing);
+  const loadData = React.useCallback(async (isRefreshing: boolean = false, preserveView: boolean = false) => {
+    console.log("[Home iOS] Loading home screen data, isRefreshing:", isRefreshing, "preserveView:", preserveView);
     if (isRefreshing) {
       setRefreshing(true);
     } else {
@@ -282,28 +282,32 @@ export default function HomeScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       
-      // CRITICAL FIX: ALWAYS apply user's preferred home screen when preferences are loaded
-      // This ensures that when the user changes preferences in settings and returns to the home screen,
-      // the new preference is immediately applied (not just on first load)
-      const preferredScreen = prefsData.preferredHomeScreen;
-      console.log('[Home iOS] Applying preferred home screen from backend:', preferredScreen);
-      console.log('[Home iOS] Current view before applying preference:', currentView, expressViewMode);
-      
-      if (preferredScreen === 'goals-detailed') {
-        console.log('[Home iOS] Setting view: goals-detailed -> Express view, Detailed mode');
-        setCurrentView('express');
-        setExpressViewMode('detailed');
-      } else if (preferredScreen === 'goals-concise') {
-        console.log('[Home iOS] Setting view: goals-concise -> Express view, Concise mode');
-        setCurrentView('express');
-        setExpressViewMode('concise');
+      // CRITICAL FIX: Only apply user's preferred home screen when NOT preserving view
+      // When preserveView is true (background refresh), we keep the current view state
+      // This prevents the page from jumping back to the default homepage during refreshes
+      if (!preserveView) {
+        const preferredScreen = prefsData.preferredHomeScreen;
+        console.log('[Home iOS] Applying preferred home screen from backend:', preferredScreen);
+        console.log('[Home iOS] Current view before applying preference:', currentView, expressViewMode);
+        
+        if (preferredScreen === 'goals-detailed') {
+          console.log('[Home iOS] Setting view: goals-detailed -> Express view, Detailed mode');
+          setCurrentView('express');
+          setExpressViewMode('detailed');
+        } else if (preferredScreen === 'goals-concise') {
+          console.log('[Home iOS] Setting view: goals-concise -> Express view, Concise mode');
+          setCurrentView('express');
+          setExpressViewMode('concise');
+        } else {
+          // Default to reflect view
+          console.log('[Home iOS] Setting view: reflect (default)');
+          setCurrentView('reflect');
+        }
+        
+        console.log('[Home iOS] View updated based on preference:', preferredScreen);
       } else {
-        // Default to reflect view
-        console.log('[Home iOS] Setting view: reflect (default)');
-        setCurrentView('reflect');
+        console.log('[Home iOS] Preserving current view state (background refresh)');
       }
-      
-      console.log('[Home iOS] View updated based on preference:', preferredScreen);
       
       console.log("[Home iOS] Data loaded successfully");
     } catch (error: any) {
@@ -536,7 +540,8 @@ export default function HomeScreen() {
       
       // CRITICAL FIX: Reload data in the background WITHOUT resetting view or scroll position
       // This ensures streak values are updated from the backend without disrupting the user
-      await loadData(true); // Pass true for isRefreshing to avoid showing loading spinner
+      // Pass preserveView=true to keep the current view state (Express/Reflect, Detailed/Concise)
+      await loadData(true, true); // isRefreshing=true, preserveView=true
       console.log("[Home iOS] Data reloaded after deletion, view preserved");
     } catch (error: any) {
       console.error("[Home iOS] Error deleting entry:", error);
@@ -623,7 +628,8 @@ export default function HomeScreen() {
     showSuccess('Reflection saved successfully');
     
     // CRITICAL FIX: Reload data in the background WITHOUT resetting view or scroll position
-    await loadData(true); // Pass true for isRefreshing to avoid showing loading spinner
+    // Pass preserveView=true to keep the current view state (Express/Reflect, Detailed/Concise)
+    await loadData(true, true); // isRefreshing=true, preserveView=true
     console.log('[Home iOS] Data reloaded after reflection saved, view preserved');
   };
 
