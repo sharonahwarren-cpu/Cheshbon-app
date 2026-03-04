@@ -40,6 +40,8 @@ interface ActivatedGoal {
   dailyEntries?: DailyEntry[];
   successCount: number;
   struggleCount: number;
+  currentStreak?: number;
+  bestStreak?: number;
   rewardCurrencyId?: string;
   rewardSuccesses?: number;
   rewardAmount?: number;
@@ -195,6 +197,7 @@ export default function HomeScreen() {
   const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [motivations, setMotivations] = useState<{ id: string; name: string; createdAt: string; updatedAt: string }[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
   const [journalEntry, setJournalEntry] = useState<JournalEntry | null>(null);
@@ -220,7 +223,7 @@ export default function HomeScreen() {
     }
     try {
       const dateString = formatDateLocal(selectedDate);
-      const [goalsRes, lifeAreasRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes, motivationsRes] = await Promise.all([
         authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/currencies'),
@@ -229,6 +232,7 @@ export default function HomeScreen() {
         authenticatedGet('/api/user-preferences'),
         authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
+        authenticatedGet('/api/reflection-motivations'),
       ]);
       
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
@@ -239,10 +243,12 @@ export default function HomeScreen() {
       const prefsData = prefsRes?.data || prefsRes || {};
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
+      const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
       
       console.log('[Home iOS] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
       console.log('[Home iOS] Loaded goals from backend:', goalsData.length, 'goals for date:', dateString);
+      console.log('[Home iOS] Loaded motivations:', motivationsData.length, 'motivations');
       console.log('[Home iOS] User preferences loaded:', prefsData);
       console.log('[Home iOS] Preferred home screen from backend:', prefsData.preferredHomeScreen);
       
@@ -251,6 +257,7 @@ export default function HomeScreen() {
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
+      setMotivations(motivationsData);
       setUserPreferences(prefsData);
       setJournalEntry(journalData);
       setJournalContent(journalData?.content || '');
@@ -363,6 +370,8 @@ export default function HomeScreen() {
               ),
               todaySuccessCount: response.todaySuccessCount || goal.todaySuccessCount,
               successCount: response.successCount || goal.successCount,
+              currentStreak: response.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
+              bestStreak: response.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
             };
           }
           return goal;
@@ -425,6 +434,8 @@ export default function HomeScreen() {
               ),
               todayStruggleCount: response.todayStruggleCount || goal.todayStruggleCount,
               struggleCount: response.struggleCount || goal.struggleCount,
+              currentStreak: response.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
+              bestStreak: response.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
             };
           }
           return goal;
@@ -867,6 +878,28 @@ export default function HomeScreen() {
               color={colors.error}
             />
           </View>
+          {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
+            <View style={styles.tallySection}>
+              <IconSymbol
+                ios_icon_name="flame.fill"
+                android_material_icon_name="local-fire-department"
+                size={16}
+                color="#FF6B35"
+              />
+              <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{goal.currentStreak}</Text>
+            </View>
+          )}
+          {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
+            <View style={styles.tallySection}>
+              <IconSymbol
+                ios_icon_name="star.fill"
+                android_material_icon_name="star"
+                size={16}
+                color="#FFD700"
+              />
+              <Text style={[styles.tallyCount, { color: '#FFD700' }]}>{goal.bestStreak}</Text>
+            </View>
+          )}
         </View>
         
         {goal.dailyEntries && goal.dailyEntries.length > 0 && (
@@ -969,14 +1002,21 @@ export default function HomeScreen() {
         <Text style={styles.conciseGoalTitle} numberOfLines={1}>{goal.title}</Text>
         <View style={styles.conciseCounters}>
           <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.success }]}>{successCount}</Text>
+            <Text style={[styles.conciseCounterText, { color: colors.success }]}>✓{successCount}</Text>
           </View>
           <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.text }]}>{goal.successCount}</Text>
+            <Text style={[styles.conciseCounterText, { color: colors.error }]}>✗{struggleCount}</Text>
           </View>
-          <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.textSecondary }]}>S</Text>
-          </View>
+          {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
+            <View style={styles.conciseCounter}>
+              <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{goal.currentStreak}</Text>
+            </View>
+          )}
+          {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
+            <View style={styles.conciseCounter}>
+              <Text style={[styles.conciseCounterText, { color: '#FFD700' }]}>⭐{goal.bestStreak}</Text>
+            </View>
+          )}
           {currencyTallies.map((tally, index) => (
             <View key={index} style={styles.conciseCounter}>
               <Text style={[styles.conciseCounterText, { color: tally.currencyType === 'reward' ? colors.success : colors.error }]}>
@@ -984,9 +1024,6 @@ export default function HomeScreen() {
               </Text>
             </View>
           ))}
-          <View style={styles.conciseCounter}>
-            <Text style={[styles.conciseCounterText, { color: colors.error }]}>X:{struggleCount}</Text>
-          </View>
         </View>
         <View style={styles.conciseActions}>
           <TouchableOpacity
