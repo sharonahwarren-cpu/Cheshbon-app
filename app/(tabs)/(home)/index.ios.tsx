@@ -369,6 +369,14 @@ export default function HomeScreen() {
     console.log("[Home iOS] Goal ID:", goalId);
     console.log("[Home iOS] Selected Date:", selectedDate.toISOString());
     
+    // Find the goal to get its behavior categories and type
+    const goal = activatedGoals.find(g => g.id === goalId);
+    if (!goal) {
+      console.error("[Home iOS] Goal not found for success quick entry:", goalId);
+      showError("Goal not found for quick entry.");
+      return;
+    }
+    
     // Create UTC timestamp for the selected date at current time in local timezone
     // This ensures the backend extracts the correct local date from the timestamp
     const localZone = getLocalTimezone();
@@ -388,17 +396,17 @@ export default function HomeScreen() {
     
     // Optimistic UI update
     setActivatedGoals(prevGoals => 
-      prevGoals.map(goal => {
-        if (goal.id === goalId) {
-          const updatedEntries = [...(goal.dailyEntries || []), newEntry];
+      prevGoals.map(g => {
+        if (g.id === goalId) {
+          const updatedEntries = [...(g.dailyEntries || []), newEntry];
           console.log("[Home iOS] Updated entries for goal:", updatedEntries.length);
           return {
-            ...goal,
+            ...g,
             dailyEntries: updatedEntries,
-            todaySuccessCount: goal.todaySuccessCount + 1,
+            todaySuccessCount: g.todaySuccessCount + 1,
           };
         }
-        return goal;
+        return g;
       })
     );
     
@@ -407,8 +415,25 @@ export default function HomeScreen() {
       // CRITICAL FIX: Send the local date string explicitly to avoid timezone issues
       // The backend will use this date field instead of extracting from the UTC timestamp
       const localDateString = formatDateLocal(selectedDate);
+      
+      // CRITICAL FIX: Extract behavior category and reflection type from the goal
+      // This ensures the reflection is created with the correct category and type
+      const reflectionCategory = goal.behaviorCategories && goal.behaviorCategories.length > 0
+        ? goal.behaviorCategories[0]
+        : null;
+      
+      // Map goal type to reflection type
+      const reflectionType: 'Proactive' | 'Restraint' = 
+        goal.type === 'PROACTIVE' ? 'Proactive' : 'Restraint';
+      
       const apiEndpoint = `/api/goals/${goalId}/success`;
-      const apiPayload = { timestamp, date: localDateString };
+      const apiPayload = {
+        timestamp,
+        date: localDateString,
+        category: reflectionCategory,
+        type: reflectionType,
+        linkedGoalId: goal.id,
+      };
       
       console.log("[Home iOS] ========== MAKING API CALL ==========");
       console.log("[Home iOS] Endpoint:", apiEndpoint);
@@ -423,20 +448,20 @@ export default function HomeScreen() {
       
       // Update with real entry ID from backend
       setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
+        prevGoals.map(g => {
+          if (g.id === goalId) {
             return {
-              ...goal,
-              dailyEntries: goal.dailyEntries?.map(e => 
+              ...g,
+              dailyEntries: g.dailyEntries?.map(e => 
                 e.id === newEntry.id ? { ...e, id: response.entryId || e.id } : e
               ),
-              todaySuccessCount: response.todaySuccessCount !== undefined ? response.todaySuccessCount : goal.todaySuccessCount,
-              successCount: response.successCount !== undefined ? response.successCount : goal.successCount,
-              currentStreak: response.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
-              bestStreak: response.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
+              todaySuccessCount: response.todaySuccessCount !== undefined ? response.todaySuccessCount : g.todaySuccessCount,
+              successCount: response.successCount !== undefined ? response.successCount : g.successCount,
+              currentStreak: response.currentStreak !== undefined ? response.currentStreak : g.currentStreak,
+              bestStreak: response.bestStreak !== undefined ? response.bestStreak : g.bestStreak,
             };
           }
-          return goal;
+          return g;
         })
       );
       
@@ -454,16 +479,16 @@ export default function HomeScreen() {
       
       // Rollback optimistic update
       setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
-            const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== newEntry.id);
+        prevGoals.map(g => {
+          if (g.id === goalId) {
+            const filteredEntries = (g.dailyEntries || []).filter(e => e.id !== newEntry.id);
             return {
-              ...goal,
+              ...g,
               dailyEntries: filteredEntries,
-              todaySuccessCount: Math.max(0, goal.todaySuccessCount - 1),
+              todaySuccessCount: Math.max(0, g.todaySuccessCount - 1),
             };
           }
-          return goal;
+          return g;
         })
       );
       
@@ -475,6 +500,14 @@ export default function HomeScreen() {
     console.log("[Home iOS] ========== RECORDING STRUGGLE ==========");
     console.log("[Home iOS] Goal ID:", goalId);
     console.log("[Home iOS] Selected Date:", selectedDate.toISOString());
+    
+    // Find the goal to get its behavior categories and type
+    const goal = activatedGoals.find(g => g.id === goalId);
+    if (!goal) {
+      console.error("[Home iOS] Goal not found for struggle quick entry:", goalId);
+      showError("Goal not found for quick entry.");
+      return;
+    }
     
     // Create UTC timestamp for the selected date at current time in local timezone
     // This ensures the backend extracts the correct local date from the timestamp
@@ -495,17 +528,17 @@ export default function HomeScreen() {
     
     // Optimistic UI update
     setActivatedGoals(prevGoals => 
-      prevGoals.map(goal => {
-        if (goal.id === goalId) {
-          const updatedEntries = [...(goal.dailyEntries || []), newEntry];
+      prevGoals.map(g => {
+        if (g.id === goalId) {
+          const updatedEntries = [...(g.dailyEntries || []), newEntry];
           console.log("[Home iOS] Updated entries for goal:", updatedEntries.length);
           return {
-            ...goal,
+            ...g,
             dailyEntries: updatedEntries,
-            todayStruggleCount: goal.todayStruggleCount + 1,
+            todayStruggleCount: g.todayStruggleCount + 1,
           };
         }
-        return goal;
+        return g;
       })
     );
     
@@ -514,8 +547,25 @@ export default function HomeScreen() {
       // CRITICAL FIX: Send the local date string explicitly to avoid timezone issues
       // The backend will use this date field instead of extracting from the UTC timestamp
       const localDateString = formatDateLocal(selectedDate);
+      
+      // CRITICAL FIX: Extract behavior category and reflection type from the goal
+      // This ensures the reflection is created with the correct category and type
+      const reflectionCategory = goal.behaviorCategories && goal.behaviorCategories.length > 0
+        ? goal.behaviorCategories[0]
+        : null;
+      
+      // Map goal type to reflection type
+      const reflectionType: 'Proactive' | 'Restraint' = 
+        goal.type === 'PROACTIVE' ? 'Proactive' : 'Restraint';
+      
       const apiEndpoint = `/api/goals/${goalId}/struggle`;
-      const apiPayload = { timestamp, date: localDateString };
+      const apiPayload = {
+        timestamp,
+        date: localDateString,
+        category: reflectionCategory,
+        type: reflectionType,
+        linkedGoalId: goal.id,
+      };
       
       console.log("[Home iOS] ========== MAKING API CALL ==========");
       console.log("[Home iOS] Endpoint:", apiEndpoint);
@@ -530,20 +580,20 @@ export default function HomeScreen() {
       
       // Update with real entry ID from backend
       setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
+        prevGoals.map(g => {
+          if (g.id === goalId) {
             return {
-              ...goal,
-              dailyEntries: goal.dailyEntries?.map(e => 
+              ...g,
+              dailyEntries: g.dailyEntries?.map(e => 
                 e.id === newEntry.id ? { ...e, id: response?.entryId || e.id } : e
               ),
-              todayStruggleCount: response?.todayStruggleCount !== undefined ? response.todayStruggleCount : goal.todayStruggleCount,
-              struggleCount: response?.struggleCount !== undefined ? response.struggleCount : goal.struggleCount,
-              currentStreak: response?.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
-              bestStreak: response?.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
+              todayStruggleCount: response?.todayStruggleCount !== undefined ? response.todayStruggleCount : g.todayStruggleCount,
+              struggleCount: response?.struggleCount !== undefined ? response.struggleCount : g.struggleCount,
+              currentStreak: response?.currentStreak !== undefined ? response.currentStreak : g.currentStreak,
+              bestStreak: response?.bestStreak !== undefined ? response.bestStreak : g.bestStreak,
             };
           }
-          return goal;
+          return g;
         })
       );
       
@@ -561,16 +611,16 @@ export default function HomeScreen() {
       
       // Rollback optimistic update
       setActivatedGoals(prevGoals => 
-        prevGoals.map(goal => {
-          if (goal.id === goalId) {
-            const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== newEntry.id);
+        prevGoals.map(g => {
+          if (g.id === goalId) {
+            const filteredEntries = (g.dailyEntries || []).filter(e => e.id !== newEntry.id);
             return {
-              ...goal,
+              ...g,
               dailyEntries: filteredEntries,
-              todayStruggleCount: Math.max(0, goal.todayStruggleCount - 1),
+              todayStruggleCount: Math.max(0, g.todayStruggleCount - 1),
             };
           }
-          return goal;
+          return g;
         })
       );
       
