@@ -155,6 +155,13 @@
       "when": 1772016589224,
       "tag": "20260225104949_solid_terrax",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1772608102516,
+      "tag": "20260304070822_heavy_joystick",
+      "breakpoints": true
     }
   ]
 }

@@ -321,3 +321,13 @@ export const reflectionMessages = pgTable('reflection_messages', {
   content: text('content').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const gainLossCategories = pgTable('gain_loss_categories', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (table) => ({
+  userNameUnique: uniqueIndex('gain_loss_categories_user_id_name_unique').on(table.userId, table.name),
+}));

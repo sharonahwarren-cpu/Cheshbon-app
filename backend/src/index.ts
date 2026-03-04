@@ -18,6 +18,7 @@ import { registerReflectionChatRoutes } from './routes/reflection-chat.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerMitzvotRoutes } from './routes/mitzvot.js';
 import { registerMitzvotCategoryRoutes } from './routes/mitzvot-categories.js';
+import { registerGainLossCategoriesRoutes } from './routes/gain-loss-categories.js';
 import { registerAuthRoutes } from './routes/auth.js';
 
 // Combine both schemas
@@ -279,6 +280,7 @@ registerReflectionChatRoutes(app);
 registerHealthRoutes(app);
 registerMitzvotCategoryRoutes(app);
 registerMitzvotRoutes(app);
+registerGainLossCategoriesRoutes(app);
 registerAuthRoutes(app);
 
 // Log registered auth endpoints with BASE_URL configuration details
