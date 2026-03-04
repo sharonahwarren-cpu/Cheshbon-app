@@ -278,9 +278,9 @@ export function registerGoalsTrackingRoutes(app: App) {
     if (!session) return;
 
     const { id } = request.params as { id: string };
-    const body = request.body as { timestamp: string; date?: string };
+    const body = request.body as { timestamp: string };
 
-    app.logger.info({ userId: session.user.id, goalId: id, timestamp: body.timestamp, date: body.date }, 'Recording goal success');
+    app.logger.info({ userId: session.user.id, goalId: id, timestamp: body.timestamp }, 'Recording goal success');
 
     try {
       // Check if goal exists and belongs to user
@@ -303,8 +303,8 @@ export function registerGoalsTrackingRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
-      // Extract date from optional date field (user's local timezone), or fall back to timestamp
-      const entryDate = body.date || (body.timestamp ? body.timestamp.split('T')[0] : new Date().toISOString().split('T')[0]);
+      // Extract date from timestamp (ISO 8601 format)
+      const entryDate = body.timestamp ? body.timestamp.split('T')[0] : new Date().toISOString().split('T')[0];
 
       // Calculate currency change based on goal and currency settings
       let currencyChange = null;
@@ -550,9 +550,9 @@ export function registerGoalsTrackingRoutes(app: App) {
     if (!session) return;
 
     const { id } = request.params as { id: string };
-    const body = request.body as { timestamp: string; date?: string };
+    const body = request.body as { timestamp: string };
 
-    app.logger.info({ userId: session.user.id, goalId: id, timestamp: body.timestamp, date: body.date }, 'Recording goal struggle');
+    app.logger.info({ userId: session.user.id, goalId: id, timestamp: body.timestamp }, 'Recording goal struggle');
 
     try {
       // Check if goal exists and belongs to user
@@ -575,8 +575,8 @@ export function registerGoalsTrackingRoutes(app: App) {
         return reply.status(403).send({ error: 'Unauthorized' });
       }
 
-      // Extract date from optional date field (user's local timezone), or fall back to timestamp
-      const entryDate = body.date || (body.timestamp ? body.timestamp.split('T')[0] : new Date().toISOString().split('T')[0]);
+      // Extract date from timestamp (ISO 8601 format)
+      const entryDate = body.timestamp ? body.timestamp.split('T')[0] : new Date().toISOString().split('T')[0];
 
       // Calculate currency change based on goal and currency settings
       let currencyChange = null;
