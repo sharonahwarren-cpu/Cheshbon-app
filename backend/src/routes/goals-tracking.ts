@@ -446,20 +446,22 @@ export function registerGoalsTrackingRoutes(app: App) {
             checkDate.setDate(checkDate.getDate() - 1);
           }
 
-          // Calculate best streak: iterate through EVERY day from earliest to today
+          // Calculate best streak: iterate through EVERY day from earliest to entryDate
           // Count consecutive scheduled days with successes
+          // Use entryDate (local date) as reference point, not UTC today
           let tempStreak = 0;
           let maxStreak = 0;
 
           if (sortedDates.length > 0) {
             const earliestDate = new Date(sortedDates[0]);
             earliestDate.setUTCHours(0, 0, 0, 0);
-            const today = new Date();
-            today.setUTCHours(0, 0, 0, 0);
+            // Use entryDate as the reference point instead of UTC today
+            const referenceDate = new Date(entryDate);
+            referenceDate.setUTCHours(0, 0, 0, 0);
 
             let currentCheckDate = new Date(earliestDate);
 
-            while (currentCheckDate <= today) {
+            while (currentCheckDate <= referenceDate) {
               const checkDateStr = currentCheckDate.toISOString().split('T')[0];
               const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
 
@@ -762,19 +764,21 @@ export function registerGoalsTrackingRoutes(app: App) {
               checkDate.setDate(checkDate.getDate() - 1);
             }
 
-            // Calculate best streak: iterate through EVERY day from earliest to today
+            // Calculate best streak: iterate through EVERY day from earliest to entryDate
             // Count consecutive scheduled days with successes
+            // Use entryDate (local date) as reference point, not UTC today
             let tempStreak = 0;
             let maxStreak = 0;
 
             const earliestDate = new Date(sortedDates[0]);
             earliestDate.setUTCHours(0, 0, 0, 0);
-            const today = new Date();
-            today.setUTCHours(0, 0, 0, 0);
+            // Use entryDate as the reference point instead of UTC today
+            const referenceDate = new Date(entryDate);
+            referenceDate.setUTCHours(0, 0, 0, 0);
 
             let currentCheckDate = new Date(earliestDate);
 
-            while (currentCheckDate <= today) {
+            while (currentCheckDate <= referenceDate) {
               const checkDateStr = currentCheckDate.toISOString().split('T')[0];
               const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
 
@@ -998,19 +1002,21 @@ export function registerGoalsTrackingRoutes(app: App) {
             checkDate.setDate(checkDate.getDate() - 1);
           }
 
-          // Calculate best streak: iterate through EVERY day from earliest to today
+          // Calculate best streak: iterate through EVERY day from earliest to the deleted entry's date
           // Count consecutive scheduled days with successes
+          // Use the deleted entry's date as reference point, not UTC today
           let tempStreak = 0;
           let maxStreak = 0;
 
           const earliestDate = new Date(sortedDates[0]);
           earliestDate.setUTCHours(0, 0, 0, 0);
-          const today = new Date();
-          today.setUTCHours(0, 0, 0, 0);
+          // Use the deleted entry's date as reference point
+          const referenceDate = new Date(entries[0].entryDate);
+          referenceDate.setUTCHours(0, 0, 0, 0);
 
           let currentCheckDate = new Date(earliestDate);
 
-          while (currentCheckDate <= today) {
+          while (currentCheckDate <= referenceDate) {
             const checkDateStr = currentCheckDate.toISOString().split('T')[0];
             const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
 
