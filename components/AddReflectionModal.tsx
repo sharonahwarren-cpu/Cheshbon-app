@@ -764,7 +764,7 @@ export function AddReflectionModal({
   };
 
   // Filter goals by category AND search query
-  const filteredGoals = goals.filter(goal => {
+  const filteredGoals = (goals || []).filter(goal => {
     if (goalSearchQuery && !goal.title.toLowerCase().includes(goalSearchQuery.toLowerCase())) {
       return false;
     }
@@ -785,36 +785,36 @@ export function AddReflectionModal({
   });
 
   // Filter gains by search query
-  const filteredGains = gainsLosses.filter(gl => gl.type === 'Gain').filter(gain => {
+  const filteredGains = (gainsLosses || []).filter(gl => gl.type === 'Gain').filter(gain => {
     if (!gainsSearchQuery) return true;
     return gain.name.toLowerCase().includes(gainsSearchQuery.toLowerCase());
   });
 
   // Filter losses by search query
-  const filteredLosses = gainsLosses.filter(gl => gl.type === 'Loss').filter(loss => {
+  const filteredLosses = (gainsLosses || []).filter(gl => gl.type === 'Loss').filter(loss => {
     if (!lossesSearchQuery) return true;
     return loss.name.toLowerCase().includes(lossesSearchQuery.toLowerCase());
   });
 
   // Filter motivations by search query
-  const filteredMotivations = motivations.filter(motivation => {
+  const filteredMotivations = (motivations || []).filter(motivation => {
     if (!motivationsSearchQuery) return true;
     return motivation.name.toLowerCase().includes(motivationsSearchQuery.toLowerCase());
   });
 
   // Filter strategies by search query
-  const filteredStrategies = strategies.filter(strategy => {
+  const filteredStrategies = (strategies || []).filter(strategy => {
     if (!strategySearchQuery) return true;
     return strategy.name.toLowerCase().includes(strategySearchQuery.toLowerCase());
   });
 
   // Filter future strategies by search query
-  const filteredFutureStrategies = strategies.filter(strategy => {
+  const filteredFutureStrategies = (strategies || []).filter(strategy => {
     if (!futureStrategySearchQuery) return true;
     return strategy.name.toLowerCase().includes(futureStrategySearchQuery.toLowerCase());
   });
 
-  const selectedGoal = goals.find(g => g.id === linkedGoalId);
+  const selectedGoal = (goals || []).find(g => g.id === linkedGoalId);
   
   const currencyBalanceInfo = (() => {
     console.log('[AddReflectionModal] Currency calculation check:', {
@@ -845,7 +845,7 @@ export function AddReflectionModal({
     
     if (!currencyId || !amount) return null;
     
-    const currency = currencies.find(c => c.id === currencyId);
+    const currency = (currencies || []).find(c => c.id === currencyId);
     if (!currency) return null;
     
     const operation = isSuccess ? currency.onSuccess : currency.onFailure;
@@ -1963,7 +1963,7 @@ export function AddReflectionModal({
                     onPress={() => setShowFutureStrategyPicker(!showFutureStrategyPicker)}
                   >
                     <Text style={styles.goalPickerText}>
-                      {futureStrategyId ? strategies.find(s => s.id === futureStrategyId)?.name || 'Select a strategy...' : 'Select a strategy...'}
+                      {futureStrategyId ? (strategies || []).find(s => s.id === futureStrategyId)?.name || 'Select a strategy...' : 'Select a strategy...'}
                     </Text>
                     <IconSymbol
                       ios_icon_name="chevron.down"
