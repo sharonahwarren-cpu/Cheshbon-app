@@ -410,20 +410,21 @@ export function registerGoalsTrackingRoutes(app: App) {
         let bestStreak = goals[0].bestStreak || 0;
 
         if (sortedDates.length > 0) {
-          // Calculate current streak: count consecutive scheduled days from most recent backwards
-          // Only count days where the goal is scheduled, skip non-scheduled days, break on missed scheduled days
-          const mostRecentDate = sortedDates[sortedDates.length - 1]; // Last (most recent) date
-          let checkDate = new Date(mostRecentDate);
+          // Create a set for O(1) lookup of success dates
+          const successDatesSet = new Set(sortedDates);
+
+          // Calculate current streak: count consecutive scheduled days from today backwards
+          // Check EVERY day, not just days with successes
+          let checkDate = new Date();
           checkDate.setUTCHours(0, 0, 0, 0);
 
-          // Count consecutive scheduled days from most recent backwards
           for (let i = 0; i < 365; i++) {
             const checkDateStr = checkDate.toISOString().split('T')[0];
             const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
 
             if (isScheduled) {
               // Goal is scheduled on this day
-              if (sortedDates.includes(checkDateStr)) {
+              if (successDatesSet.has(checkDateStr)) {
                 // Has success on this scheduled day
                 currentStreak++;
               } else {
@@ -436,18 +437,37 @@ export function registerGoalsTrackingRoutes(app: App) {
             checkDate.setDate(checkDate.getDate() - 1);
           }
 
-          // Calculate best streak: find longest consecutive sequence of scheduled days with successes
+          // Calculate best streak: iterate through EVERY day from earliest to today
+          // Count consecutive scheduled days with successes
           let tempStreak = 0;
           let maxStreak = 0;
 
-          for (let i = 0; i < sortedDates.length; i++) {
-            const dateStr = sortedDates[i];
-            const isScheduled = isGoalActiveOnDateHelper(goals[0], dateStr);
+          if (sortedDates.length > 0) {
+            const earliestDate = new Date(sortedDates[0]);
+            earliestDate.setUTCHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setUTCHours(0, 0, 0, 0);
 
-            if (isScheduled) {
-              // Goal is scheduled on this day with a success
-              tempStreak++;
-              maxStreak = Math.max(maxStreak, tempStreak);
+            let currentCheckDate = new Date(earliestDate);
+
+            while (currentCheckDate <= today) {
+              const checkDateStr = currentCheckDate.toISOString().split('T')[0];
+              const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
+
+              if (isScheduled) {
+                // Goal is scheduled on this day
+                if (successDatesSet.has(checkDateStr)) {
+                  // Has success on this scheduled day
+                  tempStreak++;
+                  maxStreak = Math.max(maxStreak, tempStreak);
+                } else {
+                  // Scheduled day but no success - reset counter
+                  tempStreak = 0;
+                }
+              }
+              // If not scheduled, skip but don't reset counter (non-scheduled days don't break streaks)
+
+              currentCheckDate.setDate(currentCheckDate.getDate() + 1);
             }
           }
 
@@ -705,19 +725,21 @@ export function registerGoalsTrackingRoutes(app: App) {
           let bestStreak = goals[0].bestStreak || 0;
 
           if (sortedDates.length > 0) {
-            // Calculate current streak: count consecutive scheduled days from most recent backwards
-            const mostRecentDate = sortedDates[sortedDates.length - 1];
-            let checkDate = new Date(mostRecentDate);
+            // Create a set for O(1) lookup of success dates
+            const successDatesSet = new Set(sortedDates);
+
+            // Calculate current streak: count consecutive scheduled days from today backwards
+            // Check EVERY day, not just days with successes
+            let checkDate = new Date();
             checkDate.setUTCHours(0, 0, 0, 0);
 
-            // Count consecutive scheduled days from most recent backwards
             for (let i = 0; i < 365; i++) {
               const checkDateStr = checkDate.toISOString().split('T')[0];
               const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
 
               if (isScheduled) {
                 // Goal is scheduled on this day
-                if (sortedDates.includes(checkDateStr)) {
+                if (successDatesSet.has(checkDateStr)) {
                   // Has success on this scheduled day
                   currentStreak++;
                 } else {
@@ -730,19 +752,36 @@ export function registerGoalsTrackingRoutes(app: App) {
               checkDate.setDate(checkDate.getDate() - 1);
             }
 
-            // Calculate best streak: find longest consecutive sequence of scheduled days with successes
+            // Calculate best streak: iterate through EVERY day from earliest to today
+            // Count consecutive scheduled days with successes
             let tempStreak = 0;
             let maxStreak = 0;
 
-            for (let i = 0; i < sortedDates.length; i++) {
-              const dateStr = sortedDates[i];
-              const isScheduled = isGoalActiveOnDateHelper(goals[0], dateStr);
+            const earliestDate = new Date(sortedDates[0]);
+            earliestDate.setUTCHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setUTCHours(0, 0, 0, 0);
+
+            let currentCheckDate = new Date(earliestDate);
+
+            while (currentCheckDate <= today) {
+              const checkDateStr = currentCheckDate.toISOString().split('T')[0];
+              const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
 
               if (isScheduled) {
-                // Goal is scheduled on this day with a success
-                tempStreak++;
-                maxStreak = Math.max(maxStreak, tempStreak);
+                // Goal is scheduled on this day
+                if (successDatesSet.has(checkDateStr)) {
+                  // Has success on this scheduled day
+                  tempStreak++;
+                  maxStreak = Math.max(maxStreak, tempStreak);
+                } else {
+                  // Scheduled day but no success - reset counter
+                  tempStreak = 0;
+                }
               }
+              // If not scheduled, skip but don't reset counter
+
+              currentCheckDate.setDate(currentCheckDate.getDate() + 1);
             }
 
             bestStreak = Math.max(bestStreak, maxStreak);
