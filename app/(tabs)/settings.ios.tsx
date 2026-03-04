@@ -133,7 +133,7 @@ interface ReflectionWorthItTallies {
   total: number;
 }
 
-type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionMotivations' | 'reflectionPrefs' | 'notifications' | 'reports';
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionMotivations' | 'reflectionPrefs' | 'notifications';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -144,7 +144,7 @@ export default function SettingsScreen() {
   const getInitialSection = (): SettingsSection => {
     const section = params.section;
     if (!section) return 'main';
-    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications', 'reports'];
+    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications'];
     if (validSections.includes(section as SettingsSection)) {
       return section as SettingsSection;
     }
@@ -215,7 +215,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     const section = params.section;
     if (section) {
-      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications', 'reports'];
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications'];
       if (validSections.includes(section as SettingsSection)) {
         console.log('[Settings iOS] Setting section from URL param:', section);
         setCurrentSection(section as SettingsSection);
@@ -223,11 +223,7 @@ export default function SettingsScreen() {
     }
   }, [params.section]);
 
-  useEffect(() => {
-    if (currentSection === 'reports') {
-      loadCurrencyBalances();
-    }
-  }, [currentSection]);
+
 
   // Reload data when screen comes into focus (e.g., returning from life-area-wizard)
   useFocusEffect(
@@ -435,7 +431,7 @@ export default function SettingsScreen() {
     setShowModal(true);
   };
 
-  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm', item: any) => {
+  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm', item: any) => {
     console.log('[Settings iOS] openEditModal called with type:', type, 'item:', item);
     
     if (type === 'lifeArea') {
@@ -498,6 +494,14 @@ export default function SettingsScreen() {
           await authenticatedPost('/api/gain-loss-categories', { name: formData.name });
           showSuccess('Category created successfully');
         }
+      } else if (modalType === 'reflectionMotivation') {
+        if (editingItem) {
+          await authenticatedPut(`/api/reflection-motivations/${editingItem.id}`, { name: formData.name });
+          showSuccess('Motivation updated successfully');
+        } else {
+          await authenticatedPost('/api/reflection-motivations', { name: formData.name });
+          showSuccess('Motivation created successfully');
+        }
       } else if (modalType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         if (editingItem) {
@@ -523,7 +527,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const confirmDelete = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | 'goal', id: string, name: string) => {
+  const confirmDelete = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm' | 'goal', id: string, name: string) => {
     setDeleteItemType(type);
     setDeleteItemId(id);
     setDeleteItemName(name);
@@ -552,6 +556,9 @@ export default function SettingsScreen() {
       } else if (deleteItemType === 'gainLossCategory') {
         await authenticatedDelete(`/api/gain-loss-categories/${deleteItemId}`);
         showSuccess('Category deleted successfully');
+      } else if (deleteItemType === 'reflectionMotivation') {
+        await authenticatedDelete(`/api/reflection-motivations/${deleteItemId}`);
+        showSuccess('Motivation deleted successfully');
       } else if (deleteItemType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         const updatedAlarms = alarms.filter(a => a.id !== deleteItemId);
@@ -653,9 +660,9 @@ export default function SettingsScreen() {
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
       { title: 'Gain/Loss Categories', icon: 'category', section: 'gainLossCategories' as SettingsSection },
+      { title: 'Reflection Motivations', icon: 'flash-on', section: 'reflectionMotivations' as SettingsSection },
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
-      { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
     ];
 
     return (
@@ -1816,11 +1823,7 @@ export default function SettingsScreen() {
     );
   };
 
-  const renderReports = () => {
-    const worthItPercentage = worthItTallies && worthItTallies.total > 0 
-      ? Math.round((worthItTallies.worthIt / worthItTallies.total) * 100)
-      : 0;
-
+  const renderReflectionMotivations = () => {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -1832,10 +1835,20 @@ export default function SettingsScreen() {
               color={colors.text}
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Reports</Text>
-          <View style={{ width: 24 }} />
+          <Text style={styles.headerTitle}>Reflection Motivations</Text>
+          <TouchableOpacity onPress={() => openAddModal('reflectionMotivation')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
         </View>
-        <ScrollView 
+        <Text style={styles.helperText}>
+          Manage your custom motivations. These will be available when creating or editing reflections.
+        </Text>
+        <ScrollView
           style={styles.listContainer}
           contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
           refreshControl={
@@ -1847,111 +1860,44 @@ export default function SettingsScreen() {
             />
           }
         >
-          {worthItTallies && worthItTallies.total > 0 && (
-            <>
-              <Text style={styles.sectionSubtitle}>Reflection Worth It Analysis</Text>
-              <View style={styles.reportCard}>
-                <View style={styles.reportHeader}>
-                  <Text style={styles.reportTitle}>Was it worth it?</Text>
-                </View>
-                <View style={styles.reportStats}>
-                  <Text style={styles.reportStat}>Total Reflections: {worthItTallies.total}</Text>
-                  <Text style={[styles.reportStat, { color: colors.success }]}>
-                    Worth It: {worthItTallies.worthIt} ({worthItPercentage}%)
-                  </Text>
-                  <Text style={[styles.reportStat, { color: colors.error }]}>
-                    Not Worth It: {worthItTallies.notWorthIt} ({100 - worthItPercentage}%)
-                  </Text>
-                </View>
-              </View>
-            </>
-          )}
-
-          <Text style={styles.sectionSubtitle}>Total Currency Balances</Text>
-          {currencyBalances.length === 0 ? (
+          {reflectionMotivations.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No currency data yet. Complete some goals to see your balances!</Text>
+              <Text style={styles.emptyStateText}>No motivations yet. Create some to track what drives your behaviors!</Text>
             </View>
           ) : (
-            currencyBalances.map((balance, index) => {
-              const symbolText = balance.symbol || '';
-              const totalBalanceText = `${balance.totalBalance}`;
-              const totalBalanceColor = balance.totalBalance >= 0 ? colors.success : colors.error;
-              const currency = currencies.find(c => c.id === balance.currencyId);
-              
-              // Determine button type based on balance and currency type
-              let buttonType: 'claim' | 'pay' = 'claim';
-              if (balance.totalBalance > 0) {
-                buttonType = (currency && isRewardCurrency(currency)) ? 'claim' : 'pay';
-              } else if (balance.totalBalance < 0) {
-                buttonType = (currency && isRewardCurrency(currency)) ? 'pay' : 'claim';
-              }
-              
-              return (
-                <React.Fragment key={index}>
-                  <TouchableOpacity 
-                    style={styles.reportCard}
-                    onPress={() => {
-                      console.log('[Settings iOS] Navigating to currency reflections for:', balance.currencyId);
-                      router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
-                    }}
-                  >
-                    <View style={styles.reportHeader}>
-                      <Text style={styles.reportTitle}>{balance.currencyName}</Text>
-                      {symbolText && <Text style={styles.reportSymbol}>{symbolText}</Text>}
-                    </View>
-                    <View style={styles.reportNetBalance}>
-                      <Text style={[styles.reportNetBalanceText, { color: totalBalanceColor }]}>
-                        Total: {totalBalanceText}
-                      </Text>
-                    </View>
-                    
-                    {balance.goalBreakdown && balance.goalBreakdown.length > 0 && (
-                      <View style={styles.goalBreakdownSection}>
-                        <Text style={styles.goalBreakdownTitle}>Per Goal:</Text>
-                        {balance.goalBreakdown.map((goalBalance, idx) => {
-                          const goalBalanceText = `${goalBalance.balance}`;
-                          const goalBalanceColor = goalBalance.balance >= 0 ? colors.success : colors.error;
-                          
-                          return (
-                            <View key={idx} style={styles.goalBreakdownRow}>
-                              <Text style={styles.goalBreakdownGoal}>{goalBalance.goalTitle}</Text>
-                              <Text style={[styles.goalBreakdownBalance, { color: goalBalanceColor }]}>
-                                {symbolText}{goalBalanceText}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    )}
-                    
-                    {balance.totalBalance !== 0 && (
-                      <TouchableOpacity
-                        style={[styles.currencyTotalActionButton, { backgroundColor: buttonType === 'claim' ? colors.success : colors.error }]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          openCurrencyModal(buttonType, balance.currencyId, balance.totalBalance);
-                        }}
-                      >
-                        <Text style={styles.currencyTotalActionButtonText}>
-                          {buttonType === 'claim' ? 'Claim' : 'Pay'} {Math.abs(balance.totalBalance)} {symbolText}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                    
-                    <View style={styles.drillDownHint}>
+            reflectionMotivations.map((motivation, index) => (
+              <React.Fragment key={index}>
+                <View style={styles.listItem}>
+                  <View style={styles.listItemContent}>
+                    <Text style={styles.listItemTitle}>{motivation.name}</Text>
+                  </View>
+                  <View style={styles.listItemActions}>
+                    <TouchableOpacity
+                      onPress={() => openEditModal('reflectionMotivation', motivation)}
+                      style={styles.iconButton}
+                    >
                       <IconSymbol
-                        ios_icon_name="chevron.right"
-                        android_material_icon_name="arrow-forward"
-                        size={16}
+                        ios_icon_name="pencil"
+                        android_material_icon_name="edit"
+                        size={20}
                         color={colors.primary}
                       />
-                      <Text style={styles.drillDownText}>Tap to view related reflections</Text>
-                    </View>
-                  </TouchableOpacity>
-                </React.Fragment>
-              );
-            })
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => confirmDelete('reflectionMotivation', motivation.id, motivation.name)}
+                      style={styles.iconButton}
+                    >
+                      <IconSymbol
+                        ios_icon_name="trash"
+                        android_material_icon_name="delete"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </React.Fragment>
+            ))
           )}
         </ScrollView>
       </View>
@@ -1980,9 +1926,9 @@ export default function SettingsScreen() {
           {currentSection === 'currencies' && renderCurrencies()}
           {currentSection === 'gainsLosses' && renderGainsLosses()}
           {currentSection === 'gainLossCategories' && renderGainLossCategories()}
+          {currentSection === 'reflectionMotivations' && renderReflectionMotivations()}
           {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
           {currentSection === 'notifications' && renderNotifications()}
-          {currentSection === 'reports' && renderReports()}
         </>
       )}
 
@@ -2312,6 +2258,62 @@ export default function SettingsScreen() {
                   value={formData.name || ''}
                   onChangeText={(text) => setFormData({ ...formData, name: text })}
                   placeholder="e.g. Financial, Relationship, Health"
+                  placeholderTextColor={colors.textSecondary}
+                  autoFocus
+                />
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading || !formData.name}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reflection Motivation Add/Edit Modal */}
+      <Modal
+        visible={showModal && modalType === 'reflectionMotivation'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Motivation' : 'Add Motivation'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Motivation Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name || ''}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholder="e.g. Pride, Money, Exhaustion"
                   placeholderTextColor={colors.textSecondary}
                   autoFocus
                 />
