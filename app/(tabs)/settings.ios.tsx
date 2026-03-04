@@ -688,13 +688,14 @@ export default function SettingsScreen() {
 
   const renderMainMenu = () => {
     const menuItems = [
-      { title: 'Goals', icon: 'flag', section: 'goals' as SettingsSection },
-      { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
-      { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
-      { title: 'Gain/Loss Categories', icon: 'category', section: 'gainLossCategories' as SettingsSection },
-      { title: 'Reflection Motivations', icon: 'flash-on', section: 'reflectionMotivations' as SettingsSection },
-      { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
-      { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
+      { title: 'Goals', iosIcon: 'flag.fill', androidIcon: 'flag', section: 'goals' as SettingsSection },
+      { title: 'Strategies', iosIcon: 'lightbulb.fill', androidIcon: 'lightbulb', section: 'strategies' as SettingsSection },
+      { title: 'Gains and Losses', iosIcon: 'arrow.up.arrow.down', androidIcon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
+      { title: 'Gain/Loss Categories', iosIcon: 'folder.fill', androidIcon: 'folder', section: 'gainLossCategories' as SettingsSection },
+      { title: 'Motivations', iosIcon: 'bolt.fill', androidIcon: 'flash-on', section: 'reflectionMotivations' as SettingsSection },
+      { title: 'Behavior Categories', iosIcon: 'list.bullet.rectangle.portrait.fill', androidIcon: 'view-list', section: 'reflectionPrefs' as SettingsSection },
+      { title: 'Life Areas', iosIcon: 'square.grid.2x2.fill', androidIcon: 'grid-view', section: 'lifeAreas' as SettingsSection },
+      { title: 'Currencies', iosIcon: 'dollarsign.circle.fill', androidIcon: 'attach-money', section: 'currencies' as SettingsSection },
     ];
 
     return (
@@ -719,10 +720,10 @@ export default function SettingsScreen() {
             >
               <View style={styles.menuItemLeft}>
                 <IconSymbol
-                  ios_icon_name="gear"
-                  android_material_icon_name={item.icon}
+                  ios_icon_name={item.iosIcon}
+                  android_material_icon_name={item.androidIcon}
                   size={24}
-                  color={colors.text}
+                  color={colors.primary}
                 />
                 <Text style={styles.menuItemText}>{item.title}</Text>
               </View>
