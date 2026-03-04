@@ -4,7 +4,8 @@ import React, { useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
 import { colors } from '@/styles/commonStyles';
-import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { IconSymbol } from '@/components/IconSymbol.ios';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -38,16 +39,20 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
+        headerShown: false,
       }}
     >
       <NativeTabs.Screen
         name="(home)"
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: () => (
-            <>
-              <Icon sf={{ default: 'house', selected: 'house.fill' }} drawable="home" />
-            </>
+          tabBarIcon: ({ focused, color }) => (
+            <IconSymbol 
+              ios_icon_name={focused ? 'house.fill' : 'house'} 
+              android_material_icon_name="home"
+              color={color}
+              size={24}
+            />
           ),
         }}
       />
@@ -55,10 +60,13 @@ export default function TabLayout() {
         name="reports"
         options={{
           tabBarLabel: 'Reports',
-          tabBarIcon: () => (
-            <>
-              <Icon sf={{ default: 'chart.bar.doc.horizontal', selected: 'chart.bar.doc.horizontal.fill' }} drawable="assessment" />
-            </>
+          tabBarIcon: ({ focused, color }) => (
+            <IconSymbol 
+              ios_icon_name={focused ? 'chart.bar.doc.horizontal.fill' : 'chart.bar.doc.horizontal'} 
+              android_material_icon_name="assessment"
+              color={color}
+              size={24}
+            />
           ),
         }}
       />
@@ -66,10 +74,13 @@ export default function TabLayout() {
         name="settings"
         options={{
           tabBarLabel: 'Settings',
-          tabBarIcon: () => (
-            <>
-              <Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} drawable="settings" />
-            </>
+          tabBarIcon: ({ focused, color }) => (
+            <IconSymbol 
+              ios_icon_name={focused ? 'gearshape.fill' : 'gearshape'} 
+              android_material_icon_name="settings"
+              color={color}
+              size={24}
+            />
           ),
         }}
       />
@@ -77,10 +88,13 @@ export default function TabLayout() {
         name="profile"
         options={{
           tabBarLabel: 'Profile',
-          tabBarIcon: () => (
-            <>
-              <Icon sf={{ default: 'person.circle', selected: 'person.circle.fill' }} drawable="account-circle" />
-            </>
+          tabBarIcon: ({ focused, color }) => (
+            <IconSymbol 
+              ios_icon_name={focused ? 'person.circle.fill' : 'person.circle'} 
+              android_material_icon_name="account-circle"
+              color={color}
+              size={24}
+            />
           ),
         }}
       />
@@ -89,10 +103,13 @@ export default function TabLayout() {
         options={{
           href: null,
           tabBarLabel: 'Reflect',
-          tabBarIcon: () => (
-            <>
-              <Icon sf={{ default: 'book', selected: 'book.fill' }} drawable="book" />
-            </>
+          tabBarIcon: ({ focused, color }) => (
+            <IconSymbol 
+              ios_icon_name={focused ? 'book.fill' : 'book'} 
+              android_material_icon_name="book"
+              color={color}
+              size={24}
+            />
           ),
         }}
       />
@@ -101,10 +118,13 @@ export default function TabLayout() {
         options={{
           href: null,
           tabBarLabel: 'AI Chat',
-          tabBarIcon: () => (
-            <>
-              <Icon sf="message" drawable="chat" />
-            </>
+          tabBarIcon: ({ focused, color }) => (
+            <IconSymbol 
+              ios_icon_name={focused ? 'message.fill' : 'message'} 
+              android_material_icon_name="chat"
+              color={color}
+              size={24}
+            />
           ),
         }}
       />
