@@ -286,20 +286,27 @@ export default function HomeScreen() {
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
 
-      // Normalize goal data: the GET endpoint returns `streak` and `currentStreak`/`bestStreak`
-      // depending on the backend version. Map both to ensure correct display.
+      // Normalize goal data: the GET endpoint returns `currentStreak` and `bestStreak`
+      // from the stored database values (persisted by success/struggle endpoints).
+      // Also handle legacy `streak` field for backwards compatibility.
       const goalsData = rawGoalsData.map((goal: any) => ({
         ...goal,
-        // If backend returns `currentStreak` use it, otherwise fall back to `streak`
-        currentStreak: goal.currentStreak !== undefined ? goal.currentStreak : (goal.streak !== undefined ? goal.streak : undefined),
-        // If backend returns `bestStreak` use it, otherwise leave undefined
-        bestStreak: goal.bestStreak !== undefined ? goal.bestStreak : undefined,
+        // Use currentStreak from backend (stored in DB), fall back to legacy `streak` field
+        currentStreak: goal.currentStreak !== undefined ? goal.currentStreak : (goal.streak !== undefined ? goal.streak : 0),
+        // Use bestStreak from backend (stored in DB), default to 0 if not present
+        bestStreak: goal.bestStreak !== undefined ? goal.bestStreak : 0,
       }));
       
       console.log('[Home] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home] Loaded currencies for modal:', currenciesData.length, 'currencies');
       console.log('[Home] Loaded goals from backend:', goalsData.length, 'goals for date:', dateString);
       console.log('[Home] Loaded motivations:', motivationsData.length, 'motivations');
+      // Debug streak values to verify backend is returning correct data
+      goalsData.forEach((goal: any) => {
+        if (goal.currentStreak > 0 || goal.bestStreak > 0) {
+          console.log(`[Home] Goal "${goal.title}" streaks: current=${goal.currentStreak}, best=${goal.bestStreak}`);
+        }
+      });
       
       setActivatedGoals(goalsData);
       setLifeAreaHierarchy(lifeAreasData);
@@ -549,6 +556,9 @@ export default function HomeScreen() {
       console.log(`[API] Deleting entry ${entryId} for goal ${goalId}`);
       await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
       console.log(`[API] Entry deleted successfully`);
+      // Reload data after deletion to get updated streak values from backend
+      // (streak recalculation happens server-side)
+      await loadData();
     } catch (error: any) {
       console.error("Error deleting entry:", error);
       showError(error.message || "Failed to delete entry");

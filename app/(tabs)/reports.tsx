@@ -104,6 +104,8 @@ interface GoalProgress {
   progress: number;
   successCount: number;
   struggleCount: number;
+  currentStreak?: number;
+  bestStreak?: number;
   rewardCurrencyBalance?: number;
   rewardCurrencySymbol?: string;
   consequenceCurrencyBalance?: number;
@@ -864,6 +866,24 @@ export default function ReportsScreen() {
                       {goal.struggleCount}
                     </Text>
                   </View>
+                  
+                  {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
+                    <View style={styles.reportRow}>
+                      <Text style={styles.reportLabel}>🔥 Current Streak:</Text>
+                      <Text style={[styles.reportValue, { color: '#FF6B35' }]}>
+                        {goal.currentStreak} day{goal.currentStreak !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
+                    <View style={styles.reportRow}>
+                      <Text style={styles.reportLabel}>⭐ Best Streak:</Text>
+                      <Text style={[styles.reportValue, { color: '#FFD700' }]}>
+                        {goal.bestStreak} day{goal.bestStreak !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  )}
                   
                   {(hasRewardBalance || hasConsequenceBalance) && (
                     <View style={styles.currencySection}>
