@@ -968,24 +968,11 @@ export default function HomeScreen() {
   // CRITICAL FIX: Helper function to calculate the "streak before today"
   // This is the streak value that should be displayed in faded color before the user clicks "success"
   const getStreakBeforeToday = (goal: ActivatedGoal): number => {
-    // If we're viewing today's date
-    if (isToday(selectedDate)) {
-      // Check if there are any success entries for today
-      const todaySuccessCount = goal.dailyEntries?.filter(e => e.type === 'success').length || 0;
-      
-      if (todaySuccessCount === 0) {
-        // No success today yet - show the streak from yesterday (which is currentStreak)
-        // BUT if the streak was broken (no success on previous scheduled day), show 0
-        // The backend already handles this logic - if streak is broken, currentStreak will be 0
-        return goal.currentStreak || 0;
-      } else {
-        // User already succeeded today - show the full current streak (not faded)
-        return goal.currentStreak || 0;
-      }
-    } else {
-      // Viewing a past or future date - show the actual streak for that date
-      return goal.currentStreak || 0;
-    }
+    // The backend's currentStreak already represents the correct value:
+    // - If yesterday (or last scheduled day) had no success, currentStreak = 0
+    // - If yesterday had success, currentStreak = number of consecutive successes
+    // We just return it as-is
+    return goal.currentStreak || 0;
   };
 
   // CRITICAL FIX: Helper function to determine if streak should be faded
@@ -1033,6 +1020,12 @@ export default function HomeScreen() {
     const isFaded = shouldFadeStreak(goal);
     const streakColor = isFaded ? colors.textSecondary : '#FF6B35';
     const streakOpacity = isFaded ? 0.5 : 1.0;
+    
+    // CRITICAL FIX: Determine if we should show the streak at all
+    // On today's screen: ONLY show if currentStreak > 0 OR if there's a success today
+    // If currentStreak = 0 and no success today, DON'T show the faded streak (it's broken)
+    const todaySuccessCount = goal.dailyEntries?.filter(e => e.type === 'success').length || 0;
+    const shouldShowStreakOnToday = streakBeforeToday > 0 || todaySuccessCount > 0;
     
     return (
       <View key={goal.id} style={styles.goalCard}>
@@ -1101,17 +1094,19 @@ export default function HomeScreen() {
             />
           </View>
           {isToday(selectedDate) ? (
-            // On today's screen: always show the streak icon (even if 0 for broken streaks)
-            // Faded = streak before today's entry (potential streak), bright = confirmed streak
-            <View style={[styles.tallySection, { opacity: streakOpacity }]}>
-              <IconSymbol
-                ios_icon_name="flame.fill"
-                android_material_icon_name="local-fire-department"
-                size={16}
-                color={streakColor}
-              />
-              <Text style={[styles.tallyCount, { color: streakColor }]}>{streakBeforeToday}</Text>
-            </View>
+            // On today's screen: ONLY show streak if currentStreak > 0 OR if there's a success today
+            // If streak is broken (currentStreak = 0) and no success today, don't show anything
+            shouldShowStreakOnToday && (
+              <View style={[styles.tallySection, { opacity: streakOpacity }]}>
+                <IconSymbol
+                  ios_icon_name="flame.fill"
+                  android_material_icon_name="local-fire-department"
+                  size={16}
+                  color={streakColor}
+                />
+                <Text style={[styles.tallyCount, { color: streakColor }]}>{streakBeforeToday}</Text>
+              </View>
+            )
           ) : (
             // On past/future dates: only show streak if > 0
             streakBeforeToday > 0 && (
@@ -1260,6 +1255,12 @@ export default function HomeScreen() {
     const streakColor = isFaded ? colors.textSecondary : '#FF6B35';
     const streakOpacity = isFaded ? 0.5 : 1.0;
     
+    // CRITICAL FIX: Determine if we should show the streak at all
+    // On today's screen: ONLY show if currentStreak > 0 OR if there's a success today
+    // If currentStreak = 0 and no success today, DON'T show the faded streak (it's broken)
+    const todaySuccessCountConcise = goal.dailyEntries?.filter(e => e.type === 'success').length || 0;
+    const shouldShowStreakOnTodayConcise = streakBeforeToday > 0 || todaySuccessCountConcise > 0;
+    
     return (
       <TouchableOpacity 
         key={goal.id} 
@@ -1276,11 +1277,13 @@ export default function HomeScreen() {
             <Text style={[styles.conciseCounterText, { color: colors.error }]}>✗{struggleCount}</Text>
           </View>
           {isToday(selectedDate) ? (
-            // On today's screen: always show the streak (even if 0 for broken streaks)
-            // Faded = streak before today's entry, bright = confirmed streak
-            <View style={[styles.conciseCounter, { opacity: streakOpacity }]}>
-              <Text style={[styles.conciseCounterText, { color: streakColor }]}>🔥{streakBeforeToday}</Text>
-            </View>
+            // On today's screen: ONLY show streak if currentStreak > 0 OR if there's a success today
+            // If streak is broken (currentStreak = 0) and no success today, don't show anything
+            shouldShowStreakOnTodayConcise && (
+              <View style={[styles.conciseCounter, { opacity: streakOpacity }]}>
+                <Text style={[styles.conciseCounterText, { color: streakColor }]}>🔥{streakBeforeToday}</Text>
+              </View>
+            )
           ) : (
             // On past/future dates: only show streak if > 0
             streakBeforeToday > 0 && (
