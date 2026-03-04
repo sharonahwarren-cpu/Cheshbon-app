@@ -699,6 +699,25 @@ export function AddReflectionModal({
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
+  // CRITICAL FIX: Helper function to get the display category for a reflection
+  // This looks up the goal's behavior category if the reflection doesn't have one
+  const getReflectionDisplayCategory = (reflection: Reflection): string | undefined => {
+    // If reflection has a category, use it
+    if (reflection.category) {
+      return reflection.category;
+    }
+    
+    // Otherwise, look up the goal's behavior category
+    if (reflection.linkedGoalId) {
+      const goal = goals.find(g => g.id === reflection.linkedGoalId);
+      if (goal && goal.behaviorCategories && goal.behaviorCategories.length > 0) {
+        return goal.behaviorCategories[0];
+      }
+    }
+    
+    return undefined;
+  };
+
   // CRITICAL FIX: Update state when props change
   // This effect handles initialization and updates for editing reflections and quick entries
   useEffect(() => {
@@ -714,11 +733,16 @@ export function AddReflectionModal({
     });
     
     if (editingReflection) {
-      // Editing an existing reflection - populate all fields from the reflection
+      // CRITICAL FIX: When editing a reflection, use the helper function to get the correct category
+      // This ensures that reflections created from quick entries (which may not have a category field)
+      // correctly display the goal's behavior category
       console.log('[AddReflectionModal] Editing reflection, setting all fields from editingReflection');
+      const displayCategory = getReflectionDisplayCategory(editingReflection);
+      console.log('[AddReflectionModal] Display category for editing reflection:', displayCategory);
+      
       setOutcome(editingReflection.outcome);
       setLinkedGoalId(editingReflection.linkedGoalId);
-      setCategory(editingReflection.category);
+      setCategory(displayCategory); // CRITICAL: Use the display category, not just editingReflection.category
       setType(editingReflection.type);
       setDescription(editingReflection.description);
       setGainedIds(editingReflection.gainedIds || []);
@@ -1136,6 +1160,8 @@ export function AddReflectionModal({
         strategyEffectiveness: validStrategyEffectiveness.length > 0 ? validStrategyEffectiveness : undefined,
         futureStrategyId: futureStrategyId || undefined,
       };
+
+      console.log('[AddReflectionModal] Saving reflection with payload:', payload);
 
       let savedReflection;
       if (editingReflection) {
