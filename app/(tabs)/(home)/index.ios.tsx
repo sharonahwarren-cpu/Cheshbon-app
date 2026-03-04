@@ -951,32 +951,37 @@ export default function HomeScreen() {
               const entryIcon = isSuccess ? 'check' : 'close';
               
               return (
-                <TouchableOpacity
+                <View
                   key={entry.id}
                   style={[styles.entryBadge, { borderColor: entryColor }]}
-                  onPress={() => openAddReflectionModal(goal.id)}
                 >
-                  <IconSymbol
-                    ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
-                    android_material_icon_name={entryIcon}
-                    size={12}
-                    color={entryColor}
-                  />
+                  <TouchableOpacity
+                    onPress={() => openAddReflectionModal(goal.id)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}
+                  >
+                    <IconSymbol
+                      ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
+                      android_material_icon_name={entryIcon}
+                      size={14}
+                      color={entryColor}
+                    />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteEntryButton}
                     onPress={(e) => {
                       e.stopPropagation();
                       handleDeleteEntry(goal.id, entry.id);
                     }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
                     <IconSymbol
-                      ios_icon_name="xmark"
-                      android_material_icon_name="close"
-                      size={10}
-                      color={colors.textSecondary}
+                      ios_icon_name="xmark.circle.fill"
+                      android_material_icon_name="cancel"
+                      size={16}
+                      color={colors.error}
                     />
                   </TouchableOpacity>
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -1691,6 +1696,7 @@ export default function HomeScreen() {
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
           strategies={strategies}
+          motivations={motivations}
           prefilledGoalId={prefilledGoalId}
           sourceScreen={currentView}
           prefilledGoalData={prefilledGoalData}
@@ -2187,17 +2193,21 @@ const styles = StyleSheet.create({
   entryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     borderWidth: 1,
     backgroundColor: colors.backgroundAlt,
   },
   deleteEntryButton: {
-    padding: 2,
+    padding: 6,
     backgroundColor: colors.card,
-    borderRadius: 3,
+    borderRadius: 6,
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionButtons: {
     flexDirection: 'row',

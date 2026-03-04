@@ -1223,7 +1223,14 @@ export function AddReflectionModal({
               <Text style={styles.modalTitle}>{modalTitle}</Text>
               <Text style={styles.stepIndicator}>Step {step} of {totalSteps}</Text>
             </View>
-            <View style={styles.backButton} />
+            <TouchableOpacity onPress={onClose} style={styles.backButton}>
+              <IconSymbol
+                ios_icon_name="xmark.circle.fill"
+                android_material_icon_name="cancel"
+                size={28}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.progressBar}>
