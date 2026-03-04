@@ -233,7 +233,7 @@ export default function AlternativeCalendarsScreen() {
     );
   }
 
-  const showMitzvotSection = selectedCalendar === 'hebrew';
+  const showMitzvotSection = selectedCalendar === 'hebrew' && false; // Hidden per user request
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -253,7 +253,6 @@ export default function AlternativeCalendarsScreen() {
 
         <Text style={styles.description}>
           Choose an alternative calendar to display alongside the standard Gregorian calendar.
-          When an alternative calendar is selected, all date fields will show both dates.
         </Text>
 
         {CALENDAR_OPTIONS.map((option) => {
@@ -365,7 +364,6 @@ export default function AlternativeCalendarsScreen() {
           <Text style={styles.infoText}>
             When an alternative calendar is selected:
           </Text>
-          <Text style={styles.infoItem}>• All date fields show both Gregorian and alternative dates</Text>
           <Text style={styles.infoItem}>• Goal scheduling and alarms can be set using either calendar</Text>
           <Text style={styles.infoItem}>• The Gregorian calendar remains the primary system calendar</Text>
           <Text style={styles.infoItem}>• All dates are stored as UTC timestamps for accuracy across timezones</Text>
