@@ -1764,6 +1764,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollViewContent: {
+    flexGrow: 1,
     paddingBottom: 20,
   },
   header: {
