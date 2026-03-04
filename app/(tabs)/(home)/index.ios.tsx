@@ -404,12 +404,16 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
+      // CRITICAL FIX: Send the local date string explicitly to avoid timezone issues
+      // The backend will use this date field instead of extracting from the UTC timestamp
+      const localDateString = formatDateLocal(selectedDate);
       const apiEndpoint = `/api/goals/${goalId}/success`;
-      const apiPayload = { timestamp };
+      const apiPayload = { timestamp, date: localDateString };
       
       console.log("[Home iOS] ========== MAKING API CALL ==========");
       console.log("[Home iOS] Endpoint:", apiEndpoint);
       console.log("[Home iOS] Payload:", JSON.stringify(apiPayload, null, 2));
+      console.log("[Home iOS] Local date string:", localDateString);
       console.log("[Home iOS] Calling authenticatedPost...");
       
       const response = await authenticatedPost(apiEndpoint, apiPayload);
@@ -507,12 +511,16 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
+      // CRITICAL FIX: Send the local date string explicitly to avoid timezone issues
+      // The backend will use this date field instead of extracting from the UTC timestamp
+      const localDateString = formatDateLocal(selectedDate);
       const apiEndpoint = `/api/goals/${goalId}/struggle`;
-      const apiPayload = { timestamp };
+      const apiPayload = { timestamp, date: localDateString };
       
       console.log("[Home iOS] ========== MAKING API CALL ==========");
       console.log("[Home iOS] Endpoint:", apiEndpoint);
       console.log("[Home iOS] Payload:", JSON.stringify(apiPayload, null, 2));
+      console.log("[Home iOS] Local date string:", localDateString);
       console.log("[Home iOS] Calling authenticatedPost...");
       
       const response: any = await authenticatedPost(apiEndpoint, apiPayload);

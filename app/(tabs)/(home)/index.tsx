@@ -406,8 +406,11 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
-      console.log("[Home] Calling API: POST /api/goals/" + goalId + "/success with timestamp:", timestamp);
-      const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
+      // CRITICAL FIX: Send the local date string explicitly to avoid timezone issues
+      // The backend will use this date field instead of extracting from the UTC timestamp
+      const localDateString = formatDateLocal(selectedDate);
+      console.log("[Home] Calling API: POST /api/goals/" + goalId + "/success with timestamp:", timestamp, "date:", localDateString);
+      const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp, date: localDateString });
       console.log("[Home] API response:", response);
       
       setActivatedGoals(prevGoals => 
@@ -485,8 +488,11 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
-      console.log("[Home] Calling API: POST /api/goals/" + goalId + "/struggle with timestamp:", timestamp);
-      const response: any = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
+      // CRITICAL FIX: Send the local date string explicitly to avoid timezone issues
+      // The backend will use this date field instead of extracting from the UTC timestamp
+      const localDateString = formatDateLocal(selectedDate);
+      console.log("[Home] Calling API: POST /api/goals/" + goalId + "/struggle with timestamp:", timestamp, "date:", localDateString);
+      const response: any = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp, date: localDateString });
       console.log("[Home] API response:", response);
       
       setActivatedGoals(prevGoals => 
