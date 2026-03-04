@@ -1128,6 +1128,7 @@ export function AddReflectionModal({
     }
 
     console.log('Saving reflection from shared AddReflectionModal, sourceScreen:', sourceScreen);
+    console.log('[AddReflectionModal] CRITICAL DEBUG - Category state before save:', category);
     setLoading(true);
     try {
       const localZone = getLocalTimezone();
@@ -1142,12 +1143,11 @@ export function AddReflectionModal({
       
       const validStrategyEffectiveness = strategyEffectiveness.filter(se => se.worked !== null);
       
-      // CRITICAL FIX: Always save category if it's set, regardless of categoriesEnabled
+      // CRITICAL FIX: Always include category in the payload if it's set
       // This ensures that reflections created from Express screen (with prefilledGoalData)
-      // correctly save the goal's behavior category
-      const payload = {
+      // correctly save the goal's behavior category to the database
+      const payload: any = {
         date: dateString,
-        category: category || undefined,
         type,
         description,
         linkedGoalId: linkedGoalId || undefined,
@@ -1161,7 +1161,14 @@ export function AddReflectionModal({
         futureStrategyId: futureStrategyId || undefined,
       };
 
-      console.log('[AddReflectionModal] Saving reflection with payload:', payload);
+      // CRITICAL FIX: Always include category if it's set, even if it's an empty string
+      // This ensures the backend receives the category field and saves it to the database
+      if (category !== undefined) {
+        payload.category = category;
+      }
+
+      console.log('[AddReflectionModal] CRITICAL DEBUG - Payload being sent to backend:', JSON.stringify(payload, null, 2));
+      console.log('[AddReflectionModal] CRITICAL DEBUG - Category in payload:', payload.category);
 
       let savedReflection;
       if (editingReflection) {
@@ -1171,6 +1178,7 @@ export function AddReflectionModal({
       }
 
       console.log('[AddReflectionModal] Reflection saved successfully, calling onSave callback');
+      console.log('[AddReflectionModal] CRITICAL DEBUG - Saved reflection from backend:', JSON.stringify(savedReflection, null, 2));
       onSave(savedReflection?.data || savedReflection);
       
       if (sourceScreen === 'express') {
