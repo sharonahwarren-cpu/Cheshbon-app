@@ -119,6 +119,7 @@ export function registerReflectionsRoutes(app: App) {
       outcome?: string;
       gainedIds?: string[];
       lostIds?: string[];
+      motivationIds?: string[];
       wasWorthIt?: boolean;
       additionalThoughts?: string;
       strategyEffectiveness?: Array<{ strategyId: string; worked: boolean }>;
@@ -151,6 +152,7 @@ export function registerReflectionsRoutes(app: App) {
           currencyChange: currencyChange ? JSON.stringify(currencyChange) : null,
           gainedIds: (body.gainedIds?.length ? body.gainedIds : null) as string[] | null,
           lostIds: (body.lostIds?.length ? body.lostIds : null) as string[] | null,
+          motivationIds: (body.motivationIds?.length ? body.motivationIds : null) as string[] | null,
           wasWorthIt: body.wasWorthIt || null,
           additionalThoughts: body.additionalThoughts || null,
           strategyEffectiveness: body.strategyEffectiveness ? JSON.stringify(body.strategyEffectiveness) : null,
@@ -262,6 +264,7 @@ export function registerReflectionsRoutes(app: App) {
       outcome?: string;
       gainedIds?: string[];
       lostIds?: string[];
+      motivationIds?: string[];
       wasWorthIt?: boolean;
       additionalThoughts?: string;
       strategyEffectiveness?: Array<{ strategyId: string; worked: boolean }>;
@@ -309,6 +312,7 @@ export function registerReflectionsRoutes(app: App) {
       if (body.outcome !== undefined) updateData.outcome = body.outcome || null;
       if (body.gainedIds !== undefined) updateData.gainedIds = (body.gainedIds?.length ? body.gainedIds : null) as string[] | null;
       if (body.lostIds !== undefined) updateData.lostIds = (body.lostIds?.length ? body.lostIds : null) as string[] | null;
+      if (body.motivationIds !== undefined) updateData.motivationIds = (body.motivationIds?.length ? body.motivationIds : null) as string[] | null;
       if (body.wasWorthIt !== undefined) updateData.wasWorthIt = body.wasWorthIt;
       if (body.additionalThoughts !== undefined) updateData.additionalThoughts = body.additionalThoughts || null;
       if (body.strategyEffectiveness !== undefined) updateData.strategyEffectiveness = body.strategyEffectiveness ? JSON.stringify(body.strategyEffectiveness) : null;
