@@ -700,7 +700,7 @@ export default function SettingsScreen() {
     return (
       <ScrollView 
         style={styles.container}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -710,25 +710,25 @@ export default function SettingsScreen() {
           />
         }
       >
-        <Text style={styles.sectionTitle}>Settings</Text>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Settings</Text>
+        </View>
         {menuItems.map((item, index) => (
           <React.Fragment key={index}>
             <TouchableOpacity
-              style={styles.menuItem}
+              style={styles.menuButton}
               onPress={() => setCurrentSection(item.section)}
             >
-              <View style={styles.menuItemLeft}>
-                <IconSymbol
-                  ios_icon_name="gear"
-                  android_material_icon_name={item.icon}
-                  size={24}
-                  color={colors.text}
-                />
-                <Text style={styles.menuItemText}>{item.title}</Text>
-              </View>
+              <IconSymbol
+                ios_icon_name="gear"
+                android_material_icon_name={item.icon}
+                size={20}
+                color={colors.primary}
+              />
+              <Text style={styles.menuButtonText}>{item.title}</Text>
               <IconSymbol
                 ios_icon_name="chevron.right"
-                android_material_icon_name="arrow-forward"
+                android_material_icon_name="chevron-right"
                 size={20}
                 color={colors.textSecondary}
               />
@@ -2695,6 +2695,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  scrollContent: {
+    paddingBottom: 100,
+  },
   sectionTitle: {
     fontSize: 32,
     fontWeight: 'bold',
@@ -2706,6 +2709,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text,
     marginBottom: 16,
+  },
+  menuButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  menuButtonText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginLeft: 12,
   },
   menuItem: {
     flexDirection: 'row',
