@@ -110,6 +110,7 @@ interface GainLoss {
   type: 'Gain' | 'Loss';
   category?: string;
   subCategory?: string;
+  term?: 'short' | 'medium' | 'long';
 }
 
 interface ReflectionWorthItTallies {
@@ -377,6 +378,7 @@ export default function SettingsScreen() {
         type: 'Gain',
         category: undefined,
         subCategory: undefined,
+        term: 'short',
       });
     } else if (type === 'currency') {
       setFormData({
@@ -1173,6 +1175,7 @@ export default function SettingsScreen() {
                   <Text style={styles.sectionSubtitle}>Gains</Text>
                   {gains.map((gain, index) => {
                     const categoryText = gain.category ? `${gain.category}${gain.subCategory ? ` > ${gain.subCategory}` : ''}` : '';
+                    const termText = gain.term ? `${gain.term.charAt(0).toUpperCase() + gain.term.slice(1)}-term` : '';
                     
                     return (
                       <React.Fragment key={index}>
@@ -1180,6 +1183,7 @@ export default function SettingsScreen() {
                           <View style={styles.listItemContent}>
                             <Text style={styles.listItemTitle}>{gain.name}</Text>
                             {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                            {termText && <Text style={styles.listItemSubtitle}>{termText}</Text>}
                           </View>
                           <View style={styles.listItemActions}>
                             <TouchableOpacity
@@ -1217,6 +1221,7 @@ export default function SettingsScreen() {
                   <Text style={styles.sectionSubtitle}>Losses</Text>
                   {losses.map((loss, index) => {
                     const categoryText = loss.category ? `${loss.category}${loss.subCategory ? ` > ${loss.subCategory}` : ''}` : '';
+                    const termText = loss.term ? `${loss.term.charAt(0).toUpperCase() + loss.term.slice(1)}-term` : '';
                     
                     return (
                       <React.Fragment key={index}>
@@ -1224,6 +1229,7 @@ export default function SettingsScreen() {
                           <View style={styles.listItemContent}>
                             <Text style={styles.listItemTitle}>{loss.name}</Text>
                             {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                            {termText && <Text style={styles.listItemSubtitle}>{termText}</Text>}
                           </View>
                           <View style={styles.listItemActions}>
                             <TouchableOpacity
@@ -2075,6 +2081,26 @@ export default function SettingsScreen() {
                       >
                         <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                           {t}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Term</Text>
+                <View style={styles.optionsGrid}>
+                  {['short', 'medium', 'long'].map((term) => {
+                    const isSelected = formData.term === term;
+                    const displayText = term.charAt(0).toUpperCase() + term.slice(1) + '-term';
+                    return (
+                      <TouchableOpacity
+                        key={term}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, term })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {displayText}
                         </Text>
                       </TouchableOpacity>
                     );
