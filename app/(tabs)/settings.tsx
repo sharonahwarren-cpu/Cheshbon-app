@@ -135,7 +135,7 @@ interface ReflectionWorthItTallies {
   total: number;
 }
 
-type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionMotivations' | 'reflectionPrefs' | 'notifications' | 'reports';
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionMotivations' | 'behaviorCategories' | 'notifications' | 'reports';
 
 const ICON_OPTIONS = [
   'favorite', 'work', 'school', 'fitness-center', 'restaurant', 'home',
@@ -151,7 +151,7 @@ export default function SettingsScreen() {
   const getInitialSection = (): SettingsSection => {
     const section = params.section;
     if (!section) return 'main';
-    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications', 'reports'];
+    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'behaviorCategories', 'notifications', 'reports'];
     if (validSections.includes(section as SettingsSection)) {
       return section as SettingsSection;
     }
@@ -226,7 +226,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     const section = params.section;
     if (section) {
-      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications', 'reports'];
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'behaviorCategories', 'notifications', 'reports'];
       if (validSections.includes(section as SettingsSection)) {
         console.log('[Settings] Setting section from URL param:', section);
         setCurrentSection(section as SettingsSection);
@@ -621,7 +621,7 @@ export default function SettingsScreen() {
     try {
       setLoading(true);
       await authenticatedPut('/api/user-preferences', preferences);
-      showSuccess('Notification preferences saved successfully');
+      showSuccess('Preferences saved successfully');
     } catch (error) {
       console.error('[Settings Web] Error saving preferences:', error);
       showError('Failed to save preferences');
@@ -799,6 +799,7 @@ export default function SettingsScreen() {
       { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
       { title: 'Gain/Loss Categories', icon: 'category', section: 'gainLossCategories' as SettingsSection },
       { title: 'Reflection Motivations', icon: 'bolt', section: 'reflectionMotivations' as SettingsSection },
+      { title: 'Behavior Categories', icon: 'psychology', section: 'behaviorCategories' as SettingsSection },
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
@@ -1958,7 +1959,7 @@ export default function SettingsScreen() {
     );
   };
 
-  const renderReflectionPreferences = () => {
+  const renderBehaviorCategories = () => {
     const allCategories = ['Action', 'Speech', 'Thought', 'Feeling'];
     const selectedCategories = preferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
     const categoriesEnabled = preferences.reflectionCategoriesEnabled !== false;
@@ -1981,7 +1982,7 @@ export default function SettingsScreen() {
       return { ios: 'sparkles', android: 'auto-awesome' };
     };
 
-    const toggleLabelText = categoriesEnabled ? 'Behaviours are Enabled' : 'Enable Behaviour Categories';
+    const toggleLabelText = categoriesEnabled ? 'Behavior Categories are Enabled' : 'Enable Behavior Categories';
     const toggleColor = categoriesEnabled ? colors.success : colors.error;
 
     return (
@@ -1995,7 +1996,7 @@ export default function SettingsScreen() {
               color={colors.text}
             />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Reflection Preferences</Text>
+          <Text style={styles.headerTitle}>Behavior Categories</Text>
           <View style={{ width: 24 }} />
         </View>
         <ScrollView style={styles.formContainer}>
@@ -2215,7 +2216,7 @@ export default function SettingsScreen() {
           {currentSection === 'gainsLosses' && renderGainsLosses()}
           {currentSection === 'gainLossCategories' && renderGainLossCategories()}
           {currentSection === 'reflectionMotivations' && renderReflectionMotivations()}
-          {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
+          {currentSection === 'behaviorCategories' && renderBehaviorCategories()}
           {currentSection === 'notifications' && renderNotifications()}
           {currentSection === 'reports' && renderReports()}
         </>
