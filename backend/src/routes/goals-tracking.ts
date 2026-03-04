@@ -229,7 +229,6 @@ export function registerGoalsTrackingRoutes(app: App) {
           dailyEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
           const lifeArea = goal.lifeAreaId ? lifeAreaMap.get(goal.lifeAreaId) : null;
-          const streak = calculateStreak(goal, reflections, requestedDate);
 
           return {
             id: goal.id,
@@ -244,7 +243,8 @@ export function registerGoalsTrackingRoutes(app: App) {
             todayStruggleCount,
             successCount: totalSuccessCount,
             struggleCount: totalStruggleCount,
-            streak,
+            currentStreak: goal.currentStreak || 0,
+            bestStreak: goal.bestStreak || 0,
             dailyEntries,
             rewardCurrencyId: goal.rewardCurrencyId || null,
             rewardAmount: goal.rewardAmount ?? null,
@@ -387,25 +387,20 @@ export function registerGoalsTrackingRoutes(app: App) {
             eq(schema.reflections.outcome, 'success')
           ));
 
-        // Sort by entry date descending (most recent first)
-        const sortedDates = allReflections
-          .map(r => r.entryDate)
-          .filter((date, index, self) => self.indexOf(date) === index) // Get unique dates
-          .sort()
-          .reverse();
+        // Get unique dates and sort chronologically (oldest to newest)
+        const uniqueDatesSet = new Set(allReflections.map(r => r.entryDate));
+        const sortedDates = Array.from(uniqueDatesSet).sort(); // Sort ascending: oldest first
 
         let currentStreak = 0;
         let bestStreak = goals[0].bestStreak || 0;
 
         if (sortedDates.length > 0) {
-          // Find the most recent success date
-          const mostRecentDate = new Date(sortedDates[0]);
-          const entryDateObj = new Date(entryDate);
-
-          // Calculate current streak (consecutive days from the provided date backwards)
-          let checkDate = new Date(entryDate);
+          // Calculate current streak: count consecutive days from most recent backwards
+          const mostRecentDate = sortedDates[sortedDates.length - 1]; // Last (most recent) date
+          let checkDate = new Date(mostRecentDate);
           checkDate.setUTCHours(0, 0, 0, 0);
 
+          // Count consecutive days from most recent backwards
           for (let i = 0; i < 365; i++) {
             const checkDateStr = checkDate.toISOString().split('T')[0];
             if (sortedDates.includes(checkDateStr)) {
@@ -416,27 +411,29 @@ export function registerGoalsTrackingRoutes(app: App) {
             checkDate.setDate(checkDate.getDate() - 1);
           }
 
-          // Calculate best streak by finding the longest consecutive sequence
-          if (sortedDates.length > 0) {
-            let tempStreak = 1;
-            for (let i = 0; i < sortedDates.length - 1; i++) {
-              const currentDate = new Date(sortedDates[i]);
-              const nextDate = new Date(sortedDates[i + 1]);
-              const diffDays = (currentDate.getTime() - nextDate.getTime()) / (1000 * 60 * 60 * 24);
+          // Calculate best streak: find longest consecutive sequence
+          let tempStreak = 1;
+          let maxStreak = 1;
 
-              if (diffDays === 1) {
-                tempStreak++;
-              } else {
-                if (tempStreak > bestStreak) {
-                  bestStreak = tempStreak;
-                }
-                tempStreak = 1;
-              }
-            }
-            if (tempStreak > bestStreak) {
-              bestStreak = tempStreak;
+          for (let i = 1; i < sortedDates.length; i++) {
+            const prevDate = new Date(sortedDates[i - 1]);
+            const currDate = new Date(sortedDates[i]);
+            prevDate.setUTCHours(0, 0, 0, 0);
+            currDate.setUTCHours(0, 0, 0, 0);
+
+            const daysDiff = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+
+            if (daysDiff === 1) {
+              // Consecutive day
+              tempStreak++;
+              maxStreak = Math.max(maxStreak, tempStreak);
+            } else {
+              // Gap in days, reset counter
+              tempStreak = 1;
             }
           }
+
+          bestStreak = Math.max(bestStreak, maxStreak);
         }
 
         // Update goal with new streak values
@@ -450,7 +447,7 @@ export function registerGoalsTrackingRoutes(app: App) {
           .where(eq(schema.goals.id, id));
 
         app.logger.info(
-          { userId: session.user.id, goalId: id, currentStreak, bestStreak },
+          { userId: session.user.id, goalId: id, entryDate, currentStreak, bestStreak, totalSuccessCount },
           'Goal streak updated on success'
         );
       } catch (error) {
