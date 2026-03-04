@@ -382,12 +382,36 @@ export default function ReflectScreen() {
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
+  // Helper function to get the display category for a reflection
+  // Falls back to the linked goal's behaviorCategories if reflection.category is not set
+  const getReflectionDisplayCategory = (reflection: Reflection): string => {
+    if (reflection.category) {
+      return reflection.category;
+    }
+    
+    // Fall back to linked goal's behavior category
+    if (reflection.linkedGoalId) {
+      const linkedGoal = goals.find(g => g.id === reflection.linkedGoalId);
+      if (linkedGoal && linkedGoal.behaviorCategories && linkedGoal.behaviorCategories.length > 0) {
+        return linkedGoal.behaviorCategories[0];
+      }
+    }
+    
+    return 'Other';
+  };
+
   const groupedReflections: Record<string, Reflection[]> = {};
   if (categoriesEnabled) {
     availableCategories.forEach(cat => {
-      groupedReflections[cat] = reflections.filter(r => r.category === cat);
+      groupedReflections[cat] = reflections.filter(r => {
+        const displayCategory = getReflectionDisplayCategory(r);
+        return displayCategory === cat;
+      });
     });
-    groupedReflections['Other'] = reflections.filter(r => !r.category || !availableCategories.includes(r.category));
+    groupedReflections['Other'] = reflections.filter(r => {
+      const displayCategory = getReflectionDisplayCategory(r);
+      return !availableCategories.includes(displayCategory);
+    });
   } else {
     groupedReflections['All'] = reflections;
   }
