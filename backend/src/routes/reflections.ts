@@ -1,6 +1,6 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
@@ -232,6 +232,81 @@ export function registerReflectionsRoutes(app: App) {
         }
       }
 
+      // Update streak if this is a success reflection with a linked goal
+      if (body.outcome === 'success' && body.linkedGoalId) {
+        try {
+          const goal = await app.db
+            .select()
+            .from(schema.goals)
+            .where(eq(schema.goals.id, body.linkedGoalId))
+            .limit(1);
+
+          if (goal.length > 0) {
+            const goalData = goal[0];
+            const currentDate = new Date(body.date);
+            currentDate.setUTCHours(0, 0, 0, 0);
+
+            // Get previous success reflections for this goal, ordered by date (most recent first)
+            const previousSuccesses = await app.db
+              .select()
+              .from(schema.reflections)
+              .where(and(
+                eq(schema.reflections.linkedGoalId, body.linkedGoalId),
+                eq(schema.reflections.outcome, 'success')
+              ))
+              .orderBy(desc(schema.reflections.entryDate));
+
+            let newCurrentStreak = 1;
+            let newBestStreak = goalData.bestStreak || 0;
+
+            // Check if there's a previous success
+            if (previousSuccesses.length > 0) {
+              const lastSuccess = previousSuccesses[0];
+              const lastSuccessDate = new Date(lastSuccess.entryDate);
+              lastSuccessDate.setUTCHours(0, 0, 0, 0);
+
+              // Calculate the difference in days
+              const diffTime = currentDate.getTime() - lastSuccessDate.getTime();
+              const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+              // If it's consecutive (1 day apart), increment streak; otherwise reset to 1
+              if (diffDays === 1) {
+                newCurrentStreak = (goalData.currentStreak || 0) + 1;
+              } else if (diffDays <= 0) {
+                // Same day or earlier reflection - don't change streak
+                newCurrentStreak = goalData.currentStreak || 1;
+              } else {
+                // Day(s) missed - reset streak to 1
+                newCurrentStreak = 1;
+              }
+            }
+
+            // Update bestStreak if newCurrentStreak is greater
+            if (newCurrentStreak > newBestStreak) {
+              newBestStreak = newCurrentStreak;
+            }
+
+            // Update goal with new streak values
+            await app.db
+              .update(schema.goals)
+              .set({
+                currentStreak: newCurrentStreak,
+                bestStreak: newBestStreak,
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.goals.id, body.linkedGoalId));
+
+            app.logger.info(
+              { userId: session.user.id, goalId: body.linkedGoalId, currentStreak: newCurrentStreak, bestStreak: newBestStreak },
+              'Goal streak updated'
+            );
+          }
+        } catch (error) {
+          app.logger.error({ err: error, userId: session.user.id, goalId: body.linkedGoalId }, 'Failed to update goal streak');
+          // Continue despite streak calculation error - don't fail the reflection creation
+        }
+      }
+
       const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
       const reflectionWithDates = {
         ...reflection,
@@ -325,6 +400,141 @@ export function registerReflectionsRoutes(app: App) {
         .where(eq(schema.reflections.id, id))
         .returning();
       const updatedReflection = updatedReflections[0];
+
+      // Handle streak update if outcome changed or if updating linked goal with success outcome
+      const goalIdForStreak = body.linkedGoalId !== undefined ? body.linkedGoalId : existingReflections[0].linkedGoalId;
+      const outcomeForStreak = body.outcome !== undefined ? body.outcome : existingReflections[0].outcome;
+      const wasSuccessBefore = existingReflections[0].outcome === 'success';
+      const isSuccessNow = outcomeForStreak === 'success';
+
+      if ((wasSuccessBefore !== isSuccessNow || body.linkedGoalId !== undefined) && goalIdForStreak) {
+        try {
+          const goal = await app.db
+            .select()
+            .from(schema.goals)
+            .where(eq(schema.goals.id, goalIdForStreak))
+            .limit(1);
+
+          if (goal.length > 0) {
+            const goalData = goal[0];
+
+            if (isSuccessNow) {
+              // Changed to success - apply similar logic as POST
+              const reflectionDate = new Date(updatedReflection.entryDate);
+              reflectionDate.setUTCHours(0, 0, 0, 0);
+
+              // Get previous success reflections for this goal (excluding current), ordered by date
+              const previousSuccesses = await app.db
+                .select()
+                .from(schema.reflections)
+                .where(and(
+                  eq(schema.reflections.linkedGoalId, goalIdForStreak),
+                  eq(schema.reflections.outcome, 'success')
+                ))
+                .orderBy(desc(schema.reflections.entryDate));
+
+              let newCurrentStreak = 1;
+              let newBestStreak = goalData.bestStreak || 0;
+
+              // Filter out the current reflection and check the most recent one
+              const otherSuccesses = previousSuccesses.filter(r => r.id !== id);
+              if (otherSuccesses.length > 0) {
+                const lastSuccess = otherSuccesses[0];
+                const lastSuccessDate = new Date(lastSuccess.entryDate);
+                lastSuccessDate.setUTCHours(0, 0, 0, 0);
+
+                const diffTime = reflectionDate.getTime() - lastSuccessDate.getTime();
+                const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+                if (diffDays === 1) {
+                  newCurrentStreak = (goalData.currentStreak || 0) + 1;
+                } else if (diffDays <= 0) {
+                  newCurrentStreak = goalData.currentStreak || 1;
+                } else {
+                  newCurrentStreak = 1;
+                }
+              }
+
+              if (newCurrentStreak > newBestStreak) {
+                newBestStreak = newCurrentStreak;
+              }
+
+              await app.db
+                .update(schema.goals)
+                .set({
+                  currentStreak: newCurrentStreak,
+                  bestStreak: newBestStreak,
+                  updatedAt: new Date(),
+                })
+                .where(eq(schema.goals.id, goalIdForStreak));
+
+              app.logger.info(
+                { userId: session.user.id, goalId: goalIdForStreak, currentStreak: newCurrentStreak, bestStreak: newBestStreak },
+                'Goal streak updated on reflection change to success'
+              );
+            } else if (wasSuccessBefore && !isSuccessNow) {
+              // Changed from success to something else - recalculate streak from remaining successes
+              const successReflections = await app.db
+                .select()
+                .from(schema.reflections)
+                .where(and(
+                  eq(schema.reflections.linkedGoalId, goalIdForStreak),
+                  eq(schema.reflections.outcome, 'success')
+                ))
+                .orderBy(desc(schema.reflections.entryDate));
+
+              let newCurrentStreak = 0;
+
+              // Recalculate current streak from remaining successes
+              if (successReflections.length > 0) {
+                const mostRecentSuccess = successReflections[0];
+                const mostRecentDate = new Date(mostRecentSuccess.entryDate);
+                mostRecentDate.setUTCHours(0, 0, 0, 0);
+                const today = new Date();
+                today.setUTCHours(0, 0, 0, 0);
+
+                const diffDays = (today.getTime() - mostRecentDate.getTime()) / (1000 * 60 * 60 * 24);
+
+                if (diffDays <= 1) {
+                  // Calculate streak backwards from most recent success
+                  newCurrentStreak = 1;
+                  for (let i = 0; i < successReflections.length - 1; i++) {
+                    const currentSuccess = successReflections[i];
+                    const nextSuccess = successReflections[i + 1];
+                    const currentDate = new Date(currentSuccess.entryDate);
+                    currentDate.setUTCHours(0, 0, 0, 0);
+                    const nextDate = new Date(nextSuccess.entryDate);
+                    nextDate.setUTCHours(0, 0, 0, 0);
+
+                    const daysDiff = (currentDate.getTime() - nextDate.getTime()) / (1000 * 60 * 60 * 24);
+                    if (daysDiff === 1) {
+                      newCurrentStreak++;
+                    } else {
+                      break;
+                    }
+                  }
+                }
+              }
+
+              await app.db
+                .update(schema.goals)
+                .set({
+                  currentStreak: newCurrentStreak,
+                  updatedAt: new Date(),
+                })
+                .where(eq(schema.goals.id, goalIdForStreak));
+
+              app.logger.info(
+                { userId: session.user.id, goalId: goalIdForStreak, currentStreak: newCurrentStreak },
+                'Goal streak recalculated on reflection change from success'
+              );
+            }
+          }
+        } catch (error) {
+          app.logger.error({ err: error, userId: session.user.id, goalId: goalIdForStreak }, 'Failed to update goal streak on reflection update');
+          // Continue despite streak calculation error
+        }
+      }
 
       const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
       const reflectionWithDates = {

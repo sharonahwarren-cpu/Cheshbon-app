@@ -100,6 +100,8 @@ export const goals = pgTable('goals', {
   monthlyUseAlternativeCalendar: boolean('monthly_use_alternative_calendar').default(false),
   monthlyCalendarType: text('monthly_calendar_type'),
   monthlyCalendarEvent: text('monthly_calendar_event'),
+  currentStreak: integer('current_streak').default(0).notNull(),
+  bestStreak: integer('best_streak').default(0).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
