@@ -421,9 +421,10 @@ export function registerGoalsTrackingRoutes(app: App) {
           // Create a set for O(1) lookup of success dates
           const successDatesSet = new Set(sortedDates);
 
-          // Calculate current streak: count consecutive scheduled days from today backwards
+          // Calculate current streak: count consecutive scheduled days from most recent success backwards
           // Check EVERY day, not just days with successes
-          let checkDate = new Date();
+          const mostRecentSuccessDate = sortedDates[sortedDates.length - 1];
+          let checkDate = new Date(mostRecentSuccessDate);
           checkDate.setUTCHours(0, 0, 0, 0);
 
           for (let i = 0; i < 365; i++) {
@@ -736,9 +737,10 @@ export function registerGoalsTrackingRoutes(app: App) {
             // Create a set for O(1) lookup of success dates
             const successDatesSet = new Set(sortedDates);
 
-            // Calculate current streak: count consecutive scheduled days from today backwards
+            // Calculate current streak: count consecutive scheduled days from most recent success backwards
             // Check EVERY day, not just days with successes
-            let checkDate = new Date();
+            const mostRecentSuccessDate = sortedDates[sortedDates.length - 1];
+            let checkDate = new Date(mostRecentSuccessDate);
             checkDate.setUTCHours(0, 0, 0, 0);
 
             for (let i = 0; i < 365; i++) {
@@ -971,9 +973,10 @@ export function registerGoalsTrackingRoutes(app: App) {
           // Create a set for O(1) lookup of success dates
           const successDatesSet = new Set(sortedDates);
 
-          // Calculate current streak: count consecutive scheduled days from today backwards
+          // Calculate current streak: count consecutive scheduled days from most recent success backwards
           // Check EVERY day, not just days with successes
-          let checkDate = new Date();
+          const mostRecentSuccessDate = sortedDates[sortedDates.length - 1];
+          let checkDate = new Date(mostRecentSuccessDate);
           checkDate.setUTCHours(0, 0, 0, 0);
 
           for (let i = 0; i < 365; i++) {
