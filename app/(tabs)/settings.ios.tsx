@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -142,6 +142,9 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ section?: string; from?: string }>();
   
+  // Track if this is the initial mount to prevent double loading
+  const isInitialMount = useRef(true);
+  
   // Determine initial section from URL params
   const getInitialSection = (): SettingsSection => {
     const section = params.section;
@@ -209,7 +212,9 @@ export default function SettingsScreen() {
   // Icon picker state (for image upload)
   const [uploadingIcon, setUploadingIcon] = useState(false);
 
+  // Initial data load on mount
   useEffect(() => {
+    console.log('[Settings iOS] Component mounted, loading initial data');
     loadData();
   }, []);
 
@@ -225,12 +230,16 @@ export default function SettingsScreen() {
     }
   }, [params.section]);
 
-
-
   // Reload data when screen comes into focus (e.g., returning from life-area-wizard)
+  // Skip on initial mount to prevent double loading
   useFocusEffect(
     useCallback(() => {
-      console.log('[Settings iOS] Screen focused, reloading data...');
+      if (isInitialMount.current) {
+        console.log('[Settings iOS] Skipping useFocusEffect on initial mount');
+        isInitialMount.current = false;
+        return;
+      }
+      console.log('[Settings iOS] Screen focused (not initial mount), reloading data...');
       loadData();
     }, [])
   );
