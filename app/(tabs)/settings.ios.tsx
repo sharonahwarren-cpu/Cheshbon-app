@@ -688,13 +688,11 @@ export default function SettingsScreen() {
 
   const renderMainMenu = () => {
     const menuItems = [
-      { title: 'Goals', icon: 'flag', section: 'goals' as SettingsSection },
-      { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
-      { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
-      { title: 'Gain/Loss Categories', icon: 'category', section: 'gainLossCategories' as SettingsSection },
-      { title: 'Reflection Motivations', icon: 'flash-on', section: 'reflectionMotivations' as SettingsSection },
-      { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
-      { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
+      { title: 'Preferences', icon: 'settings', route: '/preferences' },
+      { title: 'Alternative Calendars', icon: 'calendar-today', route: '/preferences/alternative-calendars' },
+      { title: 'Home Screen', icon: 'home', route: '/preferences/home-screen' },
+      { title: 'Notifications', icon: 'notifications', route: '/preferences/notification' },
+      { title: 'Reflection Settings', icon: 'lightbulb', route: '/preferences/reflection' },
     ];
 
     return (
@@ -710,31 +708,39 @@ export default function SettingsScreen() {
           />
         }
       >
-        <View style={styles.header}>
+        <View style={styles.headerContainer}>
           <Text style={styles.headerTitle}>Settings</Text>
         </View>
-        {menuItems.map((item, index) => (
-          <React.Fragment key={index}>
-            <TouchableOpacity
-              style={styles.menuButton}
-              onPress={() => setCurrentSection(item.section)}
-            >
-              <IconSymbol
-                ios_icon_name="gear"
-                android_material_icon_name={item.icon}
-                size={20}
-                color={colors.primary}
-              />
-              <Text style={styles.menuButtonText}>{item.title}</Text>
-              <IconSymbol
-                ios_icon_name="chevron.right"
-                android_material_icon_name="chevron-right"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-          </React.Fragment>
-        ))}
+        <View style={[styles.card, { borderColor: colors.cardBorder, backgroundColor: colors.card }]}>
+          {menuItems.map((item, index) => (
+            <React.Fragment key={index}>
+              <TouchableOpacity
+                style={[
+                  styles.menuButton,
+                  {
+                    borderBottomWidth: index === menuItems.length - 1 ? 0 : 1,
+                    borderBottomColor: colors.border,
+                  },
+                ]}
+                onPress={() => router.push(item.route)}
+              >
+                <IconSymbol
+                  ios_icon_name="gear"
+                  android_material_icon_name={item.icon}
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.menuText}>{item.title}</Text>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="chevron-forward"
+                  size={20}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </React.Fragment>
+          ))}
+        </View>
       </ScrollView>
     );
   };
@@ -2713,20 +2719,8 @@ const styles = StyleSheet.create({
   menuButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  menuButtonText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginLeft: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
   menuItem: {
     flexDirection: 'row',
@@ -2753,9 +2747,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 20,
   },
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
+    color: colors.text,
+  },
+  card: {
+    marginHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  menuText: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 17,
+    fontWeight: '600',
     color: colors.text,
   },
   listContainer: {
