@@ -40,42 +40,74 @@ export default function TabLayout() {
         tabBarInactiveTintColor: colors.textSecondary,
       }}
     >
-      <NativeTabs.Trigger name="(home)">
-        <Label>Home</Label>
-        <Icon 
-          sf={{ default: 'house', selected: 'house.fill' }} 
-          drawable="home"
-        />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reports">
-        <Label>Reports</Label>
-        <Icon 
-          sf={{ default: 'chart.bar.doc.horizontal', selected: 'chart.bar.doc.horizontal.fill' }} 
-          drawable="assessment"
-        />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
-        <Label>Settings</Label>
-        <Icon 
-          sf={{ default: 'gearshape', selected: 'gearshape.fill' }} 
-          drawable="settings"
-        />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <Label>Profile</Label>
-        <Icon 
-          sf={{ default: 'person.circle', selected: 'person.circle.fill' }} 
-          drawable="account-circle"
-        />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reflect" hidden={true}>
-        <Label>Reflect</Label>
-        <Icon sf={{ default: 'book', selected: 'book.fill' }} drawable="book" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="ai-chat" hidden={true}>
-        <Label>AI Chat</Label>
-        <Icon sf="message" drawable="chat" />
-      </NativeTabs.Trigger>
+      <NativeTabs.Screen
+        name="(home)"
+        options={{
+          tabBarLabel: 'Home',
+          tabBarIcon: () => (
+            <>
+              <Icon sf={{ default: 'house', selected: 'house.fill' }} drawable="home" />
+            </>
+          ),
+        }}
+      />
+      <NativeTabs.Screen
+        name="reports"
+        options={{
+          tabBarLabel: 'Reports',
+          tabBarIcon: () => (
+            <>
+              <Icon sf={{ default: 'chart.bar.doc.horizontal', selected: 'chart.bar.doc.horizontal.fill' }} drawable="assessment" />
+            </>
+          ),
+        }}
+      />
+      <NativeTabs.Screen
+        name="settings"
+        options={{
+          tabBarLabel: 'Settings',
+          tabBarIcon: () => (
+            <>
+              <Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} drawable="settings" />
+            </>
+          ),
+        }}
+      />
+      <NativeTabs.Screen
+        name="profile"
+        options={{
+          tabBarLabel: 'Profile',
+          tabBarIcon: () => (
+            <>
+              <Icon sf={{ default: 'person.circle', selected: 'person.circle.fill' }} drawable="account-circle" />
+            </>
+          ),
+        }}
+      />
+      <NativeTabs.Screen
+        name="reflect"
+        options={{
+          href: null,
+          tabBarLabel: 'Reflect',
+          tabBarIcon: () => (
+            <>
+              <Icon sf={{ default: 'book', selected: 'book.fill' }} drawable="book" />
+            </>
+          ),
+        }}
+      />
+      <NativeTabs.Screen
+        name="ai-chat"
+        options={{
+          href: null,
+          tabBarLabel: 'AI Chat',
+          tabBarIcon: () => (
+            <>
+              <Icon sf="message" drawable="chat" />
+            </>
+          ),
+        }}
+      />
     </NativeTabs>
   );
 }
