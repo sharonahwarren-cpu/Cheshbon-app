@@ -61,6 +61,60 @@ export function registerGainLossCategoriesRoutes(app: App) {
           .where(eq(schema.gainLossCategories.userId, session.user.id));
       }
 
+      // Sync categories from gains_losses table
+      const gainsLosses = await app.db
+        .select()
+        .from(schema.gainsLosses)
+        .where(eq(schema.gainsLosses.userId, session.user.id));
+
+      // Extract unique categories from gains_losses (case-insensitive, exclude null/empty)
+      const gainsLossesCategories = new Set<string>();
+      const categoryMap = new Map<string, string>(); // lowercase -> original case
+
+      gainsLosses.forEach(item => {
+        if (item.category && item.category.trim()) {
+          const lower = item.category.toLowerCase();
+          if (!gainsLossesCategories.has(lower)) {
+            gainsLossesCategories.add(lower);
+            categoryMap.set(lower, item.category);
+          }
+        }
+      });
+
+      // Create a map of existing categories (case-insensitive)
+      const existingCategories = new Set<string>();
+      categories.forEach(cat => {
+        existingCategories.add(cat.name.toLowerCase());
+      });
+
+      // Find categories to create
+      const categoriesToCreate: { userId: string; name: string }[] = [];
+      gainsLossesCategories.forEach(lowerCat => {
+        if (!existingCategories.has(lowerCat)) {
+          const originalName = categoryMap.get(lowerCat)!;
+          categoriesToCreate.push({
+            userId: session.user.id,
+            name: originalName,
+          });
+          existingCategories.add(lowerCat);
+        }
+      });
+
+      // Insert new categories
+      if (categoriesToCreate.length > 0) {
+        app.logger.info({ userId: session.user.id, count: categoriesToCreate.length }, 'Auto-creating categories from gains/losses');
+        await app.db.insert(schema.gainLossCategories).values(categoriesToCreate);
+
+        // Fetch updated categories
+        categories = await app.db
+          .select()
+          .from(schema.gainLossCategories)
+          .where(eq(schema.gainLossCategories.userId, session.user.id));
+      }
+
+      // Sort by name alphabetically
+      categories.sort((a, b) => a.name.localeCompare(b.name));
+
       // Convert timestamps to ISO format
       const categoriesWithDates = categories.map(category => ({
         ...category,
