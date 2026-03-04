@@ -713,17 +713,22 @@ export function AddReflectionModal({
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
-  // CRITICAL FIX: Update outcome when editingReflection changes
+  // CRITICAL FIX: Update state when props change
+  // This effect handles initialization and updates for editing reflections and quick entries
   useEffect(() => {
-    console.log('[AddReflectionModal] editingReflection changed, updating outcome:', {
+    console.log('[AddReflectionModal] Props changed, updating state:', {
       editingReflection: editingReflection ? {
         id: editingReflection.id,
         outcome: editingReflection.outcome,
         linkedGoalId: editingReflection.linkedGoalId,
+        category: editingReflection.category,
       } : null,
+      prefilledGoalId,
+      prefilledGoalData,
     });
     
     if (editingReflection) {
+      // Editing an existing reflection - populate all fields from the reflection
       setOutcome(editingReflection.outcome);
       setLinkedGoalId(editingReflection.linkedGoalId);
       setCategory(editingReflection.category);
@@ -737,15 +742,30 @@ export function AddReflectionModal({
       setStrategyEffectiveness(
         editingReflection.strategyEffectiveness?.map(se => ({ strategyId: se.strategyId, worked: se.worked })) || []
       );
-    } else if (prefilledGoalId) {
-      // When creating a new reflection with a prefilled goal, clear outcome
-      setLinkedGoalId(prefilledGoalId);
-      setOutcome(undefined);
     } else if (prefilledGoalData) {
-      // When coming from Express screen with prefilled data
+      // CRITICAL FIX: Quick Entry from Express screen
+      // When prefilledGoalData is provided, it means we're creating a new reflection from a Quick Entry
+      // The prefilledGoalData contains the goal's behavior category, type, and description
+      console.log('[AddReflectionModal] Quick Entry detected, setting category from prefilledGoalData:', prefilledGoalData.category);
       setCategory(prefilledGoalData.category);
       setType(prefilledGoalData.type || 'Proactive');
       setDescription(prefilledGoalData.description || '');
+      setLinkedGoalId(prefilledGoalId);
+      setOutcome(undefined); // Outcome will be set in Step 3
+    } else if (prefilledGoalId) {
+      // CRITICAL FIX: When only prefilledGoalId is provided (without prefilledGoalData),
+      // we need to look up the goal's behavior category
+      console.log('[AddReflectionModal] prefilledGoalId provided without prefilledGoalData, looking up goal:', prefilledGoalId);
+      const goal = goals.find(g => g.id === prefilledGoalId);
+      if (goal) {
+        console.log('[AddReflectionModal] Found goal, setting category from goal.behaviorCategories:', goal.behaviorCategories);
+        if (goal.behaviorCategories && goal.behaviorCategories.length > 0) {
+          setCategory(goal.behaviorCategories[0]);
+        } else {
+          setCategory(undefined);
+        }
+      }
+      setLinkedGoalId(prefilledGoalId);
       setOutcome(undefined);
     } else {
       // Clear all fields for a new reflection
@@ -761,7 +781,7 @@ export function AddReflectionModal({
       setSelectedMotivationIds([]);
       setStrategyEffectiveness([]);
     }
-  }, [editingReflection, prefilledGoalId, prefilledGoalData]);
+  }, [editingReflection, prefilledGoalId, prefilledGoalData, goals]);
 
   // Keyboard listeners for iOS
   useEffect(() => {
