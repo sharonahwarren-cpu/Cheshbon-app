@@ -241,10 +241,10 @@ export default function SettingsScreen() {
       }
       console.log('[Settings iOS] Screen focused (not initial mount), reloading data...');
       loadData();
-    }, [])
+    }, [loadData])
   );
 
-  const loadData = async (isRefreshing: boolean = false) => {
+  const loadData = useCallback(async (isRefreshing: boolean = false) => {
     console.log('[Settings iOS] Loading settings data...');
     if (isRefreshing) {
       setRefreshing(true);
@@ -374,7 +374,7 @@ export default function SettingsScreen() {
         setLoading(false);
       }
     }
-  };
+  }, []);
 
   const handleRefresh = async () => {
     console.log('[Settings iOS] Pull-to-refresh triggered');
