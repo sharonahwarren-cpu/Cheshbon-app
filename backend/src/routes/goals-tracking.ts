@@ -278,9 +278,18 @@ export function registerGoalsTrackingRoutes(app: App) {
     if (!session) return;
 
     const { id } = request.params as { id: string };
-    const body = request.body as { timestamp: string; date?: string };
+    const body = request.body as {
+      timestamp: string;
+      date?: string;
+      category?: string;
+      type?: string;
+      linkedGoalId?: string;
+    };
 
-    app.logger.info({ userId: session.user.id, goalId: id, timestamp: body.timestamp, date: body.date }, 'Recording goal success');
+    app.logger.info(
+      { userId: session.user.id, goalId: id, timestamp: body.timestamp, date: body.date, category: body.category, type: body.type },
+      'Recording goal success'
+    );
 
     try {
       // Check if goal exists and belongs to user
@@ -343,10 +352,10 @@ export function registerGoalsTrackingRoutes(app: App) {
         .values({
           userId: session.user.id,
           entryDate: entryDate,
-          linkedGoalId: id,
+          linkedGoalId: body.linkedGoalId || id,
           outcome: 'success',
-          type: 'Proactive',
-          category: 'Action',
+          type: body.type || 'Proactive',
+          category: body.category || 'Action',
           description: 'Quick success entry',
           currencyChange: currencyChange ? JSON.stringify(currencyChange) : null,
         })
@@ -550,9 +559,18 @@ export function registerGoalsTrackingRoutes(app: App) {
     if (!session) return;
 
     const { id } = request.params as { id: string };
-    const body = request.body as { timestamp: string; date?: string };
+    const body = request.body as {
+      timestamp: string;
+      date?: string;
+      category?: string;
+      type?: string;
+      linkedGoalId?: string;
+    };
 
-    app.logger.info({ userId: session.user.id, goalId: id, timestamp: body.timestamp, date: body.date }, 'Recording goal struggle');
+    app.logger.info(
+      { userId: session.user.id, goalId: id, timestamp: body.timestamp, date: body.date, category: body.category, type: body.type },
+      'Recording goal struggle'
+    );
 
     try {
       // Check if goal exists and belongs to user
@@ -615,10 +633,10 @@ export function registerGoalsTrackingRoutes(app: App) {
         .values({
           userId: session.user.id,
           entryDate: entryDate,
-          linkedGoalId: id,
+          linkedGoalId: body.linkedGoalId || id,
           outcome: 'struggled',
-          type: 'Restraint',
-          category: 'Action',
+          type: body.type || 'Restraint',
+          category: body.category || 'Action',
           description: 'Quick struggle entry',
           currencyChange: currencyChange ? JSON.stringify(currencyChange) : null,
         })
