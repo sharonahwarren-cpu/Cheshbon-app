@@ -499,34 +499,55 @@ export default function HomeScreen() {
   };
 
   const handleDeleteEntry = async (goalId: string, entryId: string) => {
-    console.log("Deleting entry iOS:", entryId, "for goal:", goalId);
+    console.log("[Home iOS] Deleting entry:", entryId, "for goal:", goalId);
     
+    // Store the entry type before deletion for optimistic UI update
+    const goal = activatedGoals.find(g => g.id === goalId);
+    const entryToDelete = goal?.dailyEntries?.find(e => e.id === entryId);
+    
+    if (!entryToDelete) {
+      console.error("[Home iOS] Entry not found in local state:", entryId);
+      showError("Entry not found");
+      return;
+    }
+    
+    console.log("[Home iOS] Entry to delete:", entryToDelete.type, "timestamp:", entryToDelete.timestamp);
+    
+    // Optimistic UI update: remove entry from local state immediately
     setActivatedGoals(prevGoals => 
-      prevGoals.map(goal => {
-        if (goal.id === goalId) {
-          const entryToDelete = goal.dailyEntries?.find(e => e.id === entryId);
-          const filteredEntries = (goal.dailyEntries || []).filter(e => e.id !== entryId);
+      prevGoals.map(g => {
+        if (g.id === goalId) {
+          const filteredEntries = (g.dailyEntries || []).filter(e => e.id !== entryId);
           return {
-            ...goal,
+            ...g,
             dailyEntries: filteredEntries,
-            todaySuccessCount: entryToDelete?.type === 'success' ? Math.max(0, goal.todaySuccessCount - 1) : goal.todaySuccessCount,
-            todayStruggleCount: entryToDelete?.type === 'struggle' ? Math.max(0, goal.todayStruggleCount - 1) : goal.todayStruggleCount,
+            todaySuccessCount: entryToDelete.type === 'success' ? Math.max(0, g.todaySuccessCount - 1) : g.todaySuccessCount,
+            todayStruggleCount: entryToDelete.type === 'struggle' ? Math.max(0, g.todayStruggleCount - 1) : g.todayStruggleCount,
           };
         }
-        return goal;
+        return g;
       })
     );
     
     try {
+      // Call the backend API to delete the entry
       await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
-      console.log(`[API] Entry deleted successfully iOS`);
-      // Reload data after deletion to get updated streak values from backend
-      // (streak recalculation happens server-side)
-      await loadData();
+      console.log("[Home iOS] Entry deleted successfully via API");
+      
+      // CRITICAL FIX: Reload data in the background WITHOUT resetting view or scroll position
+      // This ensures streak values are updated from the backend without disrupting the user
+      await loadData(true); // Pass true for isRefreshing to avoid showing loading spinner
+      console.log("[Home iOS] Data reloaded after deletion, view preserved");
     } catch (error: any) {
-      console.error("Error deleting entry iOS:", error);
-      showError(error.message || "Failed to delete entry");
-      await loadData();
+      console.error("[Home iOS] Error deleting entry:", error);
+      console.error("[Home iOS] Error details:", JSON.stringify(error, null, 2));
+      
+      // Show user-friendly error message
+      const errorMsg = error.message || "Failed to delete entry";
+      showError(errorMsg);
+      
+      // Revert optimistic update by reloading data
+      await loadData(true);
     }
   };
 
@@ -580,7 +601,7 @@ export default function HomeScreen() {
     setShowAddReflectionModal(true);
   };
 
-  const handleReflectionSaved = (reflection: Reflection) => {
+  const handleReflectionSaved = async (reflection: Reflection) => {
     console.log('[Home iOS] Reflection saved, closing modal and reloading data');
     if (editingReflection) {
       setReflections(reflections.map(r => r.id === reflection.id ? reflection : r));
@@ -590,8 +611,12 @@ export default function HomeScreen() {
     setShowAddReflectionModal(false);
     setPrefilledGoalId(undefined);
     setEditingReflection(null);
+    setPrefilledGoalData(undefined);
     showSuccess('Reflection saved successfully');
-    loadData();
+    
+    // CRITICAL FIX: Reload data in the background WITHOUT resetting view or scroll position
+    await loadData(true); // Pass true for isRefreshing to avoid showing loading spinner
+    console.log('[Home iOS] Data reloaded after reflection saved, view preserved');
   };
 
   const handleDeleteReflection = async (id: string) => {
