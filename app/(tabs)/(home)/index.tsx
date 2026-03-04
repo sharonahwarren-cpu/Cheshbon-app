@@ -292,16 +292,37 @@ export default function HomeScreen() {
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
 
-      // Normalize goal data: the GET endpoint returns `currentStreak` and `bestStreak`
-      // from the stored database values (persisted by success/struggle endpoints).
-      // Also handle legacy `streak` field for backwards compatibility.
-      const goalsData = rawGoalsData.map((goal: any) => ({
-        ...goal,
-        // Use currentStreak from backend (stored in DB), fall back to legacy `streak` field
-        currentStreak: goal.currentStreak !== undefined ? goal.currentStreak : (goal.streak !== undefined ? goal.streak : 0),
-        // Use bestStreak from backend (stored in DB), default to 0 if not present
-        bestStreak: goal.bestStreak !== undefined ? goal.bestStreak : 0,
-      }));
+      // Normalize goal data: after the backend fix, GET /activated-today returns `currentStreak`
+      // calculated from the day BEFORE the requested date (excludes today).
+      // POST /success returns `currentStreak` calculated FROM entryDate (includes today).
+      //
+      // When displaying the streak:
+      // - If today has a success (todaySuccessCount > 0): the GET value is streak-before-today,
+      //   so the actual current streak = currentStreak + 1 (add today's contribution).
+      //   BUT: we only do this adjustment when viewing today (not past dates).
+      // - If today has no success: currentStreak is already the correct "streak before today" value.
+      //
+      // This adjustment ensures the streak display is consistent between:
+      // - Immediate POST response (includes today)
+      // - Subsequent GET reload (excludes today, needs +1 adjustment when today has success)
+      const isTodayView = dateString === formatDateLocal(new Date());
+      const goalsData = rawGoalsData.map((goal: any) => {
+        const baseCurrentStreak = goal.currentStreak !== undefined ? goal.currentStreak : (goal.streak !== undefined ? goal.streak : 0);
+        const todaySuccessCount = (goal.dailyEntries || []).filter((e: any) => e.type === 'success').length;
+        
+        // BACKEND FIX ADJUSTMENT: When viewing today and there are successes,
+        // the GET endpoint returns streak-before-today. Add 1 to include today's success.
+        // This keeps the display consistent with the POST response value.
+        const adjustedCurrentStreak = (isTodayView && todaySuccessCount > 0)
+          ? baseCurrentStreak + 1
+          : baseCurrentStreak;
+        
+        return {
+          ...goal,
+          currentStreak: adjustedCurrentStreak,
+          bestStreak: goal.bestStreak !== undefined ? goal.bestStreak : 0,
+        };
+      });
       
       console.log('[Home] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home] Loaded currencies for modal:', currenciesData.length, 'currencies');
@@ -449,6 +470,14 @@ export default function HomeScreen() {
       setActivatedGoals(prevGoals => 
         prevGoals.map(g => {
           if (g.id === goalId) {
+            // BACKEND FIX: POST /success returns currentStreak calculated FROM entryDate (includes today).
+            // GET /activated-today returns currentStreak calculated from day BEFORE requested date (excludes today).
+            // After recording success, we use the POST response value directly — it includes today's success
+            // and is the correct value to display (not faded, since today has a success).
+            // On next reload, GET returns streak-before-today, but since todaySuccessCount > 0,
+            // we need to add 1 to get the correct displayed streak.
+            // To avoid this inconsistency, we store the POST response value and only reload when needed.
+            const newCurrentStreak = response.currentStreak !== undefined ? response.currentStreak : g.currentStreak;
             return {
               ...g,
               dailyEntries: g.dailyEntries?.map(e => 
@@ -456,7 +485,7 @@ export default function HomeScreen() {
               ),
               todaySuccessCount: response.todaySuccessCount !== undefined ? response.todaySuccessCount : g.todaySuccessCount,
               successCount: response.successCount !== undefined ? response.successCount : g.successCount,
-              currentStreak: response.currentStreak !== undefined ? response.currentStreak : g.currentStreak,
+              currentStreak: newCurrentStreak,
               bestStreak: response.bestStreak !== undefined ? response.bestStreak : g.bestStreak,
             };
           }
@@ -965,13 +994,33 @@ export default function HomeScreen() {
     return lifetimeSuccesses;
   };
 
-  // CRITICAL FIX: Helper function to calculate the "streak before today"
-  // This is the streak value that should be displayed in faded color before the user clicks "success"
+  // CRITICAL FIX: Helper function to calculate the displayed streak value.
+  //
+  // After the backend fix, GET /api/goals/activated-today returns `currentStreak`
+  // calculated from the day BEFORE the requested date (not including today).
+  // This means:
+  //   - currentStreak = 2 for "Have Kavanah" when viewing today with no success yet
+  //   - currentStreak = 0 for "Mincha" when viewing today with no success yet (streak broken yesterday)
+  //
+  // When the user records a success today, POST /success returns `currentStreak`
+  // calculated FROM today (including today). So after recording success:
+  //   - POST response: currentStreak = 3 (March 3, 4, 5)
+  //   - Next GET reload: currentStreak = 2 (from day before = March 3, 4 only)
+  //
+  // To show a consistent streak value, we use:
+  //   - If today has a success: currentStreak (from POST response, includes today) OR
+  //     currentStreak + 1 (from GET response, excludes today) — we detect which by
+  //     checking if the value was updated from a POST response vs GET response.
+  //
+  // Simplest approach: always display currentStreak as-is from the backend.
+  // The backend now returns the correct "streak before today" from GET, and
+  // "streak including today" from POST. The frontend updates state from POST
+  // immediately, so the displayed value is always correct.
   const getStreakBeforeToday = (goal: ActivatedGoal): number => {
-    // The backend's currentStreak already represents the correct value:
-    // - If yesterday (or last scheduled day) had no success, currentStreak = 0
-    // - If yesterday had success, currentStreak = number of consecutive successes
-    // We just return it as-is
+    // The backend's currentStreak now represents:
+    // - From GET /activated-today: streak as of YESTERDAY (day before requested date)
+    // - From POST /success response: streak including today (after recording success)
+    // Both are correct for their respective display contexts.
     return goal.currentStreak || 0;
   };
 

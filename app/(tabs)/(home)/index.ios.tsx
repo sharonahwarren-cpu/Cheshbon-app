@@ -247,16 +247,37 @@ export default function HomeScreen() {
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
 
-      // Normalize goal data: the GET endpoint returns `currentStreak` and `bestStreak`
-      // from the stored database values (persisted by success/struggle endpoints).
-      // Also handle legacy `streak` field for backwards compatibility.
-      const goalsData = rawGoalsData.map((goal: any) => ({
-        ...goal,
-        // Use currentStreak from backend (stored in DB), fall back to legacy `streak` field
-        currentStreak: goal.currentStreak !== undefined ? goal.currentStreak : (goal.streak !== undefined ? goal.streak : 0),
-        // Use bestStreak from backend (stored in DB), default to 0 if not present
-        bestStreak: goal.bestStreak !== undefined ? goal.bestStreak : 0,
-      }));
+      // Normalize goal data: after the backend fix, GET /activated-today returns `currentStreak`
+      // calculated from the day BEFORE the requested date (excludes today).
+      // POST /success returns `currentStreak` calculated FROM entryDate (includes today).
+      //
+      // When displaying the streak:
+      // - If today has a success (todaySuccessCount > 0): the GET value is streak-before-today,
+      //   so the actual current streak = currentStreak + 1 (add today's contribution).
+      //   BUT: we only do this adjustment when viewing today (not past dates).
+      // - If today has no success: currentStreak is already the correct "streak before today" value.
+      //
+      // This adjustment ensures the streak display is consistent between:
+      // - Immediate POST response (includes today)
+      // - Subsequent GET reload (excludes today, needs +1 adjustment when today has success)
+      const isTodayView = dateString === formatDateLocal(new Date());
+      const goalsData = rawGoalsData.map((goal: any) => {
+        const baseCurrentStreak = goal.currentStreak !== undefined ? goal.currentStreak : (goal.streak !== undefined ? goal.streak : 0);
+        const todaySuccessCount = (goal.dailyEntries || []).filter((e: any) => e.type === 'success').length;
+        
+        // BACKEND FIX ADJUSTMENT: When viewing today and there are successes,
+        // the GET endpoint returns streak-before-today. Add 1 to include today's success.
+        // This keeps the display consistent with the POST response value.
+        const adjustedCurrentStreak = (isTodayView && todaySuccessCount > 0)
+          ? baseCurrentStreak + 1
+          : baseCurrentStreak;
+        
+        return {
+          ...goal,
+          currentStreak: adjustedCurrentStreak,
+          bestStreak: goal.bestStreak !== undefined ? goal.bestStreak : 0,
+        };
+      });
       
       console.log('[Home iOS] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
@@ -1036,10 +1057,13 @@ export default function HomeScreen() {
     return todaySuccessCount === 0;
   };
 
-  // CRITICAL FIX: Helper to get the current streak value
-  // The backend's currentStreak already represents the correct value:
-  // - If yesterday (or last scheduled day) had no success, currentStreak = 0
-  // - If yesterday had success, currentStreak = number of consecutive successes
+  // CRITICAL FIX: Helper to get the current streak value.
+  // After the backend fix, GET /activated-today returns `currentStreak` calculated from
+  // the day BEFORE the requested date (excludes today). The loadData normalization above
+  // adjusts this value by +1 when viewing today with successes, so goal.currentStreak
+  // already contains the correct display value:
+  // - No success today: currentStreak = streak-before-today (shown faded)
+  // - Has success today: currentStreak = streak-including-today (shown solid)
   const getStreakBeforeTodayIOS = (goal: ActivatedGoal): number => {
     return goal.currentStreak || 0;
   };
