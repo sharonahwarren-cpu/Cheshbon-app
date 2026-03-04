@@ -120,13 +120,20 @@ interface GainLossCategory {
   updatedAt: string;
 }
 
+interface ReflectionMotivation {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ReflectionWorthItTallies {
   worthIt: number;
   notWorthIt: number;
   total: number;
 }
 
-type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionPrefs' | 'notifications' | 'reports';
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionMotivations' | 'reflectionPrefs' | 'notifications' | 'reports';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -137,7 +144,7 @@ export default function SettingsScreen() {
   const getInitialSection = (): SettingsSection => {
     const section = params.section;
     if (!section) return 'main';
-    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionPrefs', 'notifications', 'reports'];
+    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications', 'reports'];
     if (validSections.includes(section as SettingsSection)) {
       return section as SettingsSection;
     }
@@ -154,6 +161,7 @@ export default function SettingsScreen() {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [gainLossCategories, setGainLossCategories] = useState<GainLossCategory[]>([]);
+  const [reflectionMotivations, setReflectionMotivations] = useState<ReflectionMotivation[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     notificationsEnabled: false,
     notificationAlarms: [],
@@ -164,7 +172,7 @@ export default function SettingsScreen() {
   const [worthItTallies, setWorthItTallies] = useState<ReflectionWorthItTallies | null>(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | null>(null);
+  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
   
   const [errorMessage, setErrorMessage] = useState('');
@@ -174,7 +182,7 @@ export default function SettingsScreen() {
 
   // Confirm delete modal state
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
-  const [deleteItemType, setDeleteItemType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | 'goal' | null>(null);
+  const [deleteItemType, setDeleteItemType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm' | 'goal' | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<string>('');
   const [deleteItemName, setDeleteItemName] = useState<string>('');
 
@@ -207,7 +215,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     const section = params.section;
     if (section) {
-      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionPrefs', 'notifications', 'reports'];
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications', 'reports'];
       if (validSections.includes(section as SettingsSection)) {
         console.log('[Settings iOS] Setting section from URL param:', section);
         setCurrentSection(section as SettingsSection);
@@ -237,7 +245,7 @@ export default function SettingsScreen() {
       setLoading(true);
     }
     try {
-      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, gainLossCategoriesRes, prefsRes, goalProgressRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, gainLossCategoriesRes, prefsRes, goalProgressRes, reflectionMotivationsRes] = await Promise.all([
         authenticatedGet('/api/goals'),
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/strategies'),
@@ -246,6 +254,7 @@ export default function SettingsScreen() {
         authenticatedGet('/api/gain-loss-categories'),
         authenticatedGet('/api/user-preferences'),
         authenticatedGet('/api/reports/goal-progress'),
+        authenticatedGet('/api/reflection-motivations'),
       ]);
 
       console.log('[Settings iOS] Settings data loaded successfully');
@@ -273,6 +282,10 @@ export default function SettingsScreen() {
       const gainLossCategoriesData = Array.isArray(gainLossCategoriesRes)
         ? gainLossCategoriesRes
         : (Array.isArray(gainLossCategoriesRes?.data) ? gainLossCategoriesRes.data : []);
+
+      const reflectionMotivationsData = Array.isArray(reflectionMotivationsRes)
+        ? reflectionMotivationsRes
+        : (Array.isArray(reflectionMotivationsRes?.data) ? reflectionMotivationsRes.data : []);
       
       const prefsData = prefsRes?.data || prefsRes || { 
         notificationsEnabled: false, 
@@ -312,6 +325,7 @@ export default function SettingsScreen() {
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setGainLossCategories(gainLossCategoriesData);
+      setReflectionMotivations(reflectionMotivationsData);
       setPreferences(prefsData);
     } catch (error) {
       console.error('[Settings iOS] Error loading settings data:', error);
@@ -366,7 +380,7 @@ export default function SettingsScreen() {
     }, 2000);
   };
 
-  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm') => {
+  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm') => {
     console.log('[Settings iOS] openAddModal called with type:', type);
     
     if (type === 'lifeArea') {
@@ -387,6 +401,8 @@ export default function SettingsScreen() {
         dayOfMonth: undefined,
       });
     } else if (type === 'gainLossCategory') {
+      setFormData({ name: '' });
+    } else if (type === 'reflectionMotivation') {
       setFormData({ name: '' });
     } else if (type === 'gainLoss') {
       setFormData({ 

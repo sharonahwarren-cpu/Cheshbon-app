@@ -47,6 +47,13 @@ export default function SettingsMenuScreen() {
       section: 'gainLossCategories',
     },
     {
+      id: 'reflection-motivations',
+      title: 'Reflection Motivations',
+      icon: 'bolt',
+      iosIcon: 'bolt.fill',
+      section: 'reflectionMotivations',
+    },
+    {
       id: 'life-areas',
       title: 'Life Areas',
       icon: 'category',

@@ -212,6 +212,7 @@ export default function HomeScreen() {
   const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [motivations, setMotivations] = useState<{ id: string; name: string; createdAt: string; updatedAt: string }[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
   const [journalEntry, setJournalEntry] = useState<JournalEntry | null>(null);
@@ -262,7 +263,7 @@ export default function HomeScreen() {
     setLoading(true);
     try {
       const dateString = formatDateLocal(selectedDate);
-      const [goalsRes, lifeAreasRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, currenciesRes, gainsLossesRes, strategiesRes, prefsRes, journalRes, reflectionsRes, motivationsRes] = await Promise.all([
         authenticatedGet(`/api/goals/activated-today?date=${dateString}`),
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/currencies'),
@@ -271,6 +272,7 @@ export default function HomeScreen() {
         authenticatedGet('/api/user-preferences'),
         authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
+        authenticatedGet('/api/reflection-motivations'),
       ]);
       
       const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
@@ -281,6 +283,7 @@ export default function HomeScreen() {
       const prefsData = prefsRes?.data || prefsRes || {};
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
+      const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
       
       console.log('[Home] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home] Loaded currencies for modal:', currenciesData.length, 'currencies');
@@ -291,6 +294,7 @@ export default function HomeScreen() {
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
+      setMotivations(motivationsData);
       setUserPreferences(prefsData);
       setJournalEntry(journalData);
       setJournalContent(journalData?.content || '');
@@ -1624,6 +1628,7 @@ export default function HomeScreen() {
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
           strategies={strategies}
+          motivations={motivations}
           prefilledGoalId={prefilledGoalId}
           sourceScreen={currentView}
           prefilledGoalData={prefilledGoalData}

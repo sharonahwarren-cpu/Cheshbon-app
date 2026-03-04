@@ -110,6 +110,22 @@ interface GoalProgress {
   consequenceCurrencySymbol?: string;
 }
 
+interface MotivationCount {
+  motivationId: string;
+  motivationName: string;
+  count: number;
+}
+
+interface TopMotivationsByType {
+  proactive: MotivationCount[];
+  restraint: MotivationCount[];
+}
+
+interface TopMotivationsByOutcome {
+  success: MotivationCount[];
+  struggle: MotivationCount[];
+}
+
 interface Currency {
   id: string;
   name: string;
@@ -133,6 +149,8 @@ export default function ReportsScreen() {
   const [gainsLossesDistribution, setGainsLossesDistribution] = useState<GainsLossesDistribution | null>(null);
   const [behaviorCounts, setBehaviorCounts] = useState<BehaviorCounts | null>(null);
   const [goalProgress, setGoalProgress] = useState<GoalProgress[]>([]);
+  const [topMotivationsByType, setTopMotivationsByType] = useState<TopMotivationsByType | null>(null);
+  const [topMotivationsByOutcome, setTopMotivationsByOutcome] = useState<TopMotivationsByOutcome | null>(null);
   
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -164,6 +182,8 @@ export default function ReportsScreen() {
         gainsLossesDistRes,
         behaviorCountsRes,
         goalProgressRes,
+        topMotivationsByTypeRes,
+        topMotivationsByOutcomeRes,
       ] = await Promise.all([
         authenticatedGet('/api/reports/currency-balances'),
         authenticatedGet('/api/currencies'),
@@ -175,6 +195,8 @@ export default function ReportsScreen() {
         authenticatedGet('/api/reports/gains-losses-distribution'),
         authenticatedGet('/api/reports/behavior-counts'),
         authenticatedGet('/api/reports/goal-progress'),
+        authenticatedGet('/api/reports/top-motivations-by-type'),
+        authenticatedGet('/api/reports/top-motivations-by-outcome'),
       ]);
 
       const currencyData = Array.isArray(currencyRes) ? currencyRes : (currencyRes?.data || []);
@@ -187,6 +209,8 @@ export default function ReportsScreen() {
       const gainsLossesDistData = gainsLossesDistRes?.data || gainsLossesDistRes || null;
       const behaviorCountsData = behaviorCountsRes?.data || behaviorCountsRes || null;
       const goalProgressData = Array.isArray(goalProgressRes) ? goalProgressRes : (goalProgressRes?.data || []);
+      const topMotivationsByTypeData = topMotivationsByTypeRes?.data || topMotivationsByTypeRes || null;
+      const topMotivationsByOutcomeData = topMotivationsByOutcomeRes?.data || topMotivationsByOutcomeRes || null;
 
       setCurrencyBalances(currencyData);
       setCurrencies(currenciesData);
@@ -198,6 +222,10 @@ export default function ReportsScreen() {
       setGainsLossesDistribution(gainsLossesDistData);
       setBehaviorCounts(behaviorCountsData);
       setGoalProgress(goalProgressData);
+      setTopMotivationsByType(topMotivationsByTypeData);
+      setTopMotivationsByOutcome(topMotivationsByOutcomeData);
+      console.log('[Reports] Top motivations by type:', topMotivationsByTypeData);
+      console.log('[Reports] Top motivations by outcome:', topMotivationsByOutcomeData);
 
       console.log("Reports data loaded successfully");
     } catch (error: any) {
@@ -290,6 +318,72 @@ export default function ReportsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <Text style={styles.headerTitle}>Reports</Text>
+
+        {/* TOP MOTIVATIONS BY TYPE REPORT */}
+        {topMotivationsByType && (
+          (topMotivationsByType.proactive?.length > 0 || topMotivationsByType.restraint?.length > 0) && (
+            <>
+              <Text style={styles.sectionTitle}>Top Motivations by Reflection Type</Text>
+              <View style={styles.reportCard}>
+                {topMotivationsByType.proactive?.length > 0 && (
+                  <>
+                    <Text style={styles.reportSubtitle}>Proactive Reflections</Text>
+                    {topMotivationsByType.proactive.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.primary }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {topMotivationsByType.restraint?.length > 0 && (
+                  <>
+                    <Text style={[styles.reportSubtitle, topMotivationsByType.proactive?.length > 0 ? { marginTop: 12 } : {}]}>Restraint Reflections</Text>
+                    {topMotivationsByType.restraint.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.secondary || colors.primary }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </View>
+            </>
+          )
+        )}
+
+        {/* TOP MOTIVATIONS BY OUTCOME REPORT */}
+        {topMotivationsByOutcome && (
+          (topMotivationsByOutcome.success?.length > 0 || topMotivationsByOutcome.struggle?.length > 0) && (
+            <>
+              <Text style={styles.sectionTitle}>Top Motivations by Goal Outcome</Text>
+              <View style={styles.reportCard}>
+                {topMotivationsByOutcome.success?.length > 0 && (
+                  <>
+                    <Text style={styles.reportSubtitle}>Success Reflections</Text>
+                    {topMotivationsByOutcome.success.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.success }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {topMotivationsByOutcome.struggle?.length > 0 && (
+                  <>
+                    <Text style={[styles.reportSubtitle, topMotivationsByOutcome.success?.length > 0 ? { marginTop: 12 } : {}]}>Struggle Reflections</Text>
+                    {topMotivationsByOutcome.struggle.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.error }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </View>
+            </>
+          )
+        )}
 
         {currencyBalances.length > 0 && (
           <>

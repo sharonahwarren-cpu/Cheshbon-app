@@ -120,13 +120,20 @@ interface GainLossCategory {
   updatedAt: string;
 }
 
+interface ReflectionMotivation {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ReflectionWorthItTallies {
   worthIt: number;
   notWorthIt: number;
   total: number;
 }
 
-type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionPrefs' | 'notifications' | 'reports';
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionMotivations' | 'reflectionPrefs' | 'notifications' | 'reports';
 
 const ICON_OPTIONS = [
   'favorite', 'work', 'school', 'fitness-center', 'restaurant', 'home',
@@ -142,7 +149,7 @@ export default function SettingsScreen() {
   const getInitialSection = (): SettingsSection => {
     const section = params.section;
     if (!section) return 'main';
-    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionPrefs', 'notifications', 'reports'];
+    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications', 'reports'];
     if (validSections.includes(section as SettingsSection)) {
       return section as SettingsSection;
     }
@@ -158,6 +165,7 @@ export default function SettingsScreen() {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [gainLossCategories, setGainLossCategories] = useState<GainLossCategory[]>([]);
+  const [reflectionMotivations, setReflectionMotivations] = useState<ReflectionMotivation[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     notificationsEnabled: false,
     notificationAlarms: [],
@@ -168,7 +176,7 @@ export default function SettingsScreen() {
   const [worthItTallies, setWorthItTallies] = useState<ReflectionWorthItTallies | null>(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | null>(null);
+  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
   
   const [errorMessage, setErrorMessage] = useState('');
@@ -178,7 +186,7 @@ export default function SettingsScreen() {
 
   // Confirm delete modal state
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
-  const [deleteItemType, setDeleteItemType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | 'goal' | null>(null);
+  const [deleteItemType, setDeleteItemType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm' | 'goal' | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<string>('');
   const [deleteItemName, setDeleteItemName] = useState<string>('');
 
@@ -216,7 +224,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     const section = params.section;
     if (section) {
-      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionPrefs', 'notifications', 'reports'];
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications', 'reports'];
       if (validSections.includes(section as SettingsSection)) {
         console.log('[Settings] Setting section from URL param:', section);
         setCurrentSection(section as SettingsSection);
@@ -242,7 +250,7 @@ export default function SettingsScreen() {
     console.log('[Settings Web] Loading settings data...');
     setLoading(true);
     try {
-      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, gainLossCategoriesRes, prefsRes, goalProgressRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, gainLossCategoriesRes, prefsRes, goalProgressRes, reflectionMotivationsRes] = await Promise.all([
         authenticatedGet('/api/goals'),
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/strategies'),
@@ -251,6 +259,7 @@ export default function SettingsScreen() {
         authenticatedGet('/api/gain-loss-categories'),
         authenticatedGet('/api/user-preferences'),
         authenticatedGet('/api/reports/goal-progress'),
+        authenticatedGet('/api/reflection-motivations'),
       ]);
 
       console.log('[Settings Web] Settings data loaded successfully');
@@ -281,6 +290,10 @@ export default function SettingsScreen() {
       const gainLossCategoriesData = Array.isArray(gainLossCategoriesRes) 
         ? gainLossCategoriesRes 
         : (Array.isArray(gainLossCategoriesRes?.data) ? gainLossCategoriesRes.data : []);
+
+      const reflectionMotivationsData = Array.isArray(reflectionMotivationsRes)
+        ? reflectionMotivationsRes
+        : (Array.isArray(reflectionMotivationsRes?.data) ? reflectionMotivationsRes.data : []);
       
       const prefsData = prefsRes?.data || prefsRes || { 
         notificationsEnabled: false, 
@@ -317,6 +330,7 @@ export default function SettingsScreen() {
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setGainLossCategories(gainLossCategoriesData);
+      setReflectionMotivations(reflectionMotivationsData);
       setPreferences(prefsData);
     } catch (error) {
       console.error('[Settings Web] Error loading settings data:', error);
@@ -369,7 +383,7 @@ export default function SettingsScreen() {
     setShowSuccessModal(true);
   };
 
-  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm') => {
+  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm') => {
     console.log('[Settings Web] openAddModal called with type:', type);
     
     if (type === 'lifeArea') {
@@ -401,6 +415,10 @@ export default function SettingsScreen() {
       setFormData({ 
         name: '', 
       });
+    } else if (type === 'reflectionMotivation') {
+      setFormData({ 
+        name: '', 
+      });
     } else if (type === 'currency') {
       setFormData({
         name: '',
@@ -424,7 +442,7 @@ export default function SettingsScreen() {
     setShowModal(true);
   };
 
-  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm', item: any) => {
+  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm', item: any) => {
     console.log('[Settings Web] openEditModal called with type:', type, 'item:', item);
     
     if (type === 'lifeArea') {
@@ -487,6 +505,14 @@ export default function SettingsScreen() {
           await authenticatedPost('/api/gain-loss-categories', formData);
           showSuccess('Category created successfully');
         }
+      } else if (modalType === 'reflectionMotivation') {
+        if (editingItem) {
+          await authenticatedPut(`/api/reflection-motivations/${editingItem.id}`, { name: formData.name });
+          showSuccess('Motivation updated successfully');
+        } else {
+          await authenticatedPost('/api/reflection-motivations', { name: formData.name });
+          showSuccess('Motivation created successfully');
+        }
       } else if (modalType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         if (editingItem) {
@@ -512,7 +538,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const confirmDelete = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | 'goal', id: string, name: string) => {
+  const confirmDelete = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'reflectionMotivation' | 'alarm' | 'goal', id: string, name: string) => {
     setDeleteItemType(type);
     setDeleteItemId(id);
     setDeleteItemName(name);
@@ -541,6 +567,9 @@ export default function SettingsScreen() {
       } else if (deleteItemType === 'gainLossCategory') {
         await authenticatedDelete(`/api/gain-loss-categories/${deleteItemId}`);
         showSuccess('Category deleted successfully');
+      } else if (deleteItemType === 'reflectionMotivation') {
+        await authenticatedDelete(`/api/reflection-motivations/${deleteItemId}`);
+        showSuccess('Motivation deleted successfully');
       } else if (deleteItemType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         const updatedAlarms = alarms.filter(a => a.id !== deleteItemId);
@@ -760,6 +789,7 @@ export default function SettingsScreen() {
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
       { title: 'Gain/Loss Categories', icon: 'category', section: 'gainLossCategories' as SettingsSection },
+      { title: 'Reflection Motivations', icon: 'bolt', section: 'reflectionMotivations' as SettingsSection },
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
@@ -1520,6 +1550,76 @@ export default function SettingsScreen() {
     );
   };
 
+  const renderReflectionMotivations = () => {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackPress}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Reflection Motivations</Text>
+          <TouchableOpacity onPress={() => openAddModal('reflectionMotivation')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.helperText}>
+          Manage motivations that can be selected when adding reflections (e.g. Pride, Money, Exhaustion).
+        </Text>
+        <ScrollView style={styles.listContainer}>
+          {reflectionMotivations.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No motivations yet. Create some to track what drives your behavior!</Text>
+            </View>
+          ) : (
+            reflectionMotivations.map((motivation, index) => (
+              <React.Fragment key={index}>
+                <View style={styles.listItem}>
+                  <View style={styles.listItemContent}>
+                    <Text style={styles.listItemTitle}>{motivation.name}</Text>
+                  </View>
+                  <View style={styles.listItemActions}>
+                    <TouchableOpacity
+                      onPress={() => openEditModal('reflectionMotivation', motivation)}
+                      style={styles.iconButton}
+                    >
+                      <IconSymbol
+                        ios_icon_name="pencil"
+                        android_material_icon_name="edit"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => confirmDelete('reflectionMotivation', motivation.id, motivation.name)}
+                      style={styles.iconButton}
+                    >
+                      <IconSymbol
+                        ios_icon_name="trash"
+                        android_material_icon_name="delete"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </React.Fragment>
+            ))
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
   const renderGainLossCategories = () => {
     return (
       <View style={styles.container}>
@@ -2079,6 +2179,7 @@ export default function SettingsScreen() {
           {currentSection === 'currencies' && renderCurrencies()}
           {currentSection === 'gainsLosses' && renderGainsLosses()}
           {currentSection === 'gainLossCategories' && renderGainLossCategories()}
+          {currentSection === 'reflectionMotivations' && renderReflectionMotivations()}
           {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
           {currentSection === 'notifications' && renderNotifications()}
           {currentSection === 'reports' && renderReports()}
@@ -2291,6 +2392,62 @@ export default function SettingsScreen() {
                   onChangeText={(text) => setFormData({ ...formData, name: text })}
                   placeholder="e.g. Financial, Relationship, Health"
                   placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading || !formData.name}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reflection Motivation Add/Edit Modal */}
+      <Modal
+        visible={showModal && modalType === 'reflectionMotivation'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Motivation' : 'Add Motivation'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Motivation Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name || ''}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholder="e.g. Pride, Money, Exhaustion, Overwhelm, Anger"
+                  placeholderTextColor={colors.textSecondary}
+                  autoFocus
                 />
               </View>
             </ScrollView>
