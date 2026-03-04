@@ -40,6 +40,13 @@ export default function SettingsMenuScreen() {
       section: 'gainsLosses',
     },
     {
+      id: 'gain-loss-categories',
+      title: 'Gain/Loss Categories',
+      icon: 'label',
+      iosIcon: 'tag',
+      section: 'gainLossCategories',
+    },
+    {
       id: 'life-areas',
       title: 'Life Areas',
       icon: 'category',

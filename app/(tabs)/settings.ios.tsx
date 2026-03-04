@@ -113,25 +113,20 @@ interface GainLoss {
   term?: 'short' | 'medium' | 'long';
 }
 
+interface GainLossCategory {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ReflectionWorthItTallies {
   worthIt: number;
   notWorthIt: number;
   total: number;
 }
 
-type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'reflectionPrefs' | 'notifications' | 'reports';
-
-// Predefined categories for gains and losses
-const GAIN_LOSS_CATEGORIES = [
-  'Relationship',
-  'Financial',
-  'Health',
-  'Career',
-  'Personal Growth',
-  'Social',
-  'Spiritual',
-  'Other'
-];
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionPrefs' | 'notifications' | 'reports';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -142,7 +137,7 @@ export default function SettingsScreen() {
   const getInitialSection = (): SettingsSection => {
     const section = params.section;
     if (!section) return 'main';
-    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'reflectionPrefs', 'notifications', 'reports'];
+    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionPrefs', 'notifications', 'reports'];
     if (validSections.includes(section as SettingsSection)) {
       return section as SettingsSection;
     }
@@ -158,6 +153,7 @@ export default function SettingsScreen() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
+  const [gainLossCategories, setGainLossCategories] = useState<GainLossCategory[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>({
     notificationsEnabled: false,
     notificationAlarms: [],
@@ -168,7 +164,7 @@ export default function SettingsScreen() {
   const [worthItTallies, setWorthItTallies] = useState<ReflectionWorthItTallies | null>(null);
 
   const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | null>(null);
+  const [modalType, setModalType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
   
   const [errorMessage, setErrorMessage] = useState('');
@@ -178,7 +174,7 @@ export default function SettingsScreen() {
 
   // Confirm delete modal state
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
-  const [deleteItemType, setDeleteItemType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | 'goal' | null>(null);
+  const [deleteItemType, setDeleteItemType] = useState<'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | 'goal' | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<string>('');
   const [deleteItemName, setDeleteItemName] = useState<string>('');
 
@@ -211,7 +207,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     const section = params.section;
     if (section) {
-      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'reflectionPrefs', 'notifications', 'reports'];
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionPrefs', 'notifications', 'reports'];
       if (validSections.includes(section as SettingsSection)) {
         console.log('[Settings iOS] Setting section from URL param:', section);
         setCurrentSection(section as SettingsSection);
@@ -241,12 +237,13 @@ export default function SettingsScreen() {
       setLoading(true);
     }
     try {
-      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, prefsRes, goalProgressRes] = await Promise.all([
+      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, gainLossCategoriesRes, prefsRes, goalProgressRes] = await Promise.all([
         authenticatedGet('/api/goals'),
         authenticatedGet('/api/life-areas'),
         authenticatedGet('/api/strategies'),
         authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
+        authenticatedGet('/api/gain-loss-categories'),
         authenticatedGet('/api/user-preferences'),
         authenticatedGet('/api/reports/goal-progress'),
       ]);
@@ -272,6 +269,10 @@ export default function SettingsScreen() {
       const gainsLossesData = Array.isArray(gainsLossesRes) 
         ? gainsLossesRes 
         : (Array.isArray(gainsLossesRes?.data) ? gainsLossesRes.data : []);
+
+      const gainLossCategoriesData = Array.isArray(gainLossCategoriesRes)
+        ? gainLossCategoriesRes
+        : (Array.isArray(gainLossCategoriesRes?.data) ? gainLossCategoriesRes.data : []);
       
       const prefsData = prefsRes?.data || prefsRes || { 
         notificationsEnabled: false, 
@@ -310,6 +311,7 @@ export default function SettingsScreen() {
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
+      setGainLossCategories(gainLossCategoriesData);
       setPreferences(prefsData);
     } catch (error) {
       console.error('[Settings iOS] Error loading settings data:', error);
@@ -364,7 +366,7 @@ export default function SettingsScreen() {
     }, 2000);
   };
 
-  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm') => {
+  const openAddModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm') => {
     console.log('[Settings iOS] openAddModal called with type:', type);
     
     if (type === 'lifeArea') {
@@ -384,6 +386,8 @@ export default function SettingsScreen() {
         dayOfWeek: undefined,
         dayOfMonth: undefined,
       });
+    } else if (type === 'gainLossCategory') {
+      setFormData({ name: '' });
     } else if (type === 'gainLoss') {
       setFormData({ 
         name: '', 
@@ -415,7 +419,7 @@ export default function SettingsScreen() {
     setShowModal(true);
   };
 
-  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm', item: any) => {
+  const openEditModal = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm', item: any) => {
     console.log('[Settings iOS] openEditModal called with type:', type, 'item:', item);
     
     if (type === 'lifeArea') {
@@ -470,6 +474,14 @@ export default function SettingsScreen() {
           await authenticatedPost('/api/gains-losses', formData);
           showSuccess('Gain/Loss created successfully');
         }
+      } else if (modalType === 'gainLossCategory') {
+        if (editingItem) {
+          await authenticatedPut(`/api/gain-loss-categories/${editingItem.id}`, { name: formData.name });
+          showSuccess('Category updated successfully');
+        } else {
+          await authenticatedPost('/api/gain-loss-categories', { name: formData.name });
+          showSuccess('Category created successfully');
+        }
       } else if (modalType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         if (editingItem) {
@@ -495,7 +507,7 @@ export default function SettingsScreen() {
     }
   };
 
-  const confirmDelete = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'alarm' | 'goal', id: string, name: string) => {
+  const confirmDelete = (type: 'lifeArea' | 'strategy' | 'currency' | 'gainLoss' | 'gainLossCategory' | 'alarm' | 'goal', id: string, name: string) => {
     setDeleteItemType(type);
     setDeleteItemId(id);
     setDeleteItemName(name);
@@ -521,6 +533,9 @@ export default function SettingsScreen() {
       } else if (deleteItemType === 'gainLoss') {
         await authenticatedDelete(`/api/gains-losses/${deleteItemId}`);
         showSuccess('Gain/Loss deleted successfully');
+      } else if (deleteItemType === 'gainLossCategory') {
+        await authenticatedDelete(`/api/gain-loss-categories/${deleteItemId}`);
+        showSuccess('Category deleted successfully');
       } else if (deleteItemType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         const updatedAlarms = alarms.filter(a => a.id !== deleteItemId);
@@ -621,6 +636,7 @@ export default function SettingsScreen() {
       { title: 'Goals', icon: 'flag', section: 'goals' as SettingsSection },
       { title: 'Strategies', icon: 'lightbulb', section: 'strategies' as SettingsSection },
       { title: 'Gains and Losses', icon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
+      { title: 'Gain/Loss Categories', icon: 'category', section: 'gainLossCategories' as SettingsSection },
       { title: 'Life Areas', icon: 'category', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', icon: 'attach-money', section: 'currencies' as SettingsSection },
       { title: 'Reports', icon: 'assessment', section: 'reports' as SettingsSection },
@@ -1280,6 +1296,87 @@ export default function SettingsScreen() {
     );
   };
 
+  const renderGainLossCategories = () => {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackPress}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Gain/Loss Categories</Text>
+          <TouchableOpacity onPress={() => openAddModal('gainLossCategory')}>
+            <IconSymbol
+              ios_icon_name="plus"
+              android_material_icon_name="add"
+              size={24}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.helperText}>
+          Manage your custom categories for gains and losses. These will be available when creating or editing gains/losses.
+        </Text>
+        <ScrollView
+          style={styles.listContainer}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
+        >
+          {gainLossCategories.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No categories yet. Create some to organize your gains and losses!</Text>
+            </View>
+          ) : (
+            gainLossCategories.map((category, index) => (
+              <React.Fragment key={index}>
+                <View style={styles.listItem}>
+                  <View style={styles.listItemContent}>
+                    <Text style={styles.listItemTitle}>{category.name}</Text>
+                  </View>
+                  <View style={styles.listItemActions}>
+                    <TouchableOpacity
+                      onPress={() => openEditModal('gainLossCategory', category)}
+                      style={styles.iconButton}
+                    >
+                      <IconSymbol
+                        ios_icon_name="pencil"
+                        android_material_icon_name="edit"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => confirmDelete('gainLossCategory', category.id, category.name)}
+                      style={styles.iconButton}
+                    >
+                      <IconSymbol
+                        ios_icon_name="trash"
+                        android_material_icon_name="delete"
+                        size={20}
+                        color={colors.error}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </React.Fragment>
+            ))
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
+
   const renderNotifications = () => {
     const alarms = preferences.notificationAlarms || [];
 
@@ -1866,6 +1963,7 @@ export default function SettingsScreen() {
           {currentSection === 'strategies' && renderStrategies()}
           {currentSection === 'currencies' && renderCurrencies()}
           {currentSection === 'gainsLosses' && renderGainsLosses()}
+          {currentSection === 'gainLossCategories' && renderGainLossCategories()}
           {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
           {currentSection === 'notifications' && renderNotifications()}
           {currentSection === 'reports' && renderReports()}
@@ -2101,22 +2199,30 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Category</Text>
+                <Text style={styles.helperText}>
+                  Select from your custom categories or leave blank
+                </Text>
                 <View style={styles.optionsGrid}>
-                  {GAIN_LOSS_CATEGORIES.map((cat) => {
-                    const isSelected = formData.category === cat;
+                  {gainLossCategories.map((cat) => {
+                    const isSelected = formData.category === cat.name;
                     return (
                       <TouchableOpacity
-                        key={cat}
+                        key={cat.id}
                         style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                        onPress={() => setFormData({ ...formData, category: cat })}
+                        onPress={() => setFormData({ ...formData, category: cat.name })}
                       >
                         <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                          {cat}
+                          {cat.name}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
+                {gainLossCategories.length === 0 && (
+                  <Text style={styles.helperText}>
+                    No categories yet. Go to Settings → Gain/Loss Categories to create some.
+                  </Text>
+                )}
               </View>
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Term</Text>
@@ -2137,6 +2243,62 @@ export default function SettingsScreen() {
                     );
                   })}
                 </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading || !formData.name}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Gain/Loss Category Add/Edit Modal */}
+      <Modal
+        visible={showModal && modalType === 'gainLossCategory'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Category' : 'Add Category'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Category Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name || ''}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholder="e.g. Financial, Relationship, Health"
+                  placeholderTextColor={colors.textSecondary}
+                  autoFocus
+                />
               </View>
             </ScrollView>
             <View style={styles.modalFooter}>
