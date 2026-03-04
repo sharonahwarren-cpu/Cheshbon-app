@@ -135,7 +135,7 @@ interface ReflectionWorthItTallies {
   total: number;
 }
 
-type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionMotivations' | 'reflectionPrefs' | 'notifications';
+type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'gainLossCategories' | 'reflectionMotivations' | 'notifications';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -146,7 +146,7 @@ export default function SettingsScreen() {
   const getInitialSection = (): SettingsSection => {
     const section = params.section;
     if (!section) return 'main';
-    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications'];
+    const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'notifications'];
     if (validSections.includes(section as SettingsSection)) {
       return section as SettingsSection;
     }
@@ -217,7 +217,7 @@ export default function SettingsScreen() {
   useEffect(() => {
     const section = params.section;
     if (section) {
-      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'reflectionPrefs', 'notifications'];
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'notifications'];
       if (validSections.includes(section as SettingsSection)) {
         console.log('[Settings iOS] Setting section from URL param:', section);
         setCurrentSection(section as SettingsSection);
@@ -693,7 +693,6 @@ export default function SettingsScreen() {
       { title: 'Gains and Losses', iosIcon: 'arrow.up.arrow.down', androidIcon: 'compare-arrows', section: 'gainsLosses' as SettingsSection },
       { title: 'Gain/Loss Categories', iosIcon: 'folder.fill', androidIcon: 'folder', section: 'gainLossCategories' as SettingsSection },
       { title: 'Motivations', iosIcon: 'bolt.fill', androidIcon: 'flash-on', section: 'reflectionMotivations' as SettingsSection },
-      { title: 'Behavior Categories', iosIcon: 'list.bullet.rectangle.portrait.fill', androidIcon: 'view-list', section: 'reflectionPrefs' as SettingsSection },
       { title: 'Life Areas', iosIcon: 'square.grid.2x2.fill', androidIcon: 'grid-view', section: 'lifeAreas' as SettingsSection },
       { title: 'Currencies', iosIcon: 'dollarsign.circle.fill', androidIcon: 'attach-money', section: 'currencies' as SettingsSection },
     ];
@@ -1539,119 +1538,7 @@ export default function SettingsScreen() {
     );
   };
 
-  const renderReflectionPreferences = () => {
-    const allCategories = ['Action', 'Speech', 'Thought', 'Feeling'];
-    const selectedCategories = preferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
-    const categoriesEnabled = preferences.reflectionCategoriesEnabled !== false;
 
-    const toggleCategory = (category: string) => {
-      const currentCategories = preferences.reflectionCategories || [];
-      const newCategories = currentCategories.includes(category)
-        ? currentCategories.filter(c => c !== category)
-        : [...currentCategories, category];
-      
-      setPreferences({ ...preferences, reflectionCategories: newCategories });
-    };
-
-    const getCategoryIcon = (category: string) => {
-      const categoryLower = category.toLowerCase();
-      if (categoryLower === 'action') return { ios: 'figure.walk', android: 'directions-run' };
-      if (categoryLower === 'speech') return { ios: 'bubble.left.fill', android: 'chat-bubble' };
-      if (categoryLower === 'thought') return { ios: 'brain.head.profile', android: 'psychology' };
-      if (categoryLower === 'feeling') return { ios: 'heart.fill', android: 'favorite' };
-      return { ios: 'sparkles', android: 'auto-awesome' };
-    };
-
-    const toggleLabelText = categoriesEnabled ? 'Behaviours are Enabled' : 'Enable Behaviour Categories';
-    const toggleColor = categoriesEnabled ? colors.success : colors.error;
-
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackPress}>
-            <IconSymbol
-              ios_icon_name="chevron.left"
-              android_material_icon_name="arrow-back"
-              size={24}
-              color={colors.text}
-            />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Reflection Preferences</Text>
-          <View style={{ width: 24 }} />
-        </View>
-        <ScrollView 
-          style={styles.formContainer}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
-        >
-          <View style={styles.formGroup}>
-            <View style={styles.reflectionToggleContainer}>
-              <View style={styles.reflectionToggleTextContainer}>
-                <Text style={styles.reflectionToggleLabel}>{toggleLabelText}</Text>
-                <Text style={styles.helperText}>
-                  When enabled, you can categorize reflections and goals as Action, Speech, Thought, or Feeling
-                </Text>
-              </View>
-              <Switch
-                value={categoriesEnabled}
-                onValueChange={(value) => {
-                  setPreferences({ ...preferences, reflectionCategoriesEnabled: value });
-                }}
-                trackColor={{ false: toggleColor, true: toggleColor }}
-                thumbColor={colors.background}
-                ios_backgroundColor={toggleColor}
-              />
-            </View>
-          </View>
-
-          {categoriesEnabled && (
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Available Categories</Text>
-              <Text style={styles.helperText}>
-                Select which categories you want to use in your reflections and goals
-              </Text>
-              <View style={styles.optionsGrid}>
-                {allCategories.map((category, index) => {
-                  const isSelected = selectedCategories.includes(category);
-                  const categoryIcon = getCategoryIcon(category);
-                  
-                  return (
-                    <React.Fragment key={index}>
-                      <TouchableOpacity
-                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
-                        onPress={() => toggleCategory(category)}
-                      >
-                        <IconSymbol
-                          ios_icon_name={categoryIcon.ios}
-                          android_material_icon_name={categoryIcon.android}
-                          size={16}
-                          color={isSelected ? colors.background : colors.primary}
-                        />
-                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
-                          {category}
-                        </Text>
-                      </TouchableOpacity>
-                    </React.Fragment>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={styles.savePreferencesButton}
-            onPress={handleSavePreferences}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.background} />
-            ) : (
-              <Text style={styles.savePreferencesButtonText}>Save Preferences</Text>
-            )}
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-    );
-  };
 
   const renderGoals = () => {
     console.log('[Settings iOS] renderGoals called');
@@ -2012,7 +1899,6 @@ export default function SettingsScreen() {
           {currentSection === 'gainsLosses' && renderGainsLosses()}
           {currentSection === 'gainLossCategories' && renderGainLossCategories()}
           {currentSection === 'reflectionMotivations' && renderReflectionMotivations()}
-          {currentSection === 'reflectionPrefs' && renderReflectionPreferences()}
           {currentSection === 'notifications' && renderNotifications()}
         </>
       )}
@@ -2875,21 +2761,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  reflectionToggleContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  reflectionToggleTextContainer: {
-    flex: 1,
-  },
-  reflectionToggleLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 4,
   },
   optionsGrid: {
     flexDirection: 'row',
