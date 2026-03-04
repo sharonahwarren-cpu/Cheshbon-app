@@ -121,6 +121,18 @@ interface ReflectionWorthItTallies {
 
 type SettingsSection = 'main' | 'goals' | 'lifeAreas' | 'strategies' | 'currencies' | 'gainsLosses' | 'reflectionPrefs' | 'notifications' | 'reports';
 
+// Predefined categories for gains and losses
+const GAIN_LOSS_CATEGORIES = [
+  'Relationship',
+  'Financial',
+  'Health',
+  'Career',
+  'Personal Growth',
+  'Social',
+  'Spiritual',
+  'Other'
+];
+
 export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -376,8 +388,8 @@ export default function SettingsScreen() {
       setFormData({ 
         name: '', 
         type: 'Gain',
-        category: undefined,
-        subCategory: undefined,
+        category: '',
+        subCategory: '',
         term: 'short',
       });
     } else if (type === 'currency') {
@@ -2081,6 +2093,25 @@ export default function SettingsScreen() {
                       >
                         <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                           {t}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Category</Text>
+                <View style={styles.optionsGrid}>
+                  {GAIN_LOSS_CATEGORIES.map((cat) => {
+                    const isSelected = formData.category === cat;
+                    return (
+                      <TouchableOpacity
+                        key={cat}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, category: cat })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {cat}
                         </Text>
                       </TouchableOpacity>
                     );
