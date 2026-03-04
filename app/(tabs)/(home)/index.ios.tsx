@@ -957,27 +957,27 @@ export default function HomeScreen() {
                 >
                   <TouchableOpacity
                     onPress={() => openAddReflectionModal(goal.id)}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}
+                    style={styles.entryEditSection}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
                   >
                     <IconSymbol
-                      ios_icon_name={isSuccess ? 'checkmark' : 'xmark'}
-                      android_material_icon_name={entryIcon}
-                      size={14}
+                      ios_icon_name={isSuccess ? 'checkmark.circle.fill' : 'xmark.circle.fill'}
+                      android_material_icon_name={isSuccess ? 'check-circle' : 'cancel'}
+                      size={24}
                       color={entryColor}
                     />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.deleteEntryButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleDeleteEntry(goal.id, entry.id);
-                    }}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    onPress={() => handleDeleteEntry(goal.id, entry.id)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
                   >
                     <IconSymbol
-                      ios_icon_name="xmark.circle.fill"
-                      android_material_icon_name="cancel"
-                      size={16}
+                      ios_icon_name="trash.fill"
+                      android_material_icon_name="delete"
+                      size={22}
                       color={colors.error}
                     />
                   </TouchableOpacity>
@@ -2187,27 +2187,37 @@ const styles = StyleSheet.create({
   entriesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
     marginBottom: 12,
   },
   entryBadge: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
+    alignItems: 'stretch',
+    borderRadius: 12,
+    borderWidth: 2,
     backgroundColor: colors.backgroundAlt,
+    overflow: 'hidden',
+    minWidth: 110,
+    minHeight: 52,
   },
-  deleteEntryButton: {
-    padding: 6,
-    backgroundColor: colors.card,
-    borderRadius: 6,
-    minWidth: 28,
-    minHeight: 28,
+  entryEditSection: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 60,
+  },
+  deleteEntryButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: colors.error + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 50,
+    minHeight: 52,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.error + '40',
   },
   actionButtons: {
     flexDirection: 'row',
