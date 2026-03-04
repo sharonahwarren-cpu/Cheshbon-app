@@ -1,7 +1,6 @@
 
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
-import { IconSymbol } from '@/components/IconSymbol';
 import { useAuth } from '@/contexts/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
 import { colors } from '@/styles/commonStyles';
@@ -35,30 +34,35 @@ export default function TabLayout() {
   }
 
   return (
-    <NativeTabs>
+    <NativeTabs
+      screenOptions={{
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
+      }}
+    >
       <NativeTabs.Trigger name="(home)">
         <Label>Home</Label>
         <Icon sf={{ default: 'house', selected: 'house.fill' }} drawable="home" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reports">
         <Label>Reports</Label>
-        <Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} drawable="bar-chart" />
+        <Icon sf={{ default: 'chart.bar.doc.horizontal', selected: 'chart.bar.doc.horizontal.fill' }} drawable="assessment" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <Label>Settings</Label>
-        <Icon sf={{ default: 'gear', selected: 'gear' }} drawable="settings" />
+        <Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} drawable="settings" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Label>Profile</Label>
-        <Icon sf={{ default: 'person', selected: 'person.fill' }} drawable="person" />
+        <Icon sf={{ default: 'person.circle', selected: 'person.circle.fill' }} drawable="person" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reflect" hidden={true}>
         <Label>Reflect</Label>
-        <Icon sf={{ default: 'book', selected: 'book.fill' }} drawable="book" />
+        <Icon sf={{ default: 'book.closed', selected: 'book.closed.fill' }} drawable="menu-book" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="ai-chat" hidden={true}>
         <Label>AI Chat</Label>
-        <Icon sf="message" drawable="chat" />
+        <Icon sf={{ default: 'message', selected: 'message.fill' }} drawable="chat" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );
