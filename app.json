@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Cheshbon",
-    "slug": "Cheshbon",
+    "slug": "cheshbon",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/Chesbon_app_Logo Small.png",
@@ -97,7 +97,7 @@
         }
       ]
     ],
-    "scheme": "Cheshbon",
+    "scheme": "cheshbon",
     "experiments": {
       "typedRoutes": true
     },

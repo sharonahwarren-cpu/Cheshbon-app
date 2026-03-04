@@ -110,6 +110,7 @@ interface GainLoss {
   type: 'Gain' | 'Loss';
   category?: string;
   subCategory?: string;
+  term?: 'short' | 'medium' | 'long';
 }
 
 interface ReflectionWorthItTallies {
@@ -380,6 +381,7 @@ export default function SettingsScreen() {
         type: 'Gain',
         category: undefined,
         subCategory: undefined,
+        term: 'short',
       });
     } else if (type === 'currency') {
       setFormData({
@@ -1525,6 +1527,7 @@ export default function SettingsScreen() {
                   <Text style={styles.sectionSubtitle}>Gains</Text>
                   {gains.map((gain, index) => {
                     const categoryText = gain.category ? `${gain.category}${gain.subCategory ? ` > ${gain.subCategory}` : ''}` : '';
+                    const termText = gain.term ? `${gain.term.charAt(0).toUpperCase() + gain.term.slice(1)}-term` : '';
                     
                     return (
                       <React.Fragment key={index}>
@@ -1532,6 +1535,7 @@ export default function SettingsScreen() {
                           <View style={styles.listItemContent}>
                             <Text style={styles.listItemTitle}>{gain.name}</Text>
                             {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                            {termText && <Text style={styles.listItemSubtitle}>{termText}</Text>}
                           </View>
                           <View style={styles.listItemActions}>
                             <TouchableOpacity
@@ -1569,6 +1573,7 @@ export default function SettingsScreen() {
                   <Text style={styles.sectionSubtitle}>Losses</Text>
                   {losses.map((loss, index) => {
                     const categoryText = loss.category ? `${loss.category}${loss.subCategory ? ` > ${loss.subCategory}` : ''}` : '';
+                    const termText = loss.term ? `${loss.term.charAt(0).toUpperCase() + loss.term.slice(1)}-term` : '';
                     
                     return (
                       <React.Fragment key={index}>
@@ -1576,6 +1581,7 @@ export default function SettingsScreen() {
                           <View style={styles.listItemContent}>
                             <Text style={styles.listItemTitle}>{loss.name}</Text>
                             {categoryText && <Text style={styles.listItemSubtitle}>{categoryText}</Text>}
+                            {termText && <Text style={styles.listItemSubtitle}>{termText}</Text>}
                           </View>
                           <View style={styles.listItemActions}>
                             <TouchableOpacity
@@ -2125,6 +2131,100 @@ export default function SettingsScreen() {
                       >
                         <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
                           {action}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonSecondary]}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.buttonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonPrimary]}
+                onPress={handleSaveItem}
+                disabled={loading || !formData.name}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.buttonPrimaryText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Gain/Loss Add/Edit Modal */}
+      <Modal
+        visible={showModal && modalType === 'gainLoss'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editingItem ? 'Edit Gain/Loss' : 'Add Gain/Loss'}</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name || ''}
+                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  placeholder="Gain/Loss name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Type *</Text>
+                <View style={styles.optionsGrid}>
+                  {['Gain', 'Loss'].map((t) => {
+                    const isSelected = formData.type === t;
+                    return (
+                      <TouchableOpacity
+                        key={t}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, type: t })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {t}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>Term</Text>
+                <View style={styles.optionsGrid}>
+                  {['short', 'medium', 'long'].map((term) => {
+                    const isSelected = formData.term === term;
+                    const displayText = term.charAt(0).toUpperCase() + term.slice(1) + '-term';
+                    return (
+                      <TouchableOpacity
+                        key={term}
+                        style={[styles.optionButton, isSelected && styles.optionButtonSelected]}
+                        onPress={() => setFormData({ ...formData, term })}
+                      >
+                        <Text style={[styles.optionButtonText, isSelected && styles.optionButtonTextSelected]}>
+                          {displayText}
                         </Text>
                       </TouchableOpacity>
                     );
