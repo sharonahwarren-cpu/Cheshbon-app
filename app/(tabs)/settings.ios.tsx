@@ -297,10 +297,20 @@ export default function SettingsScreen() {
         : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
 
       // Merge goal progress data (which includes per-goal currency balances and streaks) with goals
+      console.log('[Settings iOS] Raw goalsData:', goalsData);
+      console.log('[Settings iOS] Raw goalProgressData:', goalProgressData);
+      
       const goalsWithBalances = goalsData.map((goal: Goal) => {
         const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
+        console.log(`[Settings iOS] Processing goal ${goal.id} (${goal.title}):`, {
+          hasProgressInfo: !!progressInfo,
+          progressInfo,
+          goalCurrentStreak: goal.currentStreak,
+          goalBestStreak: goal.bestStreak,
+        });
+        
         if (progressInfo) {
-          return {
+          const merged = {
             ...goal,
             rewardCurrencyBalance: progressInfo.rewardCurrencyBalance,
             rewardCurrencySymbol: progressInfo.rewardCurrencySymbol,
@@ -312,14 +322,27 @@ export default function SettingsScreen() {
             currentStreak: progressInfo.currentStreak ?? goal.currentStreak ?? 0,
             bestStreak: progressInfo.bestStreak ?? goal.bestStreak ?? 0,
           };
+          console.log(`[Settings iOS] Merged goal ${goal.id}:`, {
+            currentStreak: merged.currentStreak,
+            bestStreak: merged.bestStreak,
+          });
+          return merged;
         }
-        return {
+        
+        const defaulted = {
           ...goal,
           status: goal.status || 'ACTIVE',
           currentStreak: goal.currentStreak ?? 0,
           bestStreak: goal.bestStreak ?? 0,
         };
+        console.log(`[Settings iOS] Defaulted goal ${goal.id}:`, {
+          currentStreak: defaulted.currentStreak,
+          bestStreak: defaulted.bestStreak,
+        });
+        return defaulted;
       });
+      
+      console.log('[Settings iOS] Final goalsWithBalances:', goalsWithBalances);
       
       console.log('[Settings iOS] Life areas loaded:', lifeAreasData);
       
@@ -1630,6 +1653,10 @@ export default function SettingsScreen() {
   };
 
   const renderGoals = () => {
+    console.log('[Settings iOS] renderGoals called');
+    console.log('[Settings iOS] goals state:', goals);
+    console.log('[Settings iOS] sortedGoals:', sortedGoals);
+    
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -1669,6 +1696,14 @@ export default function SettingsScreen() {
             </View>
           ) : (
             sortedGoals.map((goal, index) => {
+              console.log(`[Settings iOS] Rendering goal ${index}:`, {
+                id: goal.id,
+                title: goal.title,
+                currentStreak: goal.currentStreak,
+                bestStreak: goal.bestStreak,
+                successCount: goal.successCount,
+                struggleCount: goal.struggleCount,
+              });
               const successCount = goal.successCount || 0;
               const struggleCount = goal.struggleCount || 0;
               const isDeactivated = goal.status === 'DEACTIVATED';
@@ -1796,32 +1831,46 @@ export default function SettingsScreen() {
                           {struggleCount}
                         </Text>
                       </View>
-                      {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
-                        <View style={styles.goalStatItem}>
-                          <IconSymbol
-                            ios_icon_name="flame.fill"
-                            android_material_icon_name="local-fire-department"
-                            size={16}
-                            color={colors.primary}
-                          />
-                          <Text style={[styles.goalStatText, { color: colors.primary }]}>
-                            {goal.currentStreak}
-                          </Text>
-                        </View>
-                      )}
-                      {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
-                        <View style={styles.goalStatItem}>
-                          <IconSymbol
-                            ios_icon_name="star.fill"
-                            android_material_icon_name="star"
-                            size={16}
-                            color="#FFD700"
-                          />
-                          <Text style={[styles.goalStatText, { color: '#FFD700' }]}>
-                            {goal.bestStreak}
-                          </Text>
-                        </View>
-                      )}
+                      {(() => {
+                        const shouldShowCurrentStreak = goal.currentStreak !== undefined && goal.currentStreak > 0;
+                        console.log(`[Settings iOS] Goal ${goal.id} currentStreak check:`, {
+                          currentStreak: goal.currentStreak,
+                          shouldShow: shouldShowCurrentStreak,
+                        });
+                        return shouldShowCurrentStreak ? (
+                          <View style={styles.goalStatItem}>
+                            <IconSymbol
+                              ios_icon_name="flame.fill"
+                              android_material_icon_name="local-fire-department"
+                              size={16}
+                              color={colors.primary}
+                            />
+                            <Text style={[styles.goalStatText, { color: colors.primary }]}>
+                              {goal.currentStreak}
+                            </Text>
+                          </View>
+                        ) : null;
+                      })()}
+                      {(() => {
+                        const shouldShowBestStreak = goal.bestStreak !== undefined && goal.bestStreak > 0;
+                        console.log(`[Settings iOS] Goal ${goal.id} bestStreak check:`, {
+                          bestStreak: goal.bestStreak,
+                          shouldShow: shouldShowBestStreak,
+                        });
+                        return shouldShowBestStreak ? (
+                          <View style={styles.goalStatItem}>
+                            <IconSymbol
+                              ios_icon_name="star.fill"
+                              android_material_icon_name="star"
+                              size={16}
+                              color="#FFD700"
+                            />
+                            <Text style={[styles.goalStatText, { color: '#FFD700' }]}>
+                              {goal.bestStreak}
+                            </Text>
+                          </View>
+                        ) : null;
+                      })()}
                     </View>
                     
                     {/* Per-goal currency balance (not total) */}
