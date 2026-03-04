@@ -216,8 +216,8 @@ export default function HomeScreen() {
     description?: string;
   } | undefined>(undefined);
 
-  const loadData = React.useCallback(async (isRefreshing: boolean = false) => {
-    console.log("[Home iOS] Loading home screen data, isRefreshing:", isRefreshing);
+  const loadData = React.useCallback(async (isRefreshing: boolean = false, preserveView: boolean = false) => {
+    console.log("[Home iOS] Loading home screen data, isRefreshing:", isRefreshing, "preserveView:", preserveView);
     if (isRefreshing) {
       setRefreshing(true);
     } else {
@@ -282,28 +282,31 @@ export default function HomeScreen() {
       setJournalContent(journalData?.content || '');
       setReflections(reflectionsData);
       
-      // CRITICAL FIX: ALWAYS apply user's preferred home screen when preferences are loaded
-      // This ensures that when the user changes preferences in settings and returns to the home screen,
-      // the new preference is immediately applied (not just on first load)
-      const preferredScreen = prefsData.preferredHomeScreen;
-      console.log('[Home iOS] Applying preferred home screen from backend:', preferredScreen);
-      console.log('[Home iOS] Current view before applying preference:', currentView, expressViewMode);
-      
-      if (preferredScreen === 'goals-detailed') {
-        console.log('[Home iOS] Setting view: goals-detailed -> Express view, Detailed mode');
-        setCurrentView('express');
-        setExpressViewMode('detailed');
-      } else if (preferredScreen === 'goals-concise') {
-        console.log('[Home iOS] Setting view: goals-concise -> Express view, Concise mode');
-        setCurrentView('express');
-        setExpressViewMode('concise');
+      // CRITICAL FIX: Only apply user's preferred home screen on initial load or when explicitly requested
+      // When preserveView is true (e.g., after adding/deleting entries), keep the current view
+      if (!preserveView) {
+        const preferredScreen = prefsData.preferredHomeScreen;
+        console.log('[Home iOS] Applying preferred home screen from backend:', preferredScreen);
+        console.log('[Home iOS] Current view before applying preference:', currentView, expressViewMode);
+        
+        if (preferredScreen === 'goals-detailed') {
+          console.log('[Home iOS] Setting view: goals-detailed -> Express view, Detailed mode');
+          setCurrentView('express');
+          setExpressViewMode('detailed');
+        } else if (preferredScreen === 'goals-concise') {
+          console.log('[Home iOS] Setting view: goals-concise -> Express view, Concise mode');
+          setCurrentView('express');
+          setExpressViewMode('concise');
+        } else {
+          // Default to reflect view
+          console.log('[Home iOS] Setting view: reflect (default)');
+          setCurrentView('reflect');
+        }
+        
+        console.log('[Home iOS] View updated based on preference:', preferredScreen);
       } else {
-        // Default to reflect view
-        console.log('[Home iOS] Setting view: reflect (default)');
-        setCurrentView('reflect');
+        console.log('[Home iOS] Preserving current view:', currentView, expressViewMode);
       }
-      
-      console.log('[Home iOS] View updated based on preference:', preferredScreen);
       
       console.log("[Home iOS] Data loaded successfully");
     } catch (error: any) {
@@ -520,13 +523,13 @@ export default function HomeScreen() {
     try {
       await authenticatedDelete(`/api/goals/${goalId}/entries/${entryId}`);
       console.log(`[API] Entry deleted successfully iOS`);
-      // Reload data after deletion to get updated streak values from backend
-      // (streak recalculation happens server-side)
-      await loadData();
+      // CRITICAL FIX: Reload data in background with preserveView=true to keep current screen
+      // This prevents navigation reset and keeps user on the same view (Express/Detailed)
+      await loadData(false, true);
     } catch (error: any) {
       console.error("Error deleting entry iOS:", error);
       showError(error.message || "Failed to delete entry");
-      await loadData();
+      await loadData(false, true);
     }
   };
 
@@ -591,7 +594,8 @@ export default function HomeScreen() {
     setPrefilledGoalId(undefined);
     setEditingReflection(null);
     showSuccess('Reflection saved successfully');
-    loadData();
+    // CRITICAL FIX: Reload data in background with preserveView=true to keep current screen
+    loadData(false, true);
   };
 
   const handleDeleteReflection = async (id: string) => {
@@ -1760,7 +1764,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollViewContent: {
-    paddingBottom: 100,
+    paddingBottom: 20,
   },
   header: {
     paddingHorizontal: 20,
