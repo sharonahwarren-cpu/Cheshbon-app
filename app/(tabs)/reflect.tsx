@@ -68,6 +68,7 @@ interface Reflection {
   };
   gainedIds?: string[];
   lostIds?: string[];
+  motivationIds?: string[];
   wasWorthIt?: boolean;
   additionalThoughts?: string;
   strategyEffectiveness?: {

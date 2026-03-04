@@ -66,6 +66,7 @@ interface Reflection {
   };
   gainedIds?: string[];
   lostIds?: string[];
+  motivationIds?: string[];
   wasWorthIt?: boolean;
   additionalThoughts?: string;
   strategyEffectiveness?: Array<{
@@ -132,6 +133,7 @@ export default function ReflectScreen() {
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [motivations, setMotivations] = useState<{ id: string; name: string; createdAt: string; updatedAt: string }[]>([]);
 
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -192,7 +194,7 @@ export default function ReflectScreen() {
     console.log('Loading reflect data for date (local):', dateString);
     setLoading(true);
     try {
-      const [journalRes, reflectionsRes, goalsRes, currenciesRes, prefsRes, gainsLossesRes, strategiesRes] = await Promise.all([
+      const [journalRes, reflectionsRes, goalsRes, currenciesRes, prefsRes, gainsLossesRes, strategiesRes, motivationsRes] = await Promise.all([
         authenticatedGet(`/api/journals/by-date?date=${dateString}`),
         authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
         authenticatedGet('/api/goals'),
@@ -200,6 +202,7 @@ export default function ReflectScreen() {
         authenticatedGet('/api/user-preferences'),
         authenticatedGet('/api/gains-losses'),
         authenticatedGet('/api/strategies'),
+        authenticatedGet('/api/reflection-motivations'),
       ]);
 
       const journalData = journalRes?.data || journalRes || null;
@@ -209,6 +212,7 @@ export default function ReflectScreen() {
       const prefsData = prefsRes?.data || prefsRes || {};
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
       const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
+      const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
 
       setJournalEntry(journalData);
       setJournalContent(journalData?.content || '');
@@ -218,6 +222,8 @@ export default function ReflectScreen() {
       setUserPreferences(prefsData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
+      setMotivations(motivationsData);
+      console.log('[Reflect iOS] Motivations loaded:', motivationsData.length);
 
       console.log('Reflect data loaded successfully');
     } catch (error) {
@@ -810,6 +816,7 @@ export default function ReflectScreen() {
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
           strategies={strategies}
+          motivations={motivations}
           prefilledGoalId={prefilledGoalId}
           sourceScreen="reflect"
         />
