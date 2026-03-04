@@ -670,16 +670,7 @@ export function AddReflectionModal({
     editingReflection?.description || prefilledGoalData?.description || ''
   );
   const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId || prefilledGoalId);
-  
-  // CRITICAL FIX: Initialize outcome from editingReflection
-  // When editing an existing reflection, pre-fill the success/struggle outcome
-  const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(() => {
-    if (editingReflection?.outcome) {
-      console.log('[AddReflectionModal] Initializing outcome from editingReflection:', editingReflection.outcome);
-      return editingReflection.outcome;
-    }
-    return undefined;
-  });
+  const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(editingReflection?.outcome);
   const [gainedIds, setGainedIds] = useState<string[]>(editingReflection?.gainedIds || []);
   const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
   const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(editingReflection?.wasWorthIt);
@@ -711,23 +702,6 @@ export function AddReflectionModal({
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
-
-  // CRITICAL FIX: Reset outcome when editingReflection changes
-  // This ensures the outcome is properly pre-filled when opening the modal to edit an existing reflection
-  useEffect(() => {
-    if (editingReflection) {
-      console.log('[AddReflectionModal] editingReflection changed, setting outcome:', editingReflection.outcome);
-      setOutcome(editingReflection.outcome);
-      setLinkedGoalId(editingReflection.linkedGoalId);
-    } else if (prefilledGoalId) {
-      console.log('[AddReflectionModal] prefilledGoalId set, clearing outcome for new reflection');
-      setLinkedGoalId(prefilledGoalId);
-      setOutcome(undefined);
-    } else {
-      console.log('[AddReflectionModal] New reflection, clearing outcome');
-      setOutcome(undefined);
-    }
-  }, [editingReflection, prefilledGoalId]);
 
   // Keyboard listeners for iOS
   useEffect(() => {
