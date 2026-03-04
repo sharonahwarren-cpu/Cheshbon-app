@@ -340,7 +340,8 @@ export default function HomeScreen() {
         }
       }
 
-      // Set initial view based on user's preferred home screen (only on first load)
+      // CRITICAL FIX: Set initial view based on user's preferred home screen (only on first load)
+      // After initial load, NEVER reset to default homepage on refresh
       if (!homeScreenInitialized) {
         const preferredScreen = prefsData.preferredHomeScreen;
         console.log('[Home] Setting initial view based on preferred home screen:', preferredScreen);
@@ -355,6 +356,8 @@ export default function HomeScreen() {
           setCurrentView('reflect');
         }
         setHomeScreenInitialized(true);
+      } else {
+        console.log('[Home] Preserving current view state (not first load)');
       }
       
       console.log("Home data loaded successfully");
@@ -635,6 +638,9 @@ export default function HomeScreen() {
     setPrefilledGoalId(undefined);
     setEditingReflection(null);
     showSuccess('Reflection saved successfully');
+    
+    // CRITICAL FIX: Reload data in the background to update Reflect section
+    // This ensures that when a success/struggle is recorded in Express, the Reflect section updates immediately
     loadData();
   };
 

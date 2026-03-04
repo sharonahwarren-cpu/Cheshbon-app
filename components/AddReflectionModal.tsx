@@ -1083,9 +1083,12 @@ export function AddReflectionModal({
       
       const validStrategyEffectiveness = strategyEffectiveness.filter(se => se.worked !== null);
       
+      // CRITICAL FIX: Always save category if it's set, regardless of categoriesEnabled
+      // This ensures that reflections created from Express screen (with prefilledGoalData)
+      // correctly save the goal's behavior category
       const payload = {
         date: dateString,
-        category: categoriesEnabled ? category : undefined,
+        category: category || undefined,
         type,
         description,
         linkedGoalId: linkedGoalId || undefined,
