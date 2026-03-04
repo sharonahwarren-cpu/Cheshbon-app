@@ -392,7 +392,7 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       const totalSuccessCount = allSuccessReflections.length;
 
-      // Calculate streak based on consecutive days with successes
+      // Calculate streak based on consecutive scheduled days with successes
       try {
         const allReflections = await app.db
           .select()
@@ -410,41 +410,44 @@ export function registerGoalsTrackingRoutes(app: App) {
         let bestStreak = goals[0].bestStreak || 0;
 
         if (sortedDates.length > 0) {
-          // Calculate current streak: count consecutive days from most recent backwards
+          // Calculate current streak: count consecutive scheduled days from most recent backwards
+          // Only count days where the goal is scheduled, skip non-scheduled days, break on missed scheduled days
           const mostRecentDate = sortedDates[sortedDates.length - 1]; // Last (most recent) date
           let checkDate = new Date(mostRecentDate);
           checkDate.setUTCHours(0, 0, 0, 0);
 
-          // Count consecutive days from most recent backwards
+          // Count consecutive scheduled days from most recent backwards
           for (let i = 0; i < 365; i++) {
             const checkDateStr = checkDate.toISOString().split('T')[0];
-            if (sortedDates.includes(checkDateStr)) {
-              currentStreak++;
-            } else {
-              break;
+            const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
+
+            if (isScheduled) {
+              // Goal is scheduled on this day
+              if (sortedDates.includes(checkDateStr)) {
+                // Has success on this scheduled day
+                currentStreak++;
+              } else {
+                // Scheduled day but no success - break the streak
+                break;
+              }
             }
+            // If not scheduled, just skip this day and continue (don't break)
+
             checkDate.setDate(checkDate.getDate() - 1);
           }
 
-          // Calculate best streak: find longest consecutive sequence
-          let tempStreak = 1;
-          let maxStreak = 1;
+          // Calculate best streak: find longest consecutive sequence of scheduled days with successes
+          let tempStreak = 0;
+          let maxStreak = 0;
 
-          for (let i = 1; i < sortedDates.length; i++) {
-            const prevDate = new Date(sortedDates[i - 1]);
-            const currDate = new Date(sortedDates[i]);
-            prevDate.setUTCHours(0, 0, 0, 0);
-            currDate.setUTCHours(0, 0, 0, 0);
+          for (let i = 0; i < sortedDates.length; i++) {
+            const dateStr = sortedDates[i];
+            const isScheduled = isGoalActiveOnDateHelper(goals[0], dateStr);
 
-            const daysDiff = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-
-            if (daysDiff === 1) {
-              // Consecutive day
+            if (isScheduled) {
+              // Goal is scheduled on this day with a success
               tempStreak++;
               maxStreak = Math.max(maxStreak, tempStreak);
-            } else {
-              // Gap in days, reset counter
-              tempStreak = 1;
             }
           }
 
@@ -673,7 +676,7 @@ export function registerGoalsTrackingRoutes(app: App) {
 
       const totalStruggleCount = allStruggleReflections.length;
 
-      // Reset streak if this is a struggle on the entry date (only if no successes on that date)
+      // Recalculate streaks on struggle: break streak if struggle on a scheduled day with no successes
       try {
         const successOnDate = await app.db
           .select()
@@ -684,24 +687,84 @@ export function registerGoalsTrackingRoutes(app: App) {
             eq(schema.reflections.outcome, 'success')
           ));
 
-        // Only reset streak if there are no successes on this date
+        // Only recalculate streak if there are no successes on this date
         if (successOnDate.length === 0) {
-          // Reset current streak to 0 on a struggle day
+          // Recalculate streaks based on all success reflections
+          const allSuccessReflections = await app.db
+            .select()
+            .from(schema.reflections)
+            .where(and(
+              eq(schema.reflections.linkedGoalId, id),
+              eq(schema.reflections.outcome, 'success')
+            ));
+
+          const uniqueDatesSet = new Set(allSuccessReflections.map(r => r.entryDate));
+          const sortedDates = Array.from(uniqueDatesSet).sort(); // Sort ascending: oldest first
+
+          let currentStreak = 0;
+          let bestStreak = goals[0].bestStreak || 0;
+
+          if (sortedDates.length > 0) {
+            // Calculate current streak: count consecutive scheduled days from most recent backwards
+            const mostRecentDate = sortedDates[sortedDates.length - 1];
+            let checkDate = new Date(mostRecentDate);
+            checkDate.setUTCHours(0, 0, 0, 0);
+
+            // Count consecutive scheduled days from most recent backwards
+            for (let i = 0; i < 365; i++) {
+              const checkDateStr = checkDate.toISOString().split('T')[0];
+              const isScheduled = isGoalActiveOnDateHelper(goals[0], checkDateStr);
+
+              if (isScheduled) {
+                // Goal is scheduled on this day
+                if (sortedDates.includes(checkDateStr)) {
+                  // Has success on this scheduled day
+                  currentStreak++;
+                } else {
+                  // Scheduled day but no success - break the streak
+                  break;
+                }
+              }
+              // If not scheduled, just skip this day and continue
+
+              checkDate.setDate(checkDate.getDate() - 1);
+            }
+
+            // Calculate best streak: find longest consecutive sequence of scheduled days with successes
+            let tempStreak = 0;
+            let maxStreak = 0;
+
+            for (let i = 0; i < sortedDates.length; i++) {
+              const dateStr = sortedDates[i];
+              const isScheduled = isGoalActiveOnDateHelper(goals[0], dateStr);
+
+              if (isScheduled) {
+                // Goal is scheduled on this day with a success
+                tempStreak++;
+                maxStreak = Math.max(maxStreak, tempStreak);
+              }
+            }
+
+            bestStreak = Math.max(bestStreak, maxStreak);
+          }
+
+          // Update goal with recalculated streak values
           await app.db
             .update(schema.goals)
             .set({
-              currentStreak: 0,
+              currentStreak,
+              bestStreak,
               updatedAt: new Date(),
             })
             .where(eq(schema.goals.id, id));
 
           app.logger.info(
-            { userId: session.user.id, goalId: id },
-            'Goal streak reset to 0 on struggle'
+            { userId: session.user.id, goalId: id, entryDate, currentStreak, bestStreak },
+            'Goal streaks recalculated on struggle'
           );
         }
       } catch (error) {
-        app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to reset streak on struggle');
+        app.logger.error({ err: error, userId: session.user.id, goalId: id }, 'Failed to recalculate streak on struggle');
         // Continue despite streak calculation error
       }
 
