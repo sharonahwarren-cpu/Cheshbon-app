@@ -42,7 +42,8 @@ interface ActivatedGoal {
   dailyEntries?: DailyEntry[];
   successCount: number;
   struggleCount: number;
-  streak?: number;
+  currentStreak?: number;
+  bestStreak?: number;
   rewardCurrencyId?: string;
   rewardSuccesses?: number;
   rewardAmount?: number;
@@ -394,7 +395,8 @@ export default function HomeScreen() {
               ),
               todaySuccessCount: response.todaySuccessCount || goal.todaySuccessCount,
               successCount: response.successCount || goal.successCount,
-              streak: response.streak !== undefined ? response.streak : goal.streak,
+              currentStreak: response.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
+              bestStreak: response.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
             };
           }
           return goal;
@@ -465,7 +467,8 @@ export default function HomeScreen() {
               ),
               todayStruggleCount: response?.todayStruggleCount || goal.todayStruggleCount,
               struggleCount: response?.struggleCount || goal.struggleCount,
-              streak: response?.streak !== undefined ? response.streak : goal.streak,
+              currentStreak: response?.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
+              bestStreak: response?.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
             };
           }
           return goal;
@@ -615,9 +618,9 @@ export default function HomeScreen() {
       await authenticatedDelete(`/api/reflections/${id}`);
       setReflections(reflections.filter(r => r.id !== id));
       showSuccess('Reflection deleted successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting reflection:', error);
-      showError('Failed to delete reflection');
+      showError(error.message || 'Failed to delete reflection');
     } finally {
       setLoading(false);
     }
@@ -921,10 +924,26 @@ export default function HomeScreen() {
               color={colors.error}
             />
           </View>
-          {goal.streak !== undefined && goal.streak > 0 && (
+          {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
             <View style={styles.tallySection}>
-              <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{goal.streak}</Text>
-              <Text style={styles.streakEmoji}>🔥</Text>
+              <IconSymbol
+                ios_icon_name="flame.fill"
+                android_material_icon_name="local-fire-department"
+                size={16}
+                color="#FF6B35"
+              />
+              <Text style={[styles.tallyCount, { color: '#FF6B35' }]}>{goal.currentStreak}</Text>
+            </View>
+          )}
+          {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
+            <View style={styles.tallySection}>
+              <IconSymbol
+                ios_icon_name="star.fill"
+                android_material_icon_name="star"
+                size={16}
+                color="#FFD700"
+              />
+              <Text style={[styles.tallyCount, { color: '#FFD700' }]}>{goal.bestStreak}</Text>
             </View>
           )}
         </View>
@@ -1034,9 +1053,14 @@ export default function HomeScreen() {
           <View style={styles.conciseCounter}>
             <Text style={[styles.conciseCounterText, { color: colors.error }]}>✗{struggleCount}</Text>
           </View>
-          {goal.streak !== undefined && goal.streak > 0 && (
+          {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
             <View style={styles.conciseCounter}>
-              <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{goal.streak}</Text>
+              <Text style={[styles.conciseCounterText, { color: '#FF6B35' }]}>🔥{goal.currentStreak}</Text>
+            </View>
+          )}
+          {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
+            <View style={styles.conciseCounter}>
+              <Text style={[styles.conciseCounterText, { color: '#FFD700' }]}>⭐{goal.bestStreak}</Text>
             </View>
           )}
           {currencyTallies.map((tally, index) => (
