@@ -1608,10 +1608,17 @@ export default function SettingsScreen() {
                 displayCurrencyBalance = goal.rewardCurrencyBalance;
                 displayCurrencySymbol = goal.rewardCurrencySymbol || '';
                 displayCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
-                if (displayCurrency && isRewardCurrency(displayCurrency) && displayCurrencyBalance > 0) {
-                  displayButtonType = 'claim';
+                
+                // Determine button type based on balance sign and currency configuration
+                // Positive balance = you have earned/accumulated this currency
+                // Negative balance = you owe/need to pay this currency
+                if (displayCurrencyBalance > 0) {
+                  // Positive balance: check if this is a reward (onSuccess=ADD) or consequence (onFailure=ADD)
+                  // If onSuccess=ADD (reward), you claim it. If onFailure=ADD (consequence/debt), you pay it.
+                  displayButtonType = (displayCurrency && displayCurrency.onSuccess === 'ADD') ? 'claim' : 'pay';
                 } else if (displayCurrencyBalance < 0) {
-                  displayButtonType = 'pay';
+                  // Negative balance: opposite logic
+                  displayButtonType = (displayCurrency && displayCurrency.onSuccess === 'ADD') ? 'pay' : 'claim';
                 } else {
                   displayButtonType = 'claim';
                 }
@@ -1620,10 +1627,15 @@ export default function SettingsScreen() {
                 displayCurrencyBalance = goal.consequenceCurrencyBalance;
                 displayCurrencySymbol = goal.consequenceCurrencySymbol || '';
                 displayCurrency = currencies.find(c => c.id === goal.consequenceCurrencyId);
-                if (displayCurrency && isConsequenceCurrency(displayCurrency) && displayCurrencyBalance > 0) {
-                  displayButtonType = 'pay';
+                
+                // Same logic for consequence currencies
+                if (displayCurrencyBalance > 0) {
+                  // Positive balance: check if onFailure=ADD (debt) or onSuccess=ADD (reward)
+                  // If onFailure=ADD (consequence/debt), you pay it. If onSuccess=ADD (reward), you claim it.
+                  displayButtonType = (displayCurrency && displayCurrency.onFailure === 'ADD') ? 'pay' : 'claim';
                 } else if (displayCurrencyBalance < 0) {
-                  displayButtonType = 'claim';
+                  // Negative balance: opposite logic
+                  displayButtonType = (displayCurrency && displayCurrency.onFailure === 'ADD') ? 'claim' : 'pay';
                 } else {
                   displayButtonType = 'pay';
                 }
