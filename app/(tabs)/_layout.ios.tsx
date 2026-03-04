@@ -35,45 +35,42 @@ export default function TabLayout() {
   }
 
   return (
-    <NativeTabs
-      tabBarActiveTintColor={colors.primary}
-      tabBarInactiveTintColor={colors.textSecondary}
-    >
+    <NativeTabs>
       <NativeTabs.Trigger name="(home)">
-        <Label>Home</Label>
         <Icon 
           sf={{ default: 'house', selected: 'house.fill' }} 
           drawable="home"
         />
+        <Label>Home</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reports">
-        <Label>Reports</Label>
         <Icon 
           sf={{ default: 'chart.bar.doc.horizontal', selected: 'chart.bar.doc.horizontal.fill' }} 
           drawable="assessment"
         />
+        <Label>Reports</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
-        <Label>Settings</Label>
         <Icon 
           sf={{ default: 'gearshape', selected: 'gearshape.fill' }} 
           drawable="settings"
         />
+        <Label>Settings</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
-        <Label>Profile</Label>
         <Icon 
           sf={{ default: 'person.circle', selected: 'person.circle.fill' }} 
           drawable="account-circle"
         />
+        <Label>Profile</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reflect" hidden={true}>
-        <Label>Reflect</Label>
         <Icon sf={{ default: 'book', selected: 'book.fill' }} drawable="book" />
+        <Label>Reflect</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="ai-chat" hidden={true}>
-        <Label>AI Chat</Label>
         <Icon sf="message" drawable="chat" />
+        <Label>AI Chat</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
