@@ -596,8 +596,16 @@ export default function HomeScreen() {
   };
 
   const openEditReflectionModal = (reflection: Reflection) => {
+    console.log('[Home iOS] Opening edit reflection modal with reflection:', {
+      id: reflection.id,
+      linkedGoalId: reflection.linkedGoalId,
+      outcome: reflection.outcome,
+      category: reflection.category,
+      type: reflection.type,
+    });
     setEditingReflection(reflection);
     setPrefilledGoalId(undefined);
+    setPrefilledGoalData(undefined);
     setShowAddReflectionModal(true);
   };
 
@@ -981,7 +989,27 @@ export default function HomeScreen() {
                   style={[styles.entryBadge, { borderColor: entryColor }]}
                 >
                   <TouchableOpacity
-                    onPress={() => openAddReflectionModal(goal.id)}
+                    onPress={() => {
+                      // CRITICAL FIX: When clicking on an entry badge, we need to find the corresponding reflection
+                      // and open it for editing, NOT create a new reflection
+                      console.log('[Home iOS] Entry badge clicked, looking for reflection with entryId:', entry.id);
+                      
+                      // Find the reflection that corresponds to this entry
+                      const reflection = reflections.find(r => 
+                        r.linkedGoalId === goal.id && 
+                        r.outcome === (isSuccess ? 'success' : 'struggled') &&
+                        // Match by timestamp (within same day)
+                        r.entryDate === formatDateLocal(selectedDate)
+                      );
+                      
+                      if (reflection) {
+                        console.log('[Home iOS] Found reflection for entry, opening edit modal:', reflection.id);
+                        openEditReflectionModal(reflection);
+                      } else {
+                        console.log('[Home iOS] No reflection found for entry, creating new one with goal:', goal.id);
+                        openAddReflectionModal(goal.id);
+                      }
+                    }}
                     style={styles.entryEditSection}
                     activeOpacity={0.7}
                     hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
@@ -1210,12 +1238,39 @@ export default function HomeScreen() {
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
+  // CRITICAL FIX: When grouping reflections by category, we need to use the GOAL's behaviorCategory
+  // NOT the reflection's category field (which may be undefined for quick entries from Express screen)
   const groupedReflections: Record<string, Reflection[]> = {};
   if (categoriesEnabled) {
     availableCategories.forEach(cat => {
-      groupedReflections[cat] = reflections.filter(r => r.category === cat);
+      groupedReflections[cat] = reflections.filter(r => {
+        // If reflection has a category field, use it
+        if (r.category) {
+          return r.category === cat;
+        }
+        // Otherwise, look up the goal's behaviorCategories
+        if (r.linkedGoalId) {
+          const goal = activatedGoals.find(g => g.id === r.linkedGoalId);
+          if (goal && goal.behaviorCategories && goal.behaviorCategories.length > 0) {
+            // Use the FIRST behavior category from the goal
+            return goal.behaviorCategories[0] === cat;
+          }
+        }
+        return false;
+      });
     });
-    groupedReflections['Other'] = reflections.filter(r => !r.category || !availableCategories.includes(r.category));
+    groupedReflections['Other'] = reflections.filter(r => {
+      if (r.category && availableCategories.includes(r.category)) {
+        return false;
+      }
+      if (r.linkedGoalId) {
+        const goal = activatedGoals.find(g => g.id === r.linkedGoalId);
+        if (goal && goal.behaviorCategories && goal.behaviorCategories.length > 0) {
+          return !availableCategories.includes(goal.behaviorCategories[0]);
+        }
+      }
+      return true;
+    });
   } else {
     groupedReflections['All'] = reflections;
   }

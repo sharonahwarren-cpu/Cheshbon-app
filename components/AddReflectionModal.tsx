@@ -670,7 +670,17 @@ export function AddReflectionModal({
     editingReflection?.description || prefilledGoalData?.description || ''
   );
   const [linkedGoalId, setLinkedGoalId] = useState<string | undefined>(editingReflection?.linkedGoalId || prefilledGoalId);
-  const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(editingReflection?.outcome);
+  // CRITICAL FIX: Initialize outcome from editingReflection
+  const [outcome, setOutcome] = useState<'success' | 'struggled' | undefined>(() => {
+    console.log('[AddReflectionModal] Initializing outcome state:', {
+      editingReflection: editingReflection ? {
+        id: editingReflection.id,
+        outcome: editingReflection.outcome,
+        linkedGoalId: editingReflection.linkedGoalId,
+      } : null,
+    });
+    return editingReflection?.outcome;
+  });
   const [gainedIds, setGainedIds] = useState<string[]>(editingReflection?.gainedIds || []);
   const [lostIds, setLostIds] = useState<string[]>(editingReflection?.lostIds || []);
   const [wasWorthIt, setWasWorthIt] = useState<boolean | undefined>(editingReflection?.wasWorthIt);
@@ -702,6 +712,56 @@ export function AddReflectionModal({
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+
+  // CRITICAL FIX: Update outcome when editingReflection changes
+  useEffect(() => {
+    console.log('[AddReflectionModal] editingReflection changed, updating outcome:', {
+      editingReflection: editingReflection ? {
+        id: editingReflection.id,
+        outcome: editingReflection.outcome,
+        linkedGoalId: editingReflection.linkedGoalId,
+      } : null,
+    });
+    
+    if (editingReflection) {
+      setOutcome(editingReflection.outcome);
+      setLinkedGoalId(editingReflection.linkedGoalId);
+      setCategory(editingReflection.category);
+      setType(editingReflection.type);
+      setDescription(editingReflection.description);
+      setGainedIds(editingReflection.gainedIds || []);
+      setLostIds(editingReflection.lostIds || []);
+      setWasWorthIt(editingReflection.wasWorthIt);
+      setAdditionalThoughts(editingReflection.additionalThoughts || '');
+      setSelectedMotivationIds(editingReflection.motivationIds || []);
+      setStrategyEffectiveness(
+        editingReflection.strategyEffectiveness?.map(se => ({ strategyId: se.strategyId, worked: se.worked })) || []
+      );
+    } else if (prefilledGoalId) {
+      // When creating a new reflection with a prefilled goal, clear outcome
+      setLinkedGoalId(prefilledGoalId);
+      setOutcome(undefined);
+    } else if (prefilledGoalData) {
+      // When coming from Express screen with prefilled data
+      setCategory(prefilledGoalData.category);
+      setType(prefilledGoalData.type || 'Proactive');
+      setDescription(prefilledGoalData.description || '');
+      setOutcome(undefined);
+    } else {
+      // Clear all fields for a new reflection
+      setOutcome(undefined);
+      setLinkedGoalId(undefined);
+      setCategory(undefined);
+      setType('Proactive');
+      setDescription('');
+      setGainedIds([]);
+      setLostIds([]);
+      setWasWorthIt(undefined);
+      setAdditionalThoughts('');
+      setSelectedMotivationIds([]);
+      setStrategyEffectiveness([]);
+    }
+  }, [editingReflection, prefilledGoalId, prefilledGoalData]);
 
   // Keyboard listeners for iOS
   useEffect(() => {
