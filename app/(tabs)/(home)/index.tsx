@@ -276,7 +276,7 @@ export default function HomeScreen() {
         authenticatedGet('/api/reflection-motivations'),
       ]);
       
-      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const rawGoalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
       const lifeAreasData = Array.isArray(lifeAreasRes) ? lifeAreasRes : (lifeAreasRes?.data || []);
       const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
@@ -285,6 +285,16 @@ export default function HomeScreen() {
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
+
+      // Normalize goal data: the GET endpoint returns `streak` and `currentStreak`/`bestStreak`
+      // depending on the backend version. Map both to ensure correct display.
+      const goalsData = rawGoalsData.map((goal: any) => ({
+        ...goal,
+        // If backend returns `currentStreak` use it, otherwise fall back to `streak`
+        currentStreak: goal.currentStreak !== undefined ? goal.currentStreak : (goal.streak !== undefined ? goal.streak : undefined),
+        // If backend returns `bestStreak` use it, otherwise leave undefined
+        bestStreak: goal.bestStreak !== undefined ? goal.bestStreak : undefined,
+      }));
       
       console.log('[Home] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home] Loaded currencies for modal:', currenciesData.length, 'currencies');
@@ -393,8 +403,8 @@ export default function HomeScreen() {
               dailyEntries: goal.dailyEntries?.map(e => 
                 e.id === newEntry.id ? { ...e, id: response.entryId || e.id } : e
               ),
-              todaySuccessCount: response.todaySuccessCount || goal.todaySuccessCount,
-              successCount: response.successCount || goal.successCount,
+              todaySuccessCount: response.todaySuccessCount !== undefined ? response.todaySuccessCount : goal.todaySuccessCount,
+              successCount: response.successCount !== undefined ? response.successCount : goal.successCount,
               currentStreak: response.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
               bestStreak: response.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
             };
@@ -465,8 +475,8 @@ export default function HomeScreen() {
               dailyEntries: goal.dailyEntries?.map(e => 
                 e.id === newEntry.id ? { ...e, id: response?.entryId || e.id } : e
               ),
-              todayStruggleCount: response?.todayStruggleCount || goal.todayStruggleCount,
-              struggleCount: response?.struggleCount || goal.struggleCount,
+              todayStruggleCount: response?.todayStruggleCount !== undefined ? response.todayStruggleCount : goal.todayStruggleCount,
+              struggleCount: response?.struggleCount !== undefined ? response.struggleCount : goal.struggleCount,
               currentStreak: response?.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
               bestStreak: response?.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
             };

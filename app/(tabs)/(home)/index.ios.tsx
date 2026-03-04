@@ -18,8 +18,10 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { IconSymbol } from "@/components/IconSymbol";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "@/styles/commonStyles";
-import { authenticatedGet, authenticatedPost, authenticatedDelete } from "@/utils/api";
+import { authenticatedGet, authenticatedPost, authenticatedDelete, authenticatedPut } from "@/utils/api";
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { DateTime } from 'luxon';
+import { getLocalTimezone } from '@/utils/dateUtils';
 
 interface DailyEntry {
   id: string;
@@ -235,7 +237,7 @@ export default function HomeScreen() {
         authenticatedGet('/api/reflection-motivations'),
       ]);
       
-      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      const rawGoalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
       const lifeAreasData = Array.isArray(lifeAreasRes) ? lifeAreasRes : (lifeAreasRes?.data || []);
       const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
       const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
@@ -244,6 +246,16 @@ export default function HomeScreen() {
       const journalData = journalRes?.data || journalRes || null;
       const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
       const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
+
+      // Normalize goal data: the GET endpoint returns `streak` and `currentStreak`/`bestStreak`
+      // depending on the backend version. Map both to ensure correct display.
+      const goalsData = rawGoalsData.map((goal: any) => ({
+        ...goal,
+        // If backend returns `currentStreak` use it, otherwise fall back to `streak`
+        currentStreak: goal.currentStreak !== undefined ? goal.currentStreak : (goal.streak !== undefined ? goal.streak : undefined),
+        // If backend returns `bestStreak` use it, otherwise leave undefined
+        bestStreak: goal.bestStreak !== undefined ? goal.bestStreak : undefined,
+      }));
       
       console.log('[Home iOS] Loaded life areas hierarchy:', lifeAreasData.length, 'root areas');
       console.log('[Home iOS] Loaded currencies for modal:', currenciesData.length, 'currencies');
@@ -336,10 +348,19 @@ export default function HomeScreen() {
   const handleGoalSuccess = async (goalId: string) => {
     console.log("Recording success for goal iOS:", goalId);
     
+    // Create UTC timestamp for the selected date at current time in local timezone
+    // This ensures the backend extracts the correct local date from the timestamp
+    const localZone = getLocalTimezone();
+    const now = DateTime.now().setZone(localZone);
+    const selectedDt = DateTime.fromJSDate(selectedDate, { zone: localZone })
+      .set({ hour: now.hour, minute: now.minute, second: now.second });
+    const utcTimestamp = selectedDt.toUTC().toISO();
+    console.log(`[Home iOS] Success timestamp: local=${selectedDt.toISO()} -> UTC=${utcTimestamp}`);
+    
     const newEntry: DailyEntry = {
       id: `temp-${Date.now()}`,
       type: 'success',
-      timestamp: new Date(selectedDate).toISOString(),
+      timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
     setActivatedGoals(prevGoals => 
@@ -357,7 +378,7 @@ export default function HomeScreen() {
     );
     
     try {
-      const timestamp = new Date(selectedDate).toISOString();
+      const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
       const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
       
       setActivatedGoals(prevGoals => 
@@ -368,8 +389,8 @@ export default function HomeScreen() {
               dailyEntries: goal.dailyEntries?.map(e => 
                 e.id === newEntry.id ? { ...e, id: response.entryId || e.id } : e
               ),
-              todaySuccessCount: response.todaySuccessCount || goal.todaySuccessCount,
-              successCount: response.successCount || goal.successCount,
+              todaySuccessCount: response.todaySuccessCount !== undefined ? response.todaySuccessCount : goal.todaySuccessCount,
+              successCount: response.successCount !== undefined ? response.successCount : goal.successCount,
               currentStreak: response.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
               bestStreak: response.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
             };
@@ -400,10 +421,19 @@ export default function HomeScreen() {
   const handleGoalStruggle = async (goalId: string) => {
     console.log("Recording struggle for goal iOS:", goalId);
     
+    // Create UTC timestamp for the selected date at current time in local timezone
+    // This ensures the backend extracts the correct local date from the timestamp
+    const localZone = getLocalTimezone();
+    const now = DateTime.now().setZone(localZone);
+    const selectedDt = DateTime.fromJSDate(selectedDate, { zone: localZone })
+      .set({ hour: now.hour, minute: now.minute, second: now.second });
+    const utcTimestamp = selectedDt.toUTC().toISO();
+    console.log(`[Home iOS] Struggle timestamp: local=${selectedDt.toISO()} -> UTC=${utcTimestamp}`);
+    
     const newEntry: DailyEntry = {
       id: `temp-${Date.now()}`,
       type: 'struggle',
-      timestamp: new Date(selectedDate).toISOString(),
+      timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
     setActivatedGoals(prevGoals => 
@@ -421,8 +451,8 @@ export default function HomeScreen() {
     );
     
     try {
-      const timestamp = new Date(selectedDate).toISOString();
-      const response = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
+      const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
+      const response: any = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
       
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
@@ -430,12 +460,12 @@ export default function HomeScreen() {
             return {
               ...goal,
               dailyEntries: goal.dailyEntries?.map(e => 
-                e.id === newEntry.id ? { ...e, id: response.entryId || e.id } : e
+                e.id === newEntry.id ? { ...e, id: response?.entryId || e.id } : e
               ),
-              todayStruggleCount: response.todayStruggleCount || goal.todayStruggleCount,
-              struggleCount: response.struggleCount || goal.struggleCount,
-              currentStreak: response.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
-              bestStreak: response.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
+              todayStruggleCount: response?.todayStruggleCount !== undefined ? response.todayStruggleCount : goal.todayStruggleCount,
+              struggleCount: response?.struggleCount !== undefined ? response.struggleCount : goal.struggleCount,
+              currentStreak: response?.currentStreak !== undefined ? response.currentStreak : goal.currentStreak,
+              bestStreak: response?.bestStreak !== undefined ? response.bestStreak : goal.bestStreak,
             };
           }
           return goal;
