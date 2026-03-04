@@ -69,48 +69,8 @@ function isGoalActiveTodayHelper(goal: any): boolean {
   return isGoalActiveOnDateHelper(goal, today);
 }
 
-// Helper function to calculate best streak up to a specific date
-function calculateBestStreakUpToDate(goal: any, reflections: any[], upToDate?: string): number {
-  const successDates = reflections
-    .filter(r => r.linkedGoalId === goal.id && r.outcome === 'success')
-    .map(r => r.entryDate)
-    .filter((date, index, self) => self.indexOf(date) === index) // Get unique dates
-    .sort();
-
-  if (successDates.length === 0) return 0;
-
-  // Cap to the requested date (don't count dates after upToDate)
-  const today = new Date().toISOString().split('T')[0];
-  const capDate = upToDate || today;
-  const filteredDates = successDates.filter(date => date <= capDate);
-
-  if (filteredDates.length === 0) return 0;
-
-  // Find longest consecutive sequence
-  let tempStreak = 1;
-  let maxStreak = 1;
-
-  for (let i = 1; i < filteredDates.length; i++) {
-    const prevDate = new Date(filteredDates[i - 1]);
-    const currDate = new Date(filteredDates[i]);
-    prevDate.setUTCHours(0, 0, 0, 0);
-    currDate.setUTCHours(0, 0, 0, 0);
-
-    const daysDiff = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-
-    if (daysDiff === 1) {
-      tempStreak++;
-      maxStreak = Math.max(maxStreak, tempStreak);
-    } else {
-      tempStreak = 1;
-    }
-  }
-
-  return maxStreak;
-}
-
-// Helper function to calculate current streak for a goal
-function calculateCurrentStreakForDate(goal: any, reflections: any[], fromDate?: string): number {
+// Helper function to calculate streak for a goal
+function calculateStreak(goal: any, reflections: any[], fromDate?: string): number {
   const successDates = reflections
     .filter(r => r.linkedGoalId === goal.id && r.outcome === 'success')
     .map(r => r.entryDate)
@@ -276,10 +236,6 @@ export function registerGoalsTrackingRoutes(app: App) {
 
           const lifeArea = goal.lifeAreaId ? lifeAreaMap.get(goal.lifeAreaId) : null;
 
-          // Calculate streaks for the requested date
-          const currentStreak = calculateCurrentStreakForDate(goal, reflections, requestedDate);
-          const bestStreak = calculateBestStreakUpToDate(goal, reflections, requestedDate);
-
           return {
             id: goal.id,
             title: goal.title,
@@ -293,8 +249,8 @@ export function registerGoalsTrackingRoutes(app: App) {
             todayStruggleCount,
             successCount: totalSuccessCount,
             struggleCount: totalStruggleCount,
-            currentStreak,
-            bestStreak,
+            currentStreak: goal.currentStreak || 0,
+            bestStreak: goal.bestStreak || 0,
             dailyEntries,
             rewardCurrencyId: goal.rewardCurrencyId || null,
             rewardAmount: goal.rewardAmount ?? null,
