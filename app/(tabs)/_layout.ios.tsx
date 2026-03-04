@@ -35,22 +35,37 @@ export default function TabLayout() {
   }
 
   return (
-    <NativeTabs>
+    <NativeTabs
+      tabBarActiveTintColor={colors.primary}
+      tabBarInactiveTintColor={colors.textSecondary}
+    >
       <NativeTabs.Trigger name="(home)">
         <Label>Home</Label>
-        <Icon sf={{ default: 'house', selected: 'house.fill' }} drawable="home" />
+        <Icon 
+          sf={{ default: 'house', selected: 'house.fill' }} 
+          drawable="home"
+        />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reports">
         <Label>Reports</Label>
-        <Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} drawable="bar-chart" />
+        <Icon 
+          sf={{ default: 'chart.bar.doc.horizontal', selected: 'chart.bar.doc.horizontal.fill' }} 
+          drawable="assessment"
+        />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <Label>Settings</Label>
-        <Icon sf={{ default: 'gear', selected: 'gear' }} drawable="settings" />
+        <Icon 
+          sf={{ default: 'gearshape', selected: 'gearshape.fill' }} 
+          drawable="settings"
+        />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
         <Label>Profile</Label>
-        <Icon sf={{ default: 'person', selected: 'person.fill' }} drawable="person" />
+        <Icon 
+          sf={{ default: 'person.circle', selected: 'person.circle.fill' }} 
+          drawable="account-circle"
+        />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reflect" hidden={true}>
         <Label>Reflect</Label>
