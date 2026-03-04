@@ -212,39 +212,8 @@ export default function SettingsScreen() {
   // Icon picker state (for image upload)
   const [uploadingIcon, setUploadingIcon] = useState(false);
 
-  // Initial data load on mount
-  useEffect(() => {
-    console.log('[Settings iOS] Component mounted, loading initial data');
-    loadData();
-  }, []);
-
-  // React to URL param changes (e.g., when navigating from settings-menu)
-  useEffect(() => {
-    const section = params.section;
-    if (section) {
-      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'notifications'];
-      if (validSections.includes(section as SettingsSection)) {
-        console.log('[Settings iOS] Setting section from URL param:', section);
-        setCurrentSection(section as SettingsSection);
-      }
-    }
-  }, [params.section]);
-
-  // Reload data when screen comes into focus (e.g., returning from life-area-wizard)
-  // Skip on initial mount to prevent double loading
-  useFocusEffect(
-    useCallback(() => {
-      if (isInitialMount.current) {
-        console.log('[Settings iOS] Skipping useFocusEffect on initial mount');
-        isInitialMount.current = false;
-        return;
-      }
-      console.log('[Settings iOS] Screen focused (not initial mount), reloading data...');
-      loadData();
-    }, [loadData])
-  );
-
-  const loadData = useCallback(async (isRefreshing: boolean = false) => {
+  // Memoize loadData to ensure stable reference
+  const loadDataMemoized = useCallback(async (isRefreshing: boolean = false) => {
     console.log('[Settings iOS] Loading settings data...');
     if (isRefreshing) {
       setRefreshing(true);
@@ -374,11 +343,43 @@ export default function SettingsScreen() {
         setLoading(false);
       }
     }
-  }, []);
+  }, []); // Empty dependency array ensures stable reference
+
+  // Initial data load on mount
+  useEffect(() => {
+    console.log('[Settings iOS] Component mounted, calling loadData() from useEffect');
+    loadDataMemoized();
+  }, [loadDataMemoized]);
+
+  // React to URL param changes (e.g., when navigating from settings-menu)
+  useEffect(() => {
+    const section = params.section;
+    if (section) {
+      const validSections: SettingsSection[] = ['main', 'goals', 'lifeAreas', 'strategies', 'currencies', 'gainsLosses', 'gainLossCategories', 'reflectionMotivations', 'notifications'];
+      if (validSections.includes(section as SettingsSection)) {
+        console.log('[Settings iOS] Setting section from URL param:', section);
+        setCurrentSection(section as SettingsSection);
+      }
+    }
+  }, [params.section]);
+
+  // Reload data when screen comes into focus (e.g., returning from life-area-wizard)
+  // Skip on initial mount to prevent double loading
+  useFocusEffect(
+    useCallback(() => {
+      if (isInitialMount.current) {
+        console.log('[Settings iOS] Skipping useFocusEffect on initial mount');
+        isInitialMount.current = false;
+        return;
+      }
+      console.log('[Settings iOS] Screen focused (not initial mount), reloading data...');
+      loadDataMemoized();
+    }, [loadDataMemoized])
+  );
 
   const handleRefresh = async () => {
     console.log('[Settings iOS] Pull-to-refresh triggered');
-    await loadData(true);
+    await loadDataMemoized(true);
     if (currentSection === 'reports') {
       await loadCurrencyBalances();
     }
@@ -559,7 +560,7 @@ export default function SettingsScreen() {
       }
 
       setShowModal(false);
-      await loadData();
+      await loadDataMemoized();
     } catch (error) {
       console.error('[Settings iOS] Error saving item:', error);
       showError('Failed to save item');
@@ -611,7 +612,7 @@ export default function SettingsScreen() {
         showSuccess('Goal deleted successfully');
       }
 
-      await loadData();
+      await loadDataMemoized();
     } catch (error) {
       console.error('[Settings iOS] Error deleting item:', error);
       showError('Failed to delete item');
@@ -629,7 +630,7 @@ export default function SettingsScreen() {
       console.log(`[Settings iOS] Toggling goal status for goal ${id}`);
       await authenticatedPost(`/api/goals/${id}/deactivate`, {});
       showSuccess('Goal status updated successfully');
-      await loadData();
+      await loadDataMemoized();
     } catch (error: any) {
       console.error('[Settings iOS] Error toggling goal status:', error);
       showError(error.message || 'Failed to update goal status');
