@@ -370,7 +370,7 @@ export default function HomeScreen() {
   };
 
   const handleGoalSuccess = async (goalId: string) => {
-    console.log("Recording success for goal:", goalId);
+    console.log("[Home] Recording success for goal:", goalId);
     
     // Create UTC timestamp for the selected date at current time in local timezone
     const localZone = getLocalTimezone();
@@ -387,10 +387,13 @@ export default function HomeScreen() {
       timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
+    console.log("[Home] Creating temp entry:", newEntry);
+    
     setActivatedGoals(prevGoals => 
       prevGoals.map(goal => {
         if (goal.id === goalId) {
           const updatedEntries = [...(goal.dailyEntries || []), newEntry];
+          console.log("[Home] Updated entries for goal:", updatedEntries.length);
           return {
             ...goal,
             dailyEntries: updatedEntries,
@@ -403,7 +406,9 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
+      console.log("[Home] Calling API: POST /api/goals/" + goalId + "/success with timestamp:", timestamp);
       const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
+      console.log("[Home] API response:", response);
       
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
@@ -422,8 +427,10 @@ export default function HomeScreen() {
           return goal;
         })
       );
+      console.log("[Home] Success recorded successfully, entry ID:", response.entryId);
     } catch (error: any) {
-      console.error("Error recording success:", error);
+      console.error("[Home] Error recording success:", error);
+      console.error("[Home] Error details:", JSON.stringify(error, null, 2));
       showError(error.message || "Failed to record success");
       
       setActivatedGoals(prevGoals => 
@@ -443,7 +450,7 @@ export default function HomeScreen() {
   };
 
   const handleGoalStruggle = async (goalId: string) => {
-    console.log("Recording struggle for goal:", goalId);
+    console.log("[Home] Recording struggle for goal:", goalId);
     
     // Create UTC timestamp for the selected date at current time in local timezone
     const localZone = getLocalTimezone();
@@ -459,10 +466,13 @@ export default function HomeScreen() {
       timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
+    console.log("[Home] Creating temp entry:", newEntry);
+    
     setActivatedGoals(prevGoals => 
       prevGoals.map(goal => {
         if (goal.id === goalId) {
           const updatedEntries = [...(goal.dailyEntries || []), newEntry];
+          console.log("[Home] Updated entries for goal:", updatedEntries.length);
           return {
             ...goal,
             dailyEntries: updatedEntries,
@@ -475,7 +485,9 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
+      console.log("[Home] Calling API: POST /api/goals/" + goalId + "/struggle with timestamp:", timestamp);
       const response: any = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
+      console.log("[Home] API response:", response);
       
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
@@ -494,8 +506,10 @@ export default function HomeScreen() {
           return goal;
         })
       );
+      console.log("[Home] Struggle recorded successfully, entry ID:", response?.entryId);
     } catch (error: any) {
-      console.error("Error recording struggle:", error);
+      console.error("[Home] Error recording struggle:", error);
+      console.error("[Home] Error details:", JSON.stringify(error, null, 2));
       showError(error.message || "Failed to record struggle");
       
       setActivatedGoals(prevGoals => 

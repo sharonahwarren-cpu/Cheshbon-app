@@ -365,7 +365,7 @@ export default function HomeScreen() {
   };
 
   const handleGoalSuccess = async (goalId: string) => {
-    console.log("Recording success for goal iOS:", goalId);
+    console.log("[Home iOS] Recording success for goal:", goalId);
     
     // Create UTC timestamp for the selected date at current time in local timezone
     // This ensures the backend extracts the correct local date from the timestamp
@@ -382,10 +382,13 @@ export default function HomeScreen() {
       timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
+    console.log("[Home iOS] Creating temp entry:", newEntry);
+    
     setActivatedGoals(prevGoals => 
       prevGoals.map(goal => {
         if (goal.id === goalId) {
           const updatedEntries = [...(goal.dailyEntries || []), newEntry];
+          console.log("[Home iOS] Updated entries for goal:", updatedEntries.length);
           return {
             ...goal,
             dailyEntries: updatedEntries,
@@ -398,7 +401,9 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
+      console.log("[Home iOS] Calling API: POST /api/goals/" + goalId + "/success with timestamp:", timestamp);
       const response = await authenticatedPost(`/api/goals/${goalId}/success`, { timestamp });
+      console.log("[Home iOS] API response:", response);
       
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
@@ -417,8 +422,10 @@ export default function HomeScreen() {
           return goal;
         })
       );
+      console.log("[Home iOS] Success recorded successfully, entry ID:", response.entryId);
     } catch (error: any) {
-      console.error("Error recording success iOS:", error);
+      console.error("[Home iOS] Error recording success:", error);
+      console.error("[Home iOS] Error details:", JSON.stringify(error, null, 2));
       showError(error.message || "Failed to record success");
       
       setActivatedGoals(prevGoals => 
@@ -438,7 +445,7 @@ export default function HomeScreen() {
   };
 
   const handleGoalStruggle = async (goalId: string) => {
-    console.log("Recording struggle for goal iOS:", goalId);
+    console.log("[Home iOS] Recording struggle for goal:", goalId);
     
     // Create UTC timestamp for the selected date at current time in local timezone
     // This ensures the backend extracts the correct local date from the timestamp
@@ -455,10 +462,13 @@ export default function HomeScreen() {
       timestamp: utcTimestamp || new Date(selectedDate).toISOString(),
     };
     
+    console.log("[Home iOS] Creating temp entry:", newEntry);
+    
     setActivatedGoals(prevGoals => 
       prevGoals.map(goal => {
         if (goal.id === goalId) {
           const updatedEntries = [...(goal.dailyEntries || []), newEntry];
+          console.log("[Home iOS] Updated entries for goal:", updatedEntries.length);
           return {
             ...goal,
             dailyEntries: updatedEntries,
@@ -471,7 +481,9 @@ export default function HomeScreen() {
     
     try {
       const timestamp = utcTimestamp || new Date(selectedDate).toISOString();
+      console.log("[Home iOS] Calling API: POST /api/goals/" + goalId + "/struggle with timestamp:", timestamp);
       const response: any = await authenticatedPost(`/api/goals/${goalId}/struggle`, { timestamp });
+      console.log("[Home iOS] API response:", response);
       
       setActivatedGoals(prevGoals => 
         prevGoals.map(goal => {
@@ -490,8 +502,10 @@ export default function HomeScreen() {
           return goal;
         })
       );
+      console.log("[Home iOS] Struggle recorded successfully, entry ID:", response?.entryId);
     } catch (error: any) {
-      console.error("Error recording struggle iOS:", error);
+      console.error("[Home iOS] Error recording struggle:", error);
+      console.error("[Home iOS] Error details:", JSON.stringify(error, null, 2));
       showError(error.message || "Failed to record struggle");
       
       setActivatedGoals(prevGoals => 
