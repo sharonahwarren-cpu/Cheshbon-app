@@ -56,13 +56,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="reflect"
-        options={{
-          title: 'Reflect',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} ios_icon_name="book.fill" android_material_icon_name="book" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="reports"
         options={{
           title: 'Reports',
@@ -81,6 +74,12 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color }) => <IconSymbol size={28} ios_icon_name="person.fill" android_material_icon_name="person" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reflect"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen

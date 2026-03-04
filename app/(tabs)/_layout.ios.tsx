@@ -40,10 +40,6 @@ export default function TabLayout() {
         <Label>Home</Label>
         <Icon sf={{ default: 'house', selected: 'house.fill' }} drawable="home" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reflect">
-        <Label>Reflect</Label>
-        <Icon sf={{ default: 'book', selected: 'book.fill' }} drawable="book" />
-      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="reports">
         <Label>Reports</Label>
         <Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} drawable="bar-chart" />
@@ -55,6 +51,10 @@ export default function TabLayout() {
       <NativeTabs.Trigger name="profile">
         <Label>Profile</Label>
         <Icon sf={{ default: 'person', selected: 'person.fill' }} drawable="person" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="reflect" hidden={true}>
+        <Label>Reflect</Label>
+        <Icon sf={{ default: 'book', selected: 'book.fill' }} drawable="book" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="ai-chat" hidden={true}>
         <Label>AI Chat</Label>
