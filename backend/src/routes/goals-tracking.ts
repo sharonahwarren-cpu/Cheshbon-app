@@ -243,6 +243,35 @@ export function registerGoalsTrackingRoutes(app: App) {
           // Determine if today's streak is confirmed (only relevant if requesting today)
           const confirmedToday = isRequestedDateToday ? todaySuccessCount > 0 : false;
 
+          // Calculate currentStreak as of the day BEFORE requested date (historical streak)
+          // This shows yesterday's streak, which appears faded if today has no success
+          let currentStreak = 0;
+          const dayBeforeRequested = new Date(requestedDate);
+          dayBeforeRequested.setUTCHours(0, 0, 0, 0);
+          dayBeforeRequested.setDate(dayBeforeRequested.getDate() - 1);
+
+          // Get all success reflections for this goal
+          const goalSuccessReflections = reflections.filter(r =>
+            r.linkedGoalId === goal.id && r.outcome === 'success'
+          );
+          const successDatesSet = new Set(goalSuccessReflections.map(r => r.entryDate));
+
+          // Count consecutive scheduled days from day before requested date backwards
+          let checkDate = new Date(dayBeforeRequested);
+          for (let i = 0; i < 365; i++) {
+            const checkDateStr = checkDate.toISOString().split('T')[0];
+            const isScheduled = isGoalActiveOnDateHelper(goal, checkDateStr);
+
+            if (isScheduled) {
+              if (successDatesSet.has(checkDateStr)) {
+                currentStreak++;
+              } else {
+                break;
+              }
+            }
+            checkDate.setDate(checkDate.getDate() - 1);
+          }
+
           return {
             id: goal.id,
             title: goal.title,
@@ -256,7 +285,7 @@ export function registerGoalsTrackingRoutes(app: App) {
             todayStruggleCount,
             successCount: totalSuccessCount,
             struggleCount: totalStruggleCount,
-            currentStreak: goal.currentStreak || 0,
+            currentStreak: currentStreak,
             bestStreak: goal.bestStreak || 0,
             confirmedToday,
             dailyEntries,
@@ -738,10 +767,13 @@ export function registerGoalsTrackingRoutes(app: App) {
             // Create a set for O(1) lookup of success dates
             const successDatesSet = new Set(sortedDates);
 
-            // Calculate current streak: count consecutive scheduled days from entryDate backwards
+            // Calculate current streak: count consecutive scheduled days from day BEFORE entryDate backwards
+            // Since no success on entryDate, we show the streak that existed before
             // Check EVERY day, not just days with successes
             let checkDate = new Date(entryDate);
             checkDate.setUTCHours(0, 0, 0, 0);
+            // Start from day before entryDate when there's no success on this date
+            checkDate.setDate(checkDate.getDate() - 1);
 
             for (let i = 0; i < 365; i++) {
               const checkDateStr = checkDate.toISOString().split('T')[0];
@@ -975,10 +1007,12 @@ export function registerGoalsTrackingRoutes(app: App) {
           // Create a set for O(1) lookup of success dates
           const successDatesSet = new Set(sortedDates);
 
-          // Calculate current streak: count consecutive scheduled days from the deleted entry's date backwards
+          // Calculate current streak: count consecutive scheduled days from day BEFORE the deleted entry's date backwards
           // Check EVERY day, not just days with successes
           let checkDate = new Date(entries[0].entryDate);
           checkDate.setUTCHours(0, 0, 0, 0);
+          // Start from day before the deleted entry's date
+          checkDate.setDate(checkDate.getDate() - 1);
 
           for (let i = 0; i < 365; i++) {
             const checkDateStr = checkDate.toISOString().split('T')[0];
