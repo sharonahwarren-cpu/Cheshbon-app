@@ -79,7 +79,13 @@ function calculateStreak(goal: any, reflections: any[], fromDate?: string): numb
 
   if (successDates.length === 0) return 0;
 
-  let currentDate = new Date(fromDate || new Date().toISOString().split('T')[0]);
+  const today = new Date().toISOString().split('T')[0];
+  const requestedDate = fromDate || today;
+
+  // If the requested date is in the future, calculate streak only up to today
+  const calcFromDate = requestedDate > today ? today : requestedDate;
+
+  let currentDate = new Date(calcFromDate);
   currentDate.setUTCHours(0, 0, 0, 0);
 
   if (goal.scheduleType === 'Always Active') {
