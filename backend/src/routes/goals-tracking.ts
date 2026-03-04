@@ -421,13 +421,10 @@ export function registerGoalsTrackingRoutes(app: App) {
           // Create a set for O(1) lookup of success dates
           const successDatesSet = new Set(sortedDates);
 
-          // Calculate current streak: count consecutive scheduled days from day BEFORE entryDate backwards
-          // This represents the streak that existed before today's entry
+          // Calculate current streak: count consecutive scheduled days from entryDate backwards
           // Check EVERY day, not just days with successes
           let checkDate = new Date(entryDate);
           checkDate.setUTCHours(0, 0, 0, 0);
-          // Start from day before entryDate
-          checkDate.setDate(checkDate.getDate() - 1);
 
           for (let i = 0; i < 365; i++) {
             const checkDateStr = checkDate.toISOString().split('T')[0];
@@ -741,13 +738,10 @@ export function registerGoalsTrackingRoutes(app: App) {
             // Create a set for O(1) lookup of success dates
             const successDatesSet = new Set(sortedDates);
 
-            // Calculate current streak: count consecutive scheduled days from day BEFORE entryDate backwards
-            // This represents the streak that existed before today's entry
+            // Calculate current streak: count consecutive scheduled days from entryDate backwards
             // Check EVERY day, not just days with successes
             let checkDate = new Date(entryDate);
             checkDate.setUTCHours(0, 0, 0, 0);
-            // Start from day before entryDate
-            checkDate.setDate(checkDate.getDate() - 1);
 
             for (let i = 0; i < 365; i++) {
               const checkDateStr = checkDate.toISOString().split('T')[0];
@@ -981,13 +975,10 @@ export function registerGoalsTrackingRoutes(app: App) {
           // Create a set for O(1) lookup of success dates
           const successDatesSet = new Set(sortedDates);
 
-          // Calculate current streak: count consecutive scheduled days from day BEFORE the deleted entry's date backwards
-          // This represents the streak that existed before the deleted entry
+          // Calculate current streak: count consecutive scheduled days from the deleted entry's date backwards
           // Check EVERY day, not just days with successes
           let checkDate = new Date(entries[0].entryDate);
           checkDate.setUTCHours(0, 0, 0, 0);
-          // Start from day before the deleted entry's date
-          checkDate.setDate(checkDate.getDate() - 1);
 
           for (let i = 0; i < 365; i++) {
             const checkDateStr = checkDate.toISOString().split('T')[0];
