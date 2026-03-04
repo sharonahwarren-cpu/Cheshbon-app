@@ -1,11 +1,11 @@
 
 import { useRouter } from 'expo-router';
 import React, { useEffect } from 'react';
+import { IconSymbol } from '@/components/IconSymbol';
 import { useAuth } from '@/contexts/AuthContext';
 import { ActivityIndicator, View } from 'react-native';
 import { colors } from '@/styles/commonStyles';
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { IconSymbol } from '@/components/IconSymbol.ios';
+import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -35,99 +35,31 @@ export default function TabLayout() {
   }
 
   return (
-    <NativeTabs
-      screenOptions={{
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-        headerShown: false,
-      }}
-    >
-      <NativeTabs.Screen
-        name="(home)"
-        options={{
-          tabBarLabel: 'Home',
-          tabBarIcon: ({ focused, color }) => (
-            <IconSymbol 
-              ios_icon_name={focused ? 'house.fill' : 'house'} 
-              android_material_icon_name="home"
-              color={color}
-              size={24}
-            />
-          ),
-        }}
-      />
-      <NativeTabs.Screen
-        name="reports"
-        options={{
-          tabBarLabel: 'Reports',
-          tabBarIcon: ({ focused, color }) => (
-            <IconSymbol 
-              ios_icon_name={focused ? 'chart.bar.doc.horizontal.fill' : 'chart.bar.doc.horizontal'} 
-              android_material_icon_name="assessment"
-              color={color}
-              size={24}
-            />
-          ),
-        }}
-      />
-      <NativeTabs.Screen
-        name="settings"
-        options={{
-          tabBarLabel: 'Settings',
-          tabBarIcon: ({ focused, color }) => (
-            <IconSymbol 
-              ios_icon_name={focused ? 'gearshape.fill' : 'gearshape'} 
-              android_material_icon_name="settings"
-              color={color}
-              size={24}
-            />
-          ),
-        }}
-      />
-      <NativeTabs.Screen
-        name="profile"
-        options={{
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ focused, color }) => (
-            <IconSymbol 
-              ios_icon_name={focused ? 'person.circle.fill' : 'person.circle'} 
-              android_material_icon_name="account-circle"
-              color={color}
-              size={24}
-            />
-          ),
-        }}
-      />
-      <NativeTabs.Screen
-        name="reflect"
-        options={{
-          href: null,
-          tabBarLabel: 'Reflect',
-          tabBarIcon: ({ focused, color }) => (
-            <IconSymbol 
-              ios_icon_name={focused ? 'book.fill' : 'book'} 
-              android_material_icon_name="book"
-              color={color}
-              size={24}
-            />
-          ),
-        }}
-      />
-      <NativeTabs.Screen
-        name="ai-chat"
-        options={{
-          href: null,
-          tabBarLabel: 'AI Chat',
-          tabBarIcon: ({ focused, color }) => (
-            <IconSymbol 
-              ios_icon_name={focused ? 'message.fill' : 'message'} 
-              android_material_icon_name="chat"
-              color={color}
-              size={24}
-            />
-          ),
-        }}
-      />
+    <NativeTabs>
+      <NativeTabs.Trigger name="(home)">
+        <Label>Home</Label>
+        <Icon sf={{ default: 'house', selected: 'house.fill' }} drawable="home" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="reports">
+        <Label>Reports</Label>
+        <Icon sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} drawable="bar-chart" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="settings">
+        <Label>Settings</Label>
+        <Icon sf={{ default: 'gear', selected: 'gear' }} drawable="settings" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="profile">
+        <Label>Profile</Label>
+        <Icon sf={{ default: 'person', selected: 'person.fill' }} drawable="person" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="reflect" hidden={true}>
+        <Label>Reflect</Label>
+        <Icon sf={{ default: 'book', selected: 'book.fill' }} drawable="book" />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="ai-chat" hidden={true}>
+        <Label>AI Chat</Label>
+        <Icon sf="message" drawable="chat" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
