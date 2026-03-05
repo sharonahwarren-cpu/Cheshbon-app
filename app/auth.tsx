@@ -20,7 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import Constants from 'expo-constants';
+import { apiPost } from '@/utils/api';
 
 type Mode = 'signin' | 'signup';
 
@@ -140,26 +140,28 @@ export default function AuthScreen() {
     console.log('📧 [AUTH SCREEN] Resending verification email to:', verificationEmail);
     setResendingVerification(true);
     try {
-      const response = await fetch(`${Constants.expoConfig?.extra?.backendUrl}/api/auth/resend-verification`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: verificationEmail }),
-      });
-
-      const data = await response.json();
-      
-      if (response.ok) {
-        console.log('✅ [AUTH SCREEN] Verification email resent');
-        showError('Verification email sent! Please check your inbox.');
-      } else {
-        console.error('❌ [AUTH SCREEN] Failed to resend verification:', data);
-        showError(data.error || 'Failed to resend verification email');
-      }
+      console.log('📧 [AUTH SCREEN] Calling POST /api/auth/resend-verification...');
+      const data = await apiPost('/api/auth/resend-verification', { email: verificationEmail });
+      console.log('✅ [AUTH SCREEN] Verification email resent:', data);
+      setSuccessMessage('Verification email sent! Please check your inbox and spam folder.');
+      setSuccessModalVisible(true);
     } catch (error: any) {
       console.error('❌ [AUTH SCREEN] Error resending verification:', error);
-      showError('Failed to resend verification email. Please try again.');
+      let errorMsg = 'Failed to resend verification email. Please try again.';
+      if (error.message) {
+        const match = error.message.match(/API error: \d+ - (.+)/);
+        if (match) {
+          try {
+            const parsed = JSON.parse(match[1]);
+            errorMsg = parsed.error || parsed.message || errorMsg;
+          } catch {
+            errorMsg = match[1] || errorMsg;
+          }
+        } else {
+          errorMsg = error.message;
+        }
+      }
+      showError(errorMsg);
     } finally {
       setResendingVerification(false);
     }

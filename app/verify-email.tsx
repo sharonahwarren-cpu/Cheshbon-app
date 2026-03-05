@@ -33,32 +33,16 @@ export default function VerifyEmailScreen() {
     }
 
     try {
-      console.log('[VERIFY EMAIL] Calling /api/auth/verify-email with token...');
-      // The backend endpoint may redirect to /auth?verified=true on success.
-      // We use a manual fetch with redirect: 'manual' to detect the redirect
-      // and handle it ourselves, or follow it and check the final URL.
-      const response = await fetch(`${BACKEND_URL}/api/auth/verify-email?token=${encodeURIComponent(token as string)}`, {
-        method: 'GET',
+      console.log('[VERIFY EMAIL] Calling POST /api/auth/verify-email with token...');
+      const response = await fetch(`${BACKEND_URL}/api/auth/verify-email`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        redirect: 'follow',
+        body: JSON.stringify({ token: token as string }),
       });
 
       console.log('[VERIFY EMAIL] Response status:', response.status);
-      console.log('[VERIFY EMAIL] Response URL:', response.url);
-
-      // Check if the response redirected to /auth?verified=true (success case)
-      if (response.url && response.url.includes('verified=true')) {
-        console.log('[VERIFY EMAIL] Redirect to verified=true detected - success!');
-        setStatus('success');
-        setMessage('Email verified successfully! You can now sign in.');
-        setTimeout(() => {
-          console.log('[VERIFY EMAIL] Redirecting to auth...');
-          router.replace('/auth?verified=true');
-        }, 2000);
-        return;
-      }
 
       // Try to parse JSON response
       const responseText = await response.text();
