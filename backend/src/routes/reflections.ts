@@ -1,6 +1,6 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and, desc, or } from 'drizzle-orm';
+import { eq, and, desc, or, gte, lte } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
@@ -61,7 +61,7 @@ export function registerReflectionsRoutes(app: App) {
     }
   }
 
-  // GET /api/reflections?wasWorthIt=true&outcome=success&goalId=abc&category=Action - Get reflections with filters
+  // GET /api/reflections?wasWorthIt=true&outcome=success&goalId=abc&category=Action&startDate=...&endDate=... - Get reflections with filters
   app.fastify.get('/api/reflections', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -74,6 +74,8 @@ export function registerReflectionsRoutes(app: App) {
       outcome?: string;
       goalId?: string;
       category?: string;
+      startDate?: string;
+      endDate?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching reflections with filters');
@@ -97,6 +99,17 @@ export function registerReflectionsRoutes(app: App) {
 
       if (query.category) {
         conditions.push(eq(schema.reflections.category, query.category));
+      }
+
+      // Add date range filters
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
       }
 
       const reflections = await app.db
