@@ -770,10 +770,17 @@ export default function ReportsScreen() {
           <>
             <Text style={styles.sectionTitle}>Goal Progress</Text>
             {goalProgress.map((goal, index) => {
-              const progressText = `${goal.progress || 0}%`;
+              const totalAttempts = goal.successCount + goal.struggleCount;
+              const calculatedProgress = totalAttempts > 0 
+                ? Math.round((goal.successCount / totalAttempts) * 100)
+                : 0;
+              const progressText = `${calculatedProgress}%`;
               
-              const hasRewardBalance = goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null;
-              const hasConsequenceBalance = goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null;
+              const hasRewardCurrency = goal.rewardCurrencySymbol !== undefined && goal.rewardCurrencySymbol !== null && goal.rewardCurrencySymbol !== '';
+              const hasConsequenceCurrency = goal.consequenceCurrencySymbol !== undefined && goal.consequenceCurrencySymbol !== null && goal.consequenceCurrencySymbol !== '';
+              
+              const hasRewardBalance = hasRewardCurrency && goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null;
+              const hasConsequenceBalance = hasConsequenceCurrency && goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null;
               
               return (
                 <TouchableOpacity 
