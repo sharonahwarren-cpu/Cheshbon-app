@@ -138,10 +138,13 @@ interface Currency {
   onFailure?: 'ADD' | 'SUBTRACT' | 'NONE';
 }
 
+type TimeFilter = 'week' | 'month' | '6months' | 'year' | 'all';
+
 export default function ReportsScreen() {
   const router = useRouter();
   
   const [loading, setLoading] = useState(true);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [currencyBalances, setCurrencyBalances] = useState<CurrencyBalance[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [winsVsLosses, setWinsVsLosses] = useState<WinsVsLosses | null>(null);
@@ -179,10 +182,47 @@ export default function ReportsScreen() {
 
 
 
+  const getDateRangeParams = useCallback(() => {
+    const now = new Date();
+    let startDate: Date | null = null;
+    
+    switch (timeFilter) {
+      case 'week':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case '6months':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 6);
+        break;
+      case 'year':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      case 'all':
+      default:
+        return '';
+    }
+    
+    if (startDate) {
+      const startDateISO = startDate.toISOString();
+      const endDateISO = now.toISOString();
+      return `?startDate=${encodeURIComponent(startDateISO)}&endDate=${encodeURIComponent(endDateISO)}`;
+    }
+    
+    return '';
+  }, [timeFilter]);
+
   const loadReportsData = useCallback(async () => {
-    console.log("Loading reports data");
+    console.log("Loading reports data with time filter:", timeFilter);
     setLoading(true);
     try {
+      const dateParams = getDateRangeParams();
+      
       const [
         currencyRes,
         currenciesRes,
@@ -199,16 +239,16 @@ export default function ReportsScreen() {
       ] = await Promise.all([
         authenticatedGet('/api/reports/currency-balances'),
         authenticatedGet('/api/currencies'),
-        authenticatedGet('/api/reports/wins-vs-losses'),
-        authenticatedGet('/api/reports/success-vs-struggles'),
-        authenticatedGet('/api/reports/reflection-stats'),
-        authenticatedGet('/api/reports/journal-count'),
-        authenticatedGet('/api/reports/gains-losses-summary'),
-        authenticatedGet('/api/reports/gains-losses-distribution'),
-        authenticatedGet('/api/reports/behavior-counts'),
-        authenticatedGet('/api/reports/goal-progress'),
-        authenticatedGet('/api/reports/top-motivations-by-type'),
-        authenticatedGet('/api/reports/top-motivations-by-outcome'),
+        authenticatedGet(`/api/reports/wins-vs-losses${dateParams}`),
+        authenticatedGet(`/api/reports/success-vs-struggles${dateParams}`),
+        authenticatedGet(`/api/reports/reflection-stats${dateParams}`),
+        authenticatedGet(`/api/reports/journal-count${dateParams}`),
+        authenticatedGet(`/api/reports/gains-losses-summary${dateParams}`),
+        authenticatedGet(`/api/reports/gains-losses-distribution${dateParams}`),
+        authenticatedGet(`/api/reports/behavior-counts${dateParams}`),
+        authenticatedGet(`/api/reports/goal-progress${dateParams}`),
+        authenticatedGet(`/api/reports/top-motivations-by-type${dateParams}`),
+        authenticatedGet(`/api/reports/top-motivations-by-outcome${dateParams}`),
       ]);
 
       const currencyData = Array.isArray(currencyRes) ? currencyRes : (currencyRes?.data || []);
@@ -246,7 +286,7 @@ export default function ReportsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [timeFilter, getDateRangeParams]);
 
   useEffect(() => {
     console.log("ReportsScreen mounted");
@@ -305,6 +345,43 @@ export default function ReportsScreen() {
     }
   };
 
+  const getDateRangeForModal = (): { startDate?: string; endDate?: string } => {
+    if (timeFilter === 'all') {
+      return {};
+    }
+    
+    const now = new Date();
+    let startDate: Date | null = null;
+    
+    switch (timeFilter) {
+      case 'week':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case '6months':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 6);
+        break;
+      case 'year':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+    }
+    
+    if (startDate) {
+      return {
+        startDate: startDate.toISOString(),
+        endDate: now.toISOString(),
+      };
+    }
+    
+    return {};
+  };
+
   const openReflectionListModal = (title: string, filterType: 'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal', filterValue?: string, goalId?: string) => {
     console.log('[Reports] Opening reflection list modal:', title, filterType, filterValue, goalId);
     setReflectionListTitle(title);
@@ -312,6 +389,27 @@ export default function ReportsScreen() {
     setReflectionListFilterValue(filterValue);
     setReflectionListGoalId(goalId);
     setShowReflectionListModal(true);
+  };
+
+  const getTimeFilterLabel = (filter: TimeFilter): string => {
+    switch (filter) {
+      case 'week':
+        return 'Week';
+      case 'month':
+        return 'Month';
+      case '6months':
+        return '6 Months';
+      case 'year':
+        return 'Year';
+      case 'all':
+      default:
+        return 'All Time';
+    }
+  };
+
+  const handleTimeFilterChange = (filter: TimeFilter) => {
+    console.log('[Reports] Changing time filter to:', filter);
+    setTimeFilter(filter);
   };
 
   if (loading) {
@@ -331,6 +429,65 @@ export default function ReportsScreen() {
         contentContainerStyle={styles.contentContainer}
       >
         <Text style={styles.headerTitle}>Reports</Text>
+
+        {/* Time Filter - Only affects reports below Currency Balances */}
+        <View style={styles.filterSection}>
+          <View style={styles.filterHeader}>
+            <IconSymbol
+              ios_icon_name="calendar"
+              android_material_icon_name="calendar-today"
+              size={18}
+              color={colors.primary}
+            />
+            <Text style={styles.filterLabel}>Time Period</Text>
+          </View>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterButtons}
+          >
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === 'week' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('week')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === 'week' && styles.filterButtonTextActive]}>
+                Week
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === 'month' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('month')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === 'month' && styles.filterButtonTextActive]}>
+                Month
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === '6months' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('6months')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === '6months' && styles.filterButtonTextActive]}>
+                6 Months
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === 'year' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('year')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === 'year' && styles.filterButtonTextActive]}>
+                Year
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === 'all' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('all')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === 'all' && styles.filterButtonTextActive]}>
+                All Time
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
 
         {/* 1. Currency Balances */}
         {currencyBalances.length > 0 && (
@@ -1057,6 +1214,8 @@ export default function ReportsScreen() {
         filterType={reflectionListFilterType}
         filterValue={reflectionListFilterValue}
         goalId={reflectionListGoalId}
+        startDate={getDateRangeForModal().startDate}
+        endDate={getDateRangeForModal().endDate}
       />
     </SafeAreaView>
   );
@@ -1395,5 +1554,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     fontWeight: '500',
+  },
+  filterSection: {
+    marginBottom: 24,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  filterButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  filterButtonTextActive: {
+    color: '#FFFFFF',
   },
 });

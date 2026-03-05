@@ -104,6 +104,8 @@ interface ReflectionListModalProps {
   filterType: 'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal';
   filterValue?: string;
   goalId?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export function ReflectionListModal({
@@ -113,6 +115,8 @@ export function ReflectionListModal({
   filterType,
   filterValue,
   goalId,
+  startDate,
+  endDate,
 }: ReflectionListModalProps) {
   const [loading, setLoading] = useState(true);
   const [reflections, setReflections] = useState<Reflection[]>([]);
@@ -129,11 +133,11 @@ export function ReflectionListModal({
 
   useEffect(() => {
     if (visible) {
-      console.log('[ReflectionListModal] Modal opened, loading reflections with filter:', filterType, filterValue, goalId);
+      console.log('[ReflectionListModal] Modal opened, loading reflections with filter:', filterType, filterValue, goalId, startDate, endDate);
       loadReflections();
       loadSupportingData();
     }
-  }, [visible, filterType, filterValue, goalId]);
+  }, [visible, filterType, filterValue, goalId, startDate, endDate]);
 
   const loadReflections = async () => {
     console.log('[ReflectionListModal] Loading reflections');
@@ -156,6 +160,14 @@ export function ReflectionListModal({
         params.append('outcome', 'struggled');
       } else if (filterType === 'behavior' && filterValue) {
         params.append('category', filterValue);
+      }
+      
+      if (startDate) {
+        params.append('startDate', startDate);
+      }
+      
+      if (endDate) {
+        params.append('endDate', endDate);
       }
       
       const queryString = params.toString();
