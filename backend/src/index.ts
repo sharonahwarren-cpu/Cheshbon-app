@@ -34,6 +34,49 @@ export type App = typeof app;
 // Enable authentication with Better Auth
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+// Validate FRONTEND_URL configuration for email verification links
+const isProduction = process.env.NODE_ENV === 'production';
+const frontendUrlIsLocalhost = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1');
+
+if (!process.env.FRONTEND_URL) {
+  if (isProduction) {
+    app.logger.error(
+      {
+        currentDefault: frontendUrl,
+        nodeEnv: process.env.NODE_ENV,
+        impact: 'Email verification and password reset links will point to localhost',
+      },
+      'CRITICAL: FRONTEND_URL environment variable is NOT set in production. Email verification and password reset links will fail. Set FRONTEND_URL to your production domain (e.g., https://cheshbon.app).'
+    );
+  } else {
+    app.logger.warn(
+      {
+        currentDefault: frontendUrl,
+        nodeEnv: process.env.NODE_ENV,
+      },
+      'FRONTEND_URL not configured - using localhost default. This is OK for development.'
+    );
+  }
+} else if (frontendUrlIsLocalhost && isProduction) {
+  app.logger.error(
+    {
+      frontendUrl,
+      nodeEnv: process.env.NODE_ENV,
+      impact: 'Email verification and password reset links will only work on localhost',
+    },
+    'WARNING: FRONTEND_URL is set to localhost but NODE_ENV is production. Email verification links will not work for users. Update FRONTEND_URL to your production domain (e.g., https://cheshbon.app).'
+  );
+} else {
+  app.logger.info(
+    {
+      frontendUrl,
+      nodeEnv: process.env.NODE_ENV,
+      isLocalhost: frontendUrlIsLocalhost,
+    },
+    `FRONTEND_URL configured for email verification and password reset links`
+  );
+}
+
 // Detect BASE_URL - critical for OAuth redirects
 // Priority: env var > log warning if missing
 let baseUrl = process.env.BASE_URL;
