@@ -70,6 +70,7 @@ export default function ResetPasswordScreen() {
     setLoading(true);
     try {
       console.log('[RESET PASSWORD] Calling /api/auth/reset-password...');
+      // Better Auth expects { token, newPassword } for password reset
       const response = await apiPost('/api/auth/reset-password', {
         token,
         newPassword,

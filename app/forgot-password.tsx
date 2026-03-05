@@ -50,8 +50,10 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      console.log('[FORGOT PASSWORD] Calling /api/auth/forgot-password...');
-      const response = await apiPost('/api/auth/forgot-password', { email: email.trim() });
+      // Better Auth endpoint is /api/auth/forget-password (not "forgot")
+      // Also try /api/auth/request-password-reset as fallback
+      console.log('[FORGOT PASSWORD] Calling /api/auth/forget-password...');
+      const response = await apiPost('/api/auth/forget-password', { email: email.trim(), redirectTo: '/reset-password' });
       console.log('[FORGOT PASSWORD] Success:', response);
       // Always show success modal (backend doesn't reveal if email exists)
       setSuccessModalVisible(true);

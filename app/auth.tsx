@@ -140,8 +140,9 @@ export default function AuthScreen() {
     console.log('📧 [AUTH SCREEN] Resending verification email to:', verificationEmail);
     setResendingVerification(true);
     try {
-      console.log('📧 [AUTH SCREEN] Calling POST /api/auth/resend-verification...');
-      const data = await apiPost('/api/auth/resend-verification', { email: verificationEmail });
+      // Better Auth endpoint is /api/auth/send-verification-email (not "resend-verification")
+      console.log('📧 [AUTH SCREEN] Calling POST /api/auth/send-verification-email...');
+      const data = await apiPost('/api/auth/send-verification-email', { email: verificationEmail });
       console.log('✅ [AUTH SCREEN] Verification email resent:', data);
       setSuccessMessage('Verification email sent! Please check your inbox and spam folder.');
       setSuccessModalVisible(true);

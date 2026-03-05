@@ -33,24 +33,30 @@ export default function VerifyEmailScreen() {
     }
 
     try {
-      console.log('[VERIFY EMAIL] Calling POST /api/auth/verify-email with token...');
-      const response = await fetch(`${BACKEND_URL}/api/auth/verify-email`, {
-        method: 'POST',
+      // Better Auth uses GET /api/auth/verify-email?token=... (not POST with body)
+      console.log('[VERIFY EMAIL] Calling GET /api/auth/verify-email?token=...');
+      const verifyUrl = `${BACKEND_URL}/api/auth/verify-email?token=${encodeURIComponent(token as string)}`;
+      console.log('[VERIFY EMAIL] URL:', verifyUrl.substring(0, 100) + '...');
+
+      const response = await fetch(verifyUrl, {
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token: token as string }),
+        // Note: redirect: 'manual' is not supported on React Native
+        // Better Auth may redirect to the frontend URL on success
+        // We handle this by checking for success status codes
       });
 
       console.log('[VERIFY EMAIL] Response status:', response.status);
 
-      // Try to parse JSON response
-      const responseText = await response.text();
-      console.log('[VERIFY EMAIL] Response body:', responseText.substring(0, 300));
-
+      // Better Auth returns 200 on success (or redirects to frontend URL)
+      // Status 200-299 = success
       if (response.ok) {
+        const responseText = await response.text();
+        console.log('[VERIFY EMAIL] Response body:', responseText.substring(0, 300));
         let data: any = {};
-        try { data = JSON.parse(responseText); } catch { /* ignore */ }
+        try { data = JSON.parse(responseText); } catch { /* ignore - may be HTML redirect page */ }
         console.log('[VERIFY EMAIL] Success:', data);
         setStatus('success');
         setMessage('Email verified successfully! You can now sign in.');
@@ -58,16 +64,21 @@ export default function VerifyEmailScreen() {
           console.log('[VERIFY EMAIL] Redirecting to auth...');
           router.replace('/auth?verified=true');
         }, 2000);
-      } else {
-        let errorMessage = 'Failed to verify email. The link may have expired.';
-        try {
-          const errorData = JSON.parse(responseText);
-          errorMessage = errorData.error || errorData.message || errorMessage;
-        } catch { /* ignore */ }
-        console.error('[VERIFY EMAIL] Error response:', errorMessage);
-        setStatus('error');
-        setMessage(errorMessage);
+        return;
       }
+
+      // Try to parse JSON response for error details
+      const responseText = await response.text();
+      console.log('[VERIFY EMAIL] Response body:', responseText.substring(0, 300));
+
+      let errorMessage = 'Failed to verify email. The link may have expired.';
+      try {
+        const errorData = JSON.parse(responseText);
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch { /* ignore */ }
+      console.error('[VERIFY EMAIL] Error response:', errorMessage, 'Status:', response.status);
+      setStatus('error');
+      setMessage(errorMessage);
     } catch (error: any) {
       console.error('[VERIFY EMAIL] Error:', error);
       setStatus('error');
