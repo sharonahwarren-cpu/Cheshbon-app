@@ -1482,12 +1482,18 @@ export default function HomeScreen() {
   // CRITICAL FIX: Filter out currency-related reflections (paid/claimed currency entries)
   // These are not relevant to the Reflections section and should not appear here
   const filteredReflections = reflections.filter(r => {
-    // Filter out reflections that are ONLY currency transactions (no description, no goal link, just currency change)
+    // Filter out reflections that are ONLY currency transactions
     // Currency transactions have currencyChange but no meaningful description or goal context
-    if (r.currencyChange && !r.linkedGoalId && (!r.description || r.description.trim() === '')) {
-      return false;
-    }
-    return true;
+    // Check for currency-related keywords in the description
+    const descriptionLower = (r.description || '').toLowerCase();
+    const isCurrencyTransaction = 
+      r.currencyChange && 
+      (descriptionLower.includes('paid') || 
+       descriptionLower.includes('claimed') || 
+       descriptionLower.includes('min hisbodus') ||
+       (!r.linkedGoalId && (!r.description || r.description.trim() === '')));
+    
+    return !isCurrencyTransaction;
   });
 
   // CRITICAL FIX: When grouping reflections by category, we need to use the GOAL's behaviorCategory
