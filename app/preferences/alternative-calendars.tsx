@@ -251,9 +251,7 @@ export default function AlternativeCalendarsScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.description}>
-          Choose an alternative calendar to display alongside the standard Gregorian calendar.
-        </Text>
+        <Text style={styles.description}>Choose an alternative calendar to display alongside the standard Gregorian calendar.  This is a Beta Testing Feature only and may not fully work yet.</Text>
 
         {CALENDAR_OPTIONS.map((option) => {
           const isSelected = selectedCalendar === option.value;
