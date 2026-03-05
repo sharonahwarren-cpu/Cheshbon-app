@@ -148,21 +148,14 @@ export function ReflectionListModal({
       
       if (filterType === 'wins') {
         params.append('wasWorthIt', 'true');
-        // Exclude pure currency transactions
-        params.append('excludeCurrencyTransactions', 'true');
       } else if (filterType === 'losses') {
         params.append('wasWorthIt', 'false');
-        // Exclude pure currency transactions
-        params.append('excludeCurrencyTransactions', 'true');
       } else if (filterType === 'successes') {
         params.append('outcome', 'success');
       } else if (filterType === 'struggles') {
         params.append('outcome', 'struggled');
       } else if (filterType === 'behavior' && filterValue) {
         params.append('category', filterValue);
-      } else if (filterType === 'gainslosses') {
-        // For gains/losses, we'll filter client-side to only show reflections with gains or losses
-        // Don't add any specific params here, we'll filter after fetching
       }
       
       if (startDate) {
@@ -183,36 +176,39 @@ export function ReflectionListModal({
       const response = await authenticatedGet(endpoint);
       let reflectionsData = Array.isArray(response) ? response : (response?.data || []);
       
-      // Client-side filtering for specific cases
-      if (filterType === 'wins' || filterType === 'losses') {
-        // Filter out reflections that are pure currency transactions (Claimed/Paid)
-        reflectionsData = reflectionsData.filter((reflection: Reflection) => {
-          const description = reflection.description?.toLowerCase() || '';
-          const isPureCurrencyTransaction = reflection.currencyChange && !reflection.linkedGoalId && !description;
-          const hasCurrencyKeyword = description.includes('paid') || description.includes('claimed') || description.includes('min hisbodus');
-          
-          // Exclude pure currency transactions
-          if (isPureCurrencyTransaction || hasCurrencyKeyword) {
-            console.log('[ReflectionListModal] Filtering out currency transaction:', reflection.id, description);
-            return false;
-          }
-          
-          return true;
-        });
-      } else if (filterType === 'gainslosses') {
+      // CRITICAL: Filter out ALL currency transactions from ALL report pop-ups
+      // A reflection is a currency transaction if:
+      // 1. It has a currencyChange value (not null/undefined)
+      // 2. It has NO linked goal (linkedGoalId is null/undefined)
+      // 3. The description contains currency-related keywords OR is empty/minimal
+      reflectionsData = reflectionsData.filter((reflection: Reflection) => {
+        const description = reflection.description?.toLowerCase() || '';
+        
+        // Check if this is a pure currency transaction
+        const hasCurrencyChange = reflection.currencyChange !== null && reflection.currencyChange !== undefined;
+        const hasNoLinkedGoal = !reflection.linkedGoalId;
+        
+        // Currency transaction keywords
+        const currencyKeywords = ['paid', 'claimed', 'claim', 'pay', 'chocolate cake', 'min hisbodus'];
+        const hasCurrencyKeyword = currencyKeywords.some(keyword => description.includes(keyword));
+        
+        // If it has a currency change, no linked goal, and either has currency keywords or is empty
+        const isPureCurrencyTransaction = hasCurrencyChange && hasNoLinkedGoal && (hasCurrencyKeyword || description.length < 10);
+        
+        if (isPureCurrencyTransaction) {
+          console.log('[ReflectionListModal] Filtering out currency transaction:', reflection.id, description, 'currencyChange:', reflection.currencyChange);
+          return false;
+        }
+        
+        return true;
+      });
+      
+      // Additional filtering for specific report types
+      if (filterType === 'gainslosses') {
         // For gains/losses, only show reflections that have gains or losses recorded
         reflectionsData = reflectionsData.filter((reflection: Reflection) => {
           const hasGains = reflection.gainedIds && reflection.gainedIds.length > 0;
           const hasLosses = reflection.lostIds && reflection.lostIds.length > 0;
-          const description = reflection.description?.toLowerCase() || '';
-          const isPureCurrencyTransaction = reflection.currencyChange && !reflection.linkedGoalId && !description;
-          const hasCurrencyKeyword = description.includes('paid') || description.includes('claimed') || description.includes('min hisbodus');
-          
-          // Exclude pure currency transactions
-          if (isPureCurrencyTransaction || hasCurrencyKeyword) {
-            console.log('[ReflectionListModal] Filtering out currency transaction from gains/losses:', reflection.id, description);
-            return false;
-          }
           
           // Only include if it has gains or losses
           if (!hasGains && !hasLosses) {
