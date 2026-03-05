@@ -125,7 +125,7 @@ export default function OtherReportsScreen() {
   // Reflection list modal state
   const [showReflectionListModal, setShowReflectionListModal] = useState(false);
   const [reflectionListTitle, setReflectionListTitle] = useState('');
-  const [reflectionListFilterType, setReflectionListFilterType] = useState<'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal'>('all');
+  const [reflectionListFilterType, setReflectionListFilterType] = useState<'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal' | 'gainslosses'>('all');
   const [reflectionListFilterValue, setReflectionListFilterValue] = useState<string | undefined>(undefined);
 
   const getDateRangeForModal = useCallback(() => {
@@ -238,7 +238,7 @@ export default function OtherReportsScreen() {
     loadReportsData();
   }, [loadReportsData]);
 
-  const openReflectionListModal = (title: string, filterType: 'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal', filterValue?: string) => {
+  const openReflectionListModal = (title: string, filterType: 'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal' | 'gainslosses', filterValue?: string) => {
     console.log('[Other Reports] Opening reflection list modal:', title, filterType, filterValue);
     setReflectionListTitle(title);
     setReflectionListFilterType(filterType);
@@ -419,7 +419,7 @@ export default function OtherReportsScreen() {
             <Text style={styles.sectionTitle}>Gains and Losses</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => openReflectionListModal('Gains and Losses', 'all')}
+              onPress={() => openReflectionListModal('Gains and Losses', 'gainslosses')}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Total Gains:</Text>
