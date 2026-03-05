@@ -188,20 +188,16 @@ export default function ReportsScreen() {
     
     switch (timeFilter) {
       case 'week':
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
+        startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
         break;
       case 'month':
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 1);
+        startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
         break;
       case '6months':
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 6);
+        startDate = new Date(now.getTime() - (180 * 24 * 60 * 60 * 1000));
         break;
       case 'year':
-        startDate = new Date(now);
-        startDate.setFullYear(now.getFullYear() - 1);
+        startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
         break;
       case 'all':
       default:
@@ -211,6 +207,7 @@ export default function ReportsScreen() {
     if (startDate) {
       const startDateISO = startDate.toISOString();
       const endDateISO = now.toISOString();
+      console.log('[Reports] Date range for filter:', timeFilter, 'Start:', startDateISO, 'End:', endDateISO);
       return `?startDate=${encodeURIComponent(startDateISO)}&endDate=${encodeURIComponent(endDateISO)}`;
     }
     
@@ -293,6 +290,19 @@ export default function ReportsScreen() {
     loadReportsData();
   }, [loadReportsData]);
 
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    setErrorModalVisible(true);
+  };
+
+  const showSuccess = (message: string) => {
+    setSuccessModalMessage(message);
+    setShowSuccessModal(true);
+    setTimeout(() => {
+      setShowSuccessModal(false);
+    }, 2000);
+  };
+
   const isRewardCurrency = (currency: Currency): boolean => {
     return currency.onSuccess === 'ADD';
   };
@@ -355,20 +365,16 @@ export default function ReportsScreen() {
     
     switch (timeFilter) {
       case 'week':
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
+        startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
         break;
       case 'month':
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 1);
+        startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
         break;
       case '6months':
-        startDate = new Date(now);
-        startDate.setMonth(now.getMonth() - 6);
+        startDate = new Date(now.getTime() - (180 * 24 * 60 * 60 * 1000));
         break;
       case 'year':
-        startDate = new Date(now);
-        startDate.setFullYear(now.getFullYear() - 1);
+        startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
         break;
     }
     
@@ -429,65 +435,6 @@ export default function ReportsScreen() {
         contentContainerStyle={styles.contentContainer}
       >
         <Text style={styles.headerTitle}>Reports</Text>
-
-        {/* Time Filter - Only affects reports below Currency Balances */}
-        <View style={styles.filterSection}>
-          <View style={styles.filterHeader}>
-            <IconSymbol
-              ios_icon_name="calendar"
-              android_material_icon_name="calendar-today"
-              size={18}
-              color={colors.primary}
-            />
-            <Text style={styles.filterLabel}>Time Period</Text>
-          </View>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterButtons}
-          >
-            <TouchableOpacity
-              style={[styles.filterButton, timeFilter === 'week' && styles.filterButtonActive]}
-              onPress={() => handleTimeFilterChange('week')}
-            >
-              <Text style={[styles.filterButtonText, timeFilter === 'week' && styles.filterButtonTextActive]}>
-                Week
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, timeFilter === 'month' && styles.filterButtonActive]}
-              onPress={() => handleTimeFilterChange('month')}
-            >
-              <Text style={[styles.filterButtonText, timeFilter === 'month' && styles.filterButtonTextActive]}>
-                Month
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, timeFilter === '6months' && styles.filterButtonActive]}
-              onPress={() => handleTimeFilterChange('6months')}
-            >
-              <Text style={[styles.filterButtonText, timeFilter === '6months' && styles.filterButtonTextActive]}>
-                6 Months
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, timeFilter === 'year' && styles.filterButtonActive]}
-              onPress={() => handleTimeFilterChange('year')}
-            >
-              <Text style={[styles.filterButtonText, timeFilter === 'year' && styles.filterButtonTextActive]}>
-                Year
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.filterButton, timeFilter === 'all' && styles.filterButtonActive]}
-              onPress={() => handleTimeFilterChange('all')}
-            >
-              <Text style={[styles.filterButtonText, timeFilter === 'all' && styles.filterButtonTextActive]}>
-                All Time
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
 
         {/* 1. Currency Balances */}
         {currencyBalances.length > 0 && (
@@ -562,6 +509,65 @@ export default function ReportsScreen() {
           </>
         )}
 
+        {/* Time Filter - Moved here, right after Currency Balances */}
+        <View style={styles.filterSection}>
+          <View style={styles.filterHeader}>
+            <IconSymbol
+              ios_icon_name="calendar"
+              android_material_icon_name="calendar-today"
+              size={18}
+              color={colors.primary}
+            />
+            <Text style={styles.filterLabel}>Time Period</Text>
+          </View>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterButtons}
+          >
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === 'week' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('week')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === 'week' && styles.filterButtonTextActive]}>
+                Week
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === 'month' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('month')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === 'month' && styles.filterButtonTextActive]}>
+                Month
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === '6months' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('6months')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === '6months' && styles.filterButtonTextActive]}>
+                6 Months
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === 'year' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('year')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === 'year' && styles.filterButtonTextActive]}>
+                Year
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterButton, timeFilter === 'all' && styles.filterButtonActive]}
+              onPress={() => handleTimeFilterChange('all')}
+            >
+              <Text style={[styles.filterButtonText, timeFilter === 'all' && styles.filterButtonTextActive]}>
+                All Time
+              </Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
         {/* 2. Success vs Struggles - With popup */}
         {successVsStruggles && (
           <>
@@ -625,36 +631,6 @@ export default function ReportsScreen() {
         {/* 4. Gains and Losses - With popup */}
         {gainsLossesSummary && (
           <>
-            <Text style={styles.sectionTitle}>Reflection Statistics</Text>
-            <TouchableOpacity 
-              style={styles.reportCard}
-              onPress={() => openReflectionListModal('All Reflections', 'all')}
-            >
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Total Reflections:</Text>
-                <Text style={styles.reportValue}>{reflectionStats.totalReflections}</Text>
-              </View>
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Restraints:</Text>
-                <Text style={styles.reportValue}>{reflectionStats.totalRestraints}</Text>
-              </View>
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Proactive:</Text>
-                <Text style={styles.reportValue}>{reflectionStats.totalProactive}</Text>
-              </View>
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Worth It %:</Text>
-                <Text style={[styles.reportValue, { color: colors.primary }]}>
-                  {roundedWorthItPercentage}%
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* 5. Gains & Losses Distribution - No popup needed (detailed breakdown) */}
-        {gainsLossesDistribution && (
-          <>
             <Text style={styles.sectionTitle}>Gains and Losses</Text>
             <TouchableOpacity 
               style={styles.reportCard}
@@ -708,234 +684,7 @@ export default function ReportsScreen() {
           </>
         )}
 
-        {/* 7. Top Motivations by Reflection Type */}
-        {topMotivationsByType && (
-          (topMotivationsByType.proactive?.length > 0 || topMotivationsByType.restraint?.length > 0) && (
-            <>
-              <Text style={styles.sectionTitle}>Top Motivations by Reflection Type</Text>
-              <View style={styles.reportCard}>
-                {topMotivationsByType.proactive?.length > 0 && (
-                  <>
-                    <Text style={styles.reportSubtitle}>Proactive Reflections</Text>
-                    {topMotivationsByType.proactive.map((item, idx) => (
-                      <View key={idx} style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
-                        <Text style={[styles.reportValue, { color: colors.primary }]}>{item.count}x</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {topMotivationsByType.restraint?.length > 0 && (
-                  <>
-                    <Text style={[styles.reportSubtitle, topMotivationsByType.proactive?.length > 0 ? { marginTop: 12 } : {}]}>Restraint Reflections</Text>
-                    {topMotivationsByType.restraint.map((item, idx) => (
-                      <View key={idx} style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
-                        <Text style={[styles.reportValue, { color: colors.secondary || colors.primary }]}>{item.count}x</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </View>
-            </>
-          )
-        )}
-
-        {/* 8. Top Motivations by Goal Outcome */}
-        {topMotivationsByOutcome && (
-          (topMotivationsByOutcome.success?.length > 0 || topMotivationsByOutcome.struggle?.length > 0) && (
-            <>
-              <Text style={styles.sectionTitle}>Top Motivations by Goal Outcome</Text>
-              <View style={styles.reportCard}>
-                {topMotivationsByOutcome.success?.length > 0 && (
-                  <>
-                    <Text style={styles.reportSubtitle}>Success Reflections</Text>
-                    {topMotivationsByOutcome.success.map((item, idx) => (
-                      <View key={idx} style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
-                        <Text style={[styles.reportValue, { color: colors.success }]}>{item.count}x</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {topMotivationsByOutcome.struggle?.length > 0 && (
-                  <>
-                    <Text style={[styles.reportSubtitle, topMotivationsByOutcome.success?.length > 0 ? { marginTop: 12 } : {}]}>Struggle Reflections</Text>
-                    {topMotivationsByOutcome.struggle.map((item, idx) => (
-                      <View key={idx} style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
-                        <Text style={[styles.reportValue, { color: colors.error }]}>{item.count}x</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </View>
-            </>
-          )
-        )}
-
-        {/* 9. Reflection Statistics - With popup */}
-        {reflectionStats && (
-          <>
-            <Text style={styles.sectionTitle}>Reflection Statistics</Text>
-            <TouchableOpacity 
-              style={styles.reportCard}
-              onPress={() => openReflectionListModal('All Reflections', 'all')}
-            >
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Total Reflections:</Text>
-                <Text style={styles.reportValue}>{reflectionStats.totalReflections}</Text>
-              </View>
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Restraints:</Text>
-                <Text style={styles.reportValue}>{reflectionStats.totalRestraints}</Text>
-              </View>
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Proactive:</Text>
-                <Text style={styles.reportValue}>{reflectionStats.totalProactive}</Text>
-              </View>
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Worth It %:</Text>
-                <Text style={[styles.reportValue, { color: colors.primary }]}>
-                  {roundedWorthItPercentage}%
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </>
-        )}
-
-        {/* 10. Behavior Entries - With popup */}
-        {behaviorCounts && (
-          <>
-            <Text style={styles.sectionTitle}>Behavior Entries</Text>
-            <View style={styles.reportCard}>
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Action Entries', 'behavior', 'Action')}
-              >
-                <Text style={styles.reportLabel}>Action Entries:</Text>
-                <Text style={styles.reportValue}>{behaviorCounts.actionEntries}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Speech Entries', 'behavior', 'Speech')}
-              >
-                <Text style={styles.reportLabel}>Speech Entries:</Text>
-                <Text style={styles.reportValue}>{behaviorCounts.speechEntries}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Thought Entries', 'behavior', 'Thought')}
-              >
-                <Text style={styles.reportLabel}>Thought Entries:</Text>
-                <Text style={styles.reportValue}>{behaviorCounts.thoughtEntries}</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        {/* 11. Journal Entries - No popup needed */}
-        {journalCount && (
-          <>
-            <Text style={styles.sectionTitle}>Journal Entries</Text>
-            <View style={styles.reportCard}>
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Total Entries:</Text>
-                <Text style={styles.reportValue}>{journalCount.count}</Text>
-              </View>
-            </View>
-          </>
-        )}
-
-        {/* 12. Goal Progress - With popup */}
-        {goalProgress.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Goal Progress</Text>
-            {goalProgress.map((goal, index) => {
-              const totalAttempts = goal.successCount + goal.struggleCount;
-              const calculatedProgress = totalAttempts > 0 
-                ? Math.round((goal.successCount / totalAttempts) * 100)
-                : 0;
-              const progressText = `${calculatedProgress}%`;
-              
-              const hasRewardCurrency = goal.rewardCurrencySymbol !== undefined && goal.rewardCurrencySymbol !== null && goal.rewardCurrencySymbol !== '';
-              const hasConsequenceCurrency = goal.consequenceCurrencySymbol !== undefined && goal.consequenceCurrencySymbol !== null && goal.consequenceCurrencySymbol !== '';
-              
-              const hasRewardBalance = hasRewardCurrency && goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null;
-              const hasConsequenceBalance = hasConsequenceCurrency && goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null;
-              
-              return (
-                <TouchableOpacity 
-                  key={index} 
-                  style={styles.reportCard}
-                  onPress={() => openReflectionListModal(`${goal.goalTitle} - Reflections`, 'goal', undefined, goal.goalId)}
-                >
-                  <Text style={styles.goalTitle}>{goal.goalTitle}</Text>
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: progressText }]} />
-                  </View>
-                  <View style={styles.reportRow}>
-                    <Text style={styles.reportLabel}>Progress:</Text>
-                    <Text style={styles.reportValue}>{progressText}</Text>
-                  </View>
-                  <View style={styles.reportRow}>
-                    <Text style={styles.reportLabel}>Successes:</Text>
-                    <Text style={[styles.reportValue, { color: colors.success }]}>
-                      {goal.successCount}
-                    </Text>
-                  </View>
-                  <View style={styles.reportRow}>
-                    <Text style={styles.reportLabel}>Struggles:</Text>
-                    <Text style={[styles.reportValue, { color: colors.error }]}>
-                      {goal.struggleCount}
-                    </Text>
-                  </View>
-                  
-                  {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
-                    <View style={styles.reportRow}>
-                      <Text style={styles.reportLabel}>🔥 Current Streak:</Text>
-                      <Text style={[styles.reportValue, { color: '#FF6B35' }]}>
-                        {goal.currentStreak} day{goal.currentStreak !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                  )}
-                  
-                  {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
-                    <View style={styles.reportRow}>
-                      <Text style={styles.reportLabel}>⭐ Best Streak:</Text>
-                      <Text style={[styles.reportValue, { color: '#FFD700' }]}>
-                        {goal.bestStreak} day{goal.bestStreak !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                  )}
-                  
-                  {(hasRewardBalance || hasConsequenceBalance) && (
-                    <View style={styles.currencySection}>
-                      {hasRewardBalance && (
-                        <View style={styles.reportRow}>
-                          <Text style={styles.reportLabel}>Reward Balance:</Text>
-                          <Text style={[styles.reportValue, { color: colors.success }]}>
-                            {goal.rewardCurrencyBalance} {goal.rewardCurrencySymbol || ''}
-                          </Text>
-                        </View>
-                      )}
-                      {hasConsequenceBalance && (
-                        <View style={styles.reportRow}>
-                          <Text style={styles.reportLabel}>Consequence Balance:</Text>
-                          <Text style={[styles.reportValue, { color: colors.error }]}>
-                            {goal.consequenceCurrencyBalance} {goal.consequenceCurrencySymbol || ''}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </>
-        )}
-
-        {/* Gains & Losses Distribution - No popup needed (detailed breakdown) */}
+        {/* 5. Gains & Losses Distribution - No popup needed (detailed breakdown) */}
         {gainsLossesDistribution && (
           <>
             <Text style={styles.sectionTitle}>Gains & Losses Distribution</Text>
@@ -1058,6 +807,233 @@ export default function ReportsScreen() {
                 </>
               )}
             </View>
+          </>
+        )}
+
+        {/* 6. Top Motivations by Reflection Type */}
+        {topMotivationsByType && (
+          (topMotivationsByType.proactive?.length > 0 || topMotivationsByType.restraint?.length > 0) && (
+            <>
+              <Text style={styles.sectionTitle}>Top Motivations by Reflection Type</Text>
+              <View style={styles.reportCard}>
+                {topMotivationsByType.proactive?.length > 0 && (
+                  <>
+                    <Text style={styles.reportSubtitle}>Proactive Reflections</Text>
+                    {topMotivationsByType.proactive.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.primary }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {topMotivationsByType.restraint?.length > 0 && (
+                  <>
+                    <Text style={[styles.reportSubtitle, topMotivationsByType.proactive?.length > 0 ? { marginTop: 12 } : {}]}>Restraint Reflections</Text>
+                    {topMotivationsByType.restraint.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.secondary || colors.primary }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </View>
+            </>
+          )
+        )}
+
+        {/* 7. Top Motivations by Goal Outcome */}
+        {topMotivationsByOutcome && (
+          (topMotivationsByOutcome.success?.length > 0 || topMotivationsByOutcome.struggle?.length > 0) && (
+            <>
+              <Text style={styles.sectionTitle}>Top Motivations by Goal Outcome</Text>
+              <View style={styles.reportCard}>
+                {topMotivationsByOutcome.success?.length > 0 && (
+                  <>
+                    <Text style={styles.reportSubtitle}>Success Reflections</Text>
+                    {topMotivationsByOutcome.success.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.success }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {topMotivationsByOutcome.struggle?.length > 0 && (
+                  <>
+                    <Text style={[styles.reportSubtitle, topMotivationsByOutcome.success?.length > 0 ? { marginTop: 12 } : {}]}>Struggle Reflections</Text>
+                    {topMotivationsByOutcome.struggle.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.error }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </View>
+            </>
+          )
+        )}
+
+        {/* 8. Reflection Statistics - With popup */}
+        {reflectionStats && (
+          <>
+            <Text style={styles.sectionTitle}>Reflection Statistics</Text>
+            <TouchableOpacity 
+              style={styles.reportCard}
+              onPress={() => openReflectionListModal('All Reflections', 'all')}
+            >
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Total Reflections:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalReflections}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Restraints:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalRestraints}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Proactive:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalProactive}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Worth It %:</Text>
+                <Text style={[styles.reportValue, { color: colors.primary }]}>
+                  {roundedWorthItPercentage}%
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* 9. Behavior Entries - With popup */}
+        {behaviorCounts && (
+          <>
+            <Text style={styles.sectionTitle}>Behavior Entries</Text>
+            <View style={styles.reportCard}>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Action Entries', 'behavior', 'Action')}
+              >
+                <Text style={styles.reportLabel}>Action Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.actionEntries}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Speech Entries', 'behavior', 'Speech')}
+              >
+                <Text style={styles.reportLabel}>Speech Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.speechEntries}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Thought Entries', 'behavior', 'Thought')}
+              >
+                <Text style={styles.reportLabel}>Thought Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.thoughtEntries}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        {/* 10. Journal Entries - No popup needed */}
+        {journalCount && (
+          <>
+            <Text style={styles.sectionTitle}>Journal Entries</Text>
+            <View style={styles.reportCard}>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Total Entries:</Text>
+                <Text style={styles.reportValue}>{journalCount.count}</Text>
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* 11. Goal Progress - With popup */}
+        {goalProgress.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Goal Progress</Text>
+            {goalProgress.map((goal, index) => {
+              const totalAttempts = goal.successCount + goal.struggleCount;
+              const calculatedProgress = totalAttempts > 0 
+                ? Math.round((goal.successCount / totalAttempts) * 100)
+                : 0;
+              const progressText = `${calculatedProgress}%`;
+              
+              const hasRewardCurrency = goal.rewardCurrencySymbol !== undefined && goal.rewardCurrencySymbol !== null && goal.rewardCurrencySymbol !== '';
+              const hasConsequenceCurrency = goal.consequenceCurrencySymbol !== undefined && goal.consequenceCurrencySymbol !== null && goal.consequenceCurrencySymbol !== '';
+              
+              const hasRewardBalance = hasRewardCurrency && goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null;
+              const hasConsequenceBalance = hasConsequenceCurrency && goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null;
+              
+              return (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.reportCard}
+                  onPress={() => openReflectionListModal(`${goal.goalTitle} - Reflections`, 'goal', undefined, goal.goalId)}
+                >
+                  <Text style={styles.goalTitle}>{goal.goalTitle}</Text>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: progressText }]} />
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Progress:</Text>
+                    <Text style={styles.reportValue}>{progressText}</Text>
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Successes:</Text>
+                    <Text style={[styles.reportValue, { color: colors.success }]}>
+                      {goal.successCount}
+                    </Text>
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Struggles:</Text>
+                    <Text style={[styles.reportValue, { color: colors.error }]}>
+                      {goal.struggleCount}
+                    </Text>
+                  </View>
+                  
+                  {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
+                    <View style={styles.reportRow}>
+                      <Text style={styles.reportLabel}>🔥 Current Streak:</Text>
+                      <Text style={[styles.reportValue, { color: '#FF6B35' }]}>
+                        {goal.currentStreak} day{goal.currentStreak !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
+                    <View style={styles.reportRow}>
+                      <Text style={styles.reportLabel}>⭐ Best Streak:</Text>
+                      <Text style={[styles.reportValue, { color: '#FFD700' }]}>
+                        {goal.bestStreak} day{goal.bestStreak !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {(hasRewardBalance || hasConsequenceBalance) && (
+                    <View style={styles.currencySection}>
+                      {hasRewardBalance && (
+                        <View style={styles.reportRow}>
+                          <Text style={styles.reportLabel}>Reward Balance:</Text>
+                          <Text style={[styles.reportValue, { color: colors.success }]}>
+                            {goal.rewardCurrencyBalance} {goal.rewardCurrencySymbol || ''}
+                          </Text>
+                        </View>
+                      )}
+                      {hasConsequenceBalance && (
+                        <View style={styles.reportRow}>
+                          <Text style={styles.reportLabel}>Consequence Balance:</Text>
+                          <Text style={[styles.reportValue, { color: colors.error }]}>
+                            {goal.consequenceCurrencyBalance} {goal.consequenceCurrencySymbol || ''}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </>
         )}
 
@@ -1557,6 +1533,7 @@ const styles = StyleSheet.create({
   },
   filterSection: {
     marginBottom: 24,
+    marginTop: 8,
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
