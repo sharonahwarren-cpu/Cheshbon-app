@@ -1,4 +1,9 @@
 
+import { IconSymbol } from "@/components/IconSymbol";
+import React, { useState, useEffect } from "react";
+import { authenticatedGet, authenticatedPost } from "@/utils/api";
+import { useRouter } from "expo-router";
+import { colors } from "@/styles/commonStyles";
 import {
   StyleSheet,
   View,
@@ -10,12 +15,8 @@ import {
   TextInput,
   Platform,
 } from "react-native";
-import { authenticatedGet, authenticatedPost } from "@/utils/api";
-import React, { useState, useEffect } from "react";
-import { colors } from "@/styles/commonStyles";
-import { IconSymbol } from "@/components/IconSymbol";
-import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ReflectionListModal } from "@/components/ReflectionListModal";
 
 interface CurrencyBalance {
   currencyId: string;
@@ -169,7 +170,14 @@ export default function ReportsScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
 
-  const loadReportsData = React.useCallback(async () => {
+  // Reflection list modal state
+  const [showReflectionListModal, setShowReflectionListModal] = useState(false);
+  const [reflectionListTitle, setReflectionListTitle] = useState('');
+  const [reflectionListFilterType, setReflectionListFilterType] = useState<'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal'>('all');
+  const [reflectionListFilterValue, setReflectionListFilterValue] = useState<string | undefined>(undefined);
+  const [reflectionListGoalId, setReflectionListGoalId] = useState<string | undefined>(undefined);
+
+  const loadReportsData = async () => {
     console.log("Loading reports data");
     setLoading(true);
     try {
@@ -236,7 +244,7 @@ export default function ReportsScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     console.log("ReportsScreen mounted");
@@ -308,6 +316,15 @@ export default function ReportsScreen() {
     }
   };
 
+  const openReflectionListModal = (title: string, filterType: 'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal', filterValue?: string, goalId?: string) => {
+    console.log('[Reports] Opening reflection list modal:', title, filterType, filterValue, goalId);
+    setReflectionListTitle(title);
+    setReflectionListFilterType(filterType);
+    setReflectionListFilterValue(filterValue);
+    setReflectionListGoalId(goalId);
+    setShowReflectionListModal(true);
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -320,7 +337,10 @@ export default function ReportsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={styles.contentContainer}
+      >
         <Text style={styles.headerTitle}>Reports</Text>
 
         {/* TOP MOTIVATIONS BY TYPE REPORT */}
@@ -389,6 +409,7 @@ export default function ReportsScreen() {
           )
         )}
 
+        {/* Currency Balances - Same as iOS */}
         {currencyBalances.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Total Currency Balances</Text>
@@ -461,67 +482,73 @@ export default function ReportsScreen() {
           </>
         )}
 
+        {/* Wins vs Losses - With popup */}
         {winsVsLosses && (
           <>
             <Text style={styles.sectionTitle}>Wins vs Losses</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => openReflectionListModal('Wins vs Losses', 'all')}
             >
-              <View style={styles.reportRow}>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Wins', 'wins')}
+              >
                 <Text style={styles.reportLabel}>Wins:</Text>
                 <Text style={[styles.reportValue, { color: colors.success }]}>
                   {winsVsLosses.wins}
                 </Text>
-              </View>
-              <View style={styles.reportRow}>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Losses', 'losses')}
+              >
                 <Text style={styles.reportLabel}>Losses:</Text>
                 <Text style={[styles.reportValue, { color: colors.error }]}>
                   {winsVsLosses.losses}
                 </Text>
-              </View>
+              </TouchableOpacity>
             </TouchableOpacity>
           </>
         )}
 
+        {/* Success vs Struggles - With popup */}
         {successVsStruggles && (
           <>
             <Text style={styles.sectionTitle}>Success vs Struggles</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => openReflectionListModal('Success vs Struggles', 'all')}
             >
-              <View style={styles.reportRow}>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Successes', 'successes')}
+              >
                 <Text style={styles.reportLabel}>Successes:</Text>
                 <Text style={[styles.reportValue, { color: colors.success }]}>
                   {successVsStruggles.successes}
                 </Text>
-              </View>
-              <View style={styles.reportRow}>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Struggles', 'struggles')}
+              >
                 <Text style={styles.reportLabel}>Struggles:</Text>
                 <Text style={[styles.reportValue, { color: colors.error }]}>
                   {successVsStruggles.struggles}
                 </Text>
-              </View>
+              </TouchableOpacity>
             </TouchableOpacity>
           </>
         )}
 
+        {/* Reflection Statistics - With popup */}
         {reflectionStats && (
           <>
             <Text style={styles.sectionTitle}>Reflection Statistics</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => openReflectionListModal('All Reflections', 'all')}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Total Reflections:</Text>
@@ -545,6 +572,7 @@ export default function ReportsScreen() {
           </>
         )}
 
+        {/* Journal Count - No popup needed */}
         {journalCount && (
           <>
             <Text style={styles.sectionTitle}>Journal Entries</Text>
@@ -557,15 +585,13 @@ export default function ReportsScreen() {
           </>
         )}
 
+        {/* Gains and Losses - With popup */}
         {gainsLossesSummary && (
           <>
             <Text style={styles.sectionTitle}>Gains and Losses</Text>
             <TouchableOpacity 
               style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
+              onPress={() => openReflectionListModal('Gains and Losses', 'all')}
             >
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Total Gains:</Text>
@@ -615,6 +641,7 @@ export default function ReportsScreen() {
           </>
         )}
 
+        {/* Gains & Losses Distribution - No popup needed (detailed breakdown) */}
         {gainsLossesDistribution && (
           <>
             <Text style={styles.sectionTitle}>Gains & Losses Distribution</Text>
@@ -740,32 +767,37 @@ export default function ReportsScreen() {
           </>
         )}
 
+        {/* Behavior Entries - With popup */}
         {behaviorCounts && (
           <>
             <Text style={styles.sectionTitle}>Behavior Entries</Text>
-            <TouchableOpacity 
-              style={styles.reportCard}
-              onPress={() => {
-                console.log("Navigating to reflections");
-                router.push('/(tabs)/reflect');
-              }}
-            >
-              <View style={styles.reportRow}>
+            <View style={styles.reportCard}>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Action Entries', 'behavior', 'Action')}
+              >
                 <Text style={styles.reportLabel}>Action Entries:</Text>
                 <Text style={styles.reportValue}>{behaviorCounts.actionEntries}</Text>
-              </View>
-              <View style={styles.reportRow}>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Speech Entries', 'behavior', 'Speech')}
+              >
                 <Text style={styles.reportLabel}>Speech Entries:</Text>
                 <Text style={styles.reportValue}>{behaviorCounts.speechEntries}</Text>
-              </View>
-              <View style={styles.reportRow}>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Thought Entries', 'behavior', 'Thought')}
+              >
                 <Text style={styles.reportLabel}>Thought Entries:</Text>
                 <Text style={styles.reportValue}>{behaviorCounts.thoughtEntries}</Text>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
           </>
         )}
 
+        {/* Goal Progress - With popup */}
         {goalProgress.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Goal Progress</Text>
@@ -786,13 +818,7 @@ export default function ReportsScreen() {
                 <TouchableOpacity 
                   key={index} 
                   style={styles.reportCard}
-                  onPress={() => {
-                    console.log("Navigating to reflections for goal:", goal.goalId);
-                    router.push({
-                      pathname: '/(tabs)/reflect',
-                      params: { goalId: goal.goalId },
-                    });
-                  }}
+                  onPress={() => openReflectionListModal(`${goal.goalTitle} - Reflections`, 'goal', undefined, goal.goalId)}
                 >
                   <Text style={styles.goalTitle}>{goal.goalTitle}</Text>
                   <View style={styles.progressBar}>
@@ -875,6 +901,7 @@ export default function ReportsScreen() {
         )}
       </ScrollView>
 
+      {/* Currency Modal - Same as iOS but without KeyboardAvoidingView wrapper */}
       <Modal
         visible={showCurrencyModal}
         animationType="slide"
@@ -905,6 +932,7 @@ export default function ReportsScreen() {
                 placeholder="Enter amount"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
+                returnKeyType="done"
               />
               <Text style={styles.currencyModalHelper}>
                 Maximum: {currencyModalMaxAmount} {selectedCurrencySymbol}
@@ -1001,6 +1029,16 @@ export default function ReportsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Reflection List Modal */}
+      <ReflectionListModal
+        visible={showReflectionListModal}
+        onClose={() => setShowReflectionListModal(false)}
+        title={reflectionListTitle}
+        filterType={reflectionListFilterType}
+        filterValue={reflectionListFilterValue}
+        goalId={reflectionListGoalId}
+      />
     </SafeAreaView>
   );
 }
@@ -1009,6 +1047,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: Platform.OS === 'android' ? 48 : 0,
   },
   loadingContainer: {
     flex: 1,
@@ -1021,7 +1060,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 48 : 20,
+    paddingTop: 20,
     paddingBottom: 100,
   },
   headerTitle: {
@@ -1170,14 +1209,13 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   currencyModal: {
     backgroundColor: colors.background,
-    borderRadius: 16,
-    width: '90%',
-    maxWidth: 400,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
