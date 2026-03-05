@@ -358,72 +358,7 @@ export default function ReportsScreen() {
       >
         <Text style={styles.headerTitle}>Reports</Text>
 
-        {/* TOP MOTIVATIONS BY TYPE REPORT */}
-        {topMotivationsByType && (
-          (topMotivationsByType.proactive?.length > 0 || topMotivationsByType.restraint?.length > 0) && (
-            <>
-              <Text style={styles.sectionTitle}>Top Motivations by Reflection Type</Text>
-              <View style={styles.reportCard}>
-                {topMotivationsByType.proactive?.length > 0 && (
-                  <>
-                    <Text style={styles.reportSubtitle}>Proactive Reflections</Text>
-                    {topMotivationsByType.proactive.map((item, idx) => (
-                      <View key={idx} style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
-                        <Text style={[styles.reportValue, { color: colors.primary }]}>{item.count}x</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {topMotivationsByType.restraint?.length > 0 && (
-                  <>
-                    <Text style={[styles.reportSubtitle, topMotivationsByType.proactive?.length > 0 ? { marginTop: 12 } : {}]}>Restraint Reflections</Text>
-                    {topMotivationsByType.restraint.map((item, idx) => (
-                      <View key={idx} style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
-                        <Text style={[styles.reportValue, { color: colors.secondary || colors.primary }]}>{item.count}x</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </View>
-            </>
-          )
-        )}
-
-        {/* TOP MOTIVATIONS BY OUTCOME REPORT */}
-        {topMotivationsByOutcome && (
-          (topMotivationsByOutcome.success?.length > 0 || topMotivationsByOutcome.struggle?.length > 0) && (
-            <>
-              <Text style={styles.sectionTitle}>Top Motivations by Goal Outcome</Text>
-              <View style={styles.reportCard}>
-                {topMotivationsByOutcome.success?.length > 0 && (
-                  <>
-                    <Text style={styles.reportSubtitle}>Success Reflections</Text>
-                    {topMotivationsByOutcome.success.map((item, idx) => (
-                      <View key={idx} style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
-                        <Text style={[styles.reportValue, { color: colors.success }]}>{item.count}x</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {topMotivationsByOutcome.struggle?.length > 0 && (
-                  <>
-                    <Text style={[styles.reportSubtitle, topMotivationsByOutcome.success?.length > 0 ? { marginTop: 12 } : {}]}>Struggle Reflections</Text>
-                    {topMotivationsByOutcome.struggle.map((item, idx) => (
-                      <View key={idx} style={styles.reportRow}>
-                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
-                        <Text style={[styles.reportValue, { color: colors.error }]}>{item.count}x</Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </View>
-            </>
-          )
-        )}
-
+        {/* 1. Currency Balances */}
         {currencyBalances.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Total Currency Balances</Text>
@@ -496,35 +431,7 @@ export default function ReportsScreen() {
           </>
         )}
 
-        {winsVsLosses && (
-          <>
-            <Text style={styles.sectionTitle}>Wins vs Losses</Text>
-            <TouchableOpacity 
-              style={styles.reportCard}
-              onPress={() => openReflectionListModal('Wins vs Losses', 'all')}
-            >
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Wins', 'wins')}
-              >
-                <Text style={styles.reportLabel}>Wins:</Text>
-                <Text style={[styles.reportValue, { color: colors.success }]}>
-                  {winsVsLosses.wins}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Losses', 'losses')}
-              >
-                <Text style={styles.reportLabel}>Losses:</Text>
-                <Text style={[styles.reportValue, { color: colors.error }]}>
-                  {winsVsLosses.losses}
-                </Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </>
-        )}
-
+        {/* 2. Success vs Struggles - With popup */}
         {successVsStruggles && (
           <>
             <Text style={styles.sectionTitle}>Success vs Struggles</Text>
@@ -554,7 +461,38 @@ export default function ReportsScreen() {
           </>
         )}
 
-        {reflectionStats && (
+        {/* 3. Wins vs Losses - With popup */}
+        {winsVsLosses && (
+          <>
+            <Text style={styles.sectionTitle}>Wins vs Losses</Text>
+            <TouchableOpacity 
+              style={styles.reportCard}
+              onPress={() => openReflectionListModal('Wins vs Losses', 'all')}
+            >
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Wins', 'wins')}
+              >
+                <Text style={styles.reportLabel}>Wins:</Text>
+                <Text style={[styles.reportValue, { color: colors.success }]}>
+                  {winsVsLosses.wins}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Losses', 'losses')}
+              >
+                <Text style={styles.reportLabel}>Losses:</Text>
+                <Text style={[styles.reportValue, { color: colors.error }]}>
+                  {winsVsLosses.losses}
+                </Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* 4. Gains and Losses - With popup */}
+        {gainsLossesSummary && (
           <>
             <Text style={styles.sectionTitle}>Reflection Statistics</Text>
             <TouchableOpacity 
@@ -583,19 +521,8 @@ export default function ReportsScreen() {
           </>
         )}
 
-        {journalCount && (
-          <>
-            <Text style={styles.sectionTitle}>Journal Entries</Text>
-            <View style={styles.reportCard}>
-              <View style={styles.reportRow}>
-                <Text style={styles.reportLabel}>Total Entries:</Text>
-                <Text style={styles.reportValue}>{journalCount.count}</Text>
-              </View>
-            </View>
-          </>
-        )}
-
-        {gainsLossesSummary && (
+        {/* 5. Gains & Losses Distribution - No popup needed (detailed breakdown) */}
+        {gainsLossesDistribution && (
           <>
             <Text style={styles.sectionTitle}>Gains and Losses</Text>
             <TouchableOpacity 
@@ -650,6 +577,234 @@ export default function ReportsScreen() {
           </>
         )}
 
+        {/* 7. Top Motivations by Reflection Type */}
+        {topMotivationsByType && (
+          (topMotivationsByType.proactive?.length > 0 || topMotivationsByType.restraint?.length > 0) && (
+            <>
+              <Text style={styles.sectionTitle}>Top Motivations by Reflection Type</Text>
+              <View style={styles.reportCard}>
+                {topMotivationsByType.proactive?.length > 0 && (
+                  <>
+                    <Text style={styles.reportSubtitle}>Proactive Reflections</Text>
+                    {topMotivationsByType.proactive.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.primary }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {topMotivationsByType.restraint?.length > 0 && (
+                  <>
+                    <Text style={[styles.reportSubtitle, topMotivationsByType.proactive?.length > 0 ? { marginTop: 12 } : {}]}>Restraint Reflections</Text>
+                    {topMotivationsByType.restraint.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.secondary || colors.primary }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </View>
+            </>
+          )
+        )}
+
+        {/* 8. Top Motivations by Goal Outcome */}
+        {topMotivationsByOutcome && (
+          (topMotivationsByOutcome.success?.length > 0 || topMotivationsByOutcome.struggle?.length > 0) && (
+            <>
+              <Text style={styles.sectionTitle}>Top Motivations by Goal Outcome</Text>
+              <View style={styles.reportCard}>
+                {topMotivationsByOutcome.success?.length > 0 && (
+                  <>
+                    <Text style={styles.reportSubtitle}>Success Reflections</Text>
+                    {topMotivationsByOutcome.success.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.success }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+                {topMotivationsByOutcome.struggle?.length > 0 && (
+                  <>
+                    <Text style={[styles.reportSubtitle, topMotivationsByOutcome.success?.length > 0 ? { marginTop: 12 } : {}]}>Struggle Reflections</Text>
+                    {topMotivationsByOutcome.struggle.map((item, idx) => (
+                      <View key={idx} style={styles.reportRow}>
+                        <Text style={styles.reportLabel}>{item.motivationName}</Text>
+                        <Text style={[styles.reportValue, { color: colors.error }]}>{item.count}x</Text>
+                      </View>
+                    ))}
+                  </>
+                )}
+              </View>
+            </>
+          )
+        )}
+
+        {/* 9. Reflection Statistics - With popup */}
+        {reflectionStats && (
+          <>
+            <Text style={styles.sectionTitle}>Reflection Statistics</Text>
+            <TouchableOpacity 
+              style={styles.reportCard}
+              onPress={() => openReflectionListModal('All Reflections', 'all')}
+            >
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Total Reflections:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalReflections}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Restraints:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalRestraints}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Proactive:</Text>
+                <Text style={styles.reportValue}>{reflectionStats.totalProactive}</Text>
+              </View>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Worth It %:</Text>
+                <Text style={[styles.reportValue, { color: colors.primary }]}>
+                  {roundedWorthItPercentage}%
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* 10. Behavior Entries - With popup */}
+        {behaviorCounts && (
+          <>
+            <Text style={styles.sectionTitle}>Behavior Entries</Text>
+            <View style={styles.reportCard}>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Action Entries', 'behavior', 'Action')}
+              >
+                <Text style={styles.reportLabel}>Action Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.actionEntries}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Speech Entries', 'behavior', 'Speech')}
+              >
+                <Text style={styles.reportLabel}>Speech Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.speechEntries}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.reportRow}
+                onPress={() => openReflectionListModal('Thought Entries', 'behavior', 'Thought')}
+              >
+                <Text style={styles.reportLabel}>Thought Entries:</Text>
+                <Text style={styles.reportValue}>{behaviorCounts.thoughtEntries}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
+
+        {/* 11. Journal Entries - No popup needed */}
+        {journalCount && (
+          <>
+            <Text style={styles.sectionTitle}>Journal Entries</Text>
+            <View style={styles.reportCard}>
+              <View style={styles.reportRow}>
+                <Text style={styles.reportLabel}>Total Entries:</Text>
+                <Text style={styles.reportValue}>{journalCount.count}</Text>
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* 12. Goal Progress - With popup */}
+        {goalProgress.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Goal Progress</Text>
+            {goalProgress.map((goal, index) => {
+              const totalAttempts = goal.successCount + goal.struggleCount;
+              const calculatedProgress = totalAttempts > 0 
+                ? Math.round((goal.successCount / totalAttempts) * 100)
+                : 0;
+              const progressText = `${calculatedProgress}%`;
+              
+              const hasRewardCurrency = goal.rewardCurrencySymbol !== undefined && goal.rewardCurrencySymbol !== null && goal.rewardCurrencySymbol !== '';
+              const hasConsequenceCurrency = goal.consequenceCurrencySymbol !== undefined && goal.consequenceCurrencySymbol !== null && goal.consequenceCurrencySymbol !== '';
+              
+              const hasRewardBalance = hasRewardCurrency && goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null;
+              const hasConsequenceBalance = hasConsequenceCurrency && goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null;
+              
+              return (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.reportCard}
+                  onPress={() => openReflectionListModal(`${goal.goalTitle} - Reflections`, 'goal', undefined, goal.goalId)}
+                >
+                  <Text style={styles.goalTitle}>{goal.goalTitle}</Text>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: progressText }]} />
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Progress:</Text>
+                    <Text style={styles.reportValue}>{progressText}</Text>
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Successes:</Text>
+                    <Text style={[styles.reportValue, { color: colors.success }]}>
+                      {goal.successCount}
+                    </Text>
+                  </View>
+                  <View style={styles.reportRow}>
+                    <Text style={styles.reportLabel}>Struggles:</Text>
+                    <Text style={[styles.reportValue, { color: colors.error }]}>
+                      {goal.struggleCount}
+                    </Text>
+                  </View>
+                  
+                  {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
+                    <View style={styles.reportRow}>
+                      <Text style={styles.reportLabel}>🔥 Current Streak:</Text>
+                      <Text style={[styles.reportValue, { color: '#FF6B35' }]}>
+                        {goal.currentStreak} day{goal.currentStreak !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
+                    <View style={styles.reportRow}>
+                      <Text style={styles.reportLabel}>⭐ Best Streak:</Text>
+                      <Text style={[styles.reportValue, { color: '#FFD700' }]}>
+                        {goal.bestStreak} day{goal.bestStreak !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {(hasRewardBalance || hasConsequenceBalance) && (
+                    <View style={styles.currencySection}>
+                      {hasRewardBalance && (
+                        <View style={styles.reportRow}>
+                          <Text style={styles.reportLabel}>Reward Balance:</Text>
+                          <Text style={[styles.reportValue, { color: colors.success }]}>
+                            {goal.rewardCurrencyBalance} {goal.rewardCurrencySymbol || ''}
+                          </Text>
+                        </View>
+                      )}
+                      {hasConsequenceBalance && (
+                        <View style={styles.reportRow}>
+                          <Text style={styles.reportLabel}>Consequence Balance:</Text>
+                          <Text style={[styles.reportValue, { color: colors.error }]}>
+                            {goal.consequenceCurrencyBalance} {goal.consequenceCurrencySymbol || ''}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        )}
+
+        {/* Gains & Losses Distribution - No popup needed (detailed breakdown) */}
         {gainsLossesDistribution && (
           <>
             <Text style={styles.sectionTitle}>Gains & Losses Distribution</Text>
@@ -772,122 +927,6 @@ export default function ReportsScreen() {
                 </>
               )}
             </View>
-          </>
-        )}
-
-        {behaviorCounts && (
-          <>
-            <Text style={styles.sectionTitle}>Behavior Entries</Text>
-            <View style={styles.reportCard}>
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Action Entries', 'behavior', 'Action')}
-              >
-                <Text style={styles.reportLabel}>Action Entries:</Text>
-                <Text style={styles.reportValue}>{behaviorCounts.actionEntries}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Speech Entries', 'behavior', 'Speech')}
-              >
-                <Text style={styles.reportLabel}>Speech Entries:</Text>
-                <Text style={styles.reportValue}>{behaviorCounts.speechEntries}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Thought Entries', 'behavior', 'Thought')}
-              >
-                <Text style={styles.reportLabel}>Thought Entries:</Text>
-                <Text style={styles.reportValue}>{behaviorCounts.thoughtEntries}</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        {goalProgress.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Goal Progress</Text>
-            {goalProgress.map((goal, index) => {
-              const totalAttempts = goal.successCount + goal.struggleCount;
-              const calculatedProgress = totalAttempts > 0 
-                ? Math.round((goal.successCount / totalAttempts) * 100)
-                : 0;
-              const progressText = `${calculatedProgress}%`;
-              
-              const hasRewardCurrency = goal.rewardCurrencySymbol !== undefined && goal.rewardCurrencySymbol !== null && goal.rewardCurrencySymbol !== '';
-              const hasConsequenceCurrency = goal.consequenceCurrencySymbol !== undefined && goal.consequenceCurrencySymbol !== null && goal.consequenceCurrencySymbol !== '';
-              
-              const hasRewardBalance = hasRewardCurrency && goal.rewardCurrencyBalance !== undefined && goal.rewardCurrencyBalance !== null;
-              const hasConsequenceBalance = hasConsequenceCurrency && goal.consequenceCurrencyBalance !== undefined && goal.consequenceCurrencyBalance !== null;
-              
-              return (
-                <TouchableOpacity 
-                  key={index} 
-                  style={styles.reportCard}
-                  onPress={() => openReflectionListModal(`${goal.goalTitle} - Reflections`, 'goal', undefined, goal.goalId)}
-                >
-                  <Text style={styles.goalTitle}>{goal.goalTitle}</Text>
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: progressText }]} />
-                  </View>
-                  <View style={styles.reportRow}>
-                    <Text style={styles.reportLabel}>Progress:</Text>
-                    <Text style={styles.reportValue}>{progressText}</Text>
-                  </View>
-                  <View style={styles.reportRow}>
-                    <Text style={styles.reportLabel}>Successes:</Text>
-                    <Text style={[styles.reportValue, { color: colors.success }]}>
-                      {goal.successCount}
-                    </Text>
-                  </View>
-                  <View style={styles.reportRow}>
-                    <Text style={styles.reportLabel}>Struggles:</Text>
-                    <Text style={[styles.reportValue, { color: colors.error }]}>
-                      {goal.struggleCount}
-                    </Text>
-                  </View>
-                  
-                  {goal.currentStreak !== undefined && goal.currentStreak > 0 && (
-                    <View style={styles.reportRow}>
-                      <Text style={styles.reportLabel}>🔥 Current Streak:</Text>
-                      <Text style={[styles.reportValue, { color: '#FF6B35' }]}>
-                        {goal.currentStreak} day{goal.currentStreak !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                  )}
-                  
-                  {goal.bestStreak !== undefined && goal.bestStreak > 0 && (
-                    <View style={styles.reportRow}>
-                      <Text style={styles.reportLabel}>⭐ Best Streak:</Text>
-                      <Text style={[styles.reportValue, { color: '#FFD700' }]}>
-                        {goal.bestStreak} day{goal.bestStreak !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                  )}
-                  
-                  {(hasRewardBalance || hasConsequenceBalance) && (
-                    <View style={styles.currencySection}>
-                      {hasRewardBalance && (
-                        <View style={styles.reportRow}>
-                          <Text style={styles.reportLabel}>Reward Balance:</Text>
-                          <Text style={[styles.reportValue, { color: colors.success }]}>
-                            {goal.rewardCurrencyBalance} {goal.rewardCurrencySymbol || ''}
-                          </Text>
-                        </View>
-                      )}
-                      {hasConsequenceBalance && (
-                        <View style={styles.reportRow}>
-                          <Text style={styles.reportLabel}>Consequence Balance:</Text>
-                          <Text style={[styles.reportValue, { color: colors.error }]}>
-                            {goal.consequenceCurrencyBalance} {goal.consequenceCurrencySymbol || ''}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
           </>
         )}
 
