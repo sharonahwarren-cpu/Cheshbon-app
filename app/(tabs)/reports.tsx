@@ -26,6 +26,17 @@ interface CurrencyBalance {
   goalBreakdown?: { goalId: string; goalTitle: string; balance: number }[];
 }
 
+interface CurrencyTransaction {
+  id: string;
+  entryDate: string;
+  description: string;
+  amount: number;
+  operation: 'add' | 'subtract';
+  type: 'reflection' | 'claim' | 'payment';
+  linkedGoalTitle?: string;
+  createdAt: string;
+}
+
 interface WinsVsLosses {
   wins: number;
   losses: number;
@@ -172,6 +183,12 @@ export default function ReportsScreen() {
   
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successModalMessage, setSuccessModalMessage] = useState('');
+
+  // Currency transactions modal state
+  const [showCurrencyTransactionsModal, setShowCurrencyTransactionsModal] = useState(false);
+  const [currencyTransactions, setCurrencyTransactions] = useState<CurrencyTransaction[]>([]);
+  const [currencyTransactionsLoading, setCurrencyTransactionsLoading] = useState(false);
+  const [currencyTransactionsTitle, setCurrencyTransactionsTitle] = useState('');
 
   // Reflection list modal state
   const [showReflectionListModal, setShowReflectionListModal] = useState(false);
@@ -368,6 +385,39 @@ export default function ReportsScreen() {
     }
   };
 
+  const openCurrencyTransactionsModal = async (currencyId: string, currencyName: string, currencySymbol: string) => {
+    console.log('[Reports] Opening currency transactions modal for:', currencyName);
+    setCurrencyTransactionsTitle(`${currencyName} ${currencySymbol} - Transaction History`);
+    setShowCurrencyTransactionsModal(true);
+    setCurrencyTransactionsLoading(true);
+    
+    try {
+      const params = new URLSearchParams();
+      const dateRange = getDateRangeForModal();
+      
+      if (dateRange.startDate && dateRange.endDate) {
+        params.append('startDate', dateRange.startDate);
+        params.append('endDate', dateRange.endDate);
+      }
+      
+      const queryString = params.toString();
+      const endpoint = `/api/currencies/${currencyId}/transactions${queryString ? `?${queryString}` : ''}`;
+      console.log('[Reports] Fetching currency transactions from:', endpoint);
+      
+      const response = await authenticatedGet(endpoint);
+      const transactionsData = Array.isArray(response) ? response : (response?.data || []);
+      
+      console.log('[Reports] Loaded currency transactions:', transactionsData.length);
+      setCurrencyTransactions(transactionsData);
+    } catch (error: any) {
+      console.error('[Reports] Error loading currency transactions:', error);
+      showError(error.message || 'Failed to load transaction history');
+      setCurrencyTransactions([]);
+    } finally {
+      setCurrencyTransactionsLoading(false);
+    }
+  };
+
   const openReflectionListModal = (title: string, filterType: 'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal', filterValue?: string, goalId?: string) => {
     console.log('[Reports] Opening reflection list modal:', title, filterType, filterValue, goalId);
     setReflectionListTitle(title);
@@ -396,6 +446,19 @@ export default function ReportsScreen() {
   const handleTimeFilterChange = (filter: TimeFilter) => {
     console.log('[Reports] Changing time filter to:', filter);
     setTimeFilter(filter);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const options: Intl.DateTimeFormatOptions = { 
+      weekday: 'short', 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    };
+    return date.toLocaleDateString('en-US', options);
   };
 
   if (loading) {
@@ -430,7 +493,7 @@ export default function ReportsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 1. Currency Balances - Not filterable */}
+        {/* 1. Currency Balances - Not filterable, but clickable to show transactions */}
         {currencyBalances.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Total Currency Balances</Text>
@@ -452,7 +515,11 @@ export default function ReportsScreen() {
               const buttonIosIcon = buttonType === 'claim' ? 'arrow.down.circle.fill' : 'arrow.up.circle.fill';
               
               return (
-                <View key={index} style={styles.reportCard}>
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.reportCard}
+                  onPress={() => openCurrencyTransactionsModal(balance.currencyId, balance.currencyName, symbolText)}
+                >
                   <View style={styles.reportHeader}>
                     <Text style={styles.reportTitle}>{balance.currencyName}</Text>
                     {symbolText && <Text style={styles.reportSymbol}>{symbolText}</Text>}
@@ -467,7 +534,10 @@ export default function ReportsScreen() {
                   {balance.totalBalance !== 0 && (
                     <TouchableOpacity
                       style={[styles.currencyActionButton, buttonType === 'claim' ? styles.claimButton : styles.payButton]}
-                      onPress={() => openCurrencyModal(balance.currencyId, balance.currencyName, symbolText, balance.totalBalance, buttonType)}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        openCurrencyModal(balance.currencyId, balance.currencyName, symbolText, balance.totalBalance, buttonType);
+                      }}
                     >
                       <IconSymbol
                         ios_icon_name={buttonIosIcon}
@@ -497,7 +567,17 @@ export default function ReportsScreen() {
                       })}
                     </View>
                   )}
-                </View>
+                  
+                  <View style={styles.viewTransactionsHint}>
+                    <Text style={styles.viewTransactionsText}>Tap to view transaction history</Text>
+                    <IconSymbol
+                      ios_icon_name="arrow.right"
+                      android_material_icon_name="arrow-forward"
+                      size={14}
+                      color={colors.primary}
+                    />
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </>
@@ -607,7 +687,130 @@ export default function ReportsScreen() {
         )}
       </ScrollView>
 
-      {/* Currency Modal - Same as iOS but without KeyboardAvoidingView wrapper */}
+      {/* Currency Transactions Modal */}
+      <Modal
+        visible={showCurrencyTransactionsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCurrencyTransactionsModal(false)}
+      >
+        <SafeAreaView style={styles.modalSafeArea} edges={['top', 'bottom']}>
+          <View style={styles.transactionsModalContainer}>
+            <View style={styles.transactionsModalHeader}>
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={() => setShowCurrencyTransactionsModal(false)}
+              >
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              
+              <View style={styles.headerContent}>
+                <IconSymbol
+                  ios_icon_name="list.bullet"
+                  android_material_icon_name="list"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.transactionsModalTitle}>{currencyTransactionsTitle}</Text>
+              </View>
+              
+              <View style={styles.headerButton} />
+            </View>
+
+            {currencyTransactionsLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+              </View>
+            ) : currencyTransactions.length === 0 ? (
+              <View style={styles.emptyState}>
+                <IconSymbol
+                  ios_icon_name="doc.text"
+                  android_material_icon_name="description"
+                  size={64}
+                  color={colors.textSecondary}
+                />
+                <Text style={styles.emptyStateTitle}>No Transactions Found</Text>
+                <Text style={styles.emptyStateText}>
+                  No transactions for this currency in the selected time period
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.transactionsModalContent}
+                contentContainerStyle={styles.transactionsModalContentContainer}
+              >
+                <View style={styles.resultsHeader}>
+                  <Text style={styles.resultsCount}>
+                    {currencyTransactions.length} {currencyTransactions.length === 1 ? 'transaction' : 'transactions'} found
+                  </Text>
+                </View>
+
+                {currencyTransactions.map((transaction, index) => {
+                  const formattedDate = formatDate(transaction.entryDate);
+                  const amountColor = transaction.amount >= 0 ? colors.success : colors.error;
+                  const amountText = transaction.amount >= 0 ? `+${transaction.amount}` : `${transaction.amount}`;
+                  const typeIcon = transaction.type === 'claim' ? 'download' : transaction.type === 'payment' ? 'upload' : 'swap-horiz';
+                  const typeIosIcon = transaction.type === 'claim' ? 'arrow.down.circle.fill' : transaction.type === 'payment' ? 'arrow.up.circle.fill' : 'arrow.left.arrow.right.circle.fill';
+                  
+                  return (
+                    <React.Fragment key={index}>
+                      <View style={styles.transactionCard}>
+                        <View style={styles.transactionHeader}>
+                          <View style={styles.transactionHeaderLeft}>
+                            <IconSymbol
+                              ios_icon_name="calendar"
+                              android_material_icon_name="calendar-today"
+                              size={16}
+                              color={colors.primary}
+                            />
+                            <Text style={styles.transactionDate}>{formattedDate}</Text>
+                          </View>
+                          <View style={styles.transactionBadge}>
+                            <IconSymbol
+                              ios_icon_name={typeIosIcon}
+                              android_material_icon_name={typeIcon}
+                              size={14}
+                              color={amountColor}
+                            />
+                            <Text style={[styles.transactionAmount, { color: amountColor }]}>
+                              {amountText}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {transaction.linkedGoalTitle && (
+                          <View style={styles.transactionGoal}>
+                            <IconSymbol
+                              ios_icon_name="target"
+                              android_material_icon_name="flag"
+                              size={14}
+                              color={colors.textSecondary}
+                            />
+                            <Text style={styles.transactionGoalText}>
+                              {transaction.linkedGoalTitle}
+                            </Text>
+                          </View>
+                        )}
+
+                        <Text style={styles.transactionDescription} numberOfLines={3}>
+                          {transaction.description}
+                        </Text>
+                      </View>
+                    </React.Fragment>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Currency Modal - Same as before */}
       <Modal
         visible={showCurrencyModal}
         animationType="slide"
@@ -896,6 +1099,21 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.background,
   },
+  viewTransactionsHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    alignSelf: 'flex-start',
+  },
+  viewTransactionsText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.primary,
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1150,5 +1368,109 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.primary,
+  },
+  modalSafeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+    paddingTop: Platform.OS === 'android' ? 48 : 0,
+  },
+  transactionsModalContainer: {
+    flex: 1,
+  },
+  transactionsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  transactionsModalTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  headerButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  transactionsModalContent: {
+    flex: 1,
+  },
+  transactionsModalContentContainer: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  resultsHeader: {
+    marginBottom: 16,
+  },
+  resultsCount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  transactionCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  transactionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  transactionHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  transactionDate: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  transactionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+  },
+  transactionAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  transactionGoal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  transactionGoalText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  transactionDescription: {
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 22,
   },
 });
