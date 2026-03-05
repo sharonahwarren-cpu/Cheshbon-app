@@ -12,12 +12,14 @@ import {
   Modal,
   KeyboardAvoidingView,
   Keyboard,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet, authenticatedPut } from '@/utils/api';
+import { ConfirmModal } from '@/components/ConfirmModal';
 
 interface SearchResult {
   id: string;
@@ -39,6 +41,8 @@ export default function SearchJournalsScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const textInputRef = useRef<TextInput>(null);
@@ -47,8 +51,18 @@ export default function SearchJournalsScreen() {
   useEffect(() => {
     if (selectedEntry) {
       setEditedContent(selectedEntry.content);
+      setHasUnsavedChanges(false);
     }
   }, [selectedEntry]);
+
+  // Track unsaved changes
+  useEffect(() => {
+    if (selectedEntry && editedContent !== selectedEntry.content) {
+      setHasUnsavedChanges(true);
+    } else {
+      setHasUnsavedChanges(false);
+    }
+  }, [editedContent, selectedEntry]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -76,14 +90,32 @@ export default function SearchJournalsScreen() {
     setSelectedEntry(result);
     setModalVisible(true);
     setIsEditing(false);
+    setHasUnsavedChanges(false);
   };
 
   const handleCloseModal = () => {
+    if (hasUnsavedChanges && isEditing) {
+      setShowExitConfirm(true);
+      return;
+    }
+    
     console.log('Closing journal entry modal');
     setModalVisible(false);
     setSelectedEntry(null);
     setIsEditing(false);
     setEditedContent('');
+    setHasUnsavedChanges(false);
+    Keyboard.dismiss();
+  };
+
+  const handleConfirmExit = () => {
+    console.log('Exiting without saving');
+    setShowExitConfirm(false);
+    setModalVisible(false);
+    setSelectedEntry(null);
+    setIsEditing(false);
+    setEditedContent('');
+    setHasUnsavedChanges(false);
     Keyboard.dismiss();
   };
 
@@ -97,9 +129,15 @@ export default function SearchJournalsScreen() {
   };
 
   const handleCancelEdit = () => {
+    if (hasUnsavedChanges) {
+      setShowExitConfirm(true);
+      return;
+    }
+    
     console.log('Canceling edit');
     setIsEditing(false);
     setEditedContent(selectedEntry?.content || '');
+    setHasUnsavedChanges(false);
     Keyboard.dismiss();
   };
 
@@ -131,10 +169,11 @@ export default function SearchJournalsScreen() {
       );
 
       setIsEditing(false);
+      setHasUnsavedChanges(false);
       Keyboard.dismiss();
     } catch (error) {
       console.error('Error saving journal entry:', error);
-      alert('Failed to save journal entry. Please try again.');
+      Alert.alert('Error', 'Failed to save journal entry. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -297,39 +336,62 @@ export default function SearchJournalsScreen() {
           >
             {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderContent}>
-                <IconSymbol
-                  ios_icon_name="book.fill"
-                  android_material_icon_name="menu-book"
-                  size={24}
-                  color={colors.primary}
-                />
-                <Text style={styles.modalTitle}>Journal Entry</Text>
-              </View>
-              
-              <View style={styles.headerActions}>
-                {isEditing ? (
-                  <>
-                    <TouchableOpacity
-                      style={styles.headerButton}
-                      onPress={handleCancelEdit}
-                      disabled={isSaving}
-                    >
-                      <Text style={styles.headerButtonText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.headerButton, styles.saveButton]}
-                      onPress={handleSaveEdit}
-                      disabled={isSaving}
-                    >
-                      {isSaving ? (
-                        <ActivityIndicator size="small" color={colors.background} />
-                      ) : (
-                        <Text style={styles.saveButtonText}>Save</Text>
-                      )}
-                    </TouchableOpacity>
-                  </>
-                ) : (
+              {isEditing ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.headerButton}
+                    onPress={handleCancelEdit}
+                    disabled={isSaving}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <View style={styles.modalHeaderContent}>
+                    <IconSymbol
+                      ios_icon_name="pencil"
+                      android_material_icon_name="edit"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.modalTitle}>Edit Entry</Text>
+                  </View>
+                  
+                  <TouchableOpacity
+                    style={[styles.headerButton, styles.saveButton]}
+                    onPress={handleSaveEdit}
+                    disabled={isSaving || !hasUnsavedChanges}
+                  >
+                    {isSaving ? (
+                      <ActivityIndicator size="small" color={colors.background} />
+                    ) : (
+                      <Text style={styles.saveButtonText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.headerButton}
+                    onPress={handleCloseModal}
+                  >
+                    <IconSymbol
+                      ios_icon_name="xmark"
+                      android_material_icon_name="close"
+                      size={24}
+                      color={colors.text}
+                    />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.modalHeaderContent}>
+                    <IconSymbol
+                      ios_icon_name="book.fill"
+                      android_material_icon_name="menu-book"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.modalTitle}>Journal Entry</Text>
+                  </View>
+                  
                   <TouchableOpacity
                     style={styles.headerButton}
                     onPress={handleEditPress}
@@ -340,22 +402,9 @@ export default function SearchJournalsScreen() {
                       size={20}
                       color={colors.primary}
                     />
-                    <Text style={styles.headerButtonText}>Edit</Text>
                   </TouchableOpacity>
-                )}
-                
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={handleCloseModal}
-                >
-                  <IconSymbol
-                    ios_icon_name="xmark.circle.fill"
-                    android_material_icon_name="cancel"
-                    size={28}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-              </View>
+                </>
+              )}
             </View>
 
             {/* Modal Content */}
@@ -390,6 +439,9 @@ export default function SearchJournalsScreen() {
                       textAlignVertical="top"
                       placeholder="Write your journal entry..."
                       placeholderTextColor={colors.textSecondary}
+                      returnKeyType="done"
+                      blurOnSubmit={false}
+                      onSubmitEditing={handleSaveEdit}
                       onFocus={() => {
                         // Scroll to top when focused to ensure input is visible
                         setTimeout(() => {
@@ -403,38 +455,23 @@ export default function SearchJournalsScreen() {
                     </Text>
                   )}
                 </View>
-
-                {isEditing && (
-                  <TouchableOpacity
-                    style={styles.dismissKeyboardButton}
-                    onPress={() => Keyboard.dismiss()}
-                  >
-                    <IconSymbol
-                      ios_icon_name="keyboard.chevron.compact.down"
-                      android_material_icon_name="keyboard-hide"
-                      size={20}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.dismissKeyboardText}>Dismiss Keyboard</Text>
-                  </TouchableOpacity>
-                )}
               </ScrollView>
-            )}
-
-            {/* Modal Footer - Only show when not editing */}
-            {!isEditing && (
-              <View style={styles.modalFooter}>
-                <TouchableOpacity
-                  style={styles.doneButton}
-                  onPress={handleCloseModal}
-                >
-                  <Text style={styles.doneButtonText}>Done</Text>
-                </TouchableOpacity>
-              </View>
             )}
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
+
+      {/* Exit Confirmation Modal */}
+      <ConfirmModal
+        visible={showExitConfirm}
+        title="Discard Changes?"
+        message="You have unsaved changes. Are you sure you want to exit without saving?"
+        confirmText="Discard"
+        cancelText="Keep Editing"
+        onConfirm={handleConfirmExit}
+        onCancel={() => setShowExitConfirm(false)}
+        destructive={true}
+      />
     </SafeAreaView>
   );
 }
@@ -576,44 +613,37 @@ const styles = StyleSheet.create({
   modalHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    flex: 1,
+    justifyContent: 'center',
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '600',
     color: colors.text,
   },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   headerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: colors.card,
+    minWidth: 60,
+    alignItems: 'center',
   },
-  headerButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+  cancelButtonText: {
+    fontSize: 17,
     color: colors.primary,
   },
   saveButton: {
     backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     minWidth: 70,
     justifyContent: 'center',
   },
   saveButtonText: {
     color: colors.background,
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: '600',
-  },
-  closeButton: {
-    padding: 4,
   },
   modalContent: {
     flex: 1,
@@ -656,40 +686,5 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     minHeight: 200,
     textAlignVertical: 'top',
-  },
-  dismissKeyboardButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  dismissKeyboardText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  modalFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  doneButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  doneButtonText: {
-    color: colors.background,
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
