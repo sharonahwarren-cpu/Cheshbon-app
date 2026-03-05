@@ -176,15 +176,15 @@ export default function OtherReportsScreen() {
         params.append('endDate', dateRange.endDate);
       }
       
-      // Always exclude pure currency transactions from reports
+      // CRITICAL: Exclude pure currency transactions from all Other Reports
       // Pure currency transactions are identified by the backend flag (is_pure_currency_transaction)
-      // and should not be counted in behavioral/outcome reports
+      // These are transactions where ONLY currency was claimed/paid with no other reflection data
       params.append('excludePureCurrencyTransactions', 'true');
       
       const queryString = params.toString();
       const dateParams = queryString ? `?${queryString}` : '';
       
-      console.log('[Other Reports] Fetching with date params:', dateParams);
+      console.log('[Other Reports] Fetching with params:', dateParams);
       
       const [
         winsLossesRes,
@@ -228,8 +228,10 @@ export default function OtherReportsScreen() {
       setTopMotivationsByType(topMotivationsByTypeData);
       setTopMotivationsByOutcome(topMotivationsByOutcomeData);
       
-      console.log('[Other Reports] Success vs Struggles:', successStrugglesData);
-      console.log('[Other Reports] Wins vs Losses:', winsLossesData);
+      console.log('[Other Reports] Data loaded - Success vs Struggles:', successStrugglesData);
+      console.log('[Other Reports] Data loaded - Wins vs Losses:', winsLossesData);
+      console.log('[Other Reports] Data loaded - Reflection Stats:', reflectionStatsData);
+      console.log('[Other Reports] Data loaded - Behavior Counts:', behaviorCountsData);
       console.log("Other reports data loaded successfully");
     } catch (error: any) {
       console.error("Error loading other reports data:", error);
