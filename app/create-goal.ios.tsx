@@ -2098,6 +2098,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderRadius: 12,
     padding: 16,
+    minHeight: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalOverlay: {
     flex: 1,

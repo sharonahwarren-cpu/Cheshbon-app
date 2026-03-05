@@ -1,11 +1,10 @@
-
 {
   "expo": {
     "name": "Cheshbon",
     "slug": "cheshbon",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/Chesbon_app_Logo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
