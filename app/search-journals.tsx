@@ -42,7 +42,7 @@ export default function SearchJournalsScreen() {
   const [editedContent, setEditedContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showExitOptionsModal, setShowExitOptionsModal] = useState(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const textInputRef = useRef<TextInput>(null);
@@ -95,7 +95,7 @@ export default function SearchJournalsScreen() {
 
   const handleCloseModal = () => {
     if (hasUnsavedChanges && isEditing) {
-      setShowExitConfirm(true);
+      setShowExitOptionsModal(true);
       return;
     }
     
@@ -108,15 +108,53 @@ export default function SearchJournalsScreen() {
     Keyboard.dismiss();
   };
 
-  const handleConfirmExit = () => {
+  const handleExitWithoutSaving = () => {
     console.log('Exiting without saving');
-    setShowExitConfirm(false);
+    setShowExitOptionsModal(false);
     setModalVisible(false);
     setSelectedEntry(null);
     setIsEditing(false);
     setEditedContent('');
     setHasUnsavedChanges(false);
     Keyboard.dismiss();
+  };
+
+  const handleSaveAndExit = async () => {
+    console.log('Saving and exiting');
+    setShowExitOptionsModal(false);
+    
+    if (!selectedEntry) return;
+
+    setIsSaving(true);
+    try {
+      await authenticatedPut(`/api/journals/${selectedEntry.id}`, {
+        content: editedContent,
+      });
+
+      console.log('Journal entry saved successfully, closing modal');
+      
+      // Update the entry in search results
+      setSearchResults(prevResults =>
+        prevResults.map(result =>
+          result.id === selectedEntry.id
+            ? { ...result, content: editedContent, excerpt: editedContent.substring(0, 150) }
+            : result
+        )
+      );
+
+      // Close the modal
+      setModalVisible(false);
+      setSelectedEntry(null);
+      setIsEditing(false);
+      setEditedContent('');
+      setHasUnsavedChanges(false);
+      Keyboard.dismiss();
+    } catch (error) {
+      console.error('Error saving journal entry:', error);
+      Alert.alert('Error', 'Failed to save journal entry. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEditPress = () => {
@@ -130,7 +168,7 @@ export default function SearchJournalsScreen() {
 
   const handleCancelEdit = () => {
     if (hasUnsavedChanges) {
-      setShowExitConfirm(true);
+      setShowExitOptionsModal(true);
       return;
     }
     
@@ -461,17 +499,77 @@ export default function SearchJournalsScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* Exit Confirmation Modal */}
-      <ConfirmModal
-        visible={showExitConfirm}
-        title="Discard Changes?"
-        message="You have unsaved changes. Are you sure you want to exit without saving?"
-        confirmText="Discard"
-        cancelText="Keep Editing"
-        onConfirm={handleConfirmExit}
-        onCancel={() => setShowExitConfirm(false)}
-        destructive={true}
-      />
+      {/* Exit Options Modal - Custom 3-button modal */}
+      <Modal
+        visible={showExitOptionsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowExitOptionsModal(false)}
+      >
+        <View style={styles.exitModalOverlay}>
+          <View style={styles.exitModalContainer}>
+            <View style={styles.exitModalHeader}>
+              <Text style={styles.exitModalTitle}>Unsaved Changes</Text>
+            </View>
+            
+            <View style={styles.exitModalBody}>
+              <Text style={styles.exitModalMessage}>
+                You have unsaved changes. What would you like to do?
+              </Text>
+            </View>
+
+            <View style={styles.exitModalButtons}>
+              <TouchableOpacity
+                style={[styles.exitModalButton, styles.exitModalButtonPrimary]}
+                onPress={handleSaveAndExit}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color={colors.background} />
+                ) : (
+                  <>
+                    <IconSymbol
+                      ios_icon_name="checkmark.circle.fill"
+                      android_material_icon_name="check-circle"
+                      size={20}
+                      color={colors.background}
+                    />
+                    <Text style={styles.exitModalButtonTextPrimary}>Save & Exit</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.exitModalButton, styles.exitModalButtonSecondary]}
+                onPress={handleExitWithoutSaving}
+                disabled={isSaving}
+              >
+                <IconSymbol
+                  ios_icon_name="xmark.circle"
+                  android_material_icon_name="cancel"
+                  size={20}
+                  color={colors.error}
+                />
+                <Text style={styles.exitModalButtonTextSecondary}>Exit Without Saving</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.exitModalButton, styles.exitModalButtonTertiary]}
+                onPress={() => setShowExitOptionsModal(false)}
+                disabled={isSaving}
+              >
+                <IconSymbol
+                  ios_icon_name="arrow.left"
+                  android_material_icon_name="arrow-back"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.exitModalButtonTextTertiary}>Keep Editing</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -686,5 +784,83 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     minHeight: 200,
     textAlignVertical: 'top',
+  },
+  // Exit Options Modal Styles
+  exitModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  exitModalContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  exitModalHeader: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  exitModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  exitModalBody: {
+    padding: 20,
+  },
+  exitModalMessage: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  exitModalButtons: {
+    padding: 16,
+    gap: 12,
+  },
+  exitModalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  exitModalButtonPrimary: {
+    backgroundColor: colors.primary,
+  },
+  exitModalButtonSecondary: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.error,
+  },
+  exitModalButtonTertiary: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  exitModalButtonTextPrimary: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.background,
+  },
+  exitModalButtonTextSecondary: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.error,
+  },
+  exitModalButtonTextTertiary: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });
