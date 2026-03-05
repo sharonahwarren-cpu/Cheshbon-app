@@ -1,0 +1,1 @@
+ALTER TABLE "reflections" ADD COLUMN "is_pure_currency_transaction" boolean DEFAULT false NOT NULL;

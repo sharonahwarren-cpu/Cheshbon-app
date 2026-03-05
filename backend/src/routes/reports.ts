@@ -7,23 +7,6 @@ import { createAuthWrapper } from '../utils/auth-wrapper.js';
 export function registerReportsRoutes(app: App) {
   const requireAuth = createAuthWrapper(app);
 
-  // Helper function to identify pure currency transactions (should be excluded from report counts)
-  function isPureCurrencyTransaction(reflection: any): boolean {
-    // Must have currencyChange and no linkedGoalId
-    if (!reflection.currencyChange || reflection.linkedGoalId) {
-      return false;
-    }
-
-    const description = (reflection.description || '').toLowerCase();
-    const currencyKeywords = ['paid', 'claimed', 'claim', 'pay', 'chocolate cake', 'min hisbodus'];
-
-    // Check if description contains currency keywords or is very short
-    const hasCurrencyKeyword = currencyKeywords.some(keyword => description.includes(keyword));
-    const isShortDescription = (reflection.description || '').length < 10;
-
-    return hasCurrencyKeyword || isShortDescription;
-  }
-
   // GET /api/reports/currency-balances - Calculate total currency balances from currency_transactions
   app.fastify.get('/api/reports/currency-balances', async (
     request: FastifyRequest,
@@ -254,7 +237,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/wins-vs-losses?startDate=...&endDate=... - Get wins vs losses from reflections
+  // GET /api/reports/wins-vs-losses?startDate=...&endDate=...&excludePureCurrencyTransactions=true - Get wins vs losses from reflections
   app.fastify.get('/api/reports/wins-vs-losses', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -265,6 +248,7 @@ export function registerReportsRoutes(app: App) {
     const query = request.query as {
       startDate?: string;
       endDate?: string;
+      excludePureCurrencyTransactions?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching wins vs losses report');
@@ -283,18 +267,20 @@ export function registerReportsRoutes(app: App) {
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
       }
 
+      // Exclude pure currency transactions if requested
+      if (query.excludePureCurrencyTransactions === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
         .where(and(...conditions));
 
-      // Filter out pure currency transactions
-      const filteredReflections = reflections.filter(r => !isPureCurrencyTransaction(r));
-
       let wins = 0;
       let losses = 0;
 
-      for (const reflection of filteredReflections) {
+      for (const reflection of reflections) {
         if (reflection.outcome === 'success') wins++;
         else if (reflection.outcome === 'struggled') losses++;
       }
@@ -309,7 +295,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/success-vs-struggles?startDate=...&endDate=... - Get success vs struggle counts from reflections
+  // GET /api/reports/success-vs-struggles?startDate=...&endDate=...&excludePureCurrencyTransactions=true - Get success vs struggle counts from reflections
   app.fastify.get('/api/reports/success-vs-struggles', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -320,6 +306,7 @@ export function registerReportsRoutes(app: App) {
     const query = request.query as {
       startDate?: string;
       endDate?: string;
+      excludePureCurrencyTransactions?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching success vs struggles report');
@@ -338,19 +325,21 @@ export function registerReportsRoutes(app: App) {
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
       }
 
+      // Exclude pure currency transactions if requested
+      if (query.excludePureCurrencyTransactions === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
         .where(and(...conditions));
 
-      // Filter out pure currency transactions
-      const filteredReflections = reflections.filter(r => !isPureCurrencyTransaction(r));
-
       let successes = 0;
       let struggles = 0;
       const reflectionIds = [];
 
-      for (const reflection of filteredReflections) {
+      for (const reflection of reflections) {
         if (reflection.outcome === 'success') {
           successes++;
           reflectionIds.push(reflection.id);
@@ -370,7 +359,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/reflection-stats?startDate=...&endDate=... - Get reflection statistics
+  // GET /api/reports/reflection-stats?startDate=...&endDate=...&excludePureCurrencyTransactions=true - Get reflection statistics
   app.fastify.get('/api/reports/reflection-stats', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -381,6 +370,7 @@ export function registerReportsRoutes(app: App) {
     const query = request.query as {
       startDate?: string;
       endDate?: string;
+      excludePureCurrencyTransactions?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching reflection stats');
@@ -399,20 +389,22 @@ export function registerReportsRoutes(app: App) {
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
       }
 
+      // Exclude pure currency transactions if requested
+      if (query.excludePureCurrencyTransactions === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
         .where(and(...conditions));
 
-      // Filter out pure currency transactions
-      const filteredReflections = reflections.filter(r => !isPureCurrencyTransaction(r));
-
-      const totalReflections = filteredReflections.length;
+      const totalReflections = reflections.length;
       let totalRestraints = 0;
       let totalProactive = 0;
       let worthItCount = 0;
 
-      for (const reflection of filteredReflections) {
+      for (const reflection of reflections) {
         if (reflection.type === 'Restraint') totalRestraints++;
         else if (reflection.type === 'Proactive') totalProactive++;
         if (reflection.wasWorthIt === true) worthItCount++;
@@ -584,7 +576,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/behavior-counts?startDate=...&endDate=... - Get behavior category counts
+  // GET /api/reports/behavior-counts?startDate=...&endDate=...&excludePureCurrencyTransactions=true - Get behavior category counts
   app.fastify.get('/api/reports/behavior-counts', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -595,6 +587,7 @@ export function registerReportsRoutes(app: App) {
     const query = request.query as {
       startDate?: string;
       endDate?: string;
+      excludePureCurrencyTransactions?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching behavior counts');
@@ -613,19 +606,21 @@ export function registerReportsRoutes(app: App) {
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
       }
 
+      // Exclude pure currency transactions if requested
+      if (query.excludePureCurrencyTransactions === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
         .where(and(...conditions));
 
-      // Filter out pure currency transactions
-      const filteredReflections = reflections.filter(r => !isPureCurrencyTransaction(r));
-
       let actionEntries = 0;
       let speechEntries = 0;
       let thoughtEntries = 0;
 
-      for (const reflection of filteredReflections) {
+      for (const reflection of reflections) {
         if (reflection.category === 'Action') actionEntries++;
         else if (reflection.category === 'Speech') speechEntries++;
         else if (reflection.category === 'Thought') thoughtEntries++;

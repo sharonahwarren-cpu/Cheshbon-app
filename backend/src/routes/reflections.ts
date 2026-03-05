@@ -61,7 +61,7 @@ export function registerReflectionsRoutes(app: App) {
     }
   }
 
-  // GET /api/reflections?wasWorthIt=true&outcome=success&goalId=abc&category=Action&startDate=...&endDate=... - Get reflections with filters
+  // GET /api/reflections?wasWorthIt=true&outcome=success&goalId=abc&category=Action&startDate=...&endDate=...&isPureCurrencyTransaction=false - Get reflections with filters
   app.fastify.get('/api/reflections', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -76,6 +76,7 @@ export function registerReflectionsRoutes(app: App) {
       category?: string;
       startDate?: string;
       endDate?: string;
+      isPureCurrencyTransaction?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching reflections with filters');
@@ -110,6 +111,13 @@ export function registerReflectionsRoutes(app: App) {
       if (query.endDate) {
         const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
+      // Add pure currency transaction filter
+      if (query.isPureCurrencyTransaction === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, true));
+      } else if (query.isPureCurrencyTransaction === 'false') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
       }
 
       const reflections = await app.db

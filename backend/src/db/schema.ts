@@ -149,6 +149,7 @@ export const reflections = pgTable('reflections', {
   wasWorthIt: boolean('was_worth_it'),
   additionalThoughts: text('additional_thoughts'),
   strategyEffectiveness: jsonb('strategy_effectiveness'),
+  isPureCurrencyTransaction: boolean('is_pure_currency_transaction').default(false).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().$onUpdate(() => new Date()).notNull(),
 });
