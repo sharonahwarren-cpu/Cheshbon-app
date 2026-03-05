@@ -1740,14 +1740,30 @@ export default function HomeScreen() {
                     />
                     <Text style={styles.sectionTitle}>Reflections</Text>
                   </View>
-                  <TouchableOpacity onPress={() => openAddReflectionModal()} style={styles.addButton}>
-                    <IconSymbol
-                      ios_icon_name="plus.circle.fill"
-                      android_material_icon_name="add-circle"
-                      size={28}
-                      color={colors.primary}
-                    />
-                  </TouchableOpacity>
+                  <View style={styles.sectionActions}>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        console.log('Opening search journals screen iOS');
+                        router.push('/search-journals');
+                      }} 
+                      style={styles.searchButton}
+                    >
+                      <IconSymbol
+                        ios_icon_name="magnifyingglass"
+                        android_material_icon_name="search"
+                        size={22}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => openAddReflectionModal()} style={styles.addButton}>
+                      <IconSymbol
+                        ios_icon_name="plus.circle.fill"
+                        android_material_icon_name="add-circle"
+                        size={28}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {reflections.length === 0 ? (
@@ -2282,6 +2298,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
+  },
+  sectionActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  searchButton: {
+    padding: 4,
   },
   addButton: {
     padding: 4,
