@@ -353,7 +353,7 @@ export default function AuthScreen() {
 
             {/* Demo hint */}
             <View style={styles.demoHint}>
-              <Text style={styles.demoHintText}>Demo: test@cheshbon.com / password123</Text>
+              <Text style={styles.demoHintText}>Please contact cheshbon.app.me@gmail.com if you wish to report any bugs.</Text>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
