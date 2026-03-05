@@ -27,7 +27,8 @@
     "drizzle-orm": "^0.44.7",
     "fastify": "^5.7.1",
     "pino-pretty": "^13.1.2",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "resend": "^6.9.3"
   },
   "devDependencies": {
     "@types/node": "^22.13.5",
