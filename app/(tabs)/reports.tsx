@@ -316,6 +316,8 @@ export default function ReportsScreen() {
     );
   }
 
+  const roundedWorthItPercentage = reflectionStats ? Math.round(reflectionStats.worthItPercentage) : 0;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
@@ -570,7 +572,7 @@ export default function ReportsScreen() {
               <View style={styles.reportRow}>
                 <Text style={styles.reportLabel}>Worth It %:</Text>
                 <Text style={[styles.reportValue, { color: colors.primary }]}>
-                  {reflectionStats.worthItPercentage}%
+                  {roundedWorthItPercentage}%
                 </Text>
               </View>
               <View style={styles.drillDownHint}>
