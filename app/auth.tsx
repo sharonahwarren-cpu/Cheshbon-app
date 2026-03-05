@@ -15,7 +15,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
@@ -24,6 +24,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 type Mode = 'signin' | 'signup';
 
 export default function AuthScreen() {
+  const router = useRouter();
   const {
     signInWithEmail,
     signUpWithEmail,
@@ -154,15 +155,8 @@ export default function AuthScreen() {
   };
 
   const handleForgotPassword = () => {
-    console.log('📧 [AUTH SCREEN] Forgot password pressed');
-    const emailSubject = 'Password Reset Request';
-    const emailBody = 'Hi, I would like to reset my password for my Cheshbon account.';
-    const mailtoUrl = `mailto:cheshbon.app.me@gmail.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
-    
-    Linking.openURL(mailtoUrl).catch((err) => {
-      console.error('❌ [AUTH SCREEN] Failed to open email client:', err);
-      showError('Could not open email client. Please email cheshbon.app.me@gmail.com directly.');
-    });
+    console.log('📧 [AUTH SCREEN] Forgot password pressed - navigating to forgot password screen');
+    router.push('/forgot-password');
   };
 
   const modeText = mode === 'signup' ? 'Create Account' : 'Sign In';
