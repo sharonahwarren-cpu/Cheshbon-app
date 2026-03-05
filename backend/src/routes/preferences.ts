@@ -7,6 +7,50 @@ import { createAuthWrapper } from '../utils/auth-wrapper.js';
 export function registerPreferencesRoutes(app: App) {
   const requireAuth = createAuthWrapper(app);
 
+  // GET /api/preferences - Get user preferences (simple response with reflection settings only)
+  app.fastify.get('/api/preferences', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    app.logger.info({ userId: session.user.id }, 'Fetching user preferences');
+
+    try {
+      const preferences = await app.db
+        .select()
+        .from(schema.userPreferences)
+        .where(eq(schema.userPreferences.userId, session.user.id))
+        .limit(1);
+
+      if (preferences.length === 0) {
+        app.logger.info({ userId: session.user.id }, 'No preferences found, returning defaults');
+        return {
+          reflectionCategoriesEnabled: true,
+          reflectionCategories: [],
+        };
+      }
+
+      const pref = preferences[0];
+      const categories = pref.reflectionCategories
+        ? (typeof pref.reflectionCategories === 'string'
+          ? JSON.parse(pref.reflectionCategories)
+          : pref.reflectionCategories)
+        : [];
+
+      app.logger.info({ userId: session.user.id }, 'Preferences retrieved');
+
+      return {
+        reflectionCategoriesEnabled: pref.reflectionCategoriesEnabled,
+        reflectionCategories: categories,
+      };
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id }, 'Failed to fetch preferences');
+      throw error;
+    }
+  });
+
   // GET /api/user-preferences - Get user's preferences
   app.fastify.get('/api/user-preferences', async (
     request: FastifyRequest,

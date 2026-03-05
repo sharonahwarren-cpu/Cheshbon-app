@@ -1,6 +1,6 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, or } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
@@ -60,6 +60,82 @@ export function registerReflectionsRoutes(app: App) {
       return null;
     }
   }
+
+  // GET /api/reflections?wasWorthIt=true&outcome=success&goalId=abc&category=Action - Get reflections with filters
+  app.fastify.get('/api/reflections', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    const session = await requireAuth(request, reply);
+    if (!session) return;
+
+    const query = request.query as {
+      wasWorthIt?: string;
+      outcome?: string;
+      goalId?: string;
+      category?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching reflections with filters');
+
+    try {
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      // Add filter conditions
+      if (query.wasWorthIt !== undefined) {
+        const boolValue = query.wasWorthIt === 'true';
+        conditions.push(eq(schema.reflections.wasWorthIt, boolValue));
+      }
+
+      if (query.outcome) {
+        conditions.push(eq(schema.reflections.outcome, query.outcome));
+      }
+
+      if (query.goalId) {
+        conditions.push(eq(schema.reflections.linkedGoalId, query.goalId));
+      }
+
+      if (query.category) {
+        conditions.push(eq(schema.reflections.category, query.category));
+      }
+
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(and(...conditions));
+
+      // Get unique goal IDs and fetch their titles
+      const goalsMap = new Map();
+      const uniqueGoalIds = [...new Set(reflections.filter(r => r.linkedGoalId).map(r => r.linkedGoalId as string))];
+
+      if (uniqueGoalIds.length > 0) {
+        for (const goalId of uniqueGoalIds) {
+          const goals = await app.db
+            .select()
+            .from(schema.goals)
+            .where(eq(schema.goals.id, goalId))
+            .limit(1);
+          if (goals.length > 0) {
+            goalsMap.set(goalId, goals[0]);
+          }
+        }
+      }
+
+      const convertToISO = (date: Date | null) => date ? (date instanceof Date ? date.toISOString() : new Date(date).toISOString()) : null;
+      const reflectionsWithData = reflections.map(reflection => ({
+        ...reflection,
+        linkedGoalTitle: reflection.linkedGoalId ? goalsMap.get(reflection.linkedGoalId)?.title || null : null,
+        createdAt: convertToISO(reflection.createdAt),
+        updatedAt: convertToISO(reflection.updatedAt),
+      }));
+
+      app.logger.info({ userId: session.user.id, count: reflectionsWithData.length }, 'Reflections retrieved');
+      return reflectionsWithData;
+    } catch (error) {
+      app.logger.error({ err: error, userId: session.user.id, filters: query }, 'Failed to fetch reflections');
+      throw error;
+    }
+  });
 
   // GET /api/reflections/by-date?date=YYYY-MM-DD - Get all reflections for specific date
   app.fastify.get('/api/reflections/by-date', async (
