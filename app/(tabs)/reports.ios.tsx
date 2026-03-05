@@ -9,6 +9,8 @@ import {
   Modal,
   TextInput,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { authenticatedGet, authenticatedPost } from "@/utils/api";
 import React, { useState, useEffect, useCallback } from "react";
@@ -953,13 +955,17 @@ export default function ReportsScreen() {
         )}
       </ScrollView>
 
+      {/* Currency Claim/Pay Modal - Fixed with KeyboardAvoidingView */}
       <Modal
         visible={showCurrencyModal}
         animationType="slide"
         transparent={true}
         onRequestClose={() => setShowCurrencyModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
           <View style={styles.currencyModal}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setShowCurrencyModal(false)}>
@@ -983,6 +989,7 @@ export default function ReportsScreen() {
                 placeholder="Enter amount"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
+                returnKeyType="done"
               />
               <Text style={styles.currencyModalHelper}>
                 Maximum: {currencyModalMaxAmount} {selectedCurrencySymbol}
@@ -1038,7 +1045,7 @@ export default function ReportsScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1263,14 +1270,13 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   currencyModal: {
     backgroundColor: colors.background,
-    borderRadius: 16,
-    width: '90%',
-    maxWidth: 400,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
