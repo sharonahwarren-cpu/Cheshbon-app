@@ -115,7 +115,8 @@ export function registerReflectionsRoutes(app: App) {
       const reflections = await app.db
         .select()
         .from(schema.reflections)
-        .where(and(...conditions));
+        .where(and(...conditions))
+        .orderBy(desc(schema.reflections.entryDate));
 
       // Get unique goal IDs and fetch their titles
       const goalsMap = new Map();
