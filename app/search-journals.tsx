@@ -9,9 +9,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet } from '@/utils/api';
@@ -25,11 +27,12 @@ interface SearchResult {
 }
 
 export default function SearchJournalsScreen() {
-  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<SearchResult | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -50,6 +53,18 @@ export default function SearchJournalsScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewEntry = (result: SearchResult) => {
+    console.log('Opening journal entry modal for date:', result.entryDate);
+    setSelectedEntry(result);
+    setModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    console.log('Closing journal entry modal');
+    setModalVisible(false);
+    setSelectedEntry(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -175,14 +190,7 @@ export default function SearchJournalsScreen() {
                       </Text>
                       <TouchableOpacity
                         style={styles.viewButton}
-                        onPress={() => {
-                          console.log('Navigating to journal entry for date:', result.entryDate);
-                          // Navigate back to home screen with the specific date
-                          router.push({
-                            pathname: '/(tabs)/(home)',
-                            params: { date: result.entryDate }
-                          });
-                        }}
+                        onPress={() => handleViewEntry(result)}
                       >
                         <Text style={styles.viewButtonText}>View Full Entry</Text>
                         <IconSymbol
@@ -200,6 +208,81 @@ export default function SearchJournalsScreen() {
           )}
         </ScrollView>
       </View>
+
+      {/* Journal Entry Modal */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleCloseModal}
+      >
+        <SafeAreaView style={styles.modalSafeArea} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalContainer}
+          >
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderContent}>
+                <IconSymbol
+                  ios_icon_name="book.fill"
+                  android_material_icon_name="menu-book"
+                  size={24}
+                  color={colors.primary}
+                />
+                <Text style={styles.modalTitle}>Journal Entry</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={handleCloseModal}
+              >
+                <IconSymbol
+                  ios_icon_name="xmark.circle.fill"
+                  android_material_icon_name="cancel"
+                  size={28}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* Modal Content */}
+            {selectedEntry && (
+              <ScrollView
+                style={styles.modalContent}
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.modalDateContainer}>
+                  <IconSymbol
+                    ios_icon_name="calendar"
+                    android_material_icon_name="calendar-today"
+                    size={20}
+                    color={colors.primary}
+                  />
+                  <Text style={styles.modalDate}>
+                    {dateDisplay(selectedEntry.entryDate)}
+                  </Text>
+                </View>
+
+                <View style={styles.modalEntryContainer}>
+                  <Text style={styles.modalEntryText}>
+                    {selectedEntry.content}
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+
+            {/* Modal Footer */}
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.doneButton}
+                onPress={handleCloseModal}
+              >
+                <Text style={styles.doneButtonText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -320,5 +403,83 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 60,
+  },
+  // Modal Styles
+  modalSafeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  modalDateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  modalDate: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  modalEntryContainer: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalEntryText: {
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 24,
+  },
+  modalFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  doneButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    color: colors.background,
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
