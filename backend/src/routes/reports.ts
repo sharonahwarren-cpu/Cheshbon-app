@@ -1,6 +1,6 @@
 import type { App } from '../index.js';
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gte, lte } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { createAuthWrapper } from '../utils/auth-wrapper.js';
 
@@ -237,7 +237,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/wins-vs-losses - Get wins vs losses from reflections
+  // GET /api/reports/wins-vs-losses?startDate=...&endDate=... - Get wins vs losses from reflections
   app.fastify.get('/api/reports/wins-vs-losses', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -245,13 +245,31 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching wins vs losses report');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching wins vs losses report');
 
     try {
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      // Add date range filters
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
-        .where(eq(schema.reflections.userId, session.user.id));
+        .where(and(...conditions));
 
       let wins = 0;
       let losses = 0;
@@ -271,7 +289,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/success-vs-struggles - Get success vs struggle counts from reflections
+  // GET /api/reports/success-vs-struggles?startDate=...&endDate=... - Get success vs struggle counts from reflections
   app.fastify.get('/api/reports/success-vs-struggles', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -279,13 +297,31 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching success vs struggles report');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching success vs struggles report');
 
     try {
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      // Add date range filters
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
-        .where(eq(schema.reflections.userId, session.user.id));
+        .where(and(...conditions));
 
       let successes = 0;
       let struggles = 0;
