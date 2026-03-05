@@ -699,15 +699,12 @@ export function AddReflectionModal({
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
-  // CRITICAL FIX: Helper function to get the display category for a reflection
-  // This looks up the goal's behavior category if the reflection doesn't have one
+  // Helper function to get the display category for a reflection
   const getReflectionDisplayCategory = (reflection: Reflection): string | undefined => {
-    // If reflection has a category, use it
     if (reflection.category) {
       return reflection.category;
     }
     
-    // Otherwise, look up the goal's behavior category
     if (reflection.linkedGoalId) {
       const goal = goals.find(g => g.id === reflection.linkedGoalId);
       if (goal && goal.behaviorCategories && goal.behaviorCategories.length > 0) {
@@ -718,8 +715,7 @@ export function AddReflectionModal({
     return undefined;
   };
 
-  // CRITICAL FIX: Update state when props change
-  // This effect handles initialization and updates for editing reflections and quick entries
+  // Update state when props change
   useEffect(() => {
     console.log('[AddReflectionModal] Props changed, updating state:', {
       editingReflection: editingReflection ? {
@@ -733,16 +729,13 @@ export function AddReflectionModal({
     });
     
     if (editingReflection) {
-      // CRITICAL FIX: When editing a reflection, use the helper function to get the correct category
-      // This ensures that reflections created from quick entries (which may not have a category field)
-      // correctly display the goal's behavior category
       console.log('[AddReflectionModal] Editing reflection, setting all fields from editingReflection');
       const displayCategory = getReflectionDisplayCategory(editingReflection);
       console.log('[AddReflectionModal] Display category for editing reflection:', displayCategory);
       
       setOutcome(editingReflection.outcome);
       setLinkedGoalId(editingReflection.linkedGoalId);
-      setCategory(displayCategory); // CRITICAL: Use the display category, not just editingReflection.category
+      setCategory(displayCategory);
       setType(editingReflection.type);
       setDescription(editingReflection.description);
       setGainedIds(editingReflection.gainedIds || []);
@@ -754,13 +747,9 @@ export function AddReflectionModal({
         editingReflection.strategyEffectiveness?.map(se => ({ strategyId: se.strategyId, worked: se.worked })) || []
       );
     } else if (prefilledGoalData) {
-      // CRITICAL FIX: Quick Entry from Express screen
-      // When prefilledGoalData is provided, it means we're creating a new reflection from a Quick Entry
-      // The prefilledGoalData contains the goal's behavior category, type, and description
       console.log('[AddReflectionModal] Quick Entry detected, setting category from prefilledGoalData:', prefilledGoalData.category);
       console.log('[AddReflectionModal] Full prefilledGoalData:', prefilledGoalData);
       
-      // CRITICAL FIX: Use behaviorCategories array if available, otherwise fall back to category field
       const behaviorCategory = prefilledGoalData.behaviorCategories && prefilledGoalData.behaviorCategories.length > 0
         ? prefilledGoalData.behaviorCategories[0]
         : prefilledGoalData.category;
@@ -770,8 +759,7 @@ export function AddReflectionModal({
       setType(prefilledGoalData.type || 'Proactive');
       setDescription(prefilledGoalData.description || '');
       setLinkedGoalId(prefilledGoalData.id || prefilledGoalId);
-      setOutcome(prefilledGoalData.outcome); // Pre-fill outcome if provided by quick entry
-      // Clear other fields for new reflection
+      setOutcome(prefilledGoalData.outcome);
       setGainedIds([]);
       setLostIds([]);
       setWasWorthIt(undefined);
@@ -780,8 +768,6 @@ export function AddReflectionModal({
       setStrategyEffectiveness([]);
       setFutureStrategyId(undefined);
     } else if (prefilledGoalId) {
-      // CRITICAL FIX: When only prefilledGoalId is provided (without prefilledGoalData),
-      // we need to look up the goal's behavior category
       console.log('[AddReflectionModal] prefilledGoalId provided without prefilledGoalData, looking up goal:', prefilledGoalId);
       const goal = goals.find(g => g.id === prefilledGoalId);
       if (goal) {
@@ -794,7 +780,6 @@ export function AddReflectionModal({
       }
       setLinkedGoalId(prefilledGoalId);
       setOutcome(undefined);
-      // Clear other fields for new reflection
       setType('Proactive');
       setDescription('');
       setGainedIds([]);
@@ -805,7 +790,6 @@ export function AddReflectionModal({
       setStrategyEffectiveness([]);
       setFutureStrategyId(undefined);
     } else {
-      // Clear all fields for a new reflection
       console.log('[AddReflectionModal] No prefill data, clearing all fields');
       setOutcome(undefined);
       setLinkedGoalId(undefined);
@@ -827,12 +811,12 @@ export function AddReflectionModal({
     if (Platform.OS !== 'ios') return;
 
     const keyboardWillShowListener = Keyboard.addListener('keyboardWillShow', (e) => {
-      console.log('Keyboard will show, height:', e.endCoordinates.height);
+      console.log('[AddReflectionModal] Keyboard will show, height:', e.endCoordinates.height);
       setKeyboardHeight(e.endCoordinates.height);
     });
 
     const keyboardWillHideListener = Keyboard.addListener('keyboardWillHide', () => {
-      console.log('Keyboard will hide');
+      console.log('[AddReflectionModal] Keyboard will hide');
       setKeyboardHeight(0);
     });
 
@@ -842,9 +826,9 @@ export function AddReflectionModal({
     };
   }, []);
 
-  // Auto-scroll to keep Description input visible when focused (Step 2)
+  // CRITICAL FIX: Auto-scroll to keep Description input visible when focused (Step 2)
   const handleDescriptionFocus = () => {
-    console.log('Description input focused on Step 2');
+    console.log('[AddReflectionModal] Description input focused on Step 2');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
       setTimeout(() => {
         scrollViewRef.current?.scrollTo({ y: 220, animated: true });
@@ -852,32 +836,36 @@ export function AddReflectionModal({
     }
   };
 
-  // Keep cursor visible as user types in Description (Step 2)
+  // CRITICAL FIX: Keep cursor visible as user types in Description (Step 2)
   const handleDescriptionContentSizeChange = () => {
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
-      console.log('Description content size changed, scrolling to keep visible');
+      console.log('[AddReflectionModal] Description content size changed, scrolling to keep visible');
       setTimeout(() => {
         scrollViewRef.current?.scrollTo({ y: 260, animated: true });
       }, 50);
     }
   };
 
-  // Auto-scroll to keep Additional Thoughts input visible when focused (Step 4)
+  // CRITICAL FIX: Auto-scroll to keep Additional Thoughts input visible when focused (Step 4)
+  // This fixes the issue where the screen jumps up and the input becomes hidden
   const handleAdditionalThoughtsFocus = () => {
-    console.log('Additional thoughts input focused on Step 4');
+    console.log('[AddReflectionModal] Additional thoughts input focused on Step 4');
     if (Platform.OS === 'ios' && scrollViewRef.current) {
+      // Scroll to a position that keeps the input visible above the keyboard
+      // The input is at the top of Step 4, so we scroll to the beginning
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 420, animated: true });
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
       }, 100);
     }
   };
 
-  // Keep cursor visible as user types in Additional Thoughts (Step 4)
+  // CRITICAL FIX: Keep cursor visible as user types in Additional Thoughts (Step 4)
   const handleAdditionalThoughtsContentSizeChange = () => {
     if (Platform.OS === 'ios' && keyboardHeight > 0 && scrollViewRef.current) {
-      console.log('Additional thoughts content size changed, maintaining scroll position');
+      console.log('[AddReflectionModal] Additional thoughts content size changed, maintaining scroll position');
+      // Keep the scroll position at the top so the input stays visible
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 420, animated: false });
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
       }, 50);
     }
   };
@@ -1064,11 +1052,11 @@ export function AddReflectionModal({
 
   // Auto-advance to Step 2 when category is selected in Step 1
   const handleCategorySelect = (selectedCategory: string) => {
-    console.log('Category selected:', selectedCategory);
+    console.log('[AddReflectionModal] Category selected:', selectedCategory);
     setCategory(selectedCategory);
     
     setTimeout(() => {
-      console.log('Auto-advancing to Step 2');
+      console.log('[AddReflectionModal] Auto-advancing to Step 2');
       Keyboard.dismiss();
       setStep(2);
       setTimeout(() => {
@@ -1127,7 +1115,7 @@ export function AddReflectionModal({
       return;
     }
 
-    console.log('Saving reflection from shared AddReflectionModal, sourceScreen:', sourceScreen);
+    console.log('[AddReflectionModal] Saving reflection from shared AddReflectionModal, sourceScreen:', sourceScreen);
     console.log('[AddReflectionModal] CRITICAL DEBUG - Category state before save:', category);
     setLoading(true);
     try {
@@ -1143,9 +1131,6 @@ export function AddReflectionModal({
       
       const validStrategyEffectiveness = strategyEffectiveness.filter(se => se.worked !== null);
       
-      // CRITICAL FIX: Always include category in the payload if it's set
-      // This ensures that reflections created from Express screen (with prefilledGoalData)
-      // correctly save the goal's behavior category to the database
       const payload: any = {
         date: dateString,
         type,
@@ -1161,8 +1146,6 @@ export function AddReflectionModal({
         futureStrategyId: futureStrategyId || undefined,
       };
 
-      // CRITICAL FIX: Always include category if it's set, even if it's an empty string
-      // This ensures the backend receives the category field and saves it to the database
       if (category !== undefined) {
         payload.category = category;
       }
@@ -1188,7 +1171,7 @@ export function AddReflectionModal({
         }, 500);
       }
     } catch (error) {
-      console.error('Error saving reflection:', error);
+      console.error('[AddReflectionModal] Error saving reflection:', error);
       alert('Failed to save reflection');
       setLoading(false);
     }
@@ -1228,7 +1211,7 @@ export function AddReflectionModal({
       setNewItemName('');
       setShowCreateGainModal(false);
     } catch (error) {
-      console.error('Error creating gain:', error);
+      console.error('[AddReflectionModal] Error creating gain:', error);
       alert('Failed to create gain');
     } finally {
       setLoading(false);
@@ -1253,7 +1236,7 @@ export function AddReflectionModal({
       setNewItemName('');
       setShowCreateLossModal(false);
     } catch (error) {
-      console.error('Error creating loss:', error);
+      console.error('[AddReflectionModal] Error creating loss:', error);
       alert('Failed to create loss');
     } finally {
       setLoading(false);
@@ -1279,7 +1262,7 @@ export function AddReflectionModal({
       setNewItemDescription('');
       setShowCreateStrategyModal(false);
     } catch (error) {
-      console.error('Error creating strategy:', error);
+      console.error('[AddReflectionModal] Error creating strategy:', error);
       alert('Failed to create strategy');
     } finally {
       setLoading(false);
@@ -1318,6 +1301,8 @@ export function AddReflectionModal({
   const totalSteps = 5;
   const progressPercent = (step / totalSteps) * 100;
 
+  // CRITICAL FIX: Adjust bottom padding based on keyboard height and step
+  // For Step 4 (where the "What motivated me?" input is), we need more padding
   const NEXT_BUTTON_HEIGHT = 70;
   const scrollViewBottomPadding = Platform.OS === 'ios' && keyboardHeight > 0 
     ? keyboardHeight + NEXT_BUTTON_HEIGHT + 20
@@ -1665,7 +1650,7 @@ export function AddReflectionModal({
             {/* STEP 4: Notes, Motivations, Gains, Losses, Was it worth it */}
             {step === 4 && (
               <React.Fragment>
-                {/* NOTES SECTION */}
+                {/* NOTES SECTION - CRITICAL FIX: This is the "What motivated me?" input */}
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
@@ -1691,7 +1676,7 @@ export function AddReflectionModal({
                   />
                 </View>
 
-                {/* MOTIVATIONS SECTION - FIXED FOR iOS */}
+                {/* MOTIVATIONS SECTION */}
                 <View style={styles.formGroup}>
                   <View style={styles.labelRow}>
                     <IconSymbol
