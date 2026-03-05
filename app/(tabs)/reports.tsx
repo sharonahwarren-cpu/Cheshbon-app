@@ -455,22 +455,6 @@ export default function ReportsScreen() {
                       })}
                     </View>
                   )}
-                  
-                  <TouchableOpacity 
-                    style={styles.drillDownHint}
-                    onPress={() => {
-                      console.log("Navigating to currency reflections for:", balance.currencyId);
-                      router.push(`/currency-reflections?currencyId=${balance.currencyId}`);
-                    }}
-                  >
-                    <IconSymbol
-                      ios_icon_name="chevron.right"
-                      android_material_icon_name="arrow-forward"
-                      size={16}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.drillDownText}>Tap to view related reflections</Text>
-                  </TouchableOpacity>
                 </View>
               );
             })}
@@ -499,15 +483,6 @@ export default function ReportsScreen() {
                   {winsVsLosses.losses}
                 </Text>
               </View>
-              <View style={styles.drillDownHint}>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={16}
-                  color={colors.primary}
-                />
-                <Text style={styles.drillDownText}>Tap to view reflections</Text>
-              </View>
             </TouchableOpacity>
           </>
         )}
@@ -533,15 +508,6 @@ export default function ReportsScreen() {
                 <Text style={[styles.reportValue, { color: colors.error }]}>
                   {successVsStruggles.struggles}
                 </Text>
-              </View>
-              <View style={styles.drillDownHint}>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={16}
-                  color={colors.primary}
-                />
-                <Text style={styles.drillDownText}>Tap to view reflections</Text>
               </View>
             </TouchableOpacity>
           </>
@@ -574,15 +540,6 @@ export default function ReportsScreen() {
                 <Text style={[styles.reportValue, { color: colors.primary }]}>
                   {roundedWorthItPercentage}%
                 </Text>
-              </View>
-              <View style={styles.drillDownHint}>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={16}
-                  color={colors.primary}
-                />
-                <Text style={styles.drillDownText}>Tap to view reflections</Text>
               </View>
             </TouchableOpacity>
           </>
@@ -654,15 +611,6 @@ export default function ReportsScreen() {
                   })}
                 </>
               )}
-              <View style={styles.drillDownHint}>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={16}
-                  color={colors.primary}
-                />
-                <Text style={styles.drillDownText}>Tap to view reflections</Text>
-              </View>
             </TouchableOpacity>
           </>
         )}
@@ -814,15 +762,6 @@ export default function ReportsScreen() {
                 <Text style={styles.reportLabel}>Thought Entries:</Text>
                 <Text style={styles.reportValue}>{behaviorCounts.thoughtEntries}</Text>
               </View>
-              <View style={styles.drillDownHint}>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={16}
-                  color={colors.primary}
-                />
-                <Text style={styles.drillDownText}>Tap to view reflections</Text>
-              </View>
             </TouchableOpacity>
           </>
         )}
@@ -907,16 +846,6 @@ export default function ReportsScreen() {
                       )}
                     </View>
                   )}
-                  
-                  <View style={styles.drillDownHint}>
-                    <IconSymbol
-                      ios_icon_name="chevron.right"
-                      android_material_icon_name="arrow-forward"
-                      size={16}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.drillDownText}>Tap to view reflections</Text>
-                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -1212,21 +1141,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.background,
-  },
-  drillDownHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  drillDownText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
   },
   emptyState: {
     alignItems: 'center',
