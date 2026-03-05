@@ -227,6 +227,22 @@ app.logger.info(
   'Backend configuration - BASE_URL will be used for OAuth redirects'
 );
 
+// Log email verification and password reset configuration
+app.logger.info(
+  {
+    emailVerificationEnabled: true,
+    sendOnSignUp: true,
+    emailVerificationExpiresIn: '24 hours',
+    requireEmailVerification: true,
+    passwordResetEnabled: true,
+    passwordResetExpiresIn: '1 hour',
+    resendConfigured: !!process.env.RESEND_API_KEY,
+    frontendUrlForEmails: frontendUrl,
+    emailFrom: 'Cheshbon <onboarding@resend.dev>',
+  },
+  'Email verification and password reset configuration initialized - Better Auth will handle /api/auth/request-password-reset and /api/auth/reset-password endpoints'
+);
+
 app.withAuth({
   emailVerification: {
     sendOnSignUp: true,
