@@ -1,6 +1,6 @@
 
 import { IconSymbol } from "@/components/IconSymbol";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { authenticatedGet, authenticatedPost } from "@/utils/api";
 import { useRouter } from "expo-router";
 import { colors } from "@/styles/commonStyles";
@@ -177,7 +177,9 @@ export default function ReportsScreen() {
   const [reflectionListFilterValue, setReflectionListFilterValue] = useState<string | undefined>(undefined);
   const [reflectionListGoalId, setReflectionListGoalId] = useState<string | undefined>(undefined);
 
-  const loadReportsData = async () => {
+
+
+  const loadReportsData = useCallback(async () => {
     console.log("Loading reports data");
     setLoading(true);
     try {
@@ -244,25 +246,12 @@ export default function ReportsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     console.log("ReportsScreen mounted");
     loadReportsData();
   }, [loadReportsData]);
-
-  const showError = (message: string) => {
-    setErrorMessage(message);
-    setErrorModalVisible(true);
-  };
-
-  const showSuccess = (message: string) => {
-    setSuccessModalMessage(message);
-    setShowSuccessModal(true);
-    setTimeout(() => {
-      setShowSuccessModal(false);
-    }, 2000);
-  };
 
   const isRewardCurrency = (currency: Currency): boolean => {
     return currency.onSuccess === 'ADD';

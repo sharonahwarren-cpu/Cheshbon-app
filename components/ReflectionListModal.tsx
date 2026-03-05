@@ -180,7 +180,8 @@ export function ReflectionListModal({
   const loadSupportingData = async () => {
     console.log('[ReflectionListModal] Loading supporting data for AddReflectionModal');
     try {
-      const [goalsRes, currenciesRes, gainsLossesRes, strategiesRes, motivationsRes, preferencesRes] = await Promise.all([
+      // Use Promise.allSettled so individual failures don't block the rest
+      const [goalsResult, currenciesResult, gainsLossesResult, strategiesResult, motivationsResult, preferencesResult] = await Promise.allSettled([
         authenticatedGet('/api/goals'),
         authenticatedGet('/api/currencies'),
         authenticatedGet('/api/gains-losses'),
@@ -189,13 +190,55 @@ export function ReflectionListModal({
         authenticatedGet('/api/preferences'),
       ]);
 
-      setGoals(Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []));
-      setCurrencies(Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []));
-      setGainsLosses(Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []));
-      setStrategies(Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []));
-      setMotivations(Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []));
-      setUserPreferences(preferencesRes?.data || preferencesRes || {});
-      
+      if (goalsResult.status === 'fulfilled') {
+        const goalsRes = goalsResult.value;
+        setGoals(Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []));
+      } else {
+        console.warn('[ReflectionListModal] Failed to load goals:', goalsResult.reason);
+        setGoals([]);
+      }
+
+      if (currenciesResult.status === 'fulfilled') {
+        const currenciesRes = currenciesResult.value;
+        setCurrencies(Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []));
+      } else {
+        console.warn('[ReflectionListModal] Failed to load currencies:', currenciesResult.reason);
+        setCurrencies([]);
+      }
+
+      if (gainsLossesResult.status === 'fulfilled') {
+        const gainsLossesRes = gainsLossesResult.value;
+        setGainsLosses(Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []));
+      } else {
+        console.warn('[ReflectionListModal] Failed to load gains/losses:', gainsLossesResult.reason);
+        setGainsLosses([]);
+      }
+
+      if (strategiesResult.status === 'fulfilled') {
+        const strategiesRes = strategiesResult.value;
+        setStrategies(Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []));
+      } else {
+        console.warn('[ReflectionListModal] Failed to load strategies:', strategiesResult.reason);
+        setStrategies([]);
+      }
+
+      if (motivationsResult.status === 'fulfilled') {
+        const motivationsRes = motivationsResult.value;
+        setMotivations(Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []));
+      } else {
+        console.warn('[ReflectionListModal] Failed to load motivations:', motivationsResult.reason);
+        setMotivations([]);
+      }
+
+      if (preferencesResult.status === 'fulfilled') {
+        const preferencesRes = preferencesResult.value;
+        setUserPreferences(preferencesRes?.data || preferencesRes || {});
+        console.log('[ReflectionListModal] Preferences loaded successfully');
+      } else {
+        console.log('[ReflectionListModal] Preferences endpoint not available, using defaults:', preferencesResult.reason?.message);
+        setUserPreferences({});
+      }
+
       console.log('[ReflectionListModal] Supporting data loaded');
     } catch (error) {
       console.error('[ReflectionListModal] Error loading supporting data:', error);
