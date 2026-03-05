@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,13 @@ import {
   Platform,
   Modal,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet } from '@/utils/api';
+import { authenticatedGet, authenticatedPut } from '@/utils/api';
 
 interface SearchResult {
   id: string;
@@ -33,6 +34,21 @@ export default function SearchJournalsScreen() {
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<SearchResult | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  
+  // Edit mode states
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const scrollViewRef = useRef<ScrollView>(null);
+  const textInputRef = useRef<TextInput>(null);
+
+  // Set edited content when entry is selected
+  useEffect(() => {
+    if (selectedEntry) {
+      setEditedContent(selectedEntry.content);
+    }
+  }, [selectedEntry]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -59,12 +75,69 @@ export default function SearchJournalsScreen() {
     console.log('Opening journal entry modal for date:', result.entryDate);
     setSelectedEntry(result);
     setModalVisible(true);
+    setIsEditing(false);
   };
 
   const handleCloseModal = () => {
     console.log('Closing journal entry modal');
     setModalVisible(false);
     setSelectedEntry(null);
+    setIsEditing(false);
+    setEditedContent('');
+    Keyboard.dismiss();
+  };
+
+  const handleEditPress = () => {
+    console.log('Entering edit mode');
+    setIsEditing(true);
+    // Focus the TextInput after a short delay to ensure it's rendered
+    setTimeout(() => {
+      textInputRef.current?.focus();
+    }, 100);
+  };
+
+  const handleCancelEdit = () => {
+    console.log('Canceling edit');
+    setIsEditing(false);
+    setEditedContent(selectedEntry?.content || '');
+    Keyboard.dismiss();
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedEntry) return;
+
+    console.log('Saving edited journal entry');
+    setIsSaving(true);
+    try {
+      const updatedEntry = await authenticatedPut(`/api/journals/${selectedEntry.id}`, {
+        content: editedContent,
+      });
+
+      console.log('Journal entry updated successfully');
+      
+      // Update the selected entry
+      setSelectedEntry({
+        ...selectedEntry,
+        content: editedContent,
+      });
+
+      // Update the entry in search results
+      setSearchResults(prevResults =>
+        prevResults.map(result =>
+          result.id === selectedEntry.id
+            ? { ...result, content: editedContent, excerpt: editedContent.substring(0, 150) }
+            : result
+        )
+      );
+
+      setIsEditing(false);
+      Keyboard.dismiss();
+    } catch (error) {
+      console.error('Error saving journal entry:', error);
+      alert('Failed to save journal entry. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -220,6 +293,7 @@ export default function SearchJournalsScreen() {
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalContainer}
+            keyboardVerticalOffset={0}
           >
             {/* Modal Header */}
             <View style={styles.modalHeader}>
@@ -232,24 +306,66 @@ export default function SearchJournalsScreen() {
                 />
                 <Text style={styles.modalTitle}>Journal Entry</Text>
               </View>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={handleCloseModal}
-              >
-                <IconSymbol
-                  ios_icon_name="xmark.circle.fill"
-                  android_material_icon_name="cancel"
-                  size={28}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
+              
+              <View style={styles.headerActions}>
+                {isEditing ? (
+                  <>
+                    <TouchableOpacity
+                      style={styles.headerButton}
+                      onPress={handleCancelEdit}
+                      disabled={isSaving}
+                    >
+                      <Text style={styles.headerButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.headerButton, styles.saveButton]}
+                      onPress={handleSaveEdit}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <ActivityIndicator size="small" color={colors.background} />
+                      ) : (
+                        <Text style={styles.saveButtonText}>Save</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.headerButton}
+                    onPress={handleEditPress}
+                  >
+                    <IconSymbol
+                      ios_icon_name="pencil"
+                      android_material_icon_name="edit"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.headerButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                )}
+                
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={handleCloseModal}
+                >
+                  <IconSymbol
+                    ios_icon_name="xmark.circle.fill"
+                    android_material_icon_name="cancel"
+                    size={28}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Modal Content */}
             {selectedEntry && (
               <ScrollView
+                ref={scrollViewRef}
                 style={styles.modalContent}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.modalContentContainer}
               >
                 <View style={styles.modalDateContainer}>
                   <IconSymbol
@@ -264,22 +380,58 @@ export default function SearchJournalsScreen() {
                 </View>
 
                 <View style={styles.modalEntryContainer}>
-                  <Text style={styles.modalEntryText}>
-                    {selectedEntry.content}
-                  </Text>
+                  {isEditing ? (
+                    <TextInput
+                      ref={textInputRef}
+                      style={styles.editableEntryText}
+                      value={editedContent}
+                      onChangeText={setEditedContent}
+                      multiline
+                      textAlignVertical="top"
+                      placeholder="Write your journal entry..."
+                      placeholderTextColor={colors.textSecondary}
+                      onFocus={() => {
+                        // Scroll to top when focused to ensure input is visible
+                        setTimeout(() => {
+                          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+                        }, 100);
+                      }}
+                    />
+                  ) : (
+                    <Text style={styles.modalEntryText}>
+                      {selectedEntry.content}
+                    </Text>
+                  )}
                 </View>
+
+                {isEditing && (
+                  <TouchableOpacity
+                    style={styles.dismissKeyboardButton}
+                    onPress={() => Keyboard.dismiss()}
+                  >
+                    <IconSymbol
+                      ios_icon_name="keyboard.chevron.compact.down"
+                      android_material_icon_name="keyboard-hide"
+                      size={20}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.dismissKeyboardText}>Dismiss Keyboard</Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             )}
 
-            {/* Modal Footer */}
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.doneButton}
-                onPress={handleCloseModal}
-              >
-                <Text style={styles.doneButtonText}>Done</Text>
-              </TouchableOpacity>
-            </View>
+            {/* Modal Footer - Only show when not editing */}
+            {!isEditing && (
+              <View style={styles.modalFooter}>
+                <TouchableOpacity
+                  style={styles.doneButton}
+                  onPress={handleCloseModal}
+                >
+                  <Text style={styles.doneButtonText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
@@ -431,13 +583,45 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: colors.text,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+  },
+  headerButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  saveButton: {
+    backgroundColor: colors.primary,
+    minWidth: 70,
+    justifyContent: 'center',
+  },
+  saveButtonText: {
+    color: colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   closeButton: {
     padding: 4,
   },
   modalContent: {
     flex: 1,
+  },
+  modalContentContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
+    paddingBottom: 40,
   },
   modalDateContainer: {
     flexDirection: 'row',
@@ -459,11 +643,37 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: colors.border,
+    minHeight: 200,
   },
   modalEntryText: {
     fontSize: 16,
     color: colors.text,
     lineHeight: 24,
+  },
+  editableEntryText: {
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 24,
+    minHeight: 200,
+    textAlignVertical: 'top',
+  },
+  dismissKeyboardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  dismissKeyboardText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary,
   },
   modalFooter: {
     paddingHorizontal: 20,
