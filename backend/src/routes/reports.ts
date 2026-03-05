@@ -347,7 +347,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/reflection-stats - Get reflection statistics
+  // GET /api/reports/reflection-stats?startDate=...&endDate=... - Get reflection statistics
   app.fastify.get('/api/reports/reflection-stats', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -355,13 +355,31 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching reflection stats');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching reflection stats');
 
     try {
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      // Add date range filters
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
-        .where(eq(schema.reflections.userId, session.user.id));
+        .where(and(...conditions));
 
       const totalReflections = reflections.length;
       let totalRestraints = 0;
@@ -384,7 +402,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/journal-count - Get total journal count
+  // GET /api/reports/journal-count?startDate=...&endDate=... - Get total journal count
   app.fastify.get('/api/reports/journal-count', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -392,13 +410,31 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching journal count');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching journal count');
 
     try {
+      const conditions: any[] = [eq(schema.journalEntries.userId, session.user.id)];
+
+      // Add date range filters
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.journalEntries.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.journalEntries.entryDate, endDateStr));
+      }
+
       const entries = await app.db
         .select()
         .from(schema.journalEntries)
-        .where(eq(schema.journalEntries.userId, session.user.id));
+        .where(and(...conditions));
 
       const count = entries.length;
 
@@ -410,7 +446,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/gains-losses-summary - Get gains and losses summary
+  // GET /api/reports/gains-losses-summary?startDate=...&endDate=... - Get gains and losses summary
   app.fastify.get('/api/reports/gains-losses-summary', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -418,35 +454,80 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching gains losses summary');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching gains losses summary');
 
     try {
-      const gainsLosses = await app.db
+      // Get all gains/losses definitions for name lookup
+      const allGainsLosses = await app.db
         .select()
         .from(schema.gainsLosses)
         .where(eq(schema.gainsLosses.userId, session.user.id));
 
+      const gainsLossesMap = new Map(allGainsLosses.map(gl => [gl.id, gl]));
+
+      // Get reflections with date filters
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(and(...conditions));
+
+      // Count gain/loss occurrences from reflections
       let totalGains = 0;
       let totalLosses = 0;
       const byCategoryMap = new Map<string, { gains: number; losses: number }>();
       const gainsCounts = new Map<string, number>();
       const lossesCounts = new Map<string, number>();
 
-      for (const item of gainsLosses) {
-        if (item.type === 'Gain') {
-          totalGains++;
-          gainsCounts.set(item.id, (gainsCounts.get(item.id) || 0) + 1);
-        } else {
-          totalLosses++;
-          lossesCounts.set(item.id, (lossesCounts.get(item.id) || 0) + 1);
+      reflections.forEach(reflection => {
+        // Process gained IDs
+        if (reflection.gainedIds && Array.isArray(reflection.gainedIds)) {
+          reflection.gainedIds.forEach((gainId: any) => {
+            totalGains++;
+            gainsCounts.set(gainId, (gainsCounts.get(gainId) || 0) + 1);
+
+            const gainItem = gainsLossesMap.get(gainId);
+            if (gainItem) {
+              const cat = gainItem.category || 'Uncategorized';
+              const current = byCategoryMap.get(cat) || { gains: 0, losses: 0 };
+              current.gains++;
+              byCategoryMap.set(cat, current);
+            }
+          });
         }
 
-        const cat = item.category || 'Uncategorized';
-        const current = byCategoryMap.get(cat) || { gains: 0, losses: 0 };
-        if (item.type === 'Gain') current.gains++;
-        else current.losses++;
-        byCategoryMap.set(cat, current);
-      }
+        // Process lost IDs
+        if (reflection.lostIds && Array.isArray(reflection.lostIds)) {
+          reflection.lostIds.forEach((lossId: any) => {
+            totalLosses++;
+            lossesCounts.set(lossId, (lossesCounts.get(lossId) || 0) + 1);
+
+            const lossItem = gainsLossesMap.get(lossId);
+            if (lossItem) {
+              const cat = lossItem.category || 'Uncategorized';
+              const current = byCategoryMap.get(cat) || { gains: 0, losses: 0 };
+              current.losses++;
+              byCategoryMap.set(cat, current);
+            }
+          });
+        }
+      });
 
       const byCategory = Array.from(byCategoryMap.entries()).map(([category, counts]) => ({
         category,
@@ -457,7 +538,7 @@ export function registerReportsRoutes(app: App) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
         .map(([id, count]) => {
-          const item = gainsLosses.find(g => g.id === id);
+          const item = gainsLossesMap.get(id);
           return { id, name: item?.name || '', count };
         });
 
@@ -465,7 +546,7 @@ export function registerReportsRoutes(app: App) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
         .map(([id, count]) => {
-          const item = gainsLosses.find(g => g.id === id);
+          const item = gainsLossesMap.get(id);
           return { id, name: item?.name || '', count };
         });
 
@@ -477,7 +558,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/behavior-counts - Get behavior category counts
+  // GET /api/reports/behavior-counts?startDate=...&endDate=... - Get behavior category counts
   app.fastify.get('/api/reports/behavior-counts', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -485,13 +566,31 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching behavior counts');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching behavior counts');
 
     try {
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      // Add date range filters
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
-        .where(eq(schema.reflections.userId, session.user.id));
+        .where(and(...conditions));
 
       let actionEntries = 0;
       let speechEntries = 0;
@@ -624,7 +723,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/gains-losses-distribution - Get gains and losses distribution analysis
+  // GET /api/reports/gains-losses-distribution?startDate=...&endDate=... - Get gains and losses distribution analysis
   app.fastify.get('/api/reports/gains-losses-distribution', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -632,20 +731,71 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching gains losses distribution');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching gains losses distribution');
 
     try {
-      const gainsLosses = await app.db
+      // Get all gains/losses definitions for metadata
+      const allGainsLosses = await app.db
         .select()
         .from(schema.gainsLosses)
         .where(eq(schema.gainsLosses.userId, session.user.id));
 
-      // Separate gains and losses
-      const gains = gainsLosses.filter(item => item.type === 'Gain');
-      const losses = gainsLosses.filter(item => item.type === 'Loss');
+      const gainsLossesMap = new Map(allGainsLosses.map(gl => [gl.id, gl]));
 
-      const totalGains = gains.length;
-      const totalLosses = losses.length;
+      // Get reflections with date filters
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
+      const reflections = await app.db
+        .select()
+        .from(schema.reflections)
+        .where(and(...conditions));
+
+      // Count gains and losses from reflections
+      const gainIdCounts = new Map<string, number>();
+      const lossIdCounts = new Map<string, number>();
+
+      reflections.forEach(reflection => {
+        if (reflection.gainedIds && Array.isArray(reflection.gainedIds)) {
+          reflection.gainedIds.forEach((gainId: any) => {
+            gainIdCounts.set(gainId, (gainIdCounts.get(gainId) || 0) + 1);
+          });
+        }
+        if (reflection.lostIds && Array.isArray(reflection.lostIds)) {
+          reflection.lostIds.forEach((lossId: any) => {
+            lossIdCounts.set(lossId, (lossIdCounts.get(lossId) || 0) + 1);
+          });
+        }
+      });
+
+      // Convert counts to gain/loss items with metadata
+      const gains = Array.from(gainIdCounts.entries()).map(([id, count]) => {
+        const item = gainsLossesMap.get(id);
+        return { ...item, id, count } as any;
+      });
+
+      const losses = Array.from(lossIdCounts.entries()).map(([id, count]) => {
+        const item = gainsLossesMap.get(id);
+        return { ...item, id, count } as any;
+      });
+
+      // Calculate total counts from gain/loss occurrences in reflections
+      const totalGains = gains.reduce((sum, g) => sum + (g.count || 0), 0);
+      const totalLosses = losses.reduce((sum, l) => sum + (l.count || 0), 0);
 
       // Helper function to calculate percentage
       const getPercentage = (count: number, total: number): number => {
@@ -655,15 +805,15 @@ export function registerReportsRoutes(app: App) {
       // Calculate term distribution for gains
       const gainsTermDist = {
         short: {
-          count: gains.filter(g => g.term === 'short').length,
+          count: gains.filter(g => g.term === 'short').reduce((sum, g) => sum + (g.count || 0), 0),
           percentage: 0,
         },
         medium: {
-          count: gains.filter(g => g.term === 'medium').length,
+          count: gains.filter(g => g.term === 'medium').reduce((sum, g) => sum + (g.count || 0), 0),
           percentage: 0,
         },
         long: {
-          count: gains.filter(g => g.term === 'long').length,
+          count: gains.filter(g => g.term === 'long').reduce((sum, g) => sum + (g.count || 0), 0),
           percentage: 0,
         },
       };
@@ -679,15 +829,15 @@ export function registerReportsRoutes(app: App) {
       // Calculate term distribution for losses
       const lossesTermDist = {
         short: {
-          count: losses.filter(l => l.term === 'short').length,
+          count: losses.filter(l => l.term === 'short').reduce((sum, l) => sum + (l.count || 0), 0),
           percentage: 0,
         },
         medium: {
-          count: losses.filter(l => l.term === 'medium').length,
+          count: losses.filter(l => l.term === 'medium').reduce((sum, l) => sum + (l.count || 0), 0),
           percentage: 0,
         },
         long: {
-          count: losses.filter(l => l.term === 'long').length,
+          count: losses.filter(l => l.term === 'long').reduce((sum, l) => sum + (l.count || 0), 0),
           percentage: 0,
         },
       };
@@ -704,7 +854,7 @@ export function registerReportsRoutes(app: App) {
       const gainsCategoryMap = new Map<string, number>();
       gains.forEach(g => {
         const cat = g.category || 'Uncategorized';
-        gainsCategoryMap.set(cat, (gainsCategoryMap.get(cat) || 0) + 1);
+        gainsCategoryMap.set(cat, (gainsCategoryMap.get(cat) || 0) + (g.count || 0));
       });
 
       const gainsCategoryDist = Array.from(gainsCategoryMap.entries())
@@ -719,7 +869,7 @@ export function registerReportsRoutes(app: App) {
       const lossesCategoryMap = new Map<string, number>();
       losses.forEach(l => {
         const cat = l.category || 'Uncategorized';
-        lossesCategoryMap.set(cat, (lossesCategoryMap.get(cat) || 0) + 1);
+        lossesCategoryMap.set(cat, (lossesCategoryMap.get(cat) || 0) + (l.count || 0));
       });
 
       const lossesCategoryDist = Array.from(lossesCategoryMap.entries())
@@ -761,7 +911,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/top-motivations-by-type - Get top motivations by reflection type
+  // GET /api/reports/top-motivations-by-type?startDate=...&endDate=... - Get top motivations by reflection type
   app.fastify.get('/api/reports/top-motivations-by-type', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -769,13 +919,31 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching top motivations by type');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching top motivations by type');
 
     try {
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      // Add date range filters
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
-        .where(eq(schema.reflections.userId, session.user.id));
+        .where(and(...conditions));
 
       const motivations = await app.db
         .select()
@@ -838,7 +1006,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/top-motivations-by-outcome - Get top motivations by outcome
+  // GET /api/reports/top-motivations-by-outcome?startDate=...&endDate=... - Get top motivations by outcome
   app.fastify.get('/api/reports/top-motivations-by-outcome', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -846,13 +1014,31 @@ export function registerReportsRoutes(app: App) {
     const session = await requireAuth(request, reply);
     if (!session) return;
 
-    app.logger.info({ userId: session.user.id }, 'Fetching top motivations by outcome');
+    const query = request.query as {
+      startDate?: string;
+      endDate?: string;
+    };
+
+    app.logger.info({ userId: session.user.id, filters: query }, 'Fetching top motivations by outcome');
 
     try {
+      const conditions: any[] = [eq(schema.reflections.userId, session.user.id)];
+
+      // Add date range filters
+      if (query.startDate) {
+        const startDateStr = new Date(query.startDate).toISOString().split('T')[0];
+        conditions.push(gte(schema.reflections.entryDate, startDateStr));
+      }
+
+      if (query.endDate) {
+        const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
+        conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
       const reflections = await app.db
         .select()
         .from(schema.reflections)
-        .where(eq(schema.reflections.userId, session.user.id));
+        .where(and(...conditions));
 
       const motivations = await app.db
         .select()
