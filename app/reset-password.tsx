@@ -78,7 +78,22 @@ export default function ResetPasswordScreen() {
       setSuccessModalVisible(true);
     } catch (error: any) {
       console.error('[RESET PASSWORD] Error:', error);
-      showError(error.message || 'Failed to reset password. The link may have expired.');
+      // Extract clean error message from API error format "API error: 400 - {...}"
+      let errorMessage = 'Failed to reset password. The link may have expired.';
+      if (error.message) {
+        const match = error.message.match(/API error: \d+ - (.+)/);
+        if (match) {
+          try {
+            const parsed = JSON.parse(match[1]);
+            errorMessage = parsed.error || parsed.message || errorMessage;
+          } catch {
+            errorMessage = match[1] || errorMessage;
+          }
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      showError(errorMessage);
     } finally {
       setLoading(false);
     }

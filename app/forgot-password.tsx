@@ -53,10 +53,26 @@ export default function ForgotPasswordScreen() {
       console.log('[FORGOT PASSWORD] Calling /api/auth/forgot-password...');
       const response = await apiPost('/api/auth/forgot-password', { email: email.trim() });
       console.log('[FORGOT PASSWORD] Success:', response);
+      // Always show success modal (backend doesn't reveal if email exists)
       setSuccessModalVisible(true);
     } catch (error: any) {
       console.error('[FORGOT PASSWORD] Error:', error);
-      showError(error.message || 'Failed to send reset link. Please try again.');
+      // Extract clean error message from API error format "API error: 400 - {...}"
+      let errorMessage = 'Failed to send reset link. Please try again.';
+      if (error.message) {
+        const match = error.message.match(/API error: \d+ - (.+)/);
+        if (match) {
+          try {
+            const parsed = JSON.parse(match[1]);
+            errorMessage = parsed.error || parsed.message || errorMessage;
+          } catch {
+            errorMessage = match[1] || errorMessage;
+          }
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      showError(errorMessage);
     } finally {
       setLoading(false);
     }

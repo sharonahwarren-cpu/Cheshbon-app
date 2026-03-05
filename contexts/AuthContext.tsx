@@ -275,7 +275,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           errorMessage = responseText || errorMessage;
         }
-        throw new Error(errorMessage);
+        // Preserve the HTTP status code in the error for callers to handle
+        const err = new Error(errorMessage) as any;
+        err.status = response.status;
+        throw err;
       }
 
       const data = JSON.parse(responseText);
@@ -375,6 +378,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = JSON.parse(responseText);
       console.log('📧 [EMAIL] Sign-up parsed response keys:', Object.keys(data));
 
+      // NEW BEHAVIOR: Sign-up no longer returns a session token immediately
+      // Instead, it returns a message indicating email verification is required
+      // The user must verify their email before they can sign in
+      
+      // Check if this is the new email verification flow (no token returned)
+      if (data.message && !data.token) {
+        console.log('📧 [EMAIL] Email verification required - no session created yet');
+        console.log('📧 [EMAIL] Message:', data.message);
+        // Don't set user or token - verification is pending
+        // The auth screen will show the verification pending UI
+        return;
+      }
+
+      // Legacy behavior: If token is returned (old backend), proceed as before
       const token =
         data.token ||
         data.session?.token ||

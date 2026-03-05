@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiGet, setBearerToken } from '@/utils/api';
+import { BACKEND_URL } from '@/utils/api';
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
@@ -33,30 +33,57 @@ export default function VerifyEmailScreen() {
     }
 
     try {
-      console.log('[VERIFY EMAIL] Calling /api/auth/verify-email...');
-      const response = await apiGet<{
-        message: string;
-        token: string;
-        user: { id: string; email: string; name: string };
-      }>(`/api/auth/verify-email?token=${token}`);
-      
-      console.log('[VERIFY EMAIL] Success:', response);
-      
-      // Save the session token
-      if (response.token) {
-        console.log('[VERIFY EMAIL] Saving session token...');
-        await setBearerToken(response.token);
-        console.log('[VERIFY EMAIL] Token saved successfully');
+      console.log('[VERIFY EMAIL] Calling /api/auth/verify-email with token...');
+      // The backend endpoint may redirect to /auth?verified=true on success.
+      // We use a manual fetch with redirect: 'manual' to detect the redirect
+      // and handle it ourselves, or follow it and check the final URL.
+      const response = await fetch(`${BACKEND_URL}/api/auth/verify-email?token=${encodeURIComponent(token as string)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        redirect: 'follow',
+      });
+
+      console.log('[VERIFY EMAIL] Response status:', response.status);
+      console.log('[VERIFY EMAIL] Response URL:', response.url);
+
+      // Check if the response redirected to /auth?verified=true (success case)
+      if (response.url && response.url.includes('verified=true')) {
+        console.log('[VERIFY EMAIL] Redirect to verified=true detected - success!');
+        setStatus('success');
+        setMessage('Email verified successfully! You can now sign in.');
+        setTimeout(() => {
+          console.log('[VERIFY EMAIL] Redirecting to auth...');
+          router.replace('/auth?verified=true');
+        }, 2000);
+        return;
       }
-      
-      setStatus('success');
-      setMessage(response.message || 'Email verified successfully!');
-      
-      // Redirect to home after 2 seconds
-      setTimeout(() => {
-        console.log('[VERIFY EMAIL] Redirecting to home...');
-        router.replace('/(tabs)/(home)');
-      }, 2000);
+
+      // Try to parse JSON response
+      const responseText = await response.text();
+      console.log('[VERIFY EMAIL] Response body:', responseText.substring(0, 300));
+
+      if (response.ok) {
+        let data: any = {};
+        try { data = JSON.parse(responseText); } catch { /* ignore */ }
+        console.log('[VERIFY EMAIL] Success:', data);
+        setStatus('success');
+        setMessage('Email verified successfully! You can now sign in.');
+        setTimeout(() => {
+          console.log('[VERIFY EMAIL] Redirecting to auth...');
+          router.replace('/auth?verified=true');
+        }, 2000);
+      } else {
+        let errorMessage = 'Failed to verify email. The link may have expired.';
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch { /* ignore */ }
+        console.error('[VERIFY EMAIL] Error response:', errorMessage);
+        setStatus('error');
+        setMessage(errorMessage);
+      }
     } catch (error: any) {
       console.error('[VERIFY EMAIL] Error:', error);
       setStatus('error');

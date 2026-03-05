@@ -43,7 +43,10 @@ function AuthBootstrap({ children }: { children: React.ReactNode }) {
       segments[0] === 'auth' || 
       segments[0] === 'auth-callback' || 
       segments[0] === 'auth-popup-callback' || 
-      segments[0] === 'auth-popup';
+      segments[0] === 'auth-popup' ||
+      segments[0] === 'verify-email' ||
+      segments[0] === 'reset-password' ||
+      segments[0] === 'forgot-password';
     console.log('🔐 [AUTH BOOTSTRAP] Auth state resolved:', { user: !!user, inAuthGroup, segments });
 
     if (!user && !inAuthGroup) {
@@ -104,6 +107,9 @@ export default function RootLayout() {
                 <Stack.Screen name="auth" options={{ headerShown: false }} />
                 <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
                 <Stack.Screen name="auth-popup-callback" options={{ headerShown: false }} />
+                <Stack.Screen name="verify-email" options={{ headerShown: false }} />
+                <Stack.Screen name="reset-password" options={{ headerShown: true, title: 'Reset Password' }} />
+                <Stack.Screen name="forgot-password" options={{ headerShown: true, title: 'Forgot Password' }} />
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="ai-chat" options={{ headerShown: false }} />
                 <Stack.Screen name="+not-found" />
