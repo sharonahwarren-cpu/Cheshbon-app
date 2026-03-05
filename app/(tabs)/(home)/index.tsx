@@ -1479,12 +1479,23 @@ export default function HomeScreen() {
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
   const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
 
+  // CRITICAL FIX: Filter out currency-related reflections (paid/claimed currency entries)
+  // These are not relevant to the Reflections section and should not appear here
+  const filteredReflections = reflections.filter(r => {
+    // Filter out reflections that are ONLY currency transactions (no description, no goal link, just currency change)
+    // Currency transactions have currencyChange but no meaningful description or goal context
+    if (r.currencyChange && !r.linkedGoalId && (!r.description || r.description.trim() === '')) {
+      return false;
+    }
+    return true;
+  });
+
   // CRITICAL FIX: When grouping reflections by category, we need to use the GOAL's behaviorCategory
   // NOT the reflection's category field (which may be undefined for quick entries from Express screen)
   const groupedReflections: Record<string, Reflection[]> = {};
   if (categoriesEnabled) {
     availableCategories.forEach(cat => {
-      groupedReflections[cat] = reflections.filter(r => {
+      groupedReflections[cat] = filteredReflections.filter(r => {
         // If reflection has a category field, use it
         if (r.category) {
           return r.category === cat;
@@ -1500,7 +1511,7 @@ export default function HomeScreen() {
         return false;
       });
     });
-    groupedReflections['Other'] = reflections.filter(r => {
+    groupedReflections['Other'] = filteredReflections.filter(r => {
       if (r.category && availableCategories.includes(r.category)) {
         return false;
       }
@@ -1513,7 +1524,7 @@ export default function HomeScreen() {
       return true;
     });
   } else {
-    groupedReflections['All'] = reflections;
+    groupedReflections['All'] = filteredReflections;
   }
 
   const hasJournalContent = journalContent && journalContent.trim().length > 0;
@@ -1715,7 +1726,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {reflections.length === 0 ? (
+              {filteredReflections.length === 0 ? (
                 <View style={styles.emptyState}>
                   <IconSymbol
                     ios_icon_name="sparkles"
