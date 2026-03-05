@@ -176,7 +176,12 @@ export default function SearchJournalsScreen() {
                       <TouchableOpacity
                         style={styles.viewButton}
                         onPress={() => {
-                          router.back();
+                          console.log('Navigating to journal entry for date:', result.entryDate);
+                          // Navigate back to home screen with the specific date
+                          router.push({
+                            pathname: '/(tabs)/(home)',
+                            params: { date: result.entryDate }
+                          });
                         }}
                       >
                         <Text style={styles.viewButtonText}>View Full Entry</Text>

@@ -361,6 +361,17 @@ export default function HomeScreen() {
     loadData(false);
   }, [selectedDate, loadData]);
 
+  // Handle date parameter from search journals navigation
+  useEffect(() => {
+    if (params.date && typeof params.date === 'string') {
+      console.log('[Home iOS] Navigated from search with date:', params.date);
+      const dateFromSearch = new Date(params.date);
+      if (!isNaN(dateFromSearch.getTime())) {
+        setSelectedDate(dateFromSearch);
+      }
+    }
+  }, [params.date]);
+
   useEffect(() => {
     if (showSuccessModal) {
       const timer = setTimeout(() => {
@@ -1705,6 +1716,21 @@ export default function HomeScreen() {
                     />
                     <Text style={styles.journalCardTitle}>Daily Journal</Text>
                   </View>
+                  <TouchableOpacity 
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      console.log('Opening search journals screen iOS');
+                      router.push('/search-journals');
+                    }} 
+                    style={styles.searchIconButton}
+                  >
+                    <IconSymbol
+                      ios_icon_name="magnifyingglass"
+                      android_material_icon_name="search"
+                      size={22}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
                 </View>
                 
                 {!hasJournalContent ? (
@@ -1741,20 +1767,6 @@ export default function HomeScreen() {
                     <Text style={styles.sectionTitle}>Reflections</Text>
                   </View>
                   <View style={styles.sectionActions}>
-                    <TouchableOpacity 
-                      onPress={() => {
-                        console.log('Opening search journals screen iOS');
-                        router.push('/search-journals');
-                      }} 
-                      style={styles.searchButton}
-                    >
-                      <IconSymbol
-                        ios_icon_name="magnifyingglass"
-                        android_material_icon_name="search"
-                        size={22}
-                        color={colors.primary}
-                      />
-                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => openAddReflectionModal()} style={styles.addButton}>
                       <IconSymbol
                         ios_icon_name="plus.circle.fill"
@@ -2234,11 +2246,17 @@ const styles = StyleSheet.create({
   },
   journalCardHeader: {
     marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   journalCardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  searchIconButton: {
+    padding: 4,
   },
   journalAppIcon: {
     width: 36,
