@@ -237,7 +237,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/wins-vs-losses?startDate=...&endDate=... - Get wins vs losses from reflections
+  // GET /api/reports/wins-vs-losses?startDate=...&endDate=...&excludePureCurrencyTransactions=true - Get wins vs losses from reflections
   app.fastify.get('/api/reports/wins-vs-losses', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -248,6 +248,7 @@ export function registerReportsRoutes(app: App) {
     const query = request.query as {
       startDate?: string;
       endDate?: string;
+      excludePureCurrencyTransactions?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching wins vs losses report');
@@ -264,6 +265,11 @@ export function registerReportsRoutes(app: App) {
       if (query.endDate) {
         const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
+      // Exclude pure currency transactions if requested
+      if (query.excludePureCurrencyTransactions === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
       }
 
       const reflections = await app.db
@@ -289,7 +295,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/success-vs-struggles?startDate=...&endDate=... - Get success vs struggle counts from reflections
+  // GET /api/reports/success-vs-struggles?startDate=...&endDate=...&excludePureCurrencyTransactions=true - Get success vs struggle counts from reflections
   app.fastify.get('/api/reports/success-vs-struggles', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -300,6 +306,7 @@ export function registerReportsRoutes(app: App) {
     const query = request.query as {
       startDate?: string;
       endDate?: string;
+      excludePureCurrencyTransactions?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching success vs struggles report');
@@ -316,6 +323,11 @@ export function registerReportsRoutes(app: App) {
       if (query.endDate) {
         const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
+      // Exclude pure currency transactions if requested
+      if (query.excludePureCurrencyTransactions === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
       }
 
       const reflections = await app.db
@@ -347,7 +359,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/reflection-stats?startDate=...&endDate=... - Get reflection statistics
+  // GET /api/reports/reflection-stats?startDate=...&endDate=...&excludePureCurrencyTransactions=true - Get reflection statistics
   app.fastify.get('/api/reports/reflection-stats', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -358,6 +370,7 @@ export function registerReportsRoutes(app: App) {
     const query = request.query as {
       startDate?: string;
       endDate?: string;
+      excludePureCurrencyTransactions?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching reflection stats');
@@ -374,6 +387,11 @@ export function registerReportsRoutes(app: App) {
       if (query.endDate) {
         const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
+      // Exclude pure currency transactions if requested
+      if (query.excludePureCurrencyTransactions === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
       }
 
       const reflections = await app.db
@@ -558,7 +576,7 @@ export function registerReportsRoutes(app: App) {
     }
   });
 
-  // GET /api/reports/behavior-counts?startDate=...&endDate=... - Get behavior category counts
+  // GET /api/reports/behavior-counts?startDate=...&endDate=...&excludePureCurrencyTransactions=true - Get behavior category counts
   app.fastify.get('/api/reports/behavior-counts', async (
     request: FastifyRequest,
     reply: FastifyReply
@@ -569,6 +587,7 @@ export function registerReportsRoutes(app: App) {
     const query = request.query as {
       startDate?: string;
       endDate?: string;
+      excludePureCurrencyTransactions?: string;
     };
 
     app.logger.info({ userId: session.user.id, filters: query }, 'Fetching behavior counts');
@@ -585,6 +604,11 @@ export function registerReportsRoutes(app: App) {
       if (query.endDate) {
         const endDateStr = new Date(query.endDate).toISOString().split('T')[0];
         conditions.push(lte(schema.reflections.entryDate, endDateStr));
+      }
+
+      // Exclude pure currency transactions if requested
+      if (query.excludePureCurrencyTransactions === 'true') {
+        conditions.push(eq(schema.reflections.isPureCurrencyTransaction, false));
       }
 
       const reflections = await app.db

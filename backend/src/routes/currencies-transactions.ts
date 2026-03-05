@@ -100,6 +100,7 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
             amount: body.amount,
             operation: 'add',
           }),
+          isPureCurrencyTransaction: true,
         })
         .returning();
 
@@ -224,6 +225,7 @@ export function registerCurrenciesTransactionsRoutes(app: App) {
             amount: body.amount,
             operation: 'subtract',
           }),
+          isPureCurrencyTransaction: true,
         })
         .returning();
 
