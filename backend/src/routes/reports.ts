@@ -7,6 +7,23 @@ import { createAuthWrapper } from '../utils/auth-wrapper.js';
 export function registerReportsRoutes(app: App) {
   const requireAuth = createAuthWrapper(app);
 
+  // Helper function to identify pure currency transactions (should be excluded from report counts)
+  function isPureCurrencyTransaction(reflection: any): boolean {
+    // Must have currencyChange and no linkedGoalId
+    if (!reflection.currencyChange || reflection.linkedGoalId) {
+      return false;
+    }
+
+    const description = (reflection.description || '').toLowerCase();
+    const currencyKeywords = ['paid', 'claimed', 'claim', 'pay', 'chocolate cake', 'min hisbodus'];
+
+    // Check if description contains currency keywords or is very short
+    const hasCurrencyKeyword = currencyKeywords.some(keyword => description.includes(keyword));
+    const isShortDescription = (reflection.description || '').length < 10;
+
+    return hasCurrencyKeyword || isShortDescription;
+  }
+
   // GET /api/reports/currency-balances - Calculate total currency balances from currency_transactions
   app.fastify.get('/api/reports/currency-balances', async (
     request: FastifyRequest,
@@ -271,10 +288,13 @@ export function registerReportsRoutes(app: App) {
         .from(schema.reflections)
         .where(and(...conditions));
 
+      // Filter out pure currency transactions
+      const filteredReflections = reflections.filter(r => !isPureCurrencyTransaction(r));
+
       let wins = 0;
       let losses = 0;
 
-      for (const reflection of reflections) {
+      for (const reflection of filteredReflections) {
         if (reflection.outcome === 'success') wins++;
         else if (reflection.outcome === 'struggled') losses++;
       }
@@ -323,11 +343,14 @@ export function registerReportsRoutes(app: App) {
         .from(schema.reflections)
         .where(and(...conditions));
 
+      // Filter out pure currency transactions
+      const filteredReflections = reflections.filter(r => !isPureCurrencyTransaction(r));
+
       let successes = 0;
       let struggles = 0;
       const reflectionIds = [];
 
-      for (const reflection of reflections) {
+      for (const reflection of filteredReflections) {
         if (reflection.outcome === 'success') {
           successes++;
           reflectionIds.push(reflection.id);
@@ -381,12 +404,15 @@ export function registerReportsRoutes(app: App) {
         .from(schema.reflections)
         .where(and(...conditions));
 
-      const totalReflections = reflections.length;
+      // Filter out pure currency transactions
+      const filteredReflections = reflections.filter(r => !isPureCurrencyTransaction(r));
+
+      const totalReflections = filteredReflections.length;
       let totalRestraints = 0;
       let totalProactive = 0;
       let worthItCount = 0;
 
-      for (const reflection of reflections) {
+      for (const reflection of filteredReflections) {
         if (reflection.type === 'Restraint') totalRestraints++;
         else if (reflection.type === 'Proactive') totalProactive++;
         if (reflection.wasWorthIt === true) worthItCount++;
@@ -592,11 +618,14 @@ export function registerReportsRoutes(app: App) {
         .from(schema.reflections)
         .where(and(...conditions));
 
+      // Filter out pure currency transactions
+      const filteredReflections = reflections.filter(r => !isPureCurrencyTransaction(r));
+
       let actionEntries = 0;
       let speechEntries = 0;
       let thoughtEntries = 0;
 
-      for (const reflection of reflections) {
+      for (const reflection of filteredReflections) {
         if (reflection.category === 'Action') actionEntries++;
         else if (reflection.category === 'Speech') speechEntries++;
         else if (reflection.category === 'Thought') thoughtEntries++;
