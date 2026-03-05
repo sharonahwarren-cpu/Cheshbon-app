@@ -185,7 +185,48 @@ app.logger.info(
 );
 
 app.withAuth({
+  emailVerification: {
+    sendOnSignUp: true,
+    sendVerificationEmail: async ({ user, url, token }) => {
+      const verificationLink = `${frontendUrl}/verify-email?token=${token}`;
+
+      app.logger.info({ userEmail: user.email, verificationLink }, 'Sending email verification email');
+
+      // Don't await to prevent timing attacks - let the email send in background
+      resend.emails.send({
+        from: 'Cheshbon <onboarding@resend.dev>',
+        to: user.email,
+        subject: 'Verify your Cheshbon account',
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333; margin-top: 0;">Welcome to Cheshbon!</h2>
+            <p style="color: #666;">Please verify your email address to get started.</p>
+            <p style="margin: 30px 0;">
+              <a href="${verificationLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Verify Email Address</a>
+            </p>
+            <p style="color: #666; font-size: 14px;">Or copy and paste this link in your browser:</p>
+            <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all; font-family: monospace; font-size: 12px;">
+              ${verificationLink}
+            </p>
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="color: #999; font-size: 12px;">
+              This verification link will expire in 2 hours.<br>
+              If you didn't create this account, you can safely ignore this email.
+            </p>
+            <p style="color: #999; font-size: 12px; margin-top: 20px;">
+              Need help? Contact us at cheshbon.app.me@gmail.com
+            </p>
+          </div>
+        `,
+      }).then(() => {
+        app.logger.info({ userEmail: user.email }, 'Email verification email sent successfully');
+      }).catch((error) => {
+        app.logger.error({ err: error, userEmail: user.email }, 'Failed to send email verification email');
+      });
+    },
+  },
   emailAndPassword: {
+    requireEmailVerification: true,
     sendResetPassword: async ({ user, url, token }) => {
       // Create reset link pointing to frontend with the token from Better Auth
       const resetLink = `${frontendUrl}/reset-password?token=${token}`;
@@ -194,13 +235,13 @@ app.withAuth({
 
       // Don't await to prevent timing attacks - let the email send in background
       resend.emails.send({
-        from: 'Specular <noreply@specular.app>',
+        from: 'Cheshbon <onboarding@resend.dev>',
         to: user.email,
-        subject: 'Reset your password',
+        subject: 'Reset your Cheshbon password',
         html: `
           <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #333; margin-top: 0;">Password Reset Request</h2>
-            <p style="color: #666;">We received a request to reset the password for your account.</p>
+            <p style="color: #666;">We received a request to reset the password for your Cheshbon account.</p>
             <p style="margin: 30px 0;">
               <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
             </p>
@@ -210,10 +251,12 @@ app.withAuth({
             </p>
             <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
             <p style="color: #999; font-size: 12px;">
-              This password reset link will expire in 24 hours.<br>
+              This password reset link will expire in 1 hour.<br>
               If you didn't request this, you can safely ignore this email.
             </p>
-            <p style="color: #999; font-size: 12px; margin-top: 20px;">The Specular Team</p>
+            <p style="color: #999; font-size: 12px; margin-top: 20px;">
+              Need help? Contact us at cheshbon.app.me@gmail.com
+            </p>
           </div>
         `,
       }).then(() => {
