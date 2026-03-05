@@ -363,32 +363,52 @@ export default function OtherReportsScreen() {
           </>
         )}
 
-        {/* 2. Wins vs Losses */}
-        {winsVsLosses && (
+        {/* 2. Wins vs Losses - Visual Progress Bar */}
+        {winsVsLosses && winsVsLosses.totalReflections > 0 && (
           <>
             <Text style={styles.sectionTitle}>Wins vs Losses</Text>
             <TouchableOpacity 
               style={styles.reportCard}
               onPress={() => openReflectionListModal('Wins vs Losses', 'all')}
             >
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Wins', 'wins')}
-              >
-                <Text style={styles.reportLabel}>Wins:</Text>
-                <Text style={[styles.reportValue, { color: colors.success }]}>
-                  {winsVsLosses.wins}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.reportRow}
-                onPress={() => openReflectionListModal('Losses', 'losses')}
-              >
-                <Text style={styles.reportLabel}>Losses:</Text>
-                <Text style={[styles.reportValue, { color: colors.error }]}>
-                  {winsVsLosses.losses}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.winsLossesProgressContainer}>
+                <View style={styles.winsLossesProgressBar}>
+                  <View 
+                    style={[
+                      styles.winsProgressFill, 
+                      { width: `${(winsVsLosses.wins / winsVsLosses.totalReflections) * 100}%` }
+                    ]} 
+                  />
+                  <View 
+                    style={[
+                      styles.lossesProgressFill, 
+                      { width: `${(winsVsLosses.losses / winsVsLosses.totalReflections) * 100}%` }
+                    ]} 
+                  />
+                </View>
+              </View>
+              <View style={styles.winsLossesLegend}>
+                <TouchableOpacity 
+                  style={styles.legendItem}
+                  onPress={() => openReflectionListModal('Wins', 'wins')}
+                >
+                  <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
+                  <Text style={styles.legendLabel}>Wins:</Text>
+                  <Text style={[styles.legendValue, { color: colors.success }]}>
+                    {winsVsLosses.wins} ({Math.round((winsVsLosses.wins / winsVsLosses.totalReflections) * 100)}%)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.legendItem}
+                  onPress={() => openReflectionListModal('Losses', 'losses')}
+                >
+                  <View style={[styles.legendDot, { backgroundColor: colors.error }]} />
+                  <Text style={styles.legendLabel}>Losses:</Text>
+                  <Text style={[styles.legendValue, { color: colors.error }]}>
+                    {winsVsLosses.losses} ({Math.round((winsVsLosses.losses / winsVsLosses.totalReflections) * 100)}%)
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </TouchableOpacity>
           </>
         )}
@@ -845,5 +865,44 @@ const styles = StyleSheet.create({
   },
   filterButtonTextActive: {
     color: '#FFFFFF',
+  },
+  winsLossesProgressContainer: {
+    marginBottom: 16,
+  },
+  winsLossesProgressBar: {
+    height: 24,
+    borderRadius: 12,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    backgroundColor: colors.error,
+  },
+  winsProgressFill: {
+    height: '100%',
+    backgroundColor: colors.success,
+  },
+  lossesProgressFill: {
+    height: '100%',
+    backgroundColor: colors.error,
+  },
+  winsLossesLegend: {
+    gap: 8,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  legendValue: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

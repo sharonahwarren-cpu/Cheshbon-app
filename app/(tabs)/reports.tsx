@@ -414,7 +414,21 @@ export default function ReportsScreen() {
         style={styles.content} 
         contentContainerStyle={styles.contentContainer}
       >
-        <Text style={styles.headerTitle}>Reports</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.headerTitle}>Reports</Text>
+          <TouchableOpacity
+            style={styles.otherReportsSmallButton}
+            onPress={() => router.push('/other-reports')}
+          >
+            <Text style={styles.otherReportsSmallButtonText}>Other</Text>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={16}
+              color={colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
 
         {/* 1. Currency Balances - Not filterable */}
         {currencyBalances.length > 0 && (
@@ -576,33 +590,6 @@ export default function ReportsScreen() {
             })}
           </>
         )}
-
-        {/* Other Reports Button */}
-        <TouchableOpacity
-          style={styles.otherReportsButton}
-          onPress={() => router.push('/other-reports')}
-        >
-          <View style={styles.otherReportsContent}>
-            <View style={styles.otherReportsLeft}>
-              <IconSymbol
-                ios_icon_name="chart.bar.xaxis"
-                android_material_icon_name="assessment"
-                size={24}
-                color={colors.primary}
-              />
-              <Text style={styles.otherReportsTitle}>Other Reports</Text>
-            </View>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={24}
-              color={colors.textSecondary}
-            />
-          </View>
-          <Text style={styles.otherReportsSubtitle}>
-            View Success vs Struggles, Wins vs Losses, and more with time filtering
-          </Text>
-        </TouchableOpacity>
 
         {currencyBalances.length === 0 && goalProgress.length === 0 && (
           <View style={styles.emptyState}>
@@ -1142,33 +1129,26 @@ const styles = StyleSheet.create({
   filterButtonTextActive: {
     color: '#FFFFFF',
   },
-  otherReportsButton: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  otherReportsContent: {
+  headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 24,
   },
-  otherReportsLeft: {
+  otherReportsSmallButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.primary,
   },
-  otherReportsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  otherReportsSubtitle: {
+  otherReportsSmallButtonText: {
     fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
+    fontWeight: '600',
+    color: colors.primary,
   },
 });
