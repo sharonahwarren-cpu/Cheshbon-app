@@ -233,6 +233,11 @@ export default function ReportsScreen() {
         params.append('endDate', dateRange.endDate);
       }
       
+      // Always exclude pure currency transactions from reports
+      // Pure currency transactions are identified by the backend flag (is_pure_currency_transaction)
+      // and should not be counted in behavioral/outcome reports
+      params.append('excludePureCurrencyTransactions', 'true');
+      
       const queryString = params.toString();
       const dateParams = queryString ? `?${queryString}` : '';
       

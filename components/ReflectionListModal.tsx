@@ -170,38 +170,15 @@ export function ReflectionListModal({
       params.append('orderBy', 'entryDate');
       params.append('orderDirection', 'desc');
       
+      // CRITICAL: Exclude pure currency transactions from all report pop-ups
+      // Pure currency transactions are identified by the backend flag, not by keywords
+      params.append('isPureCurrencyTransaction', 'false');
+      
       const endpoint = `/api/reflections?${params.toString()}`;
       console.log('[ReflectionListModal] Fetching from endpoint:', endpoint);
       
       const response = await authenticatedGet(endpoint);
       let reflectionsData = Array.isArray(response) ? response : (response?.data || []);
-      
-      // CRITICAL: Filter out ALL currency transactions from ALL report pop-ups
-      // A reflection is a currency transaction if:
-      // 1. It has a currencyChange value (not null/undefined)
-      // 2. It has NO linked goal (linkedGoalId is null/undefined)
-      // 3. The description contains currency-related keywords OR is empty/minimal
-      reflectionsData = reflectionsData.filter((reflection: Reflection) => {
-        const description = reflection.description?.toLowerCase() || '';
-        
-        // Check if this is a pure currency transaction
-        const hasCurrencyChange = reflection.currencyChange !== null && reflection.currencyChange !== undefined;
-        const hasNoLinkedGoal = !reflection.linkedGoalId;
-        
-        // Currency transaction keywords
-        const currencyKeywords = ['paid', 'claimed', 'claim', 'pay', 'chocolate cake', 'min hisbodus'];
-        const hasCurrencyKeyword = currencyKeywords.some(keyword => description.includes(keyword));
-        
-        // If it has a currency change, no linked goal, and either has currency keywords or is empty
-        const isPureCurrencyTransaction = hasCurrencyChange && hasNoLinkedGoal && (hasCurrencyKeyword || description.length < 10);
-        
-        if (isPureCurrencyTransaction) {
-          console.log('[ReflectionListModal] Filtering out currency transaction:', reflection.id, description, 'currencyChange:', reflection.currencyChange);
-          return false;
-        }
-        
-        return true;
-      });
       
       // Additional filtering for specific report types
       if (filterType === 'gainslosses') {
