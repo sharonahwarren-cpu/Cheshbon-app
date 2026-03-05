@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -119,6 +119,7 @@ export function ReflectionListModal({
   endDate,
 }: ReflectionListModalProps) {
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [reflections, setReflections] = useState<Reflection[]>([]);
   const [selectedReflection, setSelectedReflection] = useState<Reflection | null>(null);
   const [showReflectionModal, setShowReflectionModal] = useState(false);
@@ -131,19 +132,14 @@ export function ReflectionListModal({
   const [motivations, setMotivations] = useState<Motivation[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
 
-  useEffect(() => {
-    if (visible) {
-      console.log('[ReflectionListModal] Modal opened, loading reflections with filter:', filterType, filterValue, goalId, startDate, endDate);
-      loadReflections();
-      loadSupportingData();
-    }
-  }, [visible, filterType, filterValue, goalId, startDate, endDate]);
-
-  const loadReflections = async () => {
+  const loadReflections = useCallback(async () => {
+    if (!visible || !filterType) return;
+    
     console.log('[ReflectionListModal] Loading reflections');
     setLoading(true);
+    setErrorMessage('');
+    
     try {
-      let endpoint = '/api/reflections';
       const params = new URLSearchParams();
       
       if (goalId) {
@@ -170,24 +166,34 @@ export function ReflectionListModal({
         params.append('endDate', endDate);
       }
       
-      const queryString = params.toString();
-      if (queryString) {
-        endpoint += `?${queryString}`;
-      }
+      // Add ordering parameters for chronological order (newest first)
+      params.append('orderBy', 'entryDate');
+      params.append('orderDirection', 'desc');
       
+      const endpoint = `/api/reflections?${params.toString()}`;
       console.log('[ReflectionListModal] Fetching from endpoint:', endpoint);
+      
       const response = await authenticatedGet(endpoint);
       const reflectionsData = Array.isArray(response) ? response : (response?.data || []);
       
       console.log('[ReflectionListModal] Loaded reflections:', reflectionsData.length);
       setReflections(reflectionsData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[ReflectionListModal] Error loading reflections:', error);
+      setErrorMessage(error.message || 'Failed to load reflections');
       setReflections([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [visible, filterType, filterValue, goalId, startDate, endDate]);
+
+  useEffect(() => {
+    if (visible) {
+      console.log('[ReflectionListModal] Modal opened, loading reflections with filter:', filterType, filterValue, goalId, startDate, endDate);
+      loadReflections();
+      loadSupportingData();
+    }
+  }, [visible, loadReflections]);
 
   const loadSupportingData = async () => {
     console.log('[ReflectionListModal] Loading supporting data for AddReflectionModal');

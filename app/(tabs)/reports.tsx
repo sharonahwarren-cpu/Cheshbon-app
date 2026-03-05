@@ -180,9 +180,11 @@ export default function ReportsScreen() {
   const [reflectionListFilterValue, setReflectionListFilterValue] = useState<string | undefined>(undefined);
   const [reflectionListGoalId, setReflectionListGoalId] = useState<string | undefined>(undefined);
 
-
-
-  const getDateRangeParams = useCallback(() => {
+  const getDateRangeForModal = useCallback(() => {
+    if (timeFilter === 'all') {
+      return {};
+    }
+    
     const now = new Date();
     let startDate: Date | null = null;
     
@@ -199,26 +201,37 @@ export default function ReportsScreen() {
       case 'year':
         startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
         break;
-      case 'all':
-      default:
-        return '';
     }
     
     if (startDate) {
       const startDateISO = startDate.toISOString();
       const endDateISO = now.toISOString();
-      console.log('[Reports] Date range for filter:', timeFilter, 'Start:', startDateISO, 'End:', endDateISO);
-      return `?startDate=${encodeURIComponent(startDateISO)}&endDate=${encodeURIComponent(endDateISO)}`;
+      console.log('[Reports] Date range for modal:', timeFilter, 'Start:', startDateISO, 'End:', endDateISO);
+      return {
+        startDate: startDateISO,
+        endDate: endDateISO,
+      };
     }
     
-    return '';
+    return {};
   }, [timeFilter]);
 
   const loadReportsData = useCallback(async () => {
     console.log("Loading reports data with time filter:", timeFilter);
     setLoading(true);
     try {
-      const dateParams = getDateRangeParams();
+      const dateRange = getDateRangeForModal();
+      const params = new URLSearchParams();
+      
+      if (dateRange.startDate && dateRange.endDate) {
+        params.append('startDate', dateRange.startDate);
+        params.append('endDate', dateRange.endDate);
+      }
+      
+      const queryString = params.toString();
+      const dateParams = queryString ? `?${queryString}` : '';
+      
+      console.log('[Reports] Fetching with date params:', dateParams);
       
       const [
         currencyRes,
@@ -273,9 +286,9 @@ export default function ReportsScreen() {
       setGoalProgress(goalProgressData);
       setTopMotivationsByType(topMotivationsByTypeData);
       setTopMotivationsByOutcome(topMotivationsByOutcomeData);
-      console.log('[Reports] Top motivations by type:', topMotivationsByTypeData);
-      console.log('[Reports] Top motivations by outcome:', topMotivationsByOutcomeData);
-
+      
+      console.log('[Reports] Success vs Struggles:', successStrugglesData);
+      console.log('[Reports] Wins vs Losses:', winsLossesData);
       console.log("Reports data loaded successfully");
     } catch (error: any) {
       console.error("Error loading reports data:", error);
@@ -283,10 +296,10 @@ export default function ReportsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [timeFilter, getDateRangeParams]);
+  }, [timeFilter, getDateRangeForModal]);
 
   useEffect(() => {
-    console.log("ReportsScreen mounted");
+    console.log("ReportsScreen mounted or timeFilter changed");
     loadReportsData();
   }, [loadReportsData]);
 
@@ -353,39 +366,6 @@ export default function ReportsScreen() {
     } finally {
       setCurrencyModalLoading(false);
     }
-  };
-
-  const getDateRangeForModal = (): { startDate?: string; endDate?: string } => {
-    if (timeFilter === 'all') {
-      return {};
-    }
-    
-    const now = new Date();
-    let startDate: Date | null = null;
-    
-    switch (timeFilter) {
-      case 'week':
-        startDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-        break;
-      case 'month':
-        startDate = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
-        break;
-      case '6months':
-        startDate = new Date(now.getTime() - (180 * 24 * 60 * 60 * 1000));
-        break;
-      case 'year':
-        startDate = new Date(now.getTime() - (365 * 24 * 60 * 60 * 1000));
-        break;
-    }
-    
-    if (startDate) {
-      return {
-        startDate: startDate.toISOString(),
-        endDate: now.toISOString(),
-      };
-    }
-    
-    return {};
   };
 
   const openReflectionListModal = (title: string, filterType: 'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal', filterValue?: string, goalId?: string) => {
