@@ -1743,4 +1743,65 @@ export function registerAuthRoutes(app: App) {
       redirectUrl,
     };
   });
+
+  // GET /api/auth/password-reset-status - Check password reset configuration and endpoints
+  app.fastify.get('/api/auth/password-reset-status', {
+    schema: {
+      description: 'Check password reset configuration status and available endpoints',
+      tags: ['auth'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            status: { type: 'string' },
+            passwordResetEnabled: { type: 'boolean' },
+            emailVerificationEnabled: { type: 'boolean' },
+            resendConfigured: { type: 'boolean' },
+            frontendUrl: { type: 'string' },
+            endpoints: {
+              type: 'object',
+              properties: {
+                requestPasswordReset: { type: 'string' },
+                resetPassword: { type: 'string' },
+                sendVerificationEmail: { type: 'string' },
+                verifyEmail: { type: 'string' },
+              },
+            },
+            notes: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const resendConfigured = !!process.env.RESEND_API_KEY;
+
+    app.logger.info({}, 'Password reset status endpoint called');
+
+    return {
+      status: 'ok',
+      passwordResetEnabled: true,
+      emailVerificationEnabled: true,
+      resendConfigured,
+      frontendUrl,
+      endpoints: {
+        requestPasswordReset: 'POST /api/auth/request-password-reset',
+        resetPassword: 'POST /api/auth/reset-password',
+        sendVerificationEmail: 'POST /api/auth/send-verification-email',
+        verifyEmail: 'GET /api/auth/verify-email?token={token}',
+      },
+      notes: [
+        'Password reset tokens expire in 1 hour',
+        'Email verification tokens expire in 24 hours',
+        'All password reset and email verification endpoints are public (no authentication required)',
+        'Email is sent via Resend during request-password-reset and send-verification-email',
+      ],
+    };
+  });
 }
