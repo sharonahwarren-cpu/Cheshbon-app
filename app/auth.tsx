@@ -12,6 +12,7 @@ import {
   ScrollView,
   Modal,
   Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
@@ -152,6 +153,18 @@ export default function AuthScreen() {
     }
   };
 
+  const handleForgotPassword = () => {
+    console.log('📧 [AUTH SCREEN] Forgot password pressed');
+    const emailSubject = 'Password Reset Request';
+    const emailBody = 'Hi, I would like to reset my password for my Cheshbon account.';
+    const mailtoUrl = `mailto:cheshbon.app.me@gmail.com?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+    
+    Linking.openURL(mailtoUrl).catch((err) => {
+      console.error('❌ [AUTH SCREEN] Failed to open email client:', err);
+      showError('Could not open email client. Please email cheshbon.app.me@gmail.com directly.');
+    });
+  };
+
   const modeText = mode === 'signup' ? 'Create Account' : 'Sign In';
   const switchModeText =
     mode === 'signup' ? 'Already have an account? Sign In' : "Don't have an account? Sign Up";
@@ -242,6 +255,17 @@ export default function AuthScreen() {
                   editable={!loading}
                 />
               </View>
+
+              {/* Forgot Password Link - only show in sign-in mode */}
+              {mode === 'signin' && (
+                <TouchableOpacity
+                  style={styles.forgotPasswordButton}
+                  onPress={handleForgotPassword}
+                  disabled={loading}
+                >
+                  <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 style={[styles.button, styles.primaryButton, loading && styles.buttonDisabled]}
@@ -449,6 +473,17 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 16,
     color: colors.text,
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  forgotPasswordText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '500',
   },
   button: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 
-import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Image, Modal } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Platform, TouchableOpacity, Image, Modal, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React from "react";
 import { IconSymbol } from "@/components/IconSymbol";
@@ -32,6 +32,20 @@ export default function ProfileScreen() {
       setErrorMessage('Failed to sign out. Please try again.');
       setShowErrorModal(true);
     }
+  };
+
+  const handleContactDeveloper = () => {
+    console.log('📧 [PROFILE] Contact developer pressed');
+    const emailAddress = 'cheshbon.app.me@gmail.com';
+    const emailSubject = 'Cheshbon App Feedback';
+    const emailBody = 'Hi,\n\nI would like to:\n[ ] Report a bug\n[ ] Provide feedback\n[ ] Suggest a feature\n\nDetails:\n';
+    const mailtoUrl = `mailto:${emailAddress}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+    
+    Linking.openURL(mailtoUrl).catch((err) => {
+      console.error('❌ [PROFILE] Failed to open email client:', err);
+      setErrorMessage(`Could not open email client. Please email ${emailAddress} directly.`);
+      setShowErrorModal(true);
+    });
   };
 
   const userInitial = user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U';
@@ -113,6 +127,30 @@ export default function ProfileScreen() {
           <Text style={styles.aboutText}>
             Stay consistent, reflect on your journey, and celebrate your wins!
           </Text>
+        </View>
+
+        {/* Contact Developer Section */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Contact Developer</Text>
+          <Text style={styles.contactText}>
+            Have a bug to report, feedback to share, or a feature to suggest?
+          </Text>
+          <Text style={styles.contactText}>
+            We&apos;d love to hear from you!
+          </Text>
+          <TouchableOpacity
+            style={styles.contactButton}
+            onPress={handleContactDeveloper}
+          >
+            <IconSymbol
+              ios_icon_name="envelope.fill"
+              android_material_icon_name="email"
+              size={20}
+              color="#fff"
+            />
+            <Text style={styles.contactButtonText}>Email Developer</Text>
+          </TouchableOpacity>
+          <Text style={styles.emailText}>cheshbon.app.me@gmail.com</Text>
         </View>
       </ScrollView>
 
@@ -230,6 +268,35 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 12,
+  },
+  contactText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  contactButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginTop: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  contactButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emailText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   menuButton: {
     flexDirection: 'row',
