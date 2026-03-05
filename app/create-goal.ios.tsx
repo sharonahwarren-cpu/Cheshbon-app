@@ -984,6 +984,7 @@ export default function CreateGoalScreen() {
         options={{
           title: screenTitle,
           headerShown: true,
+          headerBackTitle: 'Back',
         }}
       />
       
