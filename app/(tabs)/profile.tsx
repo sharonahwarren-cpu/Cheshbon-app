@@ -109,9 +109,7 @@ export default function ProfileScreen() {
             />
           </View>
           <Text style={styles.cardTitle}>About Cheshbon</Text>
-          <Text style={styles.aboutText}>
-            Cheshbon is your personal growth companion. Track your thoughts through journaling and achieve your goals with progress tracking.
-          </Text>
+          <Text style={styles.aboutText}>Cheshbon is your personal growth companion. Track your thoughts through journaling and understand yourself and achieve your goals with progress tracking.</Text>
           <Text style={styles.aboutText}>
             Stay consistent, reflect on your journey, and celebrate your wins!
           </Text>
