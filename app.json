@@ -36,7 +36,11 @@
           {
             "CFBundleURLSchemes": [
 <<<<<<< HEAD
+<<<<<<< HEAD
               "com.googleusercontent.apps.115992269298-t73ftnb23upo58frkemdv7slsgest3ft"
+=======
+              "com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh"
+>>>>>>> origin/main
 =======
               "com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh"
 >>>>>>> origin/main
@@ -118,7 +122,11 @@
       "router": {},
       "backendUrl": "https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev",
 <<<<<<< HEAD
+<<<<<<< HEAD
       "googleClientIdIOS": "115992269298-t73ftnb23upo58frkemdv7slsgest3ft.apps.googleusercontent.com"
+=======
+      "googleClientIdIOS": "115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com"
+>>>>>>> origin/main
 =======
       "googleClientIdIOS": "115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com"
 >>>>>>> origin/main
