@@ -3,8 +3,7 @@ import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { FloatingTabBar } from '@/components/FloatingTabBar';
-import { IconSymbol } from '@/components/IconSymbol';
+import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
 import { colors } from '@/styles/commonStyles';
 
 export default function TabLayout() {
@@ -28,59 +27,30 @@ export default function TabLayout() {
   }
 
   return (
-    <Tabs
-      tabBar={(props) => <FloatingTabBar {...props} />}
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
-      }}
-    >
-      <Tabs.Screen
-        name="(home)"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol ios_icon_name="house.fill" android_material_icon_name="home" size={28} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="reflect"
-        options={{
-          title: 'Reflect',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol ios_icon_name="square.and.pencil" android_material_icon_name="edit" size={28} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="reports"
-        options={{
-          title: 'Reports',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol ios_icon_name="chart.bar.fill" android_material_icon_name="bar-chart" size={28} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol ios_icon_name="gearshape.fill" android_material_icon_name="settings" size={28} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol ios_icon_name="person.fill" android_material_icon_name="person" size={28} color={color} />
-          ),
-        }}
-      />
-    </Tabs>
+    <NativeTabs>
+      <NativeTabs.Trigger name="(home)">
+        <Label>Home</Label>
+        <Icon 
+          sf={{ default: 'house', selected: 'house.fill' }} 
+          drawable="home" 
+        />
+      </NativeTabs.Trigger>
+      
+      <NativeTabs.Trigger name="reports">
+        <Label>Reports</Label>
+        <Icon 
+          sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} 
+          drawable="bar-chart" 
+        />
+      </NativeTabs.Trigger>
+      
+      <NativeTabs.Trigger name="profile">
+        <Label>Profile</Label>
+        <Icon 
+          sf={{ default: 'person', selected: 'person.fill' }} 
+          drawable="person" 
+        />
+      </NativeTabs.Trigger>
+    </NativeTabs>
   );
 }

@@ -12,7 +12,6 @@ import {
   ScrollView,
   Modal,
   Image,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
@@ -32,8 +31,6 @@ export default function AuthScreen() {
     signUpWithEmail,
     signInWithGoogle,
     signInWithApple,
-    signInWithBiometrics,
-    checkBiometricsAvailable,
   } = useAuth();
 
   const [mode, setMode] = useState<Mode>('signin');
@@ -41,7 +38,6 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
 
   // Error modal state (no Alert.alert - web compatible)
@@ -72,19 +68,6 @@ export default function AuthScreen() {
       setMode('signin');
     }
   }, [params.verified]);
-
-  // Check biometrics availability
-  useEffect(() => {
-    console.log('🔐 [AUTH SCREEN] Checking biometrics availability...');
-    if (checkBiometricsAvailable) {
-      checkBiometricsAvailable()
-        .then((available) => {
-          console.log('🔐 [AUTH SCREEN] Biometrics available:', available);
-          setBiometricsAvailable(available);
-        })
-        .catch(() => setBiometricsAvailable(false));
-    }
-  }, [checkBiometricsAvailable]);
 
   // Check Apple Authentication availability
   useEffect(() => {
@@ -200,23 +183,6 @@ export default function AuthScreen() {
     }
   };
 
-  const handleBiometricSignIn = async () => {
-    console.log('🔐 [AUTH SCREEN] Biometric sign-in button pressed');
-    setLoading(true);
-    try {
-      console.log('🔐 [AUTH SCREEN] Calling signInWithBiometrics...');
-      if (signInWithBiometrics) {
-        await signInWithBiometrics();
-        console.log('✅ [AUTH SCREEN] Biometric sign-in successful');
-      }
-    } catch (error: any) {
-      console.error('❌ [AUTH SCREEN] Biometric sign-in error:', error);
-      showError(error.message || 'Biometric authentication failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleForgotPassword = () => {
     console.log('📧 [AUTH SCREEN] Forgot password pressed - navigating to forgot password screen');
     router.push('/forgot-password');
@@ -244,7 +210,7 @@ export default function AuthScreen() {
             
             <Text style={styles.verificationTitle}>Check Your Email</Text>
             <Text style={styles.verificationMessage}>
-              We've sent a verification link to:
+              We&apos;ve sent a verification link to:
             </Text>
             <Text style={styles.verificationEmail}>{verificationEmail}</Text>
             
@@ -296,7 +262,7 @@ export default function AuthScreen() {
                 color={colors.textSecondary}
               />
               <Text style={styles.verificationNoteText}>
-                Didn't receive the email? Check your spam folder or click "Resend" above.
+                Didn&apos;t receive the email? Check your spam folder or click &quot;Resend&quot; above.
               </Text>
             </View>
 
@@ -459,35 +425,8 @@ export default function AuthScreen() {
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Social / Biometric Buttons */}
+            {/* Social Buttons */}
             <View style={styles.socialButtons}>
-              {/* Biometric - only show if available AND not in sign-up mode */}
-              {biometricsAvailable && mode === 'signin' && signInWithBiometrics && (
-                <View>
-                  <TouchableOpacity
-                    style={[styles.button, styles.biometricButton, loading && styles.buttonDisabled]}
-                    onPress={handleBiometricSignIn}
-                    disabled={loading}
-                    activeOpacity={0.8}
-                  >
-                    <IconSymbol
-                      ios_icon_name="faceid"
-                      android_material_icon_name="fingerprint"
-                      size={24}
-                      color="#fff"
-                    />
-                    <Text style={styles.buttonText}>
-                      {Platform.OS === 'ios' ? 'Face ID / Touch ID' : 'Fingerprint Sign In'}
-                    </Text>
-                  </TouchableOpacity>
-                  <Text style={styles.biometricNote}>
-                    {Platform.OS === 'ios'
-                      ? 'Uses Face ID or Touch ID. Sign in with email first to enable.'
-                      : 'Uses fingerprint. Sign in with email first to enable.'}
-                  </Text>
-                </View>
-              )}
-
               {/* Google Sign In */}
               <TouchableOpacity
                 style={[styles.button, styles.googleButton, loading && styles.buttonDisabled]}
@@ -682,9 +621,6 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: colors.primary,
   },
-  biometricButton: {
-    backgroundColor: '#8B5CF6',
-  },
   googleButton: {
     backgroundColor: '#4285F4',
   },
@@ -725,16 +661,6 @@ const styles = StyleSheet.create({
   socialButtons: {
     gap: 0,
   },
-  disabledButtonContainer: {
-    marginBottom: 12,
-  },
-  disabledNote: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
   demoHint: {
     marginTop: 24,
     alignItems: 'center',
@@ -749,14 +675,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     fontStyle: 'italic',
-  },
-  biometricNote: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-    fontStyle: 'italic',
-    paddingHorizontal: 16,
   },
   modalOverlay: {
     flex: 1,
