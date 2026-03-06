@@ -715,7 +715,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // For iOS, use the iOS-specific redirect URI scheme registered in Google Cloud Console
         // This is required for native iOS Google OAuth with the iOS Client ID
+<<<<<<< HEAD
         const iosGoogleRedirectUri = 'com.googleusercontent.apps.115992269298-t73ftnb23upo58frkemdv7slsgest3ft://oauth2redirect';
+=======
+        const iosGoogleRedirectUri = 'com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh://oauth2redirect';
+>>>>>>> origin/main
         const callbackUrl = Platform.OS === 'ios' ? iosGoogleRedirectUri : `${APP_SCHEME}://auth-callback`;
         console.log('📱 [GOOGLE NATIVE] Platform:', Platform.OS);
         console.log('📱 [GOOGLE NATIVE] Callback URL:', callbackUrl);
