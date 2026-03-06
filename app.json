@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Cheshbon",
@@ -23,10 +24,12 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset) and geofencing.",
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset).",
         "NSFaceIDUsageDescription": "Use Face ID to sign in quickly and securely.",
+        "GIDClientID": "115992269298-t73ftnb23upo58frkemdv7slsgest3ft.apps.googleusercontent.com",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
-              "cheshbon"
+              "cheshbon",
+              "com.googleusercontent.apps.115992269298-t73ftnb23upo58frkemdv7slsgest3ft"
             ],
             "CFBundleURLName": "com.anonymous.Natively"
           },
@@ -48,7 +51,7 @@
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.Natively",
+      "package": "com.sharonah.cheshbon",
       "permissions": [
         "USE_BIOMETRIC",
         "USE_FINGERPRINT"

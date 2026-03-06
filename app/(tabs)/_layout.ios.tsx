@@ -1,69 +1,92 @@
 
-import { useRouter } from 'expo-router';
+import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { ActivityIndicator, View } from 'react-native';
+import { FloatingTabBar } from '@/components/FloatingTabBar';
+import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { NativeTabs, Icon, Label } from 'expo-router/unstable-native-tabs';
 
 export default function TabLayout() {
   const router = useRouter();
   const { user, loading } = useAuth();
 
-  // Redirect to auth screen if not authenticated
   useEffect(() => {
-    console.log('🔐 [TAB LAYOUT iOS] Auth state:', { user: !!user, loading });
     if (!loading && !user) {
-      console.log('🔐 [TAB LAYOUT iOS] User not authenticated, redirecting to auth...');
+      console.log('[TabLayout iOS] User not authenticated, redirecting to auth');
       router.replace('/auth');
     }
-  }, [user, loading]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, user]);
 
-  // Show loading while checking auth
   if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return null;
   }
 
-  // Don't render tabs if not authenticated
   if (!user) {
     return null;
   }
 
   return (
-    <NativeTabs
+    <Tabs
+      tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
+        headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSecondary,
       }}
     >
-      <NativeTabs.Trigger name="(home)">
-        <Label>Home</Label>
-        <Icon sf={{ default: 'house', selected: 'house.fill' }} drawable="home" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reports">
-        <Label>Reports</Label>
-        <Icon sf={{ default: 'chart.bar.doc.horizontal', selected: 'chart.bar.doc.horizontal.fill' }} drawable="assessment" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
-        <Label>Settings</Label>
-        <Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} drawable="settings" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile">
-        <Label>Profile</Label>
-        <Icon sf={{ default: 'person.circle', selected: 'person.circle.fill' }} drawable="person" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="reflect" hidden={true}>
-        <Label>Reflect</Label>
-        <Icon sf={{ default: 'book.closed', selected: 'book.closed.fill' }} drawable="menu-book" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="ai-chat" hidden={true}>
-        <Label>AI Chat</Label>
-        <Icon sf={{ default: 'message', selected: 'message.fill' }} drawable="chat" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+      <Tabs.Screen
+        name="(home)"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol ios_icon_name="house.fill" android_material_icon_name="home" size={28} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="reflect"
+        options={{
+          title: 'Reflect',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol ios_icon_name="square.and.pencil" android_material_icon_name="edit" size={28} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title: 'Reports',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol ios_icon_name="chart.bar.fill" android_material_icon_name="bar-chart" size={28} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol ios_icon_name="gearshape.fill" android_material_icon_name="settings" size={28} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol ios_icon_name="person.fill" android_material_icon_name="person" size={28} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="ai-chat"
+        options={{
+          href: null,
+        }}
+      />
+    </Tabs>
   );
 }
