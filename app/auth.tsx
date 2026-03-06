@@ -299,6 +299,18 @@ export default function AuthScreen() {
                 Didn't receive the email? Check your spam folder or click "Resend" above.
               </Text>
             </View>
+
+            <View style={styles.debugWarning}>
+              <IconSymbol
+                ios_icon_name="exclamationmark.triangle.fill"
+                android_material_icon_name="warning"
+                size={16}
+                color="#856404"
+              />
+              <Text style={styles.debugWarningText}>
+                ⚠️ If the verification email links to localhost, the FRONTEND_URL environment variable must be set to your production domain in the Specular dashboard.
+              </Text>
+            </View>
           </View>
         </SafeAreaView>
       </>
@@ -866,5 +878,23 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginLeft: 8,
     lineHeight: 18,
+  },
+  debugWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#fff3cd',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffc107',
+    maxWidth: 400,
+  },
+  debugWarningText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#856404',
+    marginLeft: 8,
+    lineHeight: 16,
   },
 });

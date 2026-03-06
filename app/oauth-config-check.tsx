@@ -35,10 +35,37 @@ interface EnvCheckResponse {
   instructions: string;
 }
 
+interface EmailConfigResponse {
+  status: string;
+  frontendUrl: string;
+  frontendUrlIsLocalhost: boolean;
+  nodeEnv: string;
+  isProduction: boolean;
+  resendConfigured: boolean;
+  sampleLinks: {
+    emailVerification: string;
+    passwordReset: string;
+  };
+  configuration: {
+    emailVerificationEnabled: boolean;
+    passwordResetEnabled: boolean;
+    requireEmailVerification: boolean;
+  };
+  betterAuthEndpoints: {
+    requestPasswordReset: string;
+    resetPassword: string;
+    sendVerificationEmail: string;
+    verifyEmail: string;
+  };
+  issues: string[];
+  instructions: string[];
+}
+
 export default function OAuthConfigCheckScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState<EnvCheckResponse | null>(null);
+  const [emailConfig, setEmailConfig] = useState<EmailConfigResponse | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -49,8 +76,19 @@ export default function OAuthConfigCheckScreen() {
     try {
       setLoading(true);
       setError('');
-      const response = await apiGet<EnvCheckResponse>('/api/env-check');
-      setConfig(response);
+      const [envResponse, emailResponse] = await Promise.allSettled([
+        apiGet<EnvCheckResponse>('/api/env-check'),
+        apiGet<EmailConfigResponse>('/api/auth/email-config-status'),
+      ]);
+      if (envResponse.status === 'fulfilled') {
+        setConfig(envResponse.value);
+      }
+      if (emailResponse.status === 'fulfilled') {
+        setEmailConfig(emailResponse.value);
+      }
+      if (envResponse.status === 'rejected' && emailResponse.status === 'rejected') {
+        setError('Failed to load configuration. Please check your connection.');
+      }
     } catch (err: any) {
       console.error('Error loading OAuth config:', err);
       setError(err.message || 'Failed to load configuration');
@@ -230,10 +268,114 @@ export default function OAuthConfigCheckScreen() {
             </View>
             <View style={styles.urlItem}>
               <Text style={styles.urlLabel}>FRONTEND_URL:</Text>
-              <Text style={styles.urlValue}>{config.urls.frontendUrl || 'NOT SET'}</Text>
+              <Text style={[styles.urlValue, config.urls.frontendUrl?.includes('localhost') && styles.urlValueWarning]}>
+                {config.urls.frontendUrl || 'NOT SET'}
+                {config.urls.frontendUrl?.includes('localhost') ? ' ⚠️ LOCALHOST' : ''}
+              </Text>
             </View>
           </View>
         </View>
+
+        {/* Email Configuration Status */}
+        {emailConfig && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Email Configuration</Text>
+            <View style={styles.card}>
+              <View style={styles.configItem}>
+                <View style={styles.configHeader}>
+                  <Text style={styles.configLabel}>Resend Email Service</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: emailConfig.resendConfigured ? '#4CAF50' : '#F44336' }]}>
+                    <IconSymbol
+                      ios_icon_name={emailConfig.resendConfigured ? 'checkmark.circle.fill' : 'xmark.circle.fill'}
+                      android_material_icon_name={emailConfig.resendConfigured ? 'check-circle' : 'error'}
+                      size={16}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.statusText}>{emailConfig.resendConfigured ? 'CONFIGURED' : 'NOT SET'}</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.configItem}>
+                <View style={styles.configHeader}>
+                  <Text style={styles.configLabel}>FRONTEND_URL for Emails</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: emailConfig.frontendUrlIsLocalhost ? '#FF9800' : '#4CAF50' }]}>
+                    <IconSymbol
+                      ios_icon_name={emailConfig.frontendUrlIsLocalhost ? 'exclamationmark.triangle.fill' : 'checkmark.circle.fill'}
+                      android_material_icon_name={emailConfig.frontendUrlIsLocalhost ? 'warning' : 'check-circle'}
+                      size={16}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.statusText}>{emailConfig.frontendUrlIsLocalhost ? 'LOCALHOST ⚠️' : 'OK'}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.previewText, emailConfig.frontendUrlIsLocalhost && { color: '#FF9800' }]}>
+                  {emailConfig.frontendUrl}
+                </Text>
+              </View>
+              {emailConfig.frontendUrlIsLocalhost && (
+                <View style={styles.warningBox}>
+                  <IconSymbol
+                    ios_icon_name="exclamationmark.triangle.fill"
+                    android_material_icon_name="warning"
+                    size={20}
+                    color="#856404"
+                  />
+                  <Text style={styles.warningText}>
+                    Email verification and password reset links will point to localhost. Users cannot click these links.{'\n\n'}
+                    Fix: Set FRONTEND_URL=https://cheshbon.app in the Specular dashboard environment variables.
+                  </Text>
+                </View>
+              )}
+              {emailConfig.sampleLinks && (
+                <View style={styles.urlItem}>
+                  <Text style={styles.urlLabel}>Sample Verification Link:</Text>
+                  <Text style={[styles.urlValue, { fontSize: 11 }]}>{emailConfig.sampleLinks.emailVerification}</Text>
+                </View>
+              )}
+              {emailConfig.issues && emailConfig.issues.length > 0 && (
+                <View style={styles.issuesList}>
+                  <Text style={styles.issuesTitle}>Issues Found:</Text>
+                  {emailConfig.issues.map((issue, idx) => (
+                    <Text key={idx} style={styles.issueItem}>• {issue}</Text>
+                  ))}
+                </View>
+              )}
+              {emailConfig.instructions && emailConfig.instructions.length > 0 && (
+                <View style={styles.issuesList}>
+                  <Text style={styles.issuesTitle}>How to Fix:</Text>
+                  {emailConfig.instructions.map((instruction, idx) => (
+                    <Text key={idx} style={styles.instructionItem}>{idx + 1}. {instruction}</Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Better Auth Endpoints */}
+        {emailConfig?.betterAuthEndpoints && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Auth Endpoints</Text>
+            <View style={styles.card}>
+              <View style={styles.urlItem}>
+                <Text style={styles.urlLabel}>Password Reset Request:</Text>
+                <Text style={styles.urlValue}>{emailConfig.betterAuthEndpoints.requestPasswordReset}</Text>
+              </View>
+              <View style={styles.urlItem}>
+                <Text style={styles.urlLabel}>Reset Password:</Text>
+                <Text style={styles.urlValue}>{emailConfig.betterAuthEndpoints.resetPassword}</Text>
+              </View>
+              <View style={styles.urlItem}>
+                <Text style={styles.urlLabel}>Send Verification Email:</Text>
+                <Text style={styles.urlValue}>{emailConfig.betterAuthEndpoints.sendVerificationEmail}</Text>
+              </View>
+              <View style={styles.urlItem}>
+                <Text style={styles.urlLabel}>Verify Email:</Text>
+                <Text style={styles.urlValue}>{emailConfig.betterAuthEndpoints.verifyEmail}</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Instructions */}
         {!googleConfigured && (
@@ -419,6 +561,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     fontFamily: 'monospace',
+  },
+  urlValueWarning: {
+    color: '#FF9800',
+  },
+  warningBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#fff3cd',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#ffc107',
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#856404',
+    marginLeft: 8,
+    lineHeight: 20,
+  },
+  issuesList: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  issuesTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  issueItem: {
+    fontSize: 13,
+    color: '#F44336',
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  instructionItem: {
+    fontSize: 13,
+    color: colors.text,
+    lineHeight: 20,
+    marginBottom: 4,
   },
   instructionsCard: {
     backgroundColor: colors.card,

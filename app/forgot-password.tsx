@@ -50,10 +50,13 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      // Better Auth endpoint is /api/auth/forget-password (not "forgot")
-      // Also try /api/auth/request-password-reset as fallback
-      console.log('[FORGOT PASSWORD] Calling /api/auth/forget-password...');
-      const response = await apiPost('/api/auth/forget-password', { email: email.trim(), redirectTo: '/reset-password' });
+      // Better Auth endpoint is POST /api/auth/request-password-reset
+      // (NOT /api/auth/forget-password - that endpoint does not exist in Better Auth)
+      console.log('[FORGOT PASSWORD] Calling /api/auth/request-password-reset...');
+      const response = await apiPost('/api/auth/request-password-reset', {
+        email: email.trim(),
+        redirectTo: '/reset-password',
+      });
       console.log('[FORGOT PASSWORD] Success:', response);
       // Always show success modal (backend doesn't reveal if email exists)
       setSuccessModalVisible(true);
@@ -174,6 +177,12 @@ export default function ForgotPasswordScreen() {
               <Text style={styles.helpText}>
                 Need help? Contact us at{' '}
                 <Text style={styles.helpEmail}>cheshbon.app.me@gmail.com</Text>
+              </Text>
+            </View>
+
+            <View style={styles.debugContainer}>
+              <Text style={styles.debugText}>
+                ⚠️ If reset emails link to localhost, the backend FRONTEND_URL environment variable must be set to your production domain (e.g., https://cheshbon.app) in the Specular dashboard.
               </Text>
             </View>
           </ScrollView>
@@ -354,6 +363,20 @@ const styles = StyleSheet.create({
   helpEmail: {
     color: colors.primary,
     fontWeight: '500',
+  },
+  debugContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: '#fff3cd',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffc107',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#856404',
+    textAlign: 'center',
+    lineHeight: 18,
   },
   modalOverlay: {
     flex: 1,
