@@ -715,26 +715,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // For iOS, use the iOS-specific redirect URI scheme registered in Google Cloud Console
         // This is required for native iOS Google OAuth with the iOS Client ID
-        const iosGoogleRedirectUri = 'com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh://oauth2redirect';
+        const iosGoogleRedirectUri = 'com.googleusercontent.apps.115992269298-t73ftnb23upo58frkemdv7slsgest3ft://oauth2redirect';
         const callbackUrl = Platform.OS === 'ios' ? iosGoogleRedirectUri : `${APP_SCHEME}://auth-callback`;
         console.log('📱 [GOOGLE NATIVE] Platform:', Platform.OS);
         console.log('📱 [GOOGLE NATIVE] Callback URL:', callbackUrl);
         console.log('📱 [GOOGLE NATIVE] BACKEND_URL:', BACKEND_URL);
 
-<<<<<<< HEAD
-        // IMPORTANT: Send X-Platform header so the backend uses the iOS-specific
-        // Google OAuth Client ID (115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com)
-        // when Platform.OS === 'ios'. The backend checks x-platform: ios to select
-        // GOOGLE_CLIENT_ID_IOS instead of the web client ID.
-        const initResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Mobile-App': 'cheshbon',
-            'X-Platform': Platform.OS,
-            'Origin': BACKEND_URL,
-          },
-=======
         // Build headers - include X-Platform: ios so backend uses iOS-specific Client ID
         const initiateHeaders: Record<string, string> = {
           'Content-Type': 'application/json',
@@ -748,7 +734,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const initResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
           method: 'POST',
           headers: initiateHeaders,
->>>>>>> origin/main
           body: JSON.stringify({
             provider: 'google',
             callbackURL: callbackUrl,

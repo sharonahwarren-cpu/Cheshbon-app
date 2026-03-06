@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Cheshbon",
@@ -23,18 +24,18 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset) and geofencing.",
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset).",
         "NSFaceIDUsageDescription": "Use Face ID to sign in quickly and securely.",
-        "GIDClientID": "115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com",
+        "GIDClientID": "115992269298-t73ftnb23upo58frkemdv7slsgest3ft.apps.googleusercontent.com",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
               "cheshbon",
-              "com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh"
+              "com.googleusercontent.apps.115992269298-t73ftnb23upo58frkemdv7slsgest3ft"
             ],
             "CFBundleURLName": "com.anonymous.Natively"
           },
           {
             "CFBundleURLSchemes": [
-              "com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh"
+              "com.googleusercontent.apps.115992269298-t73ftnb23upo58frkemdv7slsgest3ft"
             ],
             "CFBundleURLName": "com.sharonah.cheshbon.google"
           }
@@ -112,7 +113,7 @@
     "extra": {
       "router": {},
       "backendUrl": "https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev",
-      "googleClientIdIOS": "115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com"
+      "googleClientIdIOS": "115992269298-t73ftnb23upo58frkemdv7slsgest3ft.apps.googleusercontent.com"
     }
   }
 }
