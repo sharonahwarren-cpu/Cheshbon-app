@@ -1,7 +1,6 @@
 
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { FloatingTabBar } from '@/components/FloatingTabBar';
@@ -80,12 +79,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => (
             <IconSymbol ios_icon_name="person.fill" android_material_icon_name="person" size={28} color={color} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="ai-chat"
-        options={{
-          href: null,
         }}
       />
     </Tabs>
