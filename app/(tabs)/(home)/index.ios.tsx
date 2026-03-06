@@ -359,7 +359,7 @@ export default function HomeScreen() {
   useEffect(() => {
     console.log("Selected date changed iOS, reloading data:", selectedDate);
     loadData(false);
-  }, [selectedDate, loadData]);
+  }, [selectedDate]);
 
   // Handle date parameter from search journals navigation
   useEffect(() => {

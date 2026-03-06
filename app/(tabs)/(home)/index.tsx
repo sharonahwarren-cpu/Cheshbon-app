@@ -239,11 +239,13 @@ export default function HomeScreen() {
   useEffect(() => {
     console.log("HomeScreen mounted");
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     console.log("Selected date changed, reloading data:", selectedDate);
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   // Handle date parameter from search journals navigation
@@ -898,12 +900,12 @@ export default function HomeScreen() {
     const successCount = dailySuccessEntries.length;
     const struggleCount = dailyStruggleEntries.length;
 
-    const tallies: Array<{ 
+    const tallies: { 
       tally: number; 
       currencySymbol: string; 
       currencyType: 'reward' | 'consequence';
       currencyId: string;
-    }> = [];
+    }[] = [];
 
     if (goal.rewardCurrencyId && goal.rewardAmount && goal.rewardSuccesses) {
       const rewardCurrency = currencies.find(c => c.id === goal.rewardCurrencyId);
