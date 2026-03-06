@@ -23,10 +23,12 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset) and geofencing.",
         "NSLocationWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset).",
         "NSFaceIDUsageDescription": "Use Face ID to sign in quickly and securely.",
+        "GIDClientID": "115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com",
         "CFBundleURLTypes": [
           {
             "CFBundleURLSchemes": [
-              "cheshbon"
+              "cheshbon",
+              "com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh"
             ],
             "CFBundleURLName": "com.anonymous.Natively"
           }

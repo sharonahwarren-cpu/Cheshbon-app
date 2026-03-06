@@ -717,11 +717,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('📱 [GOOGLE NATIVE] Callback URL:', callbackUrl);
         console.log('📱 [GOOGLE NATIVE] BACKEND_URL:', BACKEND_URL);
 
+        // IMPORTANT: Send X-Platform header so the backend uses the iOS-specific
+        // Google OAuth Client ID (115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com)
+        // when Platform.OS === 'ios'. The backend checks x-platform: ios to select
+        // GOOGLE_CLIENT_ID_IOS instead of the web client ID.
         const initResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Mobile-App': 'cheshbon',
+            'X-Platform': Platform.OS,
             'Origin': BACKEND_URL,
           },
           body: JSON.stringify({
