@@ -19,27 +19,20 @@ import Animated, {
   withSpring,
   interpolate,
 } from 'react-native-reanimated';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { Href } from 'expo-router';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-export interface TabBarItem {
-  name: string;
-  route: Href;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  label: string;
-}
-
-interface FloatingTabBarProps {
-  tabs: TabBarItem[];
+interface FloatingTabBarProps extends BottomTabBarProps {
   containerWidth?: number;
   borderRadius?: number;
   bottomMargin?: number;
 }
 
 export function FloatingTabBar({
-  tabs,
+  state,
+  descriptors,
+  navigation,
   containerWidth = screenWidth / 2.5,
   borderRadius = 35,
   bottomMargin
@@ -47,100 +40,40 @@ export function FloatingTabBar({
   const router = useRouter();
   const pathname = usePathname();
   const theme = useTheme();
-  const animatedValue = useSharedValue(0);
-
-  // Determine active tab based on pathname
-  const activeTabIndex = React.useMemo(() => {
-    const normalizedPathname = pathname.replace(/\/$/, '');
-    
-    console.log('[FloatingTabBar] Current pathname:', normalizedPathname);
-    
-    // Check each tab
-    for (let i = 0; i < tabs.length; i++) {
-      const tab = tabs[i];
-      
-      // Home tab - match root or /(tabs)/(home)
-      if (tab.name === '(home)') {
-        if (normalizedPathname === '/' || 
-            normalizedPathname === '' || 
-            normalizedPathname === '/(tabs)' ||
-            normalizedPathname === '/(tabs)/(home)' ||
-            normalizedPathname.startsWith('/(tabs)/(home)/')) {
-          console.log(`[FloatingTabBar] Active tab: ${i} (${tab.label})`);
-          return i;
-        }
-      }
-      // Reports tab
-      else if (tab.name === 'reports') {
-        if (normalizedPathname === '/(tabs)/reports' ||
-            normalizedPathname.startsWith('/(tabs)/reports/')) {
-          console.log(`[FloatingTabBar] Active tab: ${i} (${tab.label})`);
-          return i;
-        }
-      }
-      // AI Chat tab
-      else if (tab.name === 'ai-chat') {
-        if (normalizedPathname === '/(tabs)/ai-chat' ||
-            normalizedPathname.startsWith('/(tabs)/ai-chat/')) {
-          console.log(`[FloatingTabBar] Active tab: ${i} (${tab.label})`);
-          return i;
-        }
-      }
-      // Profile tab
-      else if (tab.name === 'profile') {
-        if (normalizedPathname === '/(tabs)/profile' ||
-            normalizedPathname.startsWith('/(tabs)/profile/')) {
-          console.log(`[FloatingTabBar] Active tab: ${i} (${tab.label})`);
-          return i;
-        }
-      }
-    }
-    
-    // Default to home
-    console.log('[FloatingTabBar] No match, defaulting to Home (0)');
-    return 0;
-  }, [pathname, tabs]);
+  const animatedValue = useSharedValue(state.index);
 
   React.useEffect(() => {
-    animatedValue.value = withSpring(activeTabIndex, {
+    animatedValue.value = withSpring(state.index, {
       damping: 20,
       stiffness: 120,
       mass: 1,
     });
-  }, [activeTabIndex, animatedValue]);
+  }, [state.index, animatedValue]);
 
-  const handleTabPress = (route: Href, tabName: string, index: number) => {
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('[FloatingTabBar] TAB PRESSED');
-    console.log('[FloatingTabBar] Tab name:', tabName);
-    console.log('[FloatingTabBar] Tab label:', tabs[index].label);
-    console.log('[FloatingTabBar] Target route:', route);
-    console.log('[FloatingTabBar] Current pathname:', pathname);
-    console.log('[FloatingTabBar] Current active index:', activeTabIndex);
-    console.log('[FloatingTabBar] Pressed tab index:', index);
-    console.log('═══════════════════════════════════════════════════════');
-    
-    // Always navigate, even if already on the tab (to ensure it works)
-    try {
-      console.log('[FloatingTabBar] Calling router.push with route:', route);
-      router.push(route);
-      console.log('[FloatingTabBar] Navigation call completed');
-    } catch (error) {
-      console.error('[FloatingTabBar] Navigation error:', error);
+  const handleTabPress = (route: any, index: number) => {
+    const event = navigation.emit({
+      type: 'tabPress',
+      target: route.key,
+      canPreventDefault: true,
+    });
+
+    if (!event.defaultPrevented) {
+      navigation.navigate(route.name);
     }
   };
 
-  const tabWidthPercent = ((100 / tabs.length) - 1).toFixed(2);
+  const tabCount = state.routes.length;
+  const tabWidthPercent = ((100 / tabCount) - 1).toFixed(2);
 
   const indicatorStyle = useAnimatedStyle(() => {
-    const tabWidth = (containerWidth - 8) / tabs.length;
+    const tabWidth = (containerWidth - 8) / tabCount;
     return {
       transform: [
         {
           translateX: interpolate(
             animatedValue.value,
-            [0, tabs.length - 1],
-            [0, tabWidth * (tabs.length - 1)]
+            [0, tabCount - 1],
+            [0, tabWidth * (tabCount - 1)]
           ),
         },
       ],
@@ -199,23 +132,32 @@ export function FloatingTabBar({
           <View style={dynamicStyles.background} />
           <Animated.View style={[dynamicStyles.indicator, indicatorStyle]} />
           <View style={styles.tabsContainer}>
-            {tabs.map((tab, index) => {
-              const isActive = activeTabIndex === index;
+            {state.routes.map((route, index) => {
+              const { options } = descriptors[route.key];
+              const isActive = state.index === index;
+
+              const label =
+                options.tabBarLabel !== undefined
+                  ? options.tabBarLabel
+                  : options.title !== undefined
+                  ? options.title
+                  : route.name;
+
+              const labelText = typeof label === 'string' ? label : route.name;
 
               return (
                 <TouchableOpacity
-                  key={`tab-${index}-${tab.name}`}
+                  key={`tab-${index}-${route.key}`}
                   style={styles.tab}
-                  onPress={() => handleTabPress(tab.route, tab.name, index)}
+                  onPress={() => handleTabPress(route, index)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.tabContent}>
-                    <IconSymbol
-                      android_material_icon_name={tab.icon}
-                      ios_icon_name={tab.icon}
-                      size={24}
-                      color={isActive ? theme.colors.primary : (theme.dark ? '#98989D' : '#000000')}
-                    />
+                    {options.tabBarIcon && options.tabBarIcon({
+                      focused: isActive,
+                      color: isActive ? theme.colors.primary : (theme.dark ? '#98989D' : '#000000'),
+                      size: 24,
+                    })}
                     <Text
                       style={[
                         styles.tabLabel,
@@ -223,7 +165,7 @@ export function FloatingTabBar({
                         isActive && { color: theme.colors.primary, fontWeight: '600' },
                       ]}
                     >
-                      {tab.label}
+                      {labelText}
                     </Text>
                   </View>
                 </TouchableOpacity>
