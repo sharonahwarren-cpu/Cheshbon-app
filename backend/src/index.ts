@@ -243,7 +243,7 @@ app.logger.info(
   'Backend configuration - BASE_URL will be used for OAuth redirects'
 );
 
-// Log email verification and password reset configuration
+// Log email verification and password reset configuration with critical endpoint information
 app.logger.info(
   {
     emailVerificationEnabled: true,
@@ -254,9 +254,18 @@ app.logger.info(
     passwordResetExpiresIn: '1 hour',
     resendConfigured: !!process.env.RESEND_API_KEY,
     frontendUrlForEmails: frontendUrl,
+    frontendUrlIsLocalhost,
     emailFrom: 'Cheshbon <onboarding@resend.dev>',
+    criticalEndpoints: {
+      passwordResetRequest: 'POST /api/auth/request-password-reset (body: { email: string })',
+      passwordReset: 'POST /api/auth/reset-password (body: { token: string, password: string })',
+      emailVerificationSend: 'POST /api/auth/send-verification-email (body: { email: string })',
+      emailVerificationComplete: 'GET /api/auth/verify-email?token={token}',
+    },
+    commonError: 'If frontend gets 404 on /api/auth/forget-password, use /api/auth/request-password-reset instead',
+    diagnosticEndpoint: 'GET /api/auth/email-config-status for configuration diagnostics',
   },
-  'Email verification and password reset configuration initialized - Better Auth will handle /api/auth/request-password-reset and /api/auth/reset-password endpoints'
+  'Email verification and password reset configured with Better Auth - check common error if password reset returns 404'
 );
 
 app.withAuth({
