@@ -1,118 +1,48 @@
 {
   "expo": {
-    "name": "Cheshbon",
-    "slug": "cheshbon",
+    "name": "Natively",
+    "slug": "Natively",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/Chesbon_app_Logo.png",
+      "image": "./assets/images/natively-dark.png",
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sharonah.cheshbon",
+      "bundleIdentifier": "com.placeholder.app",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": [
-          "location"
-        ],
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset) and geofencing.",
-        "NSLocationWhenInUseUsageDescription": "This app needs access to your location for alarm triggers based on astronomical events (sunrise/sunset).",
-        "NSFaceIDUsageDescription": "Use Face ID to sign in quickly and securely.",
-        "GIDClientID": "115992269298-t73ftnb23upo58frkemdv7slsgest3ft.apps.googleusercontent.com",
-        "CFBundleURLTypes": [
-          {
-            "CFBundleURLSchemes": [
-              "cheshbon",
-              "com.googleusercontent.apps.115992269298-t73ftnb23upo58frkemdv7slsgest3ft"
-            ],
-            "CFBundleURLName": "com.anonymous.Natively"
-          },
-          {
-            "CFBundleURLSchemes": [
-              "com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh"
-            ],
-            "CFBundleURLName": "com.sharonah.cheshbon.google"
-          }
-        ]
-      },
-      "associatedDomains": [
-        "applinks:a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev"
-      ]
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/Chesbon_app_Logo.png",
+        "foregroundImage": "./assets/images/natively-dark.png",
         "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.sharonah.cheshbon",
-      "permissions": [
-        "USE_BIOMETRIC",
-        "USE_FINGERPRINT"
-      ],
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "cheshbon",
-              "host": "auth-callback"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev",
-              "pathPrefix": "/auth-callback"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        }
-      ]
+      "package": "com.placeholder.app"
     },
     "web": {
-      "favicon": "./assets/images/Chesbon_app_Logo.png",
+      "favicon": "./assets/images/final_quest_240x240.png",
       "bundler": "metro"
     },
     "plugins": [
       "expo-font",
       "expo-router",
-      "expo-web-browser",
-      "expo-apple-authentication",
-      "expo-secure-store",
-      "expo-local-authentication",
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location for alarm triggers based on astronomical events and geofencing."
-        }
-      ]
+      "expo-web-browser"
     ],
-    "scheme": "cheshbon",
+    "scheme": "natively",
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev",
-      "googleClientIdIOS": "115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com"
+      "backendUrl": "https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev"
     }
   }
 }
