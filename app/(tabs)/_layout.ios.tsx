@@ -38,6 +38,11 @@ export default function TabLayout() {
         <Icon sf="chart.bar.fill" />
       </NativeTabs.Trigger>
       
+      <NativeTabs.Trigger name="settings">
+        <Label>Settings</Label>
+        <Icon sf="gearshape.fill" />
+      </NativeTabs.Trigger>
+      
       <NativeTabs.Trigger name="profile">
         <Label>Profile</Label>
         <Icon sf="person.fill" />
