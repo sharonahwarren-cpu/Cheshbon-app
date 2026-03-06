@@ -38,7 +38,7 @@ interface FloatingTabBarProps {
   bottomMargin?: number;
 }
 
-export default function FloatingTabBar({
+export function FloatingTabBar({
   tabs,
   containerWidth = screenWidth / 2.5,
   borderRadius = 35,
