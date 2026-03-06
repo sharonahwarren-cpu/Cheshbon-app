@@ -180,6 +180,9 @@ export function registerAuthRoutes(app: App) {
     reply: FastifyReply
   ): Promise<any> => {
     const providers = [];
+    const googleClientIdIos = process.env.GOOGLE_CLIENT_ID_IOS;
+    const hasGoogleOAuthIos = !!googleClientIdIos;
+
     if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       providers.push('google');
     }
@@ -222,13 +225,31 @@ export function registerAuthRoutes(app: App) {
         'GET /api/auth/oauth-test (List all endpoints and OAuth configuration)',
         'GET /api/auth/password-reset-status (Check password reset configuration)',
         'GET /api/auth/email-config-status (Check email and FRONTEND_URL configuration)',
+        'GET /api/auth/ios-oauth-config (Check iOS Google OAuth configuration)',
       ],
       message: `OAuth configured for: ${providers.length > 0 ? providers.join(', ') : 'NONE - check environment variables'}`,
       configuration: {
         baseUrl: process.env.BASE_URL || 'not set',
         frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
         googleOAuthConfigured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+        googleIOSClientIdConfigured: hasGoogleOAuthIos,
         appleOAuthConfigured: !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY),
+      },
+      iOSGoogleOAuthSupport: {
+        configured: hasGoogleOAuthIos,
+        clientIdLength: googleClientIdIos?.length,
+        redirectUriScheme: hasGoogleOAuthIos ? `com.googleusercontent.apps.${googleClientIdIos?.split('-')[0]}://oauth2redirect` : 'N/A',
+        platformDetectionHeaders: {
+          'x-mobile-app': 'Set to "cheshbon" for iOS app requests',
+          'x-platform': 'Set to "ios" for iOS platform detection',
+          'user-agent': 'Automatically detected for iphone/ipad',
+        },
+        instructions: hasGoogleOAuthIos ? [
+          '1. iOS app calls POST /api/auth/initiate-social with X-Mobile-App: cheshbon or X-Platform: ios',
+          '2. Backend returns OAuth authorization URL using GOOGLE_CLIENT_ID_IOS',
+          '3. Redirect URI uses iOS scheme: com.googleusercontent.apps.{clientId}://oauth2redirect',
+          '4. User completes OAuth flow and is redirected to iOS app deep link',
+        ] : ['Set GOOGLE_CLIENT_ID_IOS environment variable to enable iOS Google OAuth'],
       },
       importantNote: 'Password reset endpoint is POST /api/auth/request-password-reset (NOT /api/auth/forget-password)',
     };
@@ -237,7 +258,7 @@ export function registerAuthRoutes(app: App) {
   // POST /api/auth/initiate-social - Initiate social OAuth sign-in with proper redirection
   app.fastify.post('/api/auth/initiate-social', {
     schema: {
-      description: 'Initiate social OAuth sign-in (Google or Apple)',
+      description: 'Initiate social OAuth sign-in (Google or Apple). Supports iOS with platform-specific client IDs.',
       tags: ['auth'],
       body: {
         type: 'object',
@@ -247,6 +268,20 @@ export function registerAuthRoutes(app: App) {
           redirectURL: { type: 'string', description: 'Web redirect URL after authentication (optional)' },
         },
         required: ['provider'],
+      },
+      headers: {
+        type: 'object',
+        properties: {
+          'x-mobile-app': {
+            type: 'string',
+            description: 'Set to "cheshbon" to indicate iOS app request - will use GOOGLE_CLIENT_ID_IOS for Google OAuth',
+          },
+          'x-platform': {
+            type: 'string',
+            enum: ['ios', 'web', 'android'],
+            description: 'Platform identifier - iOS requests will use platform-specific client IDs',
+          },
+        },
       },
       response: {
         200: {
@@ -273,8 +308,28 @@ export function registerAuthRoutes(app: App) {
     const { provider, callbackURL, redirectURL } = request.body as any;
     const origin = request.headers.origin || request.headers.host || 'http://localhost';
 
+    // Detect iOS requests via headers
+    const xMobileApp = request.headers['x-mobile-app'];
+    const xPlatform = request.headers['x-platform'];
+    const userAgent = request.headers['user-agent'] || '';
+
+    // Determine if this is an iOS request
+    const isIosRequest =
+      xMobileApp === 'cheshbon' ||
+      xPlatform === 'ios' ||
+      userAgent.toLowerCase().includes('iphone') ||
+      userAgent.toLowerCase().includes('ipad');
+
     app.logger.info(
-      { provider, callbackURL: callbackURL ? 'provided' : 'not provided', origin },
+      {
+        provider,
+        callbackURL: callbackURL ? 'provided' : 'not provided',
+        origin,
+        isIosRequest,
+        xMobileApp,
+        xPlatform,
+        userAgentIncludesIos: userAgent.toLowerCase().includes('iphone') || userAgent.toLowerCase().includes('ipad'),
+      },
       'OAuth sign-in initiated'
     );
 
@@ -287,8 +342,8 @@ export function registerAuthRoutes(app: App) {
     }
 
     // Check if OAuth credentials are configured
-    // Note: Google OAuth is handled by Better Auth internally, no explicit env var check needed
     const hasAppleOAuth = process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY;
+    const googleClientIdIos = process.env.GOOGLE_CLIENT_ID_IOS;
 
     // Apple OAuth requires explicit credentials
     if (provider === 'apple' && !hasAppleOAuth) {
@@ -299,10 +354,22 @@ export function registerAuthRoutes(app: App) {
       });
     }
 
-    // Google OAuth is handled by Better Auth - it can work with or without explicit credentials
-    // Better Auth may use its own proxy/configuration
+    // Google OAuth - check for platform-specific client ID
     if (provider === 'google') {
-      app.logger.info({ origin }, 'Google OAuth requested - delegating to Better Auth');
+      if (isIosRequest && !googleClientIdIos) {
+        app.logger.warn(
+          { origin, isIosRequest },
+          'iOS Google OAuth requested but GOOGLE_CLIENT_ID_IOS not configured'
+        );
+        return reply.status(400).send({
+          error: 'GOOGLE_IOS_OAUTH_NOT_CONFIGURED',
+          message: 'iOS Google OAuth is not configured. Set GOOGLE_CLIENT_ID_IOS environment variable.',
+        });
+      }
+      app.logger.info(
+        { origin, isIosRequest, usingClientId: isIosRequest ? 'GOOGLE_CLIENT_ID_IOS' : 'GOOGLE_CLIENT_ID' },
+        `Google OAuth requested - using ${isIosRequest ? 'iOS' : 'web'} client ID`
+      );
     }
 
     // Derive BASE_URL with proper handling for proxied environments
@@ -326,12 +393,31 @@ export function registerAuthRoutes(app: App) {
       // Generate direct Google OAuth authorization URL
       const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 
-      const clientId = process.env.GOOGLE_CLIENT_ID;
+      // Use iOS client ID if it's an iOS request, otherwise use web client ID
+      let clientId: string;
+      let clientIdSource: string;
+      let redirectUri: string;
+
+      if (isIosRequest && googleClientIdIos) {
+        clientId = googleClientIdIos;
+        clientIdSource = 'GOOGLE_CLIENT_ID_IOS';
+        // iOS redirect URI uses the iOS bundle identifier scheme
+        redirectUri = `com.googleusercontent.apps.${clientId.split('-')[0]}://oauth2redirect`;
+      } else {
+        clientId = process.env.GOOGLE_CLIENT_ID || '';
+        clientIdSource = 'GOOGLE_CLIENT_ID';
+        // Web redirect URI uses backend URL
+        redirectUri = `${backendBaseUrl}/api/auth/callback/google`;
+      }
+
       if (!clientId) {
-        app.logger.error({ origin }, 'Google OAuth not configured - GOOGLE_CLIENT_ID not set');
+        app.logger.error(
+          { origin, isIosRequest, clientIdSource },
+          `Google OAuth not configured - ${clientIdSource} not set`
+        );
         return reply.status(400).send({
           error: 'GOOGLE_OAUTH_NOT_CONFIGURED',
-          message: 'Google OAuth is not configured. Set GOOGLE_CLIENT_ID environment variable.',
+          message: `Google OAuth is not configured. Set ${clientIdSource} environment variable.`,
         });
       }
 
@@ -339,8 +425,7 @@ export function registerAuthRoutes(app: App) {
       const state = Math.random().toString(36).substring(7) + Date.now().toString(36);
 
       googleAuthUrl.searchParams.append('client_id', clientId);
-      // Better Auth's callback endpoint
-      googleAuthUrl.searchParams.append('redirect_uri', `${backendBaseUrl}/api/auth/callback/google`);
+      googleAuthUrl.searchParams.append('redirect_uri', redirectUri);
       googleAuthUrl.searchParams.append('response_type', 'code');
       googleAuthUrl.searchParams.append('scope', 'openid email profile');
       googleAuthUrl.searchParams.append('state', state);
@@ -359,16 +444,19 @@ export function registerAuthRoutes(app: App) {
       app.logger.info(
         {
           provider: 'google',
+          isIosRequest,
+          clientIdSource,
+          clientIdFirstPart: clientId.split('-')[0],
           backendBaseUrl,
           urlSource,
           detectedLocalhost,
           isMobile: !!callbackURL,
           hasCallbackURL: !!callbackURL,
-          redirectUri: `${backendBaseUrl}/api/auth/callback/google`,
+          redirectUri,
           oauthProviderHost: 'accounts.google.com',
           authorizationUrl: authorizationUrl.substring(0, 100) + '...' // Log first 100 chars
         },
-        `Direct Google OAuth URL generated (BASE_URL source: ${urlSource})`
+        `Direct Google OAuth URL generated - using ${clientIdSource} (BASE_URL source: ${urlSource})`
       );
     } else if (provider === 'apple') {
       // Generate Apple OAuth authorization URL directly from Apple's endpoint
@@ -1935,6 +2023,121 @@ export function registerAuthRoutes(app: App) {
         sendVerificationEmail: 'POST /api/auth/send-verification-email (body: { email: string })',
         verifyEmail: 'GET /api/auth/verify-email?token={token}',
       },
+      issues,
+      instructions,
+    };
+  });
+
+  // GET /api/auth/ios-oauth-config - Diagnostic endpoint for iOS OAuth configuration
+  app.fastify.get('/api/auth/ios-oauth-config', {
+    schema: {
+      description: 'Diagnostic endpoint to check iOS Google OAuth configuration',
+      tags: ['auth'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            status: { type: 'string' },
+            iosGoogleOAuthConfigured: { type: 'boolean' },
+            googleClientIdIosConfigured: { type: 'boolean' },
+            clientIdLength: { type: 'number' },
+            redirectUriScheme: { type: 'string' },
+            platformDetection: {
+              type: 'object',
+              properties: {
+                supportedHeaders: { type: 'array', items: { type: 'string' } },
+                userAgentDetection: { type: 'boolean' },
+              },
+            },
+            iOSEndpoints: {
+              type: 'object',
+              properties: {
+                initiateSocial: { type: 'string' },
+                requiredHeaders: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            issues: { type: 'array', items: { type: 'string' } },
+            instructions: { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const googleClientIdIos = process.env.GOOGLE_CLIENT_ID_IOS;
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    const hasGoogleOAuthIos = !!googleClientIdIos;
+    const hasGoogleOAuth = !!googleClientId && !!googleClientSecret;
+
+    const issues: string[] = [];
+    const instructions: string[] = [];
+
+    if (!hasGoogleOAuthIos) {
+      issues.push('⚠️ GOOGLE_CLIENT_ID_IOS is NOT configured');
+      instructions.push('Set GOOGLE_CLIENT_ID_IOS environment variable to enable iOS Google OAuth');
+    }
+
+    if (!hasGoogleOAuth) {
+      issues.push('❌ GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are NOT configured');
+      instructions.push('Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables for web OAuth');
+    }
+
+    if (hasGoogleOAuthIos && hasGoogleOAuth) {
+      issues.push('✓ iOS and web Google OAuth are both configured');
+    }
+
+    const clientIdFirstPart = googleClientIdIos ? googleClientIdIos.split('-')[0] : 'none';
+    const redirectUriScheme = hasGoogleOAuthIos
+      ? `com.googleusercontent.apps.${clientIdFirstPart}://oauth2redirect`
+      : 'N/A - GOOGLE_CLIENT_ID_IOS not configured';
+
+    app.logger.info(
+      {
+        iosGoogleOAuthConfigured: hasGoogleOAuthIos,
+        googleOAuthConfigured: hasGoogleOAuth,
+        clientIdLength: googleClientIdIos?.length,
+      },
+      'iOS OAuth configuration status check'
+    );
+
+    return {
+      status: hasGoogleOAuthIos && hasGoogleOAuth ? 'ok' : 'warning',
+      iosGoogleOAuthConfigured: hasGoogleOAuthIos,
+      googleClientIdIosConfigured: hasGoogleOAuthIos,
+      clientIdLength: googleClientIdIos?.length || 0,
+      redirectUriScheme,
+      platformDetection: {
+        supportedHeaders: [
+          'X-Mobile-App: cheshbon',
+          'X-Platform: ios',
+          'User-Agent: automatically detects iphone/ipad',
+        ],
+        userAgentDetection: true,
+      },
+      iOSEndpoints: {
+        initiateSocial: 'POST /api/auth/initiate-social',
+        requiredHeaders: [
+          'X-Mobile-App: cheshbon (recommended)',
+          'OR X-Platform: ios',
+          'OR include iphone/ipad in User-Agent',
+        ],
+      },
+      iOSFlowInstructions: [
+        '1. iOS app calls POST /api/auth/initiate-social with provider: "google"',
+        '2. Include header X-Mobile-App: cheshbon or X-Platform: ios',
+        '3. Backend detects iOS request and uses GOOGLE_CLIENT_ID_IOS',
+        '4. Backend returns authorizationUrl with iOS redirect URI scheme',
+        '5. iOS app opens URL in ASWebAuthenticationSession or SFSafariViewController',
+        '6. User completes OAuth in Safari',
+        '7. Google redirects to com.googleusercontent.apps.{clientId}://oauth2redirect',
+        '8. iOS app receives authorization code via deep link',
+        '9. App sends code to backend (via POST /api/auth/callback or custom endpoint)',
+        '10. Backend exchanges code for access token using GOOGLE_CLIENT_ID_IOS',
+      ],
       issues,
       instructions,
     };

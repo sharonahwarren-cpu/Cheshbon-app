@@ -121,7 +121,9 @@ if (!baseUrl) {
 // Validate OAuth credentials and log configuration status
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const googleClientIdIos = process.env.GOOGLE_CLIENT_ID_IOS;
 const hasGoogleOAuth = !!googleClientId && !!googleClientSecret;
+const hasGoogleOAuthIos = !!googleClientIdIos;
 
 const appleClientId = process.env.APPLE_CLIENT_ID;
 const appleTeamId = process.env.APPLE_TEAM_ID;
@@ -132,8 +134,12 @@ const hasAppleOAuth = !!appleClientId && !!appleTeamId && !!appleKeyId && !!appl
 // Log OAuth configuration status at startup
 if (hasGoogleOAuth) {
   app.logger.info(
-    { clientIdLength: googleClientId!.length },
-    'Google OAuth credentials configured - GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set'
+    {
+      clientIdLength: googleClientId!.length,
+      iosClientIdConfigured: hasGoogleOAuthIos,
+      iosClientIdLength: googleClientIdIos?.length,
+    },
+    'Google OAuth credentials configured - GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set' + (hasGoogleOAuthIos ? ', iOS Client ID also configured' : '')
   );
 } else {
   const missing: string[] = [];
@@ -142,6 +148,13 @@ if (hasGoogleOAuth) {
   app.logger.warn(
     { missingVariables: missing },
     'Google OAuth credentials NOT configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables to enable Google sign-in.'
+  );
+}
+
+if (hasGoogleOAuthIos) {
+  app.logger.info(
+    { iosClientIdLength: googleClientIdIos!.length },
+    'iOS-specific Google OAuth Client ID configured - iOS requests will use GOOGLE_CLIENT_ID_IOS'
   );
 }
 
@@ -203,16 +216,19 @@ if (Object.keys(socialProviders).length > 0) {
   app.logger.info(
     {
       providers: Object.keys(socialProviders),
+      googleIOSClientIdConfigured: hasGoogleOAuthIos,
       trustedOriginCount: trustedOrigins.length,
       baseUrlConfigured: !!process.env.BASE_URL,
     },
-    'OAuth configuration initialized with configured providers'
+    'OAuth configuration initialized with configured providers' + (hasGoogleOAuthIos ? ' (iOS Google OAuth supported)' : '')
   );
   app.logger.info(
     {
       providers: Object.keys(socialProviders),
+      iOSGoogleOAuthSupport: hasGoogleOAuthIos ? 'Yes - use X-Mobile-App: cheshbon or X-Platform: ios headers' : 'Not configured - set GOOGLE_CLIENT_ID_IOS',
+      iOSRedirectUriScheme: hasGoogleOAuthIos ? 'com.googleusercontent.apps.{clientId}://oauth2redirect' : 'N/A',
       recommendedEndpoints: [
-        'POST /api/auth/initiate-social (recommended - derives BASE_URL from request headers)',
+        'POST /api/auth/initiate-social (recommended - supports iOS with platform-specific client IDs)',
         'POST /api/auth/oauth-start (recommended - derives BASE_URL from request headers)',
         'POST /api/auth/sign-in/social (Better Auth built-in - uses BASE_URL environment variable)',
       ],
@@ -222,7 +238,7 @@ if (Object.keys(socialProviders).length > 0) {
 } else {
   app.logger.warn({
     missingVariables: {
-      google: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+      google: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CLIENT_ID_IOS (optional, for iOS)'],
       apple: ['APPLE_CLIENT_ID', 'APPLE_TEAM_ID', 'APPLE_KEY_ID', 'APPLE_PRIVATE_KEY'],
     },
   }, 'No OAuth providers configured - set environment variables to enable social sign-in');
