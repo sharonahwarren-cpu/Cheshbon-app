@@ -29,6 +29,12 @@
               "cheshbon"
             ],
             "CFBundleURLName": "com.anonymous.Natively"
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh"
+            ],
+            "CFBundleURLName": "com.sharonah.cheshbon.google"
           }
         ]
       },
@@ -103,7 +109,8 @@
     },
     "extra": {
       "router": {},
-      "backendUrl": "https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev"
+      "backendUrl": "https://a8sew4dfz3q59y6r9k8fhpt2jfdhpm8d.app.specular.dev",
+      "googleClientIdIOS": "115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com"
     }
   }
 }
