@@ -190,25 +190,38 @@ export function registerAuthRoutes(app: App) {
     return {
       status: 'ok',
       providers,
-      endpoints: [
+      emailAndPasswordEndpoints: [
+        'POST /api/auth/sign-in/email (Email/password sign-in)',
+        'POST /api/auth/sign-up/email (Email/password registration)',
+        'POST /api/auth/request-password-reset (Request password reset - sends email)',
+        'POST /api/auth/reset-password (Complete password reset with token)',
+        'POST /api/auth/send-verification-email (Send verification email)',
+        'GET /api/auth/verify-email?token={token} (Verify email with token)',
+      ],
+      oauthEndpoints: [
         'POST /api/auth/sign-in/social (Better Auth - automatic OAuth)',
         'POST /api/auth/sign-in/social-v1 (OAuth wrapper with error handling)',
         'POST /api/auth/initiate-social (OAuth initiation for mobile/web)',
-        'POST /api/auth/sign-in/email (Email/password sign-in)',
-        'POST /api/auth/sign-up/email (Email/password registration)',
         'GET /api/auth/oauth-callback (OAuth provider callback - code exchange)',
         'POST /api/auth/callback (OAuth callback handler)',
         'POST /api/auth/oauth-start (OAuth flow start)',
         'POST /api/auth/oauth-redirect (OAuth redirect handler)',
         'POST /api/auth/apple-callback (Apple OAuth callback)',
         'POST /api/auth/apple/native (Apple native sign-in with id_token)',
+      ],
+      sessionEndpoints: [
         'GET /api/auth/me (Get authenticated user - use Bearer token)',
         'GET /api/auth/get-session (Get current session)',
         'POST /api/auth/sign-out (Sign out)',
+      ],
+      diagnosticEndpoints: [
         'GET /api/auth/health (Health check)',
         'GET /api/auth/debug-session (Debug auth headers)',
         'POST /api/auth/test-session (Create test session for debugging)',
         'GET /api/auth/session-diagnostic (Diagnose session validation issues)',
+        'GET /api/auth/oauth-test (List all endpoints and OAuth configuration)',
+        'GET /api/auth/password-reset-status (Check password reset configuration)',
+        'GET /api/auth/email-config-status (Check email and FRONTEND_URL configuration)',
       ],
       message: `OAuth configured for: ${providers.length > 0 ? providers.join(', ') : 'NONE - check environment variables'}`,
       configuration: {
@@ -217,6 +230,7 @@ export function registerAuthRoutes(app: App) {
         googleOAuthConfigured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
         appleOAuthConfigured: !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY),
       },
+      importantNote: 'Password reset endpoint is POST /api/auth/request-password-reset (NOT /api/auth/forget-password)',
     };
   });
 
@@ -1802,6 +1816,127 @@ export function registerAuthRoutes(app: App) {
         'All password reset and email verification endpoints are public (no authentication required)',
         'Email is sent via Resend during request-password-reset and send-verification-email',
       ],
+    };
+  });
+
+  // GET /api/auth/email-config-status - Diagnostic endpoint for email configuration
+  app.fastify.get('/api/auth/email-config-status', {
+    schema: {
+      description: 'Diagnostic endpoint to check email verification and password reset configuration',
+      tags: ['auth'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            status: { type: 'string' },
+            frontendUrl: { type: 'string' },
+            frontendUrlIsLocalhost: { type: 'boolean' },
+            nodeEnv: { type: 'string' },
+            isProduction: { type: 'boolean' },
+            resendConfigured: { type: 'boolean' },
+            sampleLinks: {
+              type: 'object',
+              properties: {
+                emailVerification: { type: 'string' },
+                passwordReset: { type: 'string' },
+              },
+            },
+            configuration: {
+              type: 'object',
+              properties: {
+                emailVerificationEnabled: { type: 'boolean' },
+                passwordResetEnabled: { type: 'boolean' },
+                requireEmailVerification: { type: 'boolean' },
+              },
+            },
+            betterAuthEndpoints: {
+              type: 'object',
+              properties: {
+                requestPasswordReset: { type: 'string' },
+                resetPassword: { type: 'string' },
+                sendVerificationEmail: { type: 'string' },
+                verifyEmail: { type: 'string' },
+              },
+            },
+            issues: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            instructions: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  }, async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<any> => {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const nodeEnv = process.env.NODE_ENV || 'development';
+    const isProduction = nodeEnv === 'production';
+    const resendConfigured = !!process.env.RESEND_API_KEY;
+    const frontendUrlIsLocalhost = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1');
+
+    const issues: string[] = [];
+    const instructions: string[] = [];
+
+    // Detect configuration issues
+    if (!process.env.FRONTEND_URL && isProduction) {
+      issues.push('🚨 CRITICAL: FRONTEND_URL environment variable is NOT SET in production');
+      instructions.push('Set FRONTEND_URL=https://cheshbon.app in production deployment environment');
+    } else if (frontendUrlIsLocalhost && isProduction) {
+      issues.push('❌ ERROR: FRONTEND_URL is set to localhost in production');
+      instructions.push('Update FRONTEND_URL to production domain: https://cheshbon.app');
+    }
+
+    if (!resendConfigured) {
+      issues.push('⚠️ WARNING: RESEND_API_KEY is NOT configured');
+      instructions.push('Set RESEND_API_KEY environment variable to enable email sending');
+    }
+
+    if (issues.length === 0) {
+      issues.push('✓ Configuration appears correct');
+    }
+
+    app.logger.info(
+      {
+        frontendUrl,
+        isLocalhost: frontendUrlIsLocalhost,
+        nodeEnv,
+        isProduction,
+        resendConfigured,
+        issuesCount: issues.length,
+      },
+      'Email configuration status check'
+    );
+
+    return {
+      status: issues.length === 0 ? 'ok' : 'warning',
+      frontendUrl,
+      frontendUrlIsLocalhost,
+      nodeEnv,
+      isProduction,
+      resendConfigured,
+      sampleLinks: {
+        emailVerification: `${frontendUrl}/verify-email?token=sample-token-12345`,
+        passwordReset: `${frontendUrl}/reset-password?token=sample-token-67890`,
+      },
+      configuration: {
+        emailVerificationEnabled: true,
+        passwordResetEnabled: true,
+        requireEmailVerification: true,
+      },
+      betterAuthEndpoints: {
+        requestPasswordReset: 'POST /api/auth/request-password-reset (body: { email: string })',
+        resetPassword: 'POST /api/auth/reset-password (body: { token: string, password: string })',
+        sendVerificationEmail: 'POST /api/auth/send-verification-email (body: { email: string })',
+        verifyEmail: 'GET /api/auth/verify-email?token={token}',
+      },
+      issues,
+      instructions,
     };
   });
 }
