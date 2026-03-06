@@ -30,26 +30,17 @@ export default function TabLayout() {
     <NativeTabs>
       <NativeTabs.Trigger name="(home)">
         <Label>Home</Label>
-        <Icon 
-          sf={{ default: 'house', selected: 'house.fill' }} 
-          drawable="home" 
-        />
+        <Icon sf="house.fill" />
       </NativeTabs.Trigger>
       
       <NativeTabs.Trigger name="reports">
         <Label>Reports</Label>
-        <Icon 
-          sf={{ default: 'chart.bar', selected: 'chart.bar.fill' }} 
-          drawable="bar-chart" 
-        />
+        <Icon sf="chart.bar.fill" />
       </NativeTabs.Trigger>
       
       <NativeTabs.Trigger name="profile">
         <Label>Profile</Label>
-        <Icon 
-          sf={{ default: 'person', selected: 'person.fill' }} 
-          drawable="person" 
-        />
+        <Icon sf="person.fill" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );
