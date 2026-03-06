@@ -713,10 +713,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // accounts.google.com URL. The callbackURL is passed so Better Auth can
       // redirect back to the app's deep link after processing the OAuth code.
       try {
-        const callbackUrl = `${APP_SCHEME}://auth-callback`;
+        // For iOS, use the iOS-specific redirect URI scheme registered in Google Cloud Console
+        // This is required for native iOS Google OAuth with the iOS Client ID
+        const iosGoogleRedirectUri = 'com.googleusercontent.apps.115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh://oauth2redirect';
+        const callbackUrl = Platform.OS === 'ios' ? iosGoogleRedirectUri : `${APP_SCHEME}://auth-callback`;
+        console.log('📱 [GOOGLE NATIVE] Platform:', Platform.OS);
         console.log('📱 [GOOGLE NATIVE] Callback URL:', callbackUrl);
         console.log('📱 [GOOGLE NATIVE] BACKEND_URL:', BACKEND_URL);
 
+<<<<<<< HEAD
         // IMPORTANT: Send X-Platform header so the backend uses the iOS-specific
         // Google OAuth Client ID (115992269298-kd7ts2kmqvmauen7csvudjp4k3mmk7jh.apps.googleusercontent.com)
         // when Platform.OS === 'ios'. The backend checks x-platform: ios to select
@@ -729,6 +734,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             'X-Platform': Platform.OS,
             'Origin': BACKEND_URL,
           },
+=======
+        // Build headers - include X-Platform: ios so backend uses iOS-specific Client ID
+        const initiateHeaders: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Mobile-App': 'cheshbon',
+          'X-Platform': Platform.OS, // 'ios' or 'android' - backend uses this to select iOS Client ID
+          'Origin': BACKEND_URL,
+        };
+
+        console.log('📱 [GOOGLE NATIVE] Sending X-Platform:', Platform.OS, '(backend will use iOS Client ID for ios)');
+
+        const initResponse = await fetch(`${BACKEND_URL}/api/auth/initiate-social`, {
+          method: 'POST',
+          headers: initiateHeaders,
+>>>>>>> origin/main
           body: JSON.stringify({
             provider: 'google',
             callbackURL: callbackUrl,
@@ -780,7 +800,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         console.log('📱 [GOOGLE NATIVE] Opening browser for OAuth flow...');
-        await _openGoogleBrowser(authUrl, callbackUrl);
+        // For iOS, pass both the iOS redirect URI and the app deep link as fallback
+        // The iOS redirect URI is used by Google to redirect back after auth
+        // WebBrowser.openAuthSessionAsync will intercept the iOS redirect URI
+        await _openGoogleBrowser(authUrl, callbackUrl, Platform.OS === 'ios' ? `${APP_SCHEME}://auth-callback` : undefined);
       } catch (error) {
         console.error('❌ [GOOGLE NATIVE] Error:', error);
         throw error;
@@ -789,35 +812,119 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Helper to open Google OAuth in browser and handle callback
-  const _openGoogleBrowser = async (authUrl: string, callbackUrl: string) => {
+  // callbackUrl: the URL scheme to listen for (iOS: com.googleusercontent.apps.xxx://oauth2redirect, Android: cheshbon://auth-callback)
+  // appDeepLink: optional fallback deep link for iOS (cheshbon://auth-callback) - used when backend redirects to app scheme
+  const _openGoogleBrowser = async (authUrl: string, callbackUrl: string, appDeepLink?: string) => {
     if (!authUrl) {
       throw new Error('No authorization URL received from server');
     }
 
+    console.log('📱 [GOOGLE NATIVE] openAuthSessionAsync - authUrl:', authUrl.substring(0, 100));
+    console.log('📱 [GOOGLE NATIVE] openAuthSessionAsync - callbackUrl:', callbackUrl);
+    console.log('📱 [GOOGLE NATIVE] openAuthSessionAsync - appDeepLink:', appDeepLink);
+
+    // For iOS with the iOS Client ID, we need to listen for the iOS redirect URI scheme
+    // WebBrowser.openAuthSessionAsync will intercept any URL matching the callbackUrl prefix
     const result = await WebBrowser.openAuthSessionAsync(authUrl, callbackUrl, {
       showInRecents: true,
       preferEphemeralSession: false,
     });
 
     console.log('📱 [GOOGLE NATIVE] Browser result:', result.type);
+    if (result.type === 'success') {
+      console.log('📱 [GOOGLE NATIVE] Result URL:', result.url?.substring(0, 150));
+    }
 
     if (result.type === 'success' && result.url) {
-      console.log('📱 [GOOGLE NATIVE] Callback URL received:', result.url.substring(0, 100));
-      const urlObj = new URL(result.url);
-      const token =
-        urlObj.searchParams.get('token') ||
-        urlObj.searchParams.get('session_token') ||
-        urlObj.searchParams.get('sessionToken') ||
-        urlObj.searchParams.get('access_token');
+      console.log('📱 [GOOGLE NATIVE] Callback URL received:', result.url.substring(0, 150));
+      
+      let token: string | null = null;
+      
+      try {
+        const urlObj = new URL(result.url);
+        token =
+          urlObj.searchParams.get('token') ||
+          urlObj.searchParams.get('session_token') ||
+          urlObj.searchParams.get('sessionToken') ||
+          urlObj.searchParams.get('access_token');
+        
+        console.log('📱 [GOOGLE NATIVE] URL params:', urlObj.searchParams.toString().substring(0, 200));
+        
+        // For iOS redirect URI (com.googleusercontent.apps.xxx://oauth2redirect),
+        // the URL may contain an authorization code that needs to be exchanged
+        // The backend's oauth-callback endpoint handles this exchange
+        if (!token) {
+          const code = urlObj.searchParams.get('code');
+          const state = urlObj.searchParams.get('state');
+          
+          if (code) {
+            console.log('📱 [GOOGLE NATIVE] Authorization code received, exchanging for token...');
+            console.log('📱 [GOOGLE NATIVE] Code (first 20 chars):', code.substring(0, 20) + '...');
+            
+            // Exchange the authorization code for a session token via the backend
+            const appCallbackUrl = appDeepLink || `${APP_SCHEME}://auth-callback`;
+            const exchangeResponse = await fetch(
+              `${BACKEND_URL}/api/auth/oauth-callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}&provider=google&callbackURL=${encodeURIComponent(appCallbackUrl)}`,
+              {
+                method: 'GET',
+                headers: {
+                  'X-Mobile-App': 'cheshbon',
+                  'X-Platform': Platform.OS,
+                  'Origin': BACKEND_URL,
+                },
+                redirect: 'manual',
+              }
+            );
+            
+            console.log('📱 [GOOGLE NATIVE] Code exchange response status:', exchangeResponse.status);
+            
+            // The oauth-callback endpoint redirects to the callbackURL with the token
+            // Check the Location header for the redirect URL containing the token
+            const locationHeader = exchangeResponse.headers.get('location') || exchangeResponse.headers.get('Location');
+            console.log('📱 [GOOGLE NATIVE] Location header:', locationHeader?.substring(0, 150));
+            
+            if (locationHeader) {
+              try {
+                const redirectUrl = new URL(locationHeader);
+                token = redirectUrl.searchParams.get('token') ||
+                  redirectUrl.searchParams.get('session_token') ||
+                  redirectUrl.searchParams.get('sessionToken');
+                console.log('📱 [GOOGLE NATIVE] Token from redirect location:', token ? 'YES' : 'NO');
+              } catch (e) {
+                console.error('📱 [GOOGLE NATIVE] Error parsing location header:', e);
+              }
+            }
+            
+            // If still no token, try parsing the response body
+            if (!token && exchangeResponse.status !== 302) {
+              try {
+                const responseText = await exchangeResponse.text();
+                console.log('📱 [GOOGLE NATIVE] Exchange response body:', responseText.substring(0, 300));
+                const responseData = JSON.parse(responseText);
+                token = responseData.token || responseData.session?.token || responseData.sessionToken;
+              } catch (e) {
+                console.error('📱 [GOOGLE NATIVE] Error parsing exchange response:', e);
+              }
+            }
+          }
+        }
+      } catch (parseError) {
+        console.error('📱 [GOOGLE NATIVE] Error parsing callback URL:', parseError);
+        // Try to extract token from raw URL string as fallback
+        const tokenMatch = result.url.match(/[?&]token=([^&]+)/);
+        if (tokenMatch) {
+          token = decodeURIComponent(tokenMatch[1]);
+        }
+      }
 
       if (token) {
-        console.log('✅ [GOOGLE NATIVE] Token extracted from callback URL');
+        console.log('✅ [GOOGLE NATIVE] Token extracted, saving...');
         await setBearerToken(token);
         markAuthSuccess();
         await fetchUser(token);
       } else {
-        console.error('❌ [GOOGLE NATIVE] No token in callback URL. Params:', urlObj.searchParams.toString());
-        throw new Error('No authentication token received from Google sign-in');
+        console.error('❌ [GOOGLE NATIVE] No token in callback URL. Full URL:', result.url.substring(0, 200));
+        throw new Error('No authentication token received from Google sign-in. Please try again.');
       }
     } else if (result.type === 'cancel') {
       throw new Error('Google sign-in was cancelled');
