@@ -21,6 +21,7 @@ import { registerMitzvotCategoryRoutes } from './routes/mitzvot-categories.js';
 import { registerGainLossCategoriesRoutes } from './routes/gain-loss-categories.js';
 import { registerReflectionMotivationsRoutes } from './routes/reflection-motivations.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerUserRoutes } from './routes/user.js';
 
 // Combine both schemas
 const schema = { ...appSchema, ...authSchema };
@@ -427,6 +428,7 @@ registerMitzvotRoutes(app);
 registerGainLossCategoriesRoutes(app);
 registerReflectionMotivationsRoutes(app);
 registerAuthRoutes(app);
+registerUserRoutes(app);
 
 // Log registered auth endpoints with BASE_URL configuration details
 app.logger.info(
@@ -462,6 +464,36 @@ app.logger.info(
     },
   },
   'Authentication system ready - BASE_URL is critical for OAuth redirects'
+);
+
+// Log user management endpoints
+app.logger.info(
+  {
+    userManagementEndpoints: {
+      deleteUserData: {
+        method: 'DELETE',
+        path: '/api/user/data',
+        description: 'Delete all user-specific data while keeping the account',
+        requiresAuth: true,
+        ownership: 'Checks: only user can delete their own data',
+      },
+      deleteUserAccount: {
+        method: 'DELETE',
+        path: '/api/user/account',
+        description: 'Permanently delete user account and all associated data',
+        requiresAuth: true,
+        ownership: 'Checks: only user can delete their own account',
+        irreversible: true,
+      },
+    },
+    security: [
+      'Both endpoints require authentication',
+      'Both endpoints verify user ownership (userId matches authenticated user)',
+      'All deletion operations are logged for audit purposes',
+      'DELETE /api/user/account is irreversible and deletes all user data',
+    ],
+  },
+  'User management endpoints ready'
 );
 
 await app.run();
