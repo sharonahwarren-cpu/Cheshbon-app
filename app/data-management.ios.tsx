@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 type DataType = 'all' | 'journals' | 'reflections' | 'goals' | 'strategies' | 'currencies' | 'life-areas';
@@ -99,16 +99,21 @@ export default function DataManagementScreen() {
       // iOS: Use FileSystem.downloadAsync for proper binary file handling
       const fileExtension = selectedFormat;
       const fileName = `cheshbon_${selectedDataType}_${new Date().toISOString().split('T')[0]}.${fileExtension}`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      
+      // Use cacheDirectory as fallback if documentDirectory is not available
+      const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+      
+      if (!baseDir) {
+        throw new Error('File system not available on this device');
+      }
+      
+      const fileUri = `${baseDir}${fileName}`;
 
       console.log('📥 [DATA MANAGEMENT iOS] Saving to:', fileUri);
 
       const downloadResult = await FileSystem.downloadAsync(url, fileUri, {
         headers: {
           Authorization: `Bearer ${token}`,
-          Origin: BACKEND_URL,
-          'X-Mobile-App': 'cheshbon',
-          'X-Platform': 'ios',
         },
       });
 
