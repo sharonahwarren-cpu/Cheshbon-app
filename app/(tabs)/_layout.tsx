@@ -48,10 +48,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="reflect"
         options={{
-          title: 'Reflect',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol ios_icon_name="square.and.pencil" android_material_icon_name="edit" size={28} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

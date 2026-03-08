@@ -305,9 +305,9 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
                 endMonth: r.endMonth,
               })) || []),
             ],
-            startDate: config.startDate?.toISOString(),
-            endDate: config.endDate?.toISOString(),
-            exclusions: config.exclusionDates?.map(d => d.toISOString()),
+            startDate: (config.startDate && config.startDate instanceof Date && !isNaN(config.startDate.getTime())) ? config.startDate.toISOString() : undefined,
+            endDate: (config.endDate && config.endDate instanceof Date && !isNaN(config.endDate.getTime())) ? config.endDate.toISOString() : undefined,
+            exclusions: config.exclusionDates?.filter(d => d instanceof Date && !isNaN(d.getTime())).map(d => d.toISOString()),
           },
         };
 
@@ -348,10 +348,10 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
     config.yearlyCalendarType,
     config.yearlyUseAlternativeCalendar,
     config.yearlyCalendarEvent,
-    config.startDate?.toISOString(),
-    config.endDate?.toISOString(),
+    config.startDate instanceof Date ? config.startDate.getTime() : null,
+    config.endDate instanceof Date ? config.endDate.getTime() : null,
     config.calendarType,
-    config.exclusionDates,
+    config.exclusionDates?.length || 0,
   ]);
 
   // CRITICAL FIX: Always use the LOCAL summary as the live preview while editing.

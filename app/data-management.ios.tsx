@@ -87,12 +87,13 @@ export default function DataManagementScreen() {
       });
 
       // Convert dates to ISO 8601 format if they exist
-      if (startDate) {
+      // Ensure dates are valid Date objects before calling toISOString()
+      if (startDate && startDate instanceof Date && !isNaN(startDate.getTime())) {
         const startDateISO = startDate.toISOString();
         queryParams.append('startDate', startDateISO);
         console.log('📥 [DATA MANAGEMENT iOS] Start date ISO:', startDateISO);
       }
-      if (endDate) {
+      if (endDate && endDate instanceof Date && !isNaN(endDate.getTime())) {
         const endDateISO = endDate.toISOString();
         queryParams.append('endDate', endDateISO);
         console.log('📥 [DATA MANAGEMENT iOS] End date ISO:', endDateISO);
