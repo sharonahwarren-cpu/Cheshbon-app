@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { authenticatedDelete } from '@/utils/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 type DataType = 'all' | 'journals' | 'reflections' | 'goals' | 'strategies' | 'currencies' | 'life-areas';
@@ -67,8 +67,8 @@ export default function DataManagementScreen() {
     console.log('📥 [DATA MANAGEMENT iOS] Starting data download...');
     console.log('📥 [DATA MANAGEMENT iOS] Data type:', selectedDataType);
     console.log('📥 [DATA MANAGEMENT iOS] Format:', selectedFormat);
-    console.log('📥 [DATA MANAGEMENT iOS] Start date:', startDate?.toISOString());
-    console.log('📥 [DATA MANAGEMENT iOS] End date:', endDate?.toISOString());
+    console.log('📥 [DATA MANAGEMENT iOS] Start date:', startDate);
+    console.log('📥 [DATA MANAGEMENT iOS] End date:', endDate);
 
     setIsDownloading(true);
 
@@ -86,21 +86,26 @@ export default function DataManagementScreen() {
         format: selectedFormat,
       });
 
+      // Convert dates to ISO 8601 format if they exist
       if (startDate) {
-        queryParams.append('startDate', startDate.toISOString());
+        const startDateISO = startDate.toISOString();
+        queryParams.append('startDate', startDateISO);
+        console.log('📥 [DATA MANAGEMENT iOS] Start date ISO:', startDateISO);
       }
       if (endDate) {
-        queryParams.append('endDate', endDate.toISOString());
+        const endDateISO = endDate.toISOString();
+        queryParams.append('endDate', endDateISO);
+        console.log('📥 [DATA MANAGEMENT iOS] End date ISO:', endDateISO);
       }
 
       const url = `${BACKEND_URL}/api/user/data/export?${queryParams.toString()}`;
       console.log('📥 [DATA MANAGEMENT iOS] Downloading from:', url);
 
-      // iOS: Use FileSystem.downloadAsync for proper binary file handling
+      // iOS: Download to temporary directory
       const fileExtension = selectedFormat;
       const fileName = `cheshbon_${selectedDataType}_${new Date().toISOString().split('T')[0]}.${fileExtension}`;
       
-      // Use cacheDirectory as fallback if documentDirectory is not available
+      // Use cacheDirectory for temporary storage
       const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
       
       if (!baseDir) {
@@ -134,9 +139,10 @@ export default function DataManagementScreen() {
           dialogTitle: `Export ${selectedDataType} data`,
           UTI: selectedFormat === 'pdf' ? 'com.adobe.pdf' : 'public.comma-separated-values-text',
         });
-        console.log('✅ [DATA MANAGEMENT iOS] File shared');
+        console.log('✅ [DATA MANAGEMENT iOS] File shared via iOS Share Sheet');
       } else {
         console.log('⚠️ [DATA MANAGEMENT iOS] Sharing not available');
+        throw new Error('Sharing is not available on this device');
       }
 
       setModalMessage('Your data has been downloaded successfully.');

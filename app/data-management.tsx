@@ -18,7 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { authenticatedDelete } from '@/utils/api';
 import { DatePickerModal } from '@/components/DatePickerModal';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 type DataType = 'all' | 'journals' | 'reflections' | 'goals' | 'strategies' | 'currencies' | 'life-areas';
@@ -68,8 +68,8 @@ export default function DataManagementScreen() {
     console.log('📥 [DATA MANAGEMENT] Starting data download...');
     console.log('📥 [DATA MANAGEMENT] Data type:', selectedDataType);
     console.log('📥 [DATA MANAGEMENT] Format:', selectedFormat);
-    console.log('📥 [DATA MANAGEMENT] Start date:', startDate?.toISOString());
-    console.log('📥 [DATA MANAGEMENT] End date:', endDate?.toISOString());
+    console.log('📥 [DATA MANAGEMENT] Start date:', startDate);
+    console.log('📥 [DATA MANAGEMENT] End date:', endDate);
 
     setIsDownloading(true);
 
@@ -87,11 +87,16 @@ export default function DataManagementScreen() {
         format: selectedFormat,
       });
 
+      // Convert dates to ISO 8601 format if they exist
       if (startDate) {
-        queryParams.append('startDate', startDate.toISOString());
+        const startDateISO = startDate.toISOString();
+        queryParams.append('startDate', startDateISO);
+        console.log('📥 [DATA MANAGEMENT] Start date ISO:', startDateISO);
       }
       if (endDate) {
-        queryParams.append('endDate', endDate.toISOString());
+        const endDateISO = endDate.toISOString();
+        queryParams.append('endDate', endDateISO);
+        console.log('📥 [DATA MANAGEMENT] End date ISO:', endDateISO);
       }
 
       const url = `${BACKEND_URL}/api/user/data/export?${queryParams.toString()}`;
@@ -128,11 +133,11 @@ export default function DataManagementScreen() {
         URL.revokeObjectURL(blobUrl);
         console.log('✅ [DATA MANAGEMENT] Web download triggered:', fileName);
       } else {
-        // Mobile: Use FileSystem.downloadAsync for proper binary file handling
+        // Mobile: Download to temp directory, then share
         const fileExtension = selectedFormat;
         const fileName = `cheshbon_${selectedDataType}_${new Date().toISOString().split('T')[0]}.${fileExtension}`;
         
-        // Use cacheDirectory as fallback if documentDirectory is not available
+        // Use cacheDirectory for temporary storage
         const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
         
         if (!baseDir) {
@@ -157,17 +162,19 @@ export default function DataManagementScreen() {
 
         console.log('✅ [DATA MANAGEMENT] File saved to:', downloadResult.uri);
 
-        // Share the file
+        // Share the file using native share sheet
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
           const mimeType = selectedFormat === 'pdf' ? 'application/pdf' : 'text/csv';
           await Sharing.shareAsync(downloadResult.uri, {
             mimeType,
             dialogTitle: `Export ${selectedDataType} data`,
+            UTI: selectedFormat === 'pdf' ? 'com.adobe.pdf' : 'public.comma-separated-values-text',
           });
           console.log('✅ [DATA MANAGEMENT] File shared');
         } else {
           console.log('⚠️ [DATA MANAGEMENT] Sharing not available');
+          throw new Error('Sharing is not available on this device');
         }
       }
 
