@@ -19,7 +19,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
 
@@ -182,17 +182,10 @@ export default function CreateGoalScreen() {
     console.log('[CreateGoal iOS] Fetching schedule summary for goal:', editingGoalId);
     setLoadingScheduleSummary(true);
     try {
-      const result = await authenticatedGet<{
-        summary: string;
-        nextOccurrences: ({ date: string; source: { section: string; details: string } } | string)[];
-        calendarType?: string;
-      }>(
-        `/api/goals/${editingGoalId}/schedule-summary`
-      );
-      console.log('[CreateGoal iOS] Schedule summary received:', result);
-      if (result?.summary) {
-        setScheduleSummaryText(result.summary);
-      }
+      // Note: Schedule summary generation is not yet implemented in Supabase
+      // This would need to be added as an Edge Function or RPC call
+      console.log('[CreateGoal iOS] Schedule summary not yet implemented with Supabase');
+      setScheduleSummaryText('');
     } catch (error: any) {
       console.error('[CreateGoal iOS] Error fetching schedule summary:', error);
       setScheduleSummaryText('');
@@ -207,13 +200,10 @@ export default function CreateGoalScreen() {
     
     try {
       console.log('[CreateGoal iOS] Reloading alarms on focus for goal:', editingGoalId);
-      const [goalData, allAlarmsData] = await Promise.all([
-        authenticatedGet<any>(`/api/goals/${editingGoalId}`),
-        authenticatedGet<any>('/api/alarms'),
+      const [goal, allAlarms] = await Promise.all([
+        supabaseApi.getGoalById(editingGoalId),
+        supabaseApi.getAlarms(),
       ]);
-      
-      const goal = (goalData as any)?.data || goalData;
-      const allAlarms = Array.isArray(allAlarmsData) ? allAlarmsData : (allAlarmsData?.data || []);
       
       let goalAlarmIds: string[] = [];
       if (goal?.alarms) {
@@ -254,11 +244,11 @@ export default function CreateGoalScreen() {
     setLoading(true);
     try {
       const promises = [
-        authenticatedGet<any>('/api/goals'),
-        authenticatedGet<any>('/api/life-areas'),
-        authenticatedGet<any>('/api/strategies'),
-        authenticatedGet<any>('/api/currencies'),
-        authenticatedGet<any>('/api/user-preferences'),
+        supabaseApi.getGoals(),
+        supabaseApi.getLifeAreas(),
+        supabaseApi.getStrategies(),
+        supabaseApi.getCurrencies(),
+        supabaseApi.getUserPreferences(),
       ];
 
       if (editingGoalId) {
@@ -267,13 +257,9 @@ export default function CreateGoalScreen() {
       }
 
       const results = await Promise.all(promises);
-      const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData, allAlarmsData] = results;
+      const [goals, lifeAreas, strategies, currencies, preferencesData, goalDetails, allAlarms] = results;
       
-      const goals = Array.isArray(goalsData) ? goalsData : (goalsData?.data || []);
-      const lifeAreas = Array.isArray(lifeAreasData) ? lifeAreasData : (lifeAreasData?.data || []);
-      const strategies = Array.isArray(strategiesData) ? strategiesData : (strategiesData?.data || []);
-      const currencies = Array.isArray(currenciesData) ? currenciesData : (currenciesData?.data || []);
-      const preferences = preferencesData?.data || preferencesData || {
+      const preferences = preferencesData || {
         reflectionCategoriesEnabled: true,
         reflectionCategories: ['Action', 'Speech', 'Thought'],
         alternativeCalendar: 'gregorian',
@@ -299,8 +285,7 @@ export default function CreateGoalScreen() {
         setLifeAreaId(preselectedLifeAreaId);
       }
 
-      if (editingGoalId && goalDetailsData) {
-        const goalDetails = goalDetailsData?.data || goalDetailsData;
+      if (editingGoalId && goalDetails) {
         console.log('[API] Goal details loaded for editing:', JSON.stringify(goalDetails, null, 2));
         
         setTitle(goalDetails.title || '');
@@ -478,8 +463,7 @@ export default function CreateGoalScreen() {
         }
 
         // Load alarms for this goal using the goal's alarms jsonb field to filter
-        if (allAlarmsData) {
-          const allAlarms = Array.isArray(allAlarmsData) ? allAlarmsData : (allAlarmsData?.data || []);
+        if (allAlarms) {
           
           const goalAlarmsField = goalDetails.alarms;
           let goalAlarmIds: string[] = [];
@@ -689,20 +673,20 @@ export default function CreateGoalScreen() {
       
       if (editingGoalId) {
         console.log('[API] Updating goal with data:', goalData);
-        createdOrUpdatedGoal = await authenticatedPut(`/api/goals/${editingGoalId}`, goalData);
+        createdOrUpdatedGoal = await supabaseApi.updateGoal(editingGoalId, goalData);
         console.log('[API] Goal updated successfully:', createdOrUpdatedGoal);
         showSuccess('Goal updated successfully!');
       } else {
         console.log('[API] Creating goal with data:', goalData);
-        createdOrUpdatedGoal = await authenticatedPost('/api/goals', goalData);
+        createdOrUpdatedGoal = await supabaseApi.createGoal(goalData);
         console.log('[API] Goal created successfully:', createdOrUpdatedGoal);
         
         if (preselectedLifeAreaId && createdOrUpdatedGoal) {
-          const goalId = createdOrUpdatedGoal.id || createdOrUpdatedGoal.data?.id;
+          const goalId = createdOrUpdatedGoal.id;
           if (goalId) {
             console.log('[API] Linking newly created goal to life area:', { goalId, lifeAreaId: preselectedLifeAreaId });
             try {
-              await authenticatedPost(`/api/life-areas/${preselectedLifeAreaId}/goals`, { goalId });
+              await supabaseApi.updateGoal(goalId, { life_area_id: preselectedLifeAreaId });
               console.log('[API] Goal linked to life area successfully');
             } catch (linkError) {
               console.error('[API] Error linking goal to life area:', linkError);
@@ -771,7 +755,7 @@ export default function CreateGoalScreen() {
   const handleToggleAlarm = async (alarmId: string, currentEnabled: boolean) => {
     console.log('User tapped Toggle Alarm:', alarmId, 'Current state:', currentEnabled);
     try {
-      await authenticatedPut(`/api/alarms/${alarmId}`, { enabled: !currentEnabled });
+      await supabaseApi.updateAlarm(alarmId, { enabled: !currentEnabled });
       
       setGoalAlarms(goalAlarms.map(alarm => 
         alarm.id === alarmId ? { ...alarm, enabled: !currentEnabled } : alarm
@@ -796,7 +780,7 @@ export default function CreateGoalScreen() {
     
     console.log('User confirmed Delete Alarm:', alarmToDelete.id);
     try {
-      await authenticatedDelete(`/api/alarms/${alarmToDelete.id}`);
+      await supabaseApi.deleteAlarm(alarmToDelete.id);
       
       const updatedAlarms = goalAlarms.filter(alarm => alarm.id !== alarmToDelete.id);
       setGoalAlarms(updatedAlarms);
@@ -805,7 +789,7 @@ export default function CreateGoalScreen() {
         const remainingAlarmIds = updatedAlarms.map(a => a.id);
         console.log('[API] Updating goal alarms field after deletion:', remainingAlarmIds);
         try {
-          await authenticatedPut(`/api/goals/${editingGoalId}`, {
+          await supabaseApi.updateGoal(editingGoalId, {
             alarms: remainingAlarmIds.length > 0 ? remainingAlarmIds.map(id => ({ id })) : null,
           });
           console.log('[API] Goal alarms field updated successfully');
