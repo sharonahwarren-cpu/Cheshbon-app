@@ -1,5 +1,6 @@
 
 import { IconSymbol } from '@/components/IconSymbol';
+import { LoadingButton } from '@/components/LoadingButton';
 import {
   View,
   Text,
@@ -12,18 +13,17 @@ import {
   Platform,
   Switch,
 } from 'react-native';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { DateTime } from 'luxon';
-import { DatePickerModal } from '@/components/DatePickerModal';
-import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
 import React, { useState, useEffect } from 'react';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getLocalTimezone } from '@/utils/dateUtils';
 import { useFocusEffect } from '@react-navigation/native';
-import * as supabaseApi from '@/utils/supabaseApi';
+import { ConfirmModal } from '@/components/ConfirmModal';
 import { colors } from '@/styles/commonStyles';
-import { LoadingButton } from '@/components/LoadingButton';
+import * as supabaseApi from '@/utils/supabaseApi';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { DatePickerModal } from '@/components/DatePickerModal';
+import { DateTime } from 'luxon';
+import { getLocalTimezone } from '@/utils/dateUtils';
 
 interface Goal {
   id: string;
@@ -171,9 +171,6 @@ export default function CreateGoalScreen() {
   }, []);
 
   // Fetch backend schedule summary when editing a goal and schedule type changes.
-  // The backend now ALWAYS deletes old occurrences and generates fresh ones on every call,
-  // ensuring stale data from previous schedule configurations (e.g., old "daily" occurrences
-  // when the goal is now "weekly") is never shown.
   useEffect(() => {
     if (editingGoalId && scheduleConfig.scheduleType !== 'Always Active') {
       fetchScheduleSummary();
@@ -185,7 +182,6 @@ export default function CreateGoalScreen() {
   const fetchScheduleSummary = async () => {
     if (!editingGoalId) return;
     console.log('[CreateGoal] Fetching fresh schedule summary for goal:', editingGoalId);
-    console.log('[CreateGoal] Backend will delete old occurrences and regenerate based on current config');
     setLoadingScheduleSummary(true);
     try {
       // Note: Schedule summary generation is not yet implemented in Supabase
@@ -261,12 +257,12 @@ export default function CreateGoalScreen() {
       ];
 
       if (editingGoalId) {
-        promises.push(authenticatedGet<any>(`/api/goals/${editingGoalId}`));
-        promises.push(authenticatedGet<any>(`/api/alarms`));
+        promises.push(supabaseApi.getGoalById(editingGoalId));
+        promises.push(supabaseApi.getAlarms());
       }
 
       const results = await Promise.all(promises);
-      const [goals, lifeAreas, strategies, currencies, preferencesData, goalDetails, allAlarms] = results;
+      const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData, allAlarmsData] = results;
       
       const preferences = preferencesData || {
         reflectionCategoriesEnabled: true,
@@ -283,10 +279,10 @@ export default function CreateGoalScreen() {
         }
       }
       
-      setGoals(goals);
-      setLifeAreas(lifeAreas);
-      setStrategies(strategies);
-      setCurrencies(currencies);
+      setGoals(goalsData);
+      setLifeAreas(lifeAreasData);
+      setStrategies(strategiesData);
+      setCurrencies(currenciesData);
       setUserPreferences(preferences);
 
       if (preselectedLifeAreaId && !editingGoalId) {
@@ -295,231 +291,38 @@ export default function CreateGoalScreen() {
       }
 
       if (editingGoalId && goalDetailsData) {
-        const goalDetails = goalDetailsData?.data || goalDetailsData;
+        const goalDetails = goalDetailsData;
         console.log('[API] Goal details loaded for editing:', JSON.stringify(goalDetails, null, 2));
         
         setTitle(goalDetails.title || '');
         setDescription(goalDetails.description || '');
-        setParentGoalId(goalDetails.parentGoalId || goalDetails.parent_goal_id);
-        setLifeAreaId(goalDetails.lifeAreaId || goalDetails.life_area_id);
-        setBehaviorCategories(goalDetails.behaviorCategories || goalDetails.behavior_categories || []);
+        setParentGoalId(goalDetails.parent_goal_id);
+        setLifeAreaId(goalDetails.life_area_id);
+        setBehaviorCategories(goalDetails.behavior_categories || []);
         setType(goalDetails.type || 'Proactive');
-        setStrategyIds(goalDetails.strategyIds || goalDetails.strategy_ids || []);
+        setStrategyIds(goalDetails.strategy_ids || []);
         
-        // CRITICAL FIX: Load schedule config from BOTH fields for backward compatibility
-        // Priority: scheduleRecurrenceType > scheduleType
-        const backendScheduleType = goalDetails.scheduleRecurrenceType || goalDetails.schedule_recurrence_type;
-        const frontendScheduleType = goalDetails.scheduleType || goalDetails.schedule_type;
-        
-        let displayScheduleType = 'Always Active';
-        
-        // If we have a backend schedule type, use it (it's the source of truth)
-        if (backendScheduleType) {
-          if (backendScheduleType === 'alwaysactive') {
-            displayScheduleType = 'Always Active';
-          } else {
-            // Capitalize first letter: 'weekly' -> 'Weekly', 'fortnightly' -> 'Fortnightly'
-            displayScheduleType = backendScheduleType.charAt(0).toUpperCase() + backendScheduleType.slice(1);
-          }
-        } else if (frontendScheduleType) {
-          // Fallback to frontend schedule type if backend type is not available
-          displayScheduleType = frontendScheduleType;
+        // Load schedule config - Supabase stores it as a JSONB field
+        const scheduleConfigFromDb = goalDetails.schedule_config;
+        if (scheduleConfigFromDb) {
+          setScheduleConfig(scheduleConfigFromDb);
         }
         
-        console.log('[CreateGoal] Schedule type mapping:', {
-          backendScheduleType,
-          frontendScheduleType,
-          displayScheduleType,
-          weekdays: goalDetails.scheduleDaysOfWeek || goalDetails.schedule_days_of_week
-        });
-        
-        // CRITICAL FIX: Load ALL schedule configuration fields, not just scheduleType and weekdays
-        // This ensures the GoalScheduler component has complete data to generate accurate summaries
-        const parseJsonField = (field: any) => {
-          if (!field) return undefined;
-          if (typeof field === 'string') {
-            try {
-              return JSON.parse(field);
-            } catch (e) {
-              console.error('[CreateGoal] Failed to parse JSON field:', e);
-              return undefined;
-            }
-          }
-          return field;
-        };
-
-        const parseDateField = (field: any) => {
-          if (!field) return undefined;
-          try {
-            return new Date(field);
-          } catch (e) {
-            console.error('[CreateGoal] Failed to parse date field:', e);
-            return undefined;
-          }
-        };
-
-        // CRITICAL FIX: The backend GET /api/goals/:id returns fields with these names:
-        // - selectedWeekdays (mapped from scheduleDaysOfWeek)
-        // - selectedFortnightDays (mapped from scheduleDaysOfWeek)
-        // - monthlyDates (mapped from scheduleDatesOfMonth)
-        // - monthlyWeekdayRules (mapped from scheduleNthDayOfMonth)
-        // - yearlyDates (mapped from scheduleDatesOfYear)
-        // - startDate, endDate (direct fields)
-        // - scheduleMonthlyRange (parsed JSONB)
-        // - scheduleExclusions (parsed JSONB)
-        // We must read from these backend field names, not the frontend field names.
-        const weekdays = parseJsonField(
-          goalDetails.selectedWeekdays ||
-          goalDetails.scheduleDaysOfWeek ||
-          goalDetails.schedule_days_of_week
-        );
-        
-        const fortnightDays = parseJsonField(
-          goalDetails.selectedFortnightDays ||
-          goalDetails.scheduleFortnightDays ||
-          goalDetails.schedule_fortnight_days
-        );
-        
-        const monthlyDates = parseJsonField(
-          goalDetails.monthlyDates ||
-          goalDetails.scheduleDatesOfMonth ||
-          goalDetails.schedule_dates_of_month
-        );
-        
-        const monthlyRange = parseJsonField(goalDetails.scheduleMonthlyRange);
-        const exclusions = parseJsonField(goalDetails.scheduleExclusions);
-
-        console.log('[CreateGoal] Loading schedule data from backend:');
-        console.log('  - weekdays:', weekdays);
-        console.log('  - fortnightDays:', fortnightDays);
-        console.log('  - monthlyDates:', monthlyDates);
-        console.log('  - monthlyRange:', monthlyRange);
-
-        // CRITICAL FIX: Load yearlyDates with proper validation
-        // New format: Array<{month: number, day: number}> stored as jsonb
-        const rawYearlyDates = parseJsonField(
-          goalDetails.yearlyDates ||
-          goalDetails.scheduleYearlyDates ||
-          goalDetails.schedule_yearly_dates
-        );
-        
-        let yearlyDates: Array<{ month: number; day: number }> | undefined = undefined;
-        if (rawYearlyDates && Array.isArray(rawYearlyDates)) {
-          // Normalize each entry: must be {month, day} objects (new jsonb format)
-          const normalized = rawYearlyDates
-            .map((entry: any) => {
-              if (typeof entry === 'string') {
-                // Try to parse as JSON object (legacy string-encoded objects)
-                try {
-                  const parsed = JSON.parse(entry);
-                  if (parsed && typeof parsed === 'object' && typeof parsed.month === 'number' && typeof parsed.day === 'number') {
-                    return { month: parsed.month, day: parsed.day };
-                  }
-                } catch {
-                  // Not a JSON string - skip invalid legacy entries
-                }
-                console.warn('[CreateGoal] Skipping invalid legacy yearlyDates string entry:', entry);
-                return null;
-              }
-              if (entry && typeof entry === 'object' && typeof entry.month === 'number' && typeof entry.day === 'number') {
-                // Valid {month, day} object format (new jsonb format)
-                return { month: entry.month, day: entry.day };
-              }
-              console.warn('[CreateGoal] Skipping invalid yearlyDates entry:', entry);
-              return null;
-            })
-            .filter((e): e is { month: number; day: number } => e !== null);
-          console.log('[CreateGoal] Normalized yearlyDates (new {month,day} format):', normalized);
-          yearlyDates = normalized.length > 0 ? normalized : undefined;
-        }
-
-        // Load yearlyRanges from backend
-        const rawYearlyRanges = parseJsonField(
-          goalDetails.yearlyRanges ||
-          goalDetails.scheduleYearlyRanges ||
-          goalDetails.schedule_yearly_ranges
-        );
-        let yearlyRanges: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }> | undefined = undefined;
-        if (rawYearlyRanges && Array.isArray(rawYearlyRanges)) {
-          const normalizedRanges = rawYearlyRanges
-            .map((entry: any) => {
-              if (entry && typeof entry === 'object' &&
-                  typeof entry.startMonth === 'number' && typeof entry.startDay === 'number' &&
-                  typeof entry.endMonth === 'number' && typeof entry.endDay === 'number') {
-                return {
-                  startMonth: entry.startMonth,
-                  startDay: entry.startDay,
-                  endMonth: entry.endMonth,
-                  endDay: entry.endDay,
-                };
-              }
-              console.warn('[CreateGoal] Skipping invalid yearlyRanges entry:', entry);
-              return null;
-            })
-            .filter((e): e is { startMonth: number; startDay: number; endMonth: number; endDay: number } => e !== null);
-          console.log('[CreateGoal] Normalized yearlyRanges:', normalizedRanges);
-          yearlyRanges = normalizedRanges.length > 0 ? normalizedRanges : undefined;
-        }
-
-        setScheduleConfig({
-          scheduleType: displayScheduleType,
-          // Daily
-          timesPerDay: goalDetails.scheduleTimesPerDay || goalDetails.schedule_times_per_day,
-          specificTimes: parseJsonField(goalDetails.scheduleTimesPerDayDetails || goalDetails.scheduleSpecificTimes || goalDetails.schedule_specific_times),
-          // Weekly
-          weekdays,
-          weekendsOnly: goalDetails.scheduleWeekendsOnly || goalDetails.schedule_weekends_only || false,
-          weekdaysOnly: goalDetails.scheduleWeekdaysOnly || goalDetails.schedule_weekdays_only || false,
-          // Fortnightly
-          fortnightDays,
-          fortnightWeek: goalDetails.scheduleFortnightWeek || goalDetails.schedule_fortnight_week,
-          // Monthly
-          monthlyDates,
-          monthlyNthDay: parseJsonField(
-            goalDetails.monthlyWeekdayRules ||
-            goalDetails.scheduleMonthlyNthDay ||
-            goalDetails.schedule_monthly_nth_day
-          ),
-          monthlyWeekdayPositions: parseJsonField(
-            goalDetails.scheduleMonthlyWeekdayPositions ||
-            goalDetails.schedule_monthly_weekday_positions
-          ),
-          monthlyRangeStart: monthlyRange?.start || goalDetails.scheduleMonthlyRangeStart || goalDetails.schedule_monthly_range_start,
-          monthlyRangeEnd: monthlyRange?.end || goalDetails.scheduleMonthlyRangeEnd || goalDetails.schedule_monthly_range_end,
-          monthlyRandomCount: goalDetails.scheduleMonthlyRandomCount || goalDetails.schedule_monthly_random_count,
-          monthlyCalendarType: goalDetails.scheduleMonthlyCalendarType || goalDetails.schedule_monthly_calendar_type,
-          monthlyUseAlternativeCalendar: goalDetails.scheduleMonthlyUseAlternativeCalendar || goalDetails.schedule_monthly_use_alternative_calendar,
-          monthlyCalendarEvent: goalDetails.scheduleMonthlyCalendarEvent || goalDetails.schedule_monthly_calendar_event,
-          // Yearly - new {month, day} format for yearlyDates
-          yearlyDates,
-          yearlyRanges,
-          yearlyCalendarType: goalDetails.yearlyCalendarType || goalDetails.scheduleYearlyCalendarType || goalDetails.schedule_yearly_calendar_type,
-          yearlyUseAlternativeCalendar: goalDetails.scheduleYearlyUseAlternativeCalendar || goalDetails.schedule_yearly_use_alternative_calendar,
-          yearlyCalendarEvent: goalDetails.scheduleYearlyCalendarEvent || goalDetails.schedule_yearly_calendar_event,
-          // Advanced
-          calendarType: goalDetails.calendarType || goalDetails.scheduleCalendarType || goalDetails.schedule_calendar_type,
-          startDate: parseDateField(goalDetails.startDate || goalDetails.scheduleStartDate || goalDetails.schedule_start_date),
-          endDate: parseDateField(goalDetails.endDate || goalDetails.scheduleEndDate || goalDetails.schedule_end_date),
-          exclusionDates: exclusions?.map((d: string) => new Date(d)),
-        });
-        
-        if (goalDetails.rewardCurrencyId || goalDetails.reward_currency_id) {
-          setRewardCurrencyId(goalDetails.rewardCurrencyId || goalDetails.reward_currency_id);
-          setRewardSuccesses((goalDetails.rewardSuccesses || goalDetails.reward_successes)?.toString() || '');
-          setRewardAmount((goalDetails.rewardAmount || goalDetails.reward_amount)?.toString() || '');
+        // Load reward/consequence data
+        if (goalDetails.reward_currency_id) {
+          setRewardCurrencyId(goalDetails.reward_currency_id);
+          setRewardSuccesses(goalDetails.reward_successes?.toString() || '');
+          setRewardAmount(goalDetails.reward_amount?.toString() || '');
         }
         
-        if (goalDetails.consequenceCurrencyId || goalDetails.consequence_currency_id) {
-          setConsequenceCurrencyId(goalDetails.consequenceCurrencyId || goalDetails.consequence_currency_id);
-          setConsequenceFailures((goalDetails.consequenceFailures || goalDetails.consequence_failures)?.toString() || '');
-          setConsequenceAmount((goalDetails.consequenceAmount || goalDetails.consequence_amount)?.toString() || '');
+        if (goalDetails.consequence_currency_id) {
+          setConsequenceCurrencyId(goalDetails.consequence_currency_id);
+          setConsequenceFailures(goalDetails.consequence_failures?.toString() || '');
+          setConsequenceAmount(goalDetails.consequence_amount?.toString() || '');
         }
 
-        // Load alarms for this goal using the goal's alarms jsonb field to filter
+        // Load alarms for this goal
         if (allAlarmsData) {
-          const allAlarms = Array.isArray(allAlarmsData) ? allAlarmsData : (allAlarmsData?.data || []);
-          
-          // Get the alarm IDs stored in the goal's alarms field
           const goalAlarmsField = goalDetails.alarms;
           let goalAlarmIds: string[] = [];
           
@@ -529,7 +332,6 @@ export default function CreateGoalScreen() {
               : goalAlarmsField;
             
             if (Array.isArray(parsedAlarms)) {
-              // Support both array of IDs and array of objects with id field
               goalAlarmIds = parsedAlarms.map((a: any) => 
                 typeof a === 'string' ? a : a.id
               ).filter(Boolean);
@@ -538,9 +340,8 @@ export default function CreateGoalScreen() {
           
           console.log('[CreateGoal] Goal alarm IDs from goal record:', goalAlarmIds);
           
-          // Filter all alarms to only those belonging to this goal
           const filteredAlarms = goalAlarmIds.length > 0
-            ? allAlarms.filter((alarm: any) => goalAlarmIds.includes(alarm.id))
+            ? allAlarmsData.filter((alarm: any) => goalAlarmIds.includes(alarm.id))
             : [];
           
           console.log('[CreateGoal] Filtered alarms for goal:', filteredAlarms.length);
@@ -602,167 +403,70 @@ export default function CreateGoalScreen() {
 
     setSubmitting(true);
     try {
-      // CRITICAL FIX: Map scheduleType to scheduleRecurrenceType for backend
-      // The backend expects scheduleRecurrenceType, not scheduleType
-      const scheduleRecurrenceType = scheduleConfig.scheduleType === 'Always Active' 
-        ? 'alwaysactive' 
-        : scheduleConfig.scheduleType.toLowerCase();
-
-      console.log('📊 [YEARLY SCHEDULE] Schedule Config State:');
-      console.log('  - scheduleType:', scheduleConfig.scheduleType);
-      console.log('  - yearlyDates (new {month,day} format):', JSON.stringify(scheduleConfig.yearlyDates));
-      console.log('  - yearlyRanges:', JSON.stringify(scheduleConfig.yearlyRanges));
-
-      // ✅ CRITICAL: Only send yearlyDates/yearlyRanges if scheduleType is "Yearly"
-      // yearlyDates is now Array<{month, day}> - send as plain objects (jsonb)
-      let yearlyDatesForBackend: Array<{ month: number; day: number }> | null = null;
-      let yearlyRangesForBackend: Array<{ startMonth: number; startDay: number; endMonth: number; endDay: number }> | null = null;
-      
-      if (scheduleConfig.scheduleType === 'Yearly') {
-        if (scheduleConfig.yearlyDates && scheduleConfig.yearlyDates.length > 0) {
-          // Send as plain {month, day} objects - backend stores as jsonb
-          yearlyDatesForBackend = scheduleConfig.yearlyDates.map(d => ({
-            month: d.month,
-            day: d.day,
-          }));
-          console.log('[YEARLY SCHEDULE] yearlyDates for backend:', JSON.stringify(yearlyDatesForBackend));
-        }
-        if (scheduleConfig.yearlyRanges && scheduleConfig.yearlyRanges.length > 0) {
-          yearlyRangesForBackend = scheduleConfig.yearlyRanges.map(r => ({
-            startMonth: r.startMonth,
-            startDay: r.startDay,
-            endMonth: r.endMonth,
-            endDay: r.endDay,
-          }));
-          console.log('[YEARLY SCHEDULE] yearlyRanges for backend:', JSON.stringify(yearlyRangesForBackend));
-        }
-      }
-
+      // CRITICAL FIX: Build the goal data object with ONLY snake_case fields
+      // Supabase expects snake_case column names
       const goalData: any = {
         title: title.trim(),
-        description: description.trim() || undefined,
-        parentGoalId,
-        lifeAreaId,
-        behaviorCategories: behaviorCategories.length > 0 ? behaviorCategories : undefined,
-        type,
-        strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
-        scheduleType: scheduleConfig.scheduleType, // Keep for frontend compatibility
-        scheduleRecurrenceType, // CRITICAL: Send the correct field for backend
-        scheduleTimesPerDay: scheduleConfig.timesPerDay,
-        // CRITICAL FIX: Backend PUT handler reads 'selectedWeekdays', not 'scheduleDaysOfWeek'.
-        // Sending both ensures compatibility with both create and update endpoints.
-        selectedWeekdays: scheduleConfig.weekdays,
-        scheduleDaysOfWeek: scheduleConfig.weekdays,
-        scheduleWeekendsOnly: scheduleConfig.weekendsOnly,
-        scheduleWeekdaysOnly: scheduleConfig.weekdaysOnly,
-        // CRITICAL FIX: Backend PUT handler reads 'selectedFortnightDays', not 'scheduleFortnightDays'.
-        selectedFortnightDays: scheduleConfig.fortnightDays,
-        scheduleFortnightDays: scheduleConfig.fortnightDays,
-        scheduleFortnightWeek: scheduleConfig.fortnightWeek,
-        // CRITICAL FIX: Backend reads 'scheduleFortnightEvenOdd' for fortnight week type.
-        scheduleFortnightEvenOdd: scheduleConfig.fortnightWeek === 'week1' ? 'even' : scheduleConfig.fortnightWeek === 'week2' ? 'odd' : undefined,
-        // CRITICAL FIX: Backend PUT handler reads 'monthlyDates', not 'scheduleMonthlyDates'.
-        monthlyDates: scheduleConfig.monthlyDates,
-        scheduleDatesOfMonth: scheduleConfig.monthlyDates,
-        // CRITICAL FIX: Backend PUT handler reads 'monthlyWeekdayRules', not 'scheduleMonthlyWeekdayPositions'.
-        monthlyWeekdayRules: scheduleConfig.monthlyWeekdayPositions,
-        scheduleMonthlyWeekdayPositions: scheduleConfig.monthlyWeekdayPositions,
-        scheduleMonthlyRangeStart: scheduleConfig.monthlyRangeStart,
-        scheduleMonthlyRangeEnd: scheduleConfig.monthlyRangeEnd,
-        // CRITICAL FIX: Backend reads 'scheduleMonthlyRange' as {start, end} object.
-        scheduleMonthlyRange: (scheduleConfig.monthlyRangeStart && scheduleConfig.monthlyRangeEnd)
-          ? { start: scheduleConfig.monthlyRangeStart, end: scheduleConfig.monthlyRangeEnd }
-          : undefined,
-        scheduleMonthlyRandomCount: scheduleConfig.monthlyRandomCount,
-        scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
-        scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
-        scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
-        // ✅ YEARLY SCHEDULE: Send new {month, day} format as jsonb
-        // Only populated when scheduleType is "Yearly", null otherwise
-        yearlyDates: yearlyDatesForBackend,
-        scheduleDatesOfYear: yearlyDatesForBackend,
-        scheduleYearlyDates: yearlyDatesForBackend,
-        yearlyRanges: yearlyRangesForBackend,
-        scheduleYearlyRanges: yearlyRangesForBackend,
-        scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
-        scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
-        scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,
-        // CRITICAL FIX: Backend PUT handler reads 'startDate'/'endDate', not 'scheduleStartDate'/'scheduleEndDate'.
-        startDate: scheduleConfig.startDate?.toISOString(),
-        endDate: scheduleConfig.endDate?.toISOString(),
-        scheduleStartDate: scheduleConfig.startDate,
-        scheduleEndDate: scheduleConfig.endDate,
-        // CRITICAL FIX: Backend PUT handler reads 'scheduleExclusions', not 'scheduleExclusionDates'.
-        scheduleExclusions: scheduleConfig.exclusionDates?.map(d => d.toISOString()),
-        scheduleExclusionDates: scheduleConfig.exclusionDates,
-        calendarType: scheduleConfig.calendarType,
+        description: description.trim() || null,
+        parent_goal_id: parentGoalId || null,
+        life_area_id: lifeAreaId || null,
+        behavior_categories: behaviorCategories.length > 0 ? behaviorCategories : null,
+        type: type.toUpperCase(), // Ensure uppercase for database enum
+        strategy_ids: strategyIds.length > 0 ? strategyIds : null,
+        schedule_config: scheduleConfig, // Store entire schedule config as JSONB
       };
-      
-      console.log('[YEARLY SCHEDULE] Final goalData.yearlyDates:', JSON.stringify(goalData.yearlyDates));
-      console.log('[YEARLY SCHEDULE] Final goalData.yearlyRanges:', JSON.stringify(goalData.yearlyRanges));
-      
-      // FIXED: Include alarms field when editing a goal
-      if (editingGoalId && goalAlarms.length > 0) {
-        goalData.alarms = goalAlarms.map(alarm => ({ id: alarm.id }));
-        console.log('[API] Including alarms in goal update:', goalData.alarms);
-      }
       
       console.log('[CreateGoal] Submitting goal data:', JSON.stringify(goalData, null, 2));
 
-      // CRITICAL FIX: Supabase expects snake_case column names ONLY
-      // Remove any camelCase fields before sending to Supabase
+      // CRITICAL FIX: Handle reward/consequence data with proper snake_case field names
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
         goalData.reward_currency_id = rewardCurrencyId;
         goalData.reward_successes = parseInt(rewardSuccesses, 10);
         goalData.reward_amount = parseInt(rewardAmount, 10);
+        console.log('[CreateGoal] Setting reward data:', { 
+          reward_currency_id: rewardCurrencyId, 
+          reward_successes: parseInt(rewardSuccesses, 10), 
+          reward_amount: parseInt(rewardAmount, 10) 
+        });
       } else {
         goalData.reward_currency_id = null;
         goalData.reward_successes = null;
         goalData.reward_amount = null;
+        console.log('[CreateGoal] Clearing reward data');
       }
 
       if (consequenceCurrencyId && consequenceFailures && consequenceAmount) {
         goalData.consequence_currency_id = consequenceCurrencyId;
         goalData.consequence_failures = parseInt(consequenceFailures, 10);
         goalData.consequence_amount = parseInt(consequenceAmount, 10);
+        console.log('[CreateGoal] Setting consequence data:', { 
+          consequence_currency_id: consequenceCurrencyId, 
+          consequence_failures: parseInt(consequenceFailures, 10), 
+          consequence_amount: parseInt(consequenceAmount, 10) 
+        });
       } else {
         goalData.consequence_currency_id = null;
         goalData.consequence_failures = null;
         goalData.consequence_amount = null;
+        console.log('[CreateGoal] Clearing consequence data');
       }
-      
-      // Clean up: Remove ALL camelCase fields that don't exist in Supabase schema
-      // Supabase will reject unknown column names
-      delete goalData.rewardCurrencyId;
-      delete goalData.rewardSuccesses;
-      delete goalData.rewardAmount;
-      delete goalData.consequenceCurrencyId;
-      delete goalData.consequenceFailures;
-      delete goalData.consequenceAmount;
-      delete goalData.parentGoalId;
-      delete goalData.lifeAreaId;
-      delete goalData.behaviorCategories;
-      delete goalData.strategyIds;
 
       let createdOrUpdatedGoal: any;
       
       if (editingGoalId) {
         console.log('[CreateGoal] Updating goal:', editingGoalId);
+        
+        // Include alarms field when editing a goal
+        if (goalAlarms.length > 0) {
+          goalData.alarms = goalAlarms.map(alarm => ({ id: alarm.id }));
+          console.log('[API] Including alarms in goal update:', goalData.alarms);
+        }
+        
         createdOrUpdatedGoal = await supabaseApi.updateGoal(editingGoalId, goalData);
         console.log('[CreateGoal] Goal updated successfully:', createdOrUpdatedGoal?.id);
-        // CRITICAL FIX: After updating the goal, immediately refresh the schedule summary.
-        // The backend will delete old occurrences and generate fresh ones based on the
-        // newly saved schedule configuration, ensuring the UI shows current data.
-        if (scheduleConfig.scheduleType !== 'Always Active') {
-          console.log('[CreateGoal] Goal updated - refreshing schedule summary to reflect new config');
-          fetchScheduleSummary();
-        } else {
-          setScheduleSummaryText('');
-        }
         showSuccess('Goal updated successfully!');
       } else {
-        console.log('  - Method: POST');
-        console.log('  - Creating goal with Supabase');
+        console.log('[CreateGoal] Creating goal with Supabase');
         createdOrUpdatedGoal = await supabaseApi.createGoal(goalData);
         console.log('[CreateGoal] Goal created successfully:', createdOrUpdatedGoal?.id);
         
@@ -991,7 +695,6 @@ export default function CreateGoalScreen() {
     if (scheduleType === 'Always Active') {
       return 'every day';
     } else if (scheduleType === 'Weekly') {
-      // CRITICAL FIX: Show which days are selected, not just the count
       const weekdays = scheduleConfig.weekdays || [];
       if (weekdays.length === 0) return 'weekly';
       if (weekdays.length === 7) return 'every day';
@@ -1217,13 +920,6 @@ export default function CreateGoalScreen() {
             style={styles.picker}
             onPress={() => {
               setShowScheduleWizard(true);
-              // CRITICAL FIX: Refresh schedule summary when opening the wizard for an existing goal.
-              // The backend now always deletes old occurrences and generates fresh ones,
-              // so we must fetch on every open to show the current schedule (not stale data).
-              if (editingGoalId && scheduleConfig.scheduleType !== 'Always Active') {
-                console.log('[CreateGoal] Opening schedule wizard - triggering fresh schedule summary fetch');
-                fetchScheduleSummary();
-              }
             }}
           >
             <View style={styles.schedulePickerContent}>
