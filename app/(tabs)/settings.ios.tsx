@@ -16,7 +16,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator, DragEndParams } from 'react-native-draggable-flatlist';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -221,111 +221,42 @@ export default function SettingsScreen() {
       setLoading(true);
     }
     try {
-      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, gainLossCategoriesRes, prefsRes, goalProgressRes, reflectionMotivationsRes] = await Promise.all([
-        authenticatedGet('/api/goals'),
-        authenticatedGet('/api/life-areas'),
-        authenticatedGet('/api/strategies'),
-        authenticatedGet('/api/currencies'),
-        authenticatedGet('/api/gains-losses'),
-        authenticatedGet('/api/gain-loss-categories'),
-        authenticatedGet('/api/user-preferences'),
-        authenticatedGet('/api/reports/goal-progress'),
-        authenticatedGet('/api/reflection-motivations'),
+      const [goalsData, lifeAreasData, strategiesData, currenciesData, gainsLossesData, gainLossCategoriesData, prefsData, reflectionMotivationsData] = await Promise.all([
+        supabaseApi.getGoals(),
+        supabaseApi.getLifeAreas(),
+        supabaseApi.getStrategies(),
+        supabaseApi.getCurrencies(),
+        supabaseApi.getGainsLosses(),
+        supabaseApi.getGainLossCategories(),
+        supabaseApi.getUserPreferences(),
+        supabaseApi.getReflectionMotivations(),
       ]);
 
       console.log('[Settings iOS] Settings data loaded successfully');
-      
-      const goalsData = Array.isArray(goalsRes) 
-        ? goalsRes 
-        : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
-      
-      const lifeAreasData = Array.isArray(lifeAreasRes) 
-        ? lifeAreasRes 
-        : (Array.isArray(lifeAreasRes?.data) ? lifeAreasRes.data : []);
-      
-      const strategiesData = Array.isArray(strategiesRes) 
-        ? strategiesRes 
-        : (Array.isArray(strategiesRes?.data) ? strategiesRes.data : []);
-      
-      const currenciesData = Array.isArray(currenciesRes) 
-        ? currenciesRes 
-        : (Array.isArray(currenciesRes?.data) ? currenciesRes.data : []);
-      
-      const gainsLossesData = Array.isArray(gainsLossesRes) 
-        ? gainsLossesRes 
-        : (Array.isArray(gainsLossesRes?.data) ? gainsLossesRes.data : []);
-
-      const gainLossCategoriesData = Array.isArray(gainLossCategoriesRes)
-        ? gainLossCategoriesRes
-        : (Array.isArray(gainLossCategoriesRes?.data) ? gainLossCategoriesRes.data : []);
-
-      const reflectionMotivationsData = Array.isArray(reflectionMotivationsRes)
-        ? reflectionMotivationsRes
-        : (Array.isArray(reflectionMotivationsRes?.data) ? reflectionMotivationsRes.data : []);
-      
-      const prefsData = prefsRes?.data || prefsRes || { 
-        notificationsEnabled: false, 
-        notificationAlarms: [],
-        reflectionCategoriesEnabled: true,
-        reflectionCategories: ['Action', 'Speech', 'Thought'],
-      };
-
-      const goalProgressData = Array.isArray(goalProgressRes) 
-        ? goalProgressRes 
-        : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
-
-      // Merge goal progress data (which includes per-goal currency balances and streaks) with goals
-      console.log('[Settings iOS] Raw goalsData:', goalsData);
-      console.log('[Settings iOS] Raw goalProgressData:', goalProgressData);
-      
-      const goalsWithBalances = goalsData.map((goal: Goal) => {
-        const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
-        console.log(`[Settings iOS] Processing goal ${goal.id} (${goal.title}):`, {
-          hasProgressInfo: !!progressInfo,
-          progressInfo,
-          goalCurrentStreak: goal.currentStreak,
-          goalBestStreak: goal.bestStreak,
-        });
-        
-        if (progressInfo) {
-          const merged = {
-            ...goal,
-            rewardCurrencyBalance: progressInfo.rewardCurrencyBalance,
-            rewardCurrencySymbol: progressInfo.rewardCurrencySymbol,
-            consequenceCurrencyBalance: progressInfo.consequenceCurrencyBalance,
-            consequenceCurrencySymbol: progressInfo.consequenceCurrencySymbol,
-            successCount: progressInfo.successCount || 0,
-            struggleCount: progressInfo.struggleCount || 0,
-            status: progressInfo.status || goal.status || 'ACTIVE',
-            currentStreak: progressInfo.currentStreak ?? goal.currentStreak ?? 0,
-            bestStreak: progressInfo.bestStreak ?? goal.bestStreak ?? 0,
-          };
-          console.log(`[Settings iOS] Merged goal ${goal.id}:`, {
-            currentStreak: merged.currentStreak,
-            bestStreak: merged.bestStreak,
-          });
-          return merged;
-        }
-        
-        const defaulted = {
-          ...goal,
-          status: goal.status || 'ACTIVE',
-          currentStreak: goal.currentStreak ?? 0,
-          bestStreak: goal.bestStreak ?? 0,
-        };
-        console.log(`[Settings iOS] Defaulted goal ${goal.id}:`, {
-          currentStreak: defaulted.currentStreak,
-          bestStreak: defaulted.bestStreak,
-        });
-        return defaulted;
-      });
-      
-      console.log('[Settings iOS] Final goalsWithBalances:', goalsWithBalances);
-      
       console.log('[Settings iOS] Life areas loaded:', lifeAreasData);
       
-      setGoals(goalsWithBalances);
-      // Life Areas API now returns nested structure with goals and success percentages
+      // Goals already have success_count and struggle_count from Supabase
+      const goalsWithDefaults = goalsData.map((goal: any) => {
+        console.log(`[Settings iOS] Processing goal ${goal.id} (${goal.title}):`, {
+          currentStreak: goal.current_streak,
+          bestStreak: goal.best_streak,
+          successCount: goal.success_count,
+          struggleCount: goal.struggle_count,
+        });
+        
+        return {
+          ...goal,
+          status: goal.status || 'ACTIVE',
+          currentStreak: goal.current_streak ?? 0,
+          bestStreak: goal.best_streak ?? 0,
+          successCount: goal.success_count || 0,
+          struggleCount: goal.struggle_count || 0,
+        };
+      });
+      
+      console.log('[Settings iOS] Final goalsWithDefaults:', goalsWithDefaults);
+      
+      setGoals(goalsWithDefaults);
       setLifeAreas(lifeAreasData);
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
@@ -386,18 +317,10 @@ export default function SettingsScreen() {
   };
 
   const loadCurrencyBalances = async () => {
-    console.log('[Settings iOS] Loading currency balances and reflection tallies...');
+    console.log('[Settings iOS] Loading currency balances...');
     try {
-      const [balancesRes, talliesRes] = await Promise.all([
-        authenticatedGet('/api/reports/currency-balances'),
-        authenticatedGet('/api/reports/reflection-worth-it-tallies'),
-      ]);
-      
-      const balancesData = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || []);
-      const talliesData = talliesRes?.data || talliesRes || null;
-      
+      const balancesData = await supabaseApi.getCurrencyBalances();
       setCurrencyBalances(balancesData);
-      setWorthItTallies(talliesData);
     } catch (error) {
       console.error('[Settings iOS] Error loading reports data:', error);
       showError('Failed to load reports data');
@@ -498,62 +421,62 @@ export default function SettingsScreen() {
       
       if (modalType === 'lifeArea') {
         if (editingItem) {
-          await authenticatedPut(`/api/life-areas/${editingItem.id}`, formData);
+          await supabaseApi.updateLifeArea(editingItem.id, formData);
           showSuccess('Life area updated successfully');
         } else {
-          await authenticatedPost('/api/life-areas', formData);
+          await supabaseApi.createLifeArea(formData);
           showSuccess('Life area created successfully');
         }
       } else if (modalType === 'strategy') {
         if (editingItem) {
-          await authenticatedPut(`/api/strategies/${editingItem.id}`, formData);
+          await supabaseApi.updateStrategy(editingItem.id, formData);
           showSuccess('Strategy updated successfully');
         } else {
-          await authenticatedPost('/api/strategies', formData);
+          await supabaseApi.createStrategy(formData);
           showSuccess('Strategy created successfully');
         }
       } else if (modalType === 'currency') {
         if (editingItem) {
-          await authenticatedPut(`/api/currencies/${editingItem.id}`, formData);
+          await supabaseApi.updateCurrency(editingItem.id, formData);
           showSuccess('Currency updated successfully');
         } else {
-          await authenticatedPost('/api/currencies', formData);
+          await supabaseApi.createCurrency(formData);
           showSuccess('Currency created successfully');
         }
       } else if (modalType === 'gainLoss') {
         if (editingItem) {
-          await authenticatedPut(`/api/gains-losses/${editingItem.id}`, formData);
+          await supabaseApi.updateGainLoss(editingItem.id, formData);
           showSuccess('Gain/Loss updated successfully');
         } else {
-          await authenticatedPost('/api/gains-losses', formData);
+          await supabaseApi.createGainLoss(formData);
           showSuccess('Gain/Loss created successfully');
         }
       } else if (modalType === 'gainLossCategory') {
         if (editingItem) {
-          await authenticatedPut(`/api/gain-loss-categories/${editingItem.id}`, { name: formData.name });
+          await supabaseApi.updateGainLossCategory(editingItem.id, { name: formData.name });
           showSuccess('Category updated successfully');
         } else {
-          await authenticatedPost('/api/gain-loss-categories', { name: formData.name });
+          await supabaseApi.createGainLossCategory({ name: formData.name });
           showSuccess('Category created successfully');
         }
       } else if (modalType === 'reflectionMotivation') {
         if (editingItem) {
-          await authenticatedPut(`/api/reflection-motivations/${editingItem.id}`, { name: formData.name });
+          await supabaseApi.updateReflectionMotivation(editingItem.id, { name: formData.name });
           showSuccess('Motivation updated successfully');
         } else {
-          await authenticatedPost('/api/reflection-motivations', { name: formData.name });
+          await supabaseApi.createReflectionMotivation({ name: formData.name });
           showSuccess('Motivation created successfully');
         }
       } else if (modalType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         if (editingItem) {
           const updatedAlarms = alarms.map(a => a.id === editingItem.id ? formData : a);
-          await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+          await supabaseApi.updateUserPreferences({ ...preferences, notificationAlarms: updatedAlarms });
           setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         } else {
           const newAlarm = { ...formData, id: Date.now().toString() };
           const updatedAlarms = [...alarms, newAlarm];
-          await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+          await supabaseApi.updateUserPreferences({ ...preferences, notificationAlarms: updatedAlarms });
           setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         }
         showSuccess('Notification alarm saved successfully');
@@ -584,31 +507,31 @@ export default function SettingsScreen() {
       setShowConfirmDelete(false);
       
       if (deleteItemType === 'lifeArea') {
-        await authenticatedDelete(`/api/life-areas/${deleteItemId}`);
+        await supabaseApi.deleteLifeArea(deleteItemId);
         showSuccess('Life area deleted successfully');
       } else if (deleteItemType === 'strategy') {
-        await authenticatedDelete(`/api/strategies/${deleteItemId}`);
+        await supabaseApi.deleteStrategy(deleteItemId);
         showSuccess('Strategy deleted successfully');
       } else if (deleteItemType === 'currency') {
-        await authenticatedDelete(`/api/currencies/${deleteItemId}`);
+        await supabaseApi.deleteCurrency(deleteItemId);
         showSuccess('Currency deleted successfully');
       } else if (deleteItemType === 'gainLoss') {
-        await authenticatedDelete(`/api/gains-losses/${deleteItemId}`);
+        await supabaseApi.deleteGainLoss(deleteItemId);
         showSuccess('Gain/Loss deleted successfully');
       } else if (deleteItemType === 'gainLossCategory') {
-        await authenticatedDelete(`/api/gain-loss-categories/${deleteItemId}`);
+        await supabaseApi.deleteGainLossCategory(deleteItemId);
         showSuccess('Category deleted successfully');
       } else if (deleteItemType === 'reflectionMotivation') {
-        await authenticatedDelete(`/api/reflection-motivations/${deleteItemId}`);
+        await supabaseApi.deleteReflectionMotivation(deleteItemId);
         showSuccess('Motivation deleted successfully');
       } else if (deleteItemType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         const updatedAlarms = alarms.filter(a => a.id !== deleteItemId);
-        await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+        await supabaseApi.updateUserPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         showSuccess('Notification alarm deleted successfully');
       } else if (deleteItemType === 'goal') {
-        await authenticatedDelete(`/api/goals/${deleteItemId}`);
+        await supabaseApi.deleteGoal(deleteItemId);
         showSuccess('Goal deleted successfully');
       }
 
@@ -628,7 +551,18 @@ export default function SettingsScreen() {
     try {
       setLoading(true);
       console.log(`[Settings iOS] Toggling goal status for goal ${id}`);
-      await authenticatedPost(`/api/goals/${id}/deactivate`, {});
+      
+      // Get current goal status
+      const goal = goals.find(g => g.id === id);
+      if (!goal) {
+        showError('Goal not found');
+        return;
+      }
+      
+      // Toggle status
+      const newStatus = goal.status === 'ACTIVE' ? 'DEACTIVATED' : 'ACTIVE';
+      await supabaseApi.updateGoal(id, { status: newStatus });
+      
       showSuccess('Goal status updated successfully');
       await loadDataMemoized();
     } catch (error: any) {
@@ -642,7 +576,7 @@ export default function SettingsScreen() {
   const handleSavePreferences = async () => {
     try {
       setLoading(true);
-      await authenticatedPut('/api/user-preferences', preferences);
+      await supabaseApi.updateUserPreferences(preferences);
       showSuccess('Preferences saved successfully');
     } catch (error) {
       console.error('[Settings iOS] Error saving preferences:', error);
@@ -769,16 +703,28 @@ export default function SettingsScreen() {
 
       if (currencyModalType === 'claim') {
         console.log(`[Settings iOS] Claiming ${amount} of currency ${selectedCurrencyId}`);
-        await authenticatedPost(`/api/currencies/${selectedCurrencyId}/claim`, { amount });
+        await supabaseApi.createCurrencyTransaction({
+          currency_id: selectedCurrencyId,
+          amount,
+          operation: 'subtract', // Claiming reduces the balance owed
+          type: 'claim',
+          description: 'Manual claim from settings',
+        });
         showSuccess(`Claimed ${amount} successfully`);
       } else {
         console.log(`[Settings iOS] Paying ${amount} of currency ${selectedCurrencyId}`);
-        await authenticatedPost(`/api/currencies/${selectedCurrencyId}/pay`, { amount });
+        await supabaseApi.createCurrencyTransaction({
+          currency_id: selectedCurrencyId,
+          amount,
+          operation: 'subtract', // Paying reduces the balance
+          type: 'payment',
+          description: 'Manual payment from settings',
+        });
         showSuccess(`Paid ${amount} successfully`);
       }
 
       setShowCurrencyModal(false);
-      await loadData();
+      await loadDataMemoized();
       if (currentSection === 'reports') {
         await loadCurrencyBalances();
       }
@@ -897,19 +843,19 @@ export default function SettingsScreen() {
         });
       }
       
-      console.log('[Settings iOS] Sending updates to backend:', updates);
+      console.log('[Settings iOS] Sending updates to Supabase:', updates);
       
-      // Send updates to backend
-      await authenticatedPut('/api/life-areas/reorder', { updates });
+      // Send updates to Supabase
+      await supabaseApi.reorderLifeAreas(updates);
       console.log('[Settings iOS] Life areas reordered successfully');
       
       // Reload data to get the updated structure
-      await loadData();
+      await loadDataMemoized();
     } catch (error: any) {
       console.error('[Settings iOS] Error reordering life areas:', error);
       showError(error.message || 'Failed to reorder life areas');
       // Reload data to revert to previous state
-      await loadData();
+      await loadDataMemoized();
     }
   };
 

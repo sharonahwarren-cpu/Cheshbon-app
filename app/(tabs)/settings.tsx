@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { COLOR_PALETTE, COLOR_GRID_COLUMNS } from '@/utils/colorPalette';
@@ -252,88 +252,31 @@ export default function SettingsScreen() {
     console.log('[Settings Web] Loading settings data...');
     setLoading(true);
     try {
-      const [goalsRes, lifeAreasRes, strategiesRes, currenciesRes, gainsLossesRes, gainLossCategoriesRes, prefsRes, goalProgressRes, reflectionMotivationsRes] = await Promise.all([
-        authenticatedGet('/api/goals'),
-        authenticatedGet('/api/life-areas'),
-        authenticatedGet('/api/strategies'),
-        authenticatedGet('/api/currencies'),
-        authenticatedGet('/api/gains-losses'),
-        authenticatedGet('/api/gain-loss-categories'),
-        authenticatedGet('/api/user-preferences'),
-        authenticatedGet('/api/reports/goal-progress'),
-        authenticatedGet('/api/reflection-motivations'),
+      const [goalsData, lifeAreasData, strategiesData, currenciesData, gainsLossesData, gainLossCategoriesData, prefsData, reflectionMotivationsData] = await Promise.all([
+        supabaseApi.getGoals(),
+        supabaseApi.getLifeAreas(),
+        supabaseApi.getStrategies(),
+        supabaseApi.getCurrencies(),
+        supabaseApi.getGainsLosses(),
+        supabaseApi.getGainLossCategories(),
+        supabaseApi.getUserPreferences(),
+        supabaseApi.getReflectionMotivations(),
       ]);
 
       console.log('[Settings Web] Settings data loaded successfully');
-      
-      const goalsData = Array.isArray(goalsRes) 
-        ? goalsRes 
-        : (Array.isArray(goalsRes?.data) ? goalsRes.data : []);
-      
-      // Life Areas API now returns nested structure with goals and success percentages
-      const lifeAreasData = Array.isArray(lifeAreasRes) 
-        ? lifeAreasRes 
-        : (Array.isArray(lifeAreasRes?.data) ? lifeAreasRes.data : []);
-      
       console.log('[Settings Web] Life areas loaded:', lifeAreasData);
       
-      const strategiesData = Array.isArray(strategiesRes) 
-        ? strategiesRes 
-        : (Array.isArray(strategiesRes?.data) ? strategiesRes.data : []);
+      // Goals already have success_count and struggle_count from Supabase
+      const goalsWithDefaults = goalsData.map((goal: any) => ({
+        ...goal,
+        status: goal.status || 'ACTIVE',
+        currentStreak: goal.current_streak ?? 0,
+        bestStreak: goal.best_streak ?? 0,
+        successCount: goal.success_count || 0,
+        struggleCount: goal.struggle_count || 0,
+      }));
       
-      const currenciesData = Array.isArray(currenciesRes) 
-        ? currenciesRes 
-        : (Array.isArray(currenciesRes?.data) ? currenciesRes.data : []);
-      
-      const gainsLossesData = Array.isArray(gainsLossesRes) 
-        ? gainsLossesRes 
-        : (Array.isArray(gainsLossesRes?.data) ? gainsLossesRes.data : []);
-      
-      const gainLossCategoriesData = Array.isArray(gainLossCategoriesRes) 
-        ? gainLossCategoriesRes 
-        : (Array.isArray(gainLossCategoriesRes?.data) ? gainLossCategoriesRes.data : []);
-
-      const reflectionMotivationsData = Array.isArray(reflectionMotivationsRes)
-        ? reflectionMotivationsRes
-        : (Array.isArray(reflectionMotivationsRes?.data) ? reflectionMotivationsRes.data : []);
-      
-      const prefsData = prefsRes?.data || prefsRes || { 
-        notificationsEnabled: false, 
-        notificationAlarms: [],
-        reflectionCategoriesEnabled: true,
-        reflectionCategories: ['Action', 'Speech', 'Thought'],
-      };
-
-      const goalProgressData = Array.isArray(goalProgressRes) 
-        ? goalProgressRes 
-        : (Array.isArray(goalProgressRes?.data) ? goalProgressRes.data : []);
-
-      // Merge goal progress data (which includes per-goal currency balances and streaks) with goals
-      const goalsWithBalances = goalsData.map((goal: Goal) => {
-        const progressInfo = goalProgressData.find((gp: any) => gp.goalId === goal.id);
-        if (progressInfo) {
-          return {
-            ...goal,
-            rewardCurrencyBalance: progressInfo.rewardCurrencyBalance,
-            rewardCurrencySymbol: progressInfo.rewardCurrencySymbol,
-            consequenceCurrencyBalance: progressInfo.consequenceCurrencyBalance,
-            consequenceCurrencySymbol: progressInfo.consequenceCurrencySymbol,
-            successCount: progressInfo.successCount || 0,
-            struggleCount: progressInfo.struggleCount || 0,
-            status: progressInfo.status || goal.status || 'ACTIVE',
-            currentStreak: progressInfo.currentStreak ?? goal.currentStreak ?? 0,
-            bestStreak: progressInfo.bestStreak ?? goal.bestStreak ?? 0,
-          };
-        }
-        return {
-          ...goal,
-          status: goal.status || 'ACTIVE',
-          currentStreak: goal.currentStreak ?? 0,
-          bestStreak: goal.bestStreak ?? 0,
-        };
-      });
-      
-      setGoals(goalsWithBalances);
+      setGoals(goalsWithDefaults);
       setLifeAreas(lifeAreasData);
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
@@ -350,15 +293,9 @@ export default function SettingsScreen() {
   };
 
   const loadCurrencyBalances = async () => {
-    console.log('[Settings Web] Loading currency balances and reflection tallies...');
+    console.log('[Settings Web] Loading currency balances...');
     try {
-      const [balancesRes, talliesRes] = await Promise.all([
-        authenticatedGet('/api/reports/currency-balances'),
-        authenticatedGet('/api/reports/reflection-worth-it-tallies'),
-      ]);
-      
-      const balancesData = Array.isArray(balancesRes) ? balancesRes : (balancesRes?.data || []);
-      const talliesData = talliesRes?.data || talliesRes || null;
+      const balancesData = await supabaseApi.getCurrencyBalances();
       
       // FILTER: Only show currencies with non-zero total balance
       const filteredBalances = balancesData
@@ -370,7 +307,6 @@ export default function SettingsScreen() {
         }));
       
       setCurrencyBalances(filteredBalances);
-      setWorthItTallies(talliesData);
       
       console.log('[Settings Web] Filtered currency balances:', {
         total: balancesData.length,
@@ -476,62 +412,62 @@ export default function SettingsScreen() {
       
       if (modalType === 'lifeArea') {
         if (editingItem) {
-          await authenticatedPut(`/api/life-areas/${editingItem.id}`, formData);
+          await supabaseApi.updateLifeArea(editingItem.id, formData);
           showSuccess('Life area updated successfully');
         } else {
-          await authenticatedPost('/api/life-areas', formData);
+          await supabaseApi.createLifeArea(formData);
           showSuccess('Life area created successfully');
         }
       } else if (modalType === 'strategy') {
         if (editingItem) {
-          await authenticatedPut(`/api/strategies/${editingItem.id}`, formData);
+          await supabaseApi.updateStrategy(editingItem.id, formData);
           showSuccess('Strategy updated successfully');
         } else {
-          await authenticatedPost('/api/strategies', formData);
+          await supabaseApi.createStrategy(formData);
           showSuccess('Strategy created successfully');
         }
       } else if (modalType === 'currency') {
         if (editingItem) {
-          await authenticatedPut(`/api/currencies/${editingItem.id}`, formData);
+          await supabaseApi.updateCurrency(editingItem.id, formData);
           showSuccess('Currency updated successfully');
         } else {
-          await authenticatedPost('/api/currencies', formData);
+          await supabaseApi.createCurrency(formData);
           showSuccess('Currency created successfully');
         }
       } else if (modalType === 'gainLoss') {
         if (editingItem) {
-          await authenticatedPut(`/api/gains-losses/${editingItem.id}`, formData);
+          await supabaseApi.updateGainLoss(editingItem.id, formData);
           showSuccess('Gain/Loss updated successfully');
         } else {
-          await authenticatedPost('/api/gains-losses', formData);
+          await supabaseApi.createGainLoss(formData);
           showSuccess('Gain/Loss created successfully');
         }
       } else if (modalType === 'gainLossCategory') {
         if (editingItem) {
-          await authenticatedPut(`/api/gain-loss-categories/${editingItem.id}`, formData);
+          await supabaseApi.updateGainLossCategory(editingItem.id, { name: formData.name });
           showSuccess('Category updated successfully');
         } else {
-          await authenticatedPost('/api/gain-loss-categories', formData);
+          await supabaseApi.createGainLossCategory({ name: formData.name });
           showSuccess('Category created successfully');
         }
       } else if (modalType === 'reflectionMotivation') {
         if (editingItem) {
-          await authenticatedPut(`/api/reflection-motivations/${editingItem.id}`, { name: formData.name });
+          await supabaseApi.updateReflectionMotivation(editingItem.id, { name: formData.name });
           showSuccess('Motivation updated successfully');
         } else {
-          await authenticatedPost('/api/reflection-motivations', { name: formData.name });
+          await supabaseApi.createReflectionMotivation({ name: formData.name });
           showSuccess('Motivation created successfully');
         }
       } else if (modalType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         if (editingItem) {
           const updatedAlarms = alarms.map(a => a.id === editingItem.id ? formData : a);
-          await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+          await supabaseApi.updateUserPreferences({ ...preferences, notificationAlarms: updatedAlarms });
           setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         } else {
           const newAlarm = { ...formData, id: Date.now().toString() };
           const updatedAlarms = [...alarms, newAlarm];
-          await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+          await supabaseApi.updateUserPreferences({ ...preferences, notificationAlarms: updatedAlarms });
           setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         }
         showSuccess('Notification alarm saved successfully');
@@ -562,31 +498,31 @@ export default function SettingsScreen() {
       setShowConfirmDelete(false);
       
       if (deleteItemType === 'lifeArea') {
-        await authenticatedDelete(`/api/life-areas/${deleteItemId}`);
+        await supabaseApi.deleteLifeArea(deleteItemId);
         showSuccess('Life area deleted successfully');
       } else if (deleteItemType === 'strategy') {
-        await authenticatedDelete(`/api/strategies/${deleteItemId}`);
+        await supabaseApi.deleteStrategy(deleteItemId);
         showSuccess('Strategy deleted successfully');
       } else if (deleteItemType === 'currency') {
-        await authenticatedDelete(`/api/currencies/${deleteItemId}`);
+        await supabaseApi.deleteCurrency(deleteItemId);
         showSuccess('Currency deleted successfully');
       } else if (deleteItemType === 'gainLoss') {
-        await authenticatedDelete(`/api/gains-losses/${deleteItemId}`);
+        await supabaseApi.deleteGainLoss(deleteItemId);
         showSuccess('Gain/Loss deleted successfully');
       } else if (deleteItemType === 'gainLossCategory') {
-        await authenticatedDelete(`/api/gain-loss-categories/${deleteItemId}`);
+        await supabaseApi.deleteGainLossCategory(deleteItemId);
         showSuccess('Category deleted successfully');
       } else if (deleteItemType === 'reflectionMotivation') {
-        await authenticatedDelete(`/api/reflection-motivations/${deleteItemId}`);
+        await supabaseApi.deleteReflectionMotivation(deleteItemId);
         showSuccess('Motivation deleted successfully');
       } else if (deleteItemType === 'alarm') {
         const alarms = preferences.notificationAlarms || [];
         const updatedAlarms = alarms.filter(a => a.id !== deleteItemId);
-        await authenticatedPut('/api/user-preferences', { ...preferences, notificationAlarms: updatedAlarms });
+        await supabaseApi.updateUserPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         setPreferences({ ...preferences, notificationAlarms: updatedAlarms });
         showSuccess('Notification alarm deleted successfully');
       } else if (deleteItemType === 'goal') {
-        await authenticatedDelete(`/api/goals/${deleteItemId}`);
+        await supabaseApi.deleteGoal(deleteItemId);
         showSuccess('Goal deleted successfully');
       }
 
@@ -606,7 +542,18 @@ export default function SettingsScreen() {
     try {
       setLoading(true);
       console.log(`[Settings Web] Toggling goal status for goal ${id}`);
-      await authenticatedPost(`/api/goals/${id}/deactivate`, {});
+      
+      // Get current goal status
+      const goal = goals.find(g => g.id === id);
+      if (!goal) {
+        showError('Goal not found');
+        return;
+      }
+      
+      // Toggle status
+      const newStatus = goal.status === 'ACTIVE' ? 'DEACTIVATED' : 'ACTIVE';
+      await supabaseApi.updateGoal(id, { status: newStatus });
+      
       showSuccess('Goal status updated successfully');
       await loadData();
     } catch (error: any) {
@@ -620,7 +567,7 @@ export default function SettingsScreen() {
   const handleSavePreferences = async () => {
     try {
       setLoading(true);
-      await authenticatedPut('/api/user-preferences', preferences);
+      await supabaseApi.updateUserPreferences(preferences);
       showSuccess('Preferences saved successfully');
     } catch (error) {
       console.error('[Settings Web] Error saving preferences:', error);
@@ -633,7 +580,9 @@ export default function SettingsScreen() {
   const handleLinkGoalToLifeArea = async (goalId: string, lifeAreaId: string) => {
     try {
       console.log('[Settings Web] Linking goal to life area:', { goalId, lifeAreaId });
-      await authenticatedPost(`/api/life-areas/${lifeAreaId}/goals`, { goalId });
+      
+      // Update the goal's life_area_id
+      await supabaseApi.updateGoal(goalId, { life_area_id: lifeAreaId });
       
       // Find the goal that was just linked
       const linkedGoal = goals.find(g => g.id === goalId);
@@ -670,7 +619,9 @@ export default function SettingsScreen() {
   const handleUnlinkGoalFromLifeArea = async (goalId: string, lifeAreaId: string) => {
     try {
       console.log('[Settings Web] Unlinking goal from life area:', { goalId, lifeAreaId });
-      await authenticatedDelete(`/api/life-areas/${lifeAreaId}/goals/${goalId}`);
+      
+      // Set the goal's life_area_id to null
+      await supabaseApi.updateGoal(goalId, { life_area_id: null });
       
       // Update formData immediately (optimistic update)
       const updatedGoals = (formData.goals || []).filter((g: any) => g.id !== goalId);
@@ -743,13 +694,13 @@ export default function SettingsScreen() {
         });
       }
       
-      console.log('[Settings Web] Sending updates to backend:', updates);
+      console.log('[Settings Web] Sending updates to Supabase:', updates);
       
-      // Send updates to backend
-      await authenticatedPut('/api/life-areas/reorder', { updates });
+      // Send updates to Supabase
+      await supabaseApi.reorderLifeAreas(updates);
       console.log('[Settings Web] Life areas reordered successfully');
       
-      // Reload to get the correct structure from backend
+      // Reload to get the correct structure from Supabase
       await loadData();
       // REMOVED: showSuccess('Life areas recorded successfully');
       // No success message shown after reordering
@@ -862,11 +813,23 @@ export default function SettingsScreen() {
 
       if (currencyModalType === 'claim') {
         console.log(`[Settings Web] Claiming ${amount} of currency ${selectedCurrencyId}`);
-        await authenticatedPost(`/api/currencies/${selectedCurrencyId}/claim`, { amount });
+        await supabaseApi.createCurrencyTransaction({
+          currency_id: selectedCurrencyId,
+          amount,
+          operation: 'subtract', // Claiming reduces the balance owed
+          type: 'claim',
+          description: 'Manual claim from settings',
+        });
         showSuccess(`Claimed ${amount} successfully`);
       } else {
         console.log(`[Settings Web] Paying ${amount} of currency ${selectedCurrencyId}`);
-        await authenticatedPost(`/api/currencies/${selectedCurrencyId}/pay`, { amount });
+        await supabaseApi.createCurrencyTransaction({
+          currency_id: selectedCurrencyId,
+          amount,
+          operation: 'subtract', // Paying reduces the balance
+          type: 'payment',
+          description: 'Manual payment from settings',
+        });
         showSuccess(`Paid ${amount} successfully`);
       }
 
