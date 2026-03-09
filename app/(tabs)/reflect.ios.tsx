@@ -18,7 +18,7 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { AddReflectionModal } from '@/components/AddReflectionModal';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface JournalEntry {
@@ -155,9 +155,9 @@ export default function ReflectScreen() {
 
   useEffect(() => {
     if (params.openModal === 'true') {
-      console.log('[Reflect] openModal parameter detected, opening AddReflectionModal');
+      console.log('[Reflect iOS] openModal parameter detected, opening AddReflectionModal');
       if (params.goalId) {
-        console.log('[Reflect] Pre-filling with goalId:', params.goalId);
+        console.log('[Reflect iOS] Pre-filling with goalId:', params.goalId);
         setPrefilledGoalId(params.goalId);
       }
       setTimeout(() => {
@@ -174,7 +174,7 @@ export default function ReflectScreen() {
     if (params.reflectionId && reflections.length > 0) {
       const reflection = reflections.find(r => r.id === params.reflectionId);
       if (reflection) {
-        console.log('Opening reflection from history:', reflection.id);
+        console.log('[Reflect iOS] Opening reflection from history:', reflection.id);
         openEditReflectionModal(reflection);
       }
     }
@@ -191,43 +191,95 @@ export default function ReflectScreen() {
 
   const loadData = async () => {
     const dateString = formatDateLocal(selectedDate);
-    console.log('Loading reflect data for date (local):', dateString);
+    console.log('[Reflect iOS] Loading reflect data for date (local):', dateString);
     setLoading(true);
     try {
-      const [journalRes, reflectionsRes, goalsRes, currenciesRes, prefsRes, gainsLossesRes, strategiesRes, motivationsRes] = await Promise.all([
-        authenticatedGet(`/api/journals/by-date?date=${dateString}`),
-        authenticatedGet(`/api/reflections/by-date?date=${dateString}`),
-        authenticatedGet('/api/goals'),
-        authenticatedGet('/api/currencies'),
-        authenticatedGet('/api/user-preferences'),
-        authenticatedGet('/api/gains-losses'),
-        authenticatedGet('/api/strategies'),
-        authenticatedGet('/api/reflection-motivations'),
+      const [journalsData, reflectionsData, goalsData, currenciesData, prefsData, gainsLossesData, strategiesData, motivationsData] = await Promise.all([
+        supabaseApi.getJournals(dateString),
+        supabaseApi.getReflections(dateString),
+        supabaseApi.getGoals(),
+        supabaseApi.getCurrencies(),
+        supabaseApi.getUserPreferences(),
+        supabaseApi.getGainsLosses(),
+        supabaseApi.getStrategies(),
+        supabaseApi.getReflectionMotivations(),
       ]);
 
-      const journalData = journalRes?.data || journalRes || null;
-      const reflectionsData = Array.isArray(reflectionsRes) ? reflectionsRes : (reflectionsRes?.data || []);
-      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
-      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
-      const prefsData = prefsRes?.data || prefsRes || {};
-      const gainsLossesData = Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []);
-      const strategiesData = Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []);
-      const motivationsData = Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []);
-
-      setJournalEntry(journalData);
-      setJournalContent(journalData?.content || '');
-      setReflections(reflectionsData);
-      setGoals(goalsData);
-      setCurrencies(currenciesData);
-      setUserPreferences(prefsData);
-      setGainsLosses(gainsLossesData);
-      setStrategies(strategiesData);
-      setMotivations(motivationsData);
+      // Find journal for the specific date
+      const journalForDate = journalsData.find((j: any) => j.entry_date === dateString);
+      
+      setJournalEntry(journalForDate || null);
+      setJournalContent(journalForDate?.content || '');
+      setReflections(reflectionsData.map((r: any) => ({
+        id: r.id,
+        entryDate: r.entry_date,
+        category: r.category,
+        type: r.type,
+        description: r.description,
+        linkedGoalId: r.linked_goal_id,
+        linkedGoalTitle: r.goal?.title,
+        outcome: r.outcome,
+        currencyChange: r.currency_change,
+        gainedIds: r.gained_ids,
+        lostIds: r.lost_ids,
+        motivationIds: r.motivation_ids,
+        wasWorthIt: r.was_worth_it,
+        additionalThoughts: r.additional_thoughts,
+        strategyEffectiveness: r.strategy_effectiveness,
+        createdAt: r.created_at,
+      })));
+      setGoals(goalsData.map((g: any) => ({
+        id: g.id,
+        title: g.title,
+        behaviorCategories: g.behavior_categories,
+        rewardCurrencyId: g.reward_currency_id,
+        rewardAmount: g.reward_amount,
+        rewardSuccesses: g.reward_successes,
+        consequenceCurrencyId: g.consequence_currency_id,
+        consequenceAmount: g.consequence_amount,
+        consequenceFailures: g.consequence_failures,
+        successCount: g.success_count,
+        struggleCount: g.struggle_count,
+      })));
+      setCurrencies(currenciesData.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        symbol: c.symbol,
+        onSuccess: c.on_success,
+        onFailure: c.on_failure,
+      })));
+      setUserPreferences({
+        reflectionCategoriesEnabled: prefsData.reflection_categories_enabled,
+        reflectionCategories: prefsData.reflection_categories,
+      });
+      setGainsLosses(gainsLossesData.map((gl: any) => ({
+        id: gl.id,
+        name: gl.name,
+        type: gl.type,
+        category: gl.category,
+        subCategory: gl.sub_category,
+      })));
+      setStrategies(strategiesData.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        category: s.category,
+        successCount: s.success_count || 0,
+        failureCount: s.failure_count || 0,
+        timesUsed: s.times_used || 0,
+        successRate: s.success_rate || 0,
+      })));
+      setMotivations(motivationsData.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        createdAt: m.created_at,
+        updatedAt: m.updated_at,
+      })));
       console.log('[Reflect iOS] Motivations loaded:', motivationsData.length);
 
-      console.log('Reflect data loaded successfully');
+      console.log('[Reflect iOS] Data loaded successfully');
     } catch (error) {
-      console.error('Error loading reflect data:', error);
+      console.error('[Reflect iOS] Error loading reflect data:', error);
       showError('Failed to load reflect data');
     } finally {
       setLoading(false);
@@ -245,50 +297,70 @@ export default function ReflectScreen() {
   };
 
   const handleOpenJournalModal = () => {
-    console.log('Opening journal modal');
+    console.log('[Reflect iOS] Opening journal modal');
     setTempJournalContent(journalContent);
     setShowJournalModal(true);
   };
 
   const handleCloseJournalModal = () => {
-    console.log('Closing journal modal without saving');
+    console.log('[Reflect iOS] Closing journal modal without saving');
     setShowJournalModal(false);
     setTempJournalContent('');
   };
 
   const handleSaveJournal = async () => {
-    console.log('Saving journal entry...');
+    console.log('[Reflect iOS] Saving journal entry...');
     try {
       setLoading(true);
       const dateString = formatDateLocal(selectedDate);
       
-      const response = await authenticatedPost('/api/journals/by-date', {
-        date: dateString,
-        content: tempJournalContent,
-      });
-
-      const savedEntry = response?.data || response;
-      
-      if (savedEntry && savedEntry.deleted) {
-        console.log('Journal entry deleted (content was empty)');
-        setJournalEntry(null);
-        setJournalContent('');
-        showSuccess('Journal entry deleted');
-      } else if (savedEntry) {
-        console.log('Journal entry saved');
-        setJournalEntry(savedEntry);
-        setJournalContent(tempJournalContent);
-        showSuccess('Journal saved successfully');
+      if (!tempJournalContent.trim()) {
+        // Delete journal if content is empty
+        if (journalEntry) {
+          await supabaseApi.deleteJournal(journalEntry.id);
+          console.log('[Reflect iOS] Journal entry deleted (content was empty)');
+          setJournalEntry(null);
+          setJournalContent('');
+          showSuccess('Journal entry deleted');
+        }
       } else {
-        console.log('No journal entry (content was empty and no existing entry)');
-        setJournalEntry(null);
-        setJournalContent('');
+        // Create or update journal
+        if (journalEntry) {
+          const updated = await supabaseApi.updateJournal(journalEntry.id, {
+            content: tempJournalContent,
+          });
+          console.log('[Reflect iOS] Journal entry updated');
+          setJournalEntry({
+            id: updated.id,
+            content: updated.content,
+            entryDate: updated.entry_date,
+            createdAt: updated.created_at,
+            updatedAt: updated.updated_at,
+          });
+          setJournalContent(tempJournalContent);
+          showSuccess('Journal saved successfully');
+        } else {
+          const created = await supabaseApi.createJournal({
+            entry_date: dateString,
+            content: tempJournalContent,
+          });
+          console.log('[Reflect iOS] Journal entry created');
+          setJournalEntry({
+            id: created.id,
+            content: created.content,
+            entryDate: created.entry_date,
+            createdAt: created.created_at,
+            updatedAt: created.updated_at,
+          });
+          setJournalContent(tempJournalContent);
+          showSuccess('Journal saved successfully');
+        }
       }
       
       setShowJournalModal(false);
       setTempJournalContent('');
     } catch (error) {
-      console.error('Error saving journal:', error);
+      console.error('[Reflect iOS] Error saving journal:', error);
       showError('Failed to save journal entry');
     } finally {
       setLoading(false);
@@ -324,14 +396,14 @@ export default function ReflectScreen() {
   };
 
   const handleDeleteReflection = async (id: string) => {
-    console.log('Deleting reflection:', id);
+    console.log('[Reflect iOS] Deleting reflection:', id);
     try {
       setLoading(true);
-      await authenticatedDelete(`/api/reflections/${id}`);
+      await supabaseApi.deleteReflection(id);
       setReflections(reflections.filter(r => r.id !== id));
       showSuccess('Reflection deleted successfully');
     } catch (error) {
-      console.error('Error deleting reflection:', error);
+      console.error('[Reflect iOS] Error deleting reflection:', error);
       showError('Failed to delete reflection');
     } finally {
       setLoading(false);
