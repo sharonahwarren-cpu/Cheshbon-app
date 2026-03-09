@@ -12,7 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { authenticatedGet, authenticatedPost } from "@/utils/api";
+import * as supabaseApi from "@/utils/supabaseApi";
 import React, { useState, useEffect, useCallback } from "react";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
@@ -225,80 +225,27 @@ export default function ReportsScreen() {
       setLoading(true);
     }
     try {
-      const dateRange = getDateRangeForModal();
-      const params = new URLSearchParams();
-      
-      if (dateRange.startDate && dateRange.endDate) {
-        params.append('startDate', dateRange.startDate);
-        params.append('endDate', dateRange.endDate);
-      }
-      
-      // Always exclude pure currency transactions from reports
-      // Pure currency transactions are identified by the backend flag (is_pure_currency_transaction)
-      // and should not be counted in behavioral/outcome reports
-      params.append('excludePureCurrencyTransactions', 'true');
-      
-      const queryString = params.toString();
-      const dateParams = queryString ? `?${queryString}` : '';
-      
-      console.log('[Reports] Fetching with date params:', dateParams);
-      
-      const [
-        currencyRes,
-        currenciesRes,
-        winsLossesRes,
-        successStrugglesRes,
-        reflectionStatsRes,
-        journalCountRes,
-        gainsLossesRes,
-        gainsLossesDistRes,
-        behaviorCountsRes,
-        goalProgressRes,
-        topMotivationsByTypeRes,
-        topMotivationsByOutcomeRes,
-      ] = await Promise.all([
-        authenticatedGet('/api/reports/currency-balances'),
-        authenticatedGet('/api/currencies'),
-        authenticatedGet(`/api/reports/wins-vs-losses${dateParams}`),
-        authenticatedGet(`/api/reports/success-vs-struggles${dateParams}`),
-        authenticatedGet(`/api/reports/reflection-stats${dateParams}`),
-        authenticatedGet(`/api/reports/journal-count${dateParams}`),
-        authenticatedGet(`/api/reports/gains-losses-summary${dateParams}`),
-        authenticatedGet(`/api/reports/gains-losses-distribution${dateParams}`),
-        authenticatedGet(`/api/reports/behavior-counts${dateParams}`),
-        authenticatedGet(`/api/reports/goal-progress${dateParams}`),
-        authenticatedGet(`/api/reports/top-motivations-by-type${dateParams}`),
-        authenticatedGet(`/api/reports/top-motivations-by-outcome${dateParams}`),
-      ]);
+      // Load currency balances
+      const balancesData = await supabaseApi.getCurrencyBalances();
+      console.log('[Reports] Currency balances loaded:', balancesData);
+      setCurrencyBalances(balancesData);
 
-      const currencyData = Array.isArray(currencyRes) ? currencyRes : (currencyRes?.data || []);
-      const currenciesData = Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []);
-      const winsLossesData = winsLossesRes?.data || winsLossesRes || null;
-      const successStrugglesData = successStrugglesRes?.data || successStrugglesRes || null;
-      const reflectionStatsData = reflectionStatsRes?.data || reflectionStatsRes || null;
-      const journalCountData = journalCountRes?.data || journalCountRes || null;
-      const gainsLossesData = gainsLossesRes?.data || gainsLossesRes || null;
-      const gainsLossesDistData = gainsLossesDistRes?.data || gainsLossesDistRes || null;
-      const behaviorCountsData = behaviorCountsRes?.data || behaviorCountsRes || null;
-      const goalProgressData = Array.isArray(goalProgressRes) ? goalProgressRes : (goalProgressRes?.data || []);
-      const topMotivationsByTypeData = topMotivationsByTypeRes?.data || topMotivationsByTypeRes || null;
-      const topMotivationsByOutcomeData = topMotivationsByOutcomeRes?.data || topMotivationsByOutcomeRes || null;
-
-      setCurrencyBalances(currencyData);
+      // Load currencies
+      const currenciesData = await supabaseApi.getCurrencies();
+      console.log('[Reports] Currencies loaded:', currenciesData);
       setCurrencies(currenciesData);
-      setWinsVsLosses(winsLossesData);
-      setSuccessVsStruggles(successStrugglesData);
-      setReflectionStats(reflectionStatsData);
-      setJournalCount(journalCountData);
-      setGainsLossesSummary(gainsLossesData);
-      setGainsLossesDistribution(gainsLossesDistData);
-      setBehaviorCounts(behaviorCountsData);
-      setGoalProgress(goalProgressData);
-      setTopMotivationsByType(topMotivationsByTypeData);
-      setTopMotivationsByOutcome(topMotivationsByOutcomeData);
-      
-      console.log('[Reports] Success vs Struggles:', successStrugglesData);
-      console.log('[Reports] Wins vs Losses:', winsLossesData);
+
+      // Load reports data with time filter
+      const reportsData = await supabaseApi.getReportsData(timeFilter);
+      console.log('[Reports] Reports data loaded:', reportsData);
+
+      setReflectionStats(reportsData.reflectionStats);
+      setWinsVsLosses(reportsData.winsVsLosses);
+      setJournalCount(reportsData.journalCount);
+      setGoalProgress(reportsData.goalProgress);
+
+      console.log('[Reports] Success vs Struggles:', reportsData.winsVsLosses);
+      console.log('[Reports] Wins vs Losses:', reportsData.winsVsLosses);
       console.log("Reports data loaded successfully");
     } catch (error: any) {
       console.error("Error loading reports data:", error);
@@ -307,7 +254,7 @@ export default function ReportsScreen() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [timeFilter, getDateRangeForModal]);
+  }, [timeFilter]);
 
   useEffect(() => {
     console.log("ReportsScreen mounted or timeFilter changed");
@@ -364,11 +311,17 @@ export default function ReportsScreen() {
     
     setCurrencyModalLoading(true);
     try {
-      const endpoint = currencyModalType === 'claim' 
-        ? `/api/currencies/${selectedCurrencyId}/claim`
-        : `/api/currencies/${selectedCurrencyId}/pay`;
-      
-      const response = await authenticatedPost(endpoint, { amount });
+      // Create a currency transaction
+      const transaction = {
+        currency_id: selectedCurrencyId,
+        amount: amount,
+        operation: currencyModalType === 'claim' ? 'subtract' : 'add',
+        type: currencyModalType,
+        description: `${currencyModalType === 'claim' ? 'Claimed' : 'Paid'} ${amount} ${selectedCurrencySymbol}`,
+        entry_date: new Date().toISOString().split('T')[0],
+      };
+
+      await supabaseApi.createCurrencyTransaction(transaction);
       
       setShowCurrencyModal(false);
       setCurrencyModalAmount('');
@@ -384,8 +337,6 @@ export default function ReportsScreen() {
       setCurrencyModalLoading(false);
     }
   };
-
-
 
   const openReflectionListModal = (title: string, filterType: 'wins' | 'losses' | 'successes' | 'struggles' | 'all' | 'behavior' | 'goal', filterValue?: string, goalId?: string) => {
     console.log('[Reports] Opening reflection list modal:', title, filterType, filterValue, goalId);
