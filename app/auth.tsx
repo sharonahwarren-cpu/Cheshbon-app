@@ -18,36 +18,23 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { apiPost } from '@/utils/api';
 
 type Mode = 'signin' | 'signup';
 
 export default function AuthScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const {
-    signInWithEmail,
-    signUpWithEmail,
-    signInWithGoogle,
-    signInWithApple,
-  } = useAuth();
+  const { signInWithEmail, signUpWithEmail } = useAuth();
 
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
 
-  // Error modal state (no Alert.alert - web compatible)
+  // Error modal state
   const [errorModalVisible, setErrorModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  
-  // Verification pending state
-  const [verificationPending, setVerificationPending] = useState(false);
-  const [verificationEmail, setVerificationEmail] = useState('');
-  const [resendingVerification, setResendingVerification] = useState(false);
   
   // Success modal for email verification
   const [successModalVisible, setSuccessModalVisible] = useState(false);
@@ -69,17 +56,6 @@ export default function AuthScreen() {
     }
   }, [params.verified]);
 
-  // Check Apple Authentication availability
-  useEffect(() => {
-    console.log('📞 [AUTH SCREEN] Checking Apple Authentication availability...');
-    AppleAuthentication.isAvailableAsync()
-      .then((available) => {
-        console.log('📞 [AUTH SCREEN] Apple Authentication available:', available);
-        setAppleAuthAvailable(available);
-      })
-      .catch(() => setAppleAuthAvailable(false));
-  }, []);
-
   const handleEmailAuth = async () => {
     console.log(`📧 [AUTH SCREEN] ${mode === 'signup' ? 'Sign up' : 'Sign in'} button pressed`);
     console.log('📧 [AUTH SCREEN] Email:', email);
@@ -94,90 +70,17 @@ export default function AuthScreen() {
       if (mode === 'signup') {
         console.log('📧 [AUTH SCREEN] Calling signUpWithEmail...');
         await signUpWithEmail(email.trim(), password, name.trim() || undefined);
-        console.log('✅ [AUTH SCREEN] Sign up successful - showing verification pending');
-        // Show verification pending screen
-        setVerificationEmail(email.trim());
-        setVerificationPending(true);
+        console.log('✅ [AUTH SCREEN] Sign up successful');
+        setSuccessMessage('Account created! Please check your email to verify your account.');
+        setSuccessModalVisible(true);
       } else {
         console.log('📧 [AUTH SCREEN] Calling signInWithEmail...');
         await signInWithEmail(email.trim(), password);
         console.log('✅ [AUTH SCREEN] Sign in successful');
       }
-      // Navigation is handled by AuthBootstrap in _layout.tsx
     } catch (error: any) {
       console.error('❌ [AUTH SCREEN] Email auth error:', error);
-      // Handle 403 "Email not verified" - show verification pending screen
-      if (error.status === 403 || (error.message && error.message.toLowerCase().includes('email not verified'))) {
-        console.log('📧 [AUTH SCREEN] Email not verified - showing verification pending screen');
-        setVerificationEmail(email.trim());
-        setVerificationPending(true);
-      } else {
-        showError(error.message || 'Authentication failed. Please check your credentials.');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendVerification = async () => {
-    console.log('📧 [AUTH SCREEN] Resending verification email to:', verificationEmail);
-    setResendingVerification(true);
-    try {
-      // Better Auth endpoint is /api/auth/send-verification-email (not "resend-verification")
-      console.log('📧 [AUTH SCREEN] Calling POST /api/auth/send-verification-email...');
-      const data = await apiPost('/api/auth/send-verification-email', { email: verificationEmail });
-      console.log('✅ [AUTH SCREEN] Verification email resent:', data);
-      setSuccessMessage('Verification email sent! Please check your inbox and spam folder.');
-      setSuccessModalVisible(true);
-    } catch (error: any) {
-      console.error('❌ [AUTH SCREEN] Error resending verification:', error);
-      let errorMsg = 'Failed to resend verification email. Please try again.';
-      if (error.message) {
-        const match = error.message.match(/API error: \d+ - (.+)/);
-        if (match) {
-          try {
-            const parsed = JSON.parse(match[1]);
-            errorMsg = parsed.error || parsed.message || errorMsg;
-          } catch {
-            errorMsg = match[1] || errorMsg;
-          }
-        } else {
-          errorMsg = error.message;
-        }
-      }
-      showError(errorMsg);
-    } finally {
-      setResendingVerification(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    console.log('📱 [AUTH SCREEN] Google sign-in button pressed');
-    setLoading(true);
-    try {
-      console.log('📱 [AUTH SCREEN] Calling signInWithGoogle...');
-      await signInWithGoogle();
-      console.log('✅ [AUTH SCREEN] Google sign-in flow initiated');
-    } catch (error: any) {
-      console.error('❌ [AUTH SCREEN] Google sign-in error:', error);
-      showError(error.message || 'Google sign-in failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAppleSignIn = async () => {
-    console.log('📞 [AUTH SCREEN] Apple sign-in button pressed');
-    setLoading(true);
-    try {
-      console.log('📞 [AUTH SCREEN] Calling signInWithApple...');
-      await signInWithApple();
-      console.log('✅ [AUTH SCREEN] Apple sign-in successful');
-    } catch (error: any) {
-      console.error('❌ [AUTH SCREEN] Apple sign-in error:', error);
-      if (error.message !== 'Apple Sign-In was cancelled') {
-        showError(error.message || 'Apple sign-in failed. Please try again.');
-      }
+      showError(error.message || 'Authentication failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -191,97 +94,6 @@ export default function AuthScreen() {
   const modeText = mode === 'signup' ? 'Create Account' : 'Sign In';
   const switchModeText =
     mode === 'signup' ? 'Already have an account? Sign In' : "Don't have an account? Sign Up";
-
-  // Show verification pending screen if needed
-  if (verificationPending) {
-    return (
-      <>
-        <Stack.Screen options={{ headerShown: false }} />
-        <SafeAreaView style={styles.container}>
-          <View style={styles.verificationContainer}>
-            <View style={styles.verificationIconContainer}>
-              <IconSymbol
-                ios_icon_name="envelope.badge.fill"
-                android_material_icon_name="mark-email-unread"
-                size={64}
-                color={colors.primary}
-              />
-            </View>
-            
-            <Text style={styles.verificationTitle}>Check Your Email</Text>
-            <Text style={styles.verificationMessage}>
-              We&apos;ve sent a verification link to:
-            </Text>
-            <Text style={styles.verificationEmail}>{verificationEmail}</Text>
-            
-            <Text style={styles.verificationInstructions}>
-              Please click the link in the email to verify your account. You must verify your email before you can sign in.
-            </Text>
-            
-            <View style={styles.verificationActions}>
-              <TouchableOpacity
-                style={[styles.button, styles.primaryButton, resendingVerification && styles.buttonDisabled]}
-                onPress={handleResendVerification}
-                disabled={resendingVerification}
-              >
-                {resendingVerification ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <>
-                    <IconSymbol
-                      ios_icon_name="arrow.clockwise"
-                      android_material_icon_name="refresh"
-                      size={20}
-                      color="#fff"
-                    />
-                    <Text style={styles.buttonText}>Resend Verification Email</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.backToSignInButton}
-                onPress={() => {
-                  setVerificationPending(false);
-                  setVerificationEmail('');
-                  setEmail('');
-                  setPassword('');
-                  setName('');
-                  setMode('signin');
-                }}
-              >
-                <Text style={styles.backToSignInText}>Back to Sign In</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.verificationNote}>
-              <IconSymbol
-                ios_icon_name="info.circle"
-                android_material_icon_name="info"
-                size={16}
-                color={colors.textSecondary}
-              />
-              <Text style={styles.verificationNoteText}>
-                Didn&apos;t receive the email? Check your spam folder or click &quot;Resend&quot; above.
-              </Text>
-            </View>
-
-            <View style={styles.debugWarning}>
-              <IconSymbol
-                ios_icon_name="exclamationmark.triangle.fill"
-                android_material_icon_name="warning"
-                size={16}
-                color="#856404"
-              />
-              <Text style={styles.debugWarningText}>
-                ⚠️ If the verification email links to localhost, the FRONTEND_URL environment variable must be set to your production domain in the Specular dashboard.
-              </Text>
-            </View>
-          </View>
-        </SafeAreaView>
-      </>
-    );
-  }
 
   return (
     <>
@@ -418,58 +230,16 @@ export default function AuthScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Social Buttons */}
-            <View style={styles.socialButtons}>
-              {/* Google Sign In */}
-              <TouchableOpacity
-                style={[styles.button, styles.googleButton, loading && styles.buttonDisabled]}
-                onPress={handleGoogleSignIn}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                <IconSymbol
-                  ios_icon_name="globe"
-                  android_material_icon_name="language"
-                  size={24}
-                  color="#fff"
-                />
-                <Text style={styles.buttonText}>Continue with Google</Text>
-              </TouchableOpacity>
-
-              {/* Apple - only on iOS/web where available */}
-              {appleAuthAvailable && (
-                <TouchableOpacity
-                  style={[styles.button, styles.appleButton, loading && styles.buttonDisabled]}
-                  onPress={handleAppleSignIn}
-                  disabled={loading}
-                  activeOpacity={0.8}
-                >
-                  <IconSymbol
-                    ios_icon_name="apple.logo"
-                    android_material_icon_name="phone-iphone"
-                    size={24}
-                    color="#fff"
-                  />
-                  <Text style={styles.buttonText}>Continue with Apple</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Demo hint */}
+            {/* Info hint */}
             <View style={styles.demoHint}>
-              <Text style={styles.demoHintText}>Please contact cheshbon.app.me@gmail.com if you wish to report any bugs.</Text>
+              <Text style={styles.demoHintText}>
+                Powered by Supabase Auth. Your data is secure and encrypted.
+              </Text>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* Error Modal - web-compatible, no Alert.alert */}
+        {/* Error Modal */}
         <Modal
           visible={errorModalVisible}
           transparent
@@ -498,7 +268,7 @@ export default function AuthScreen() {
           </View>
         </Modal>
 
-        {/* Success Modal - for email verification */}
+        {/* Success Modal */}
         <Modal
           visible={successModalVisible}
           transparent
@@ -621,12 +391,6 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: colors.primary,
   },
-  googleButton: {
-    backgroundColor: '#4285F4',
-  },
-  appleButton: {
-    backgroundColor: '#1C1C1E',
-  },
   buttonText: {
     color: '#fff',
     fontSize: 16,
@@ -640,26 +404,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 14,
     fontWeight: '500',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
-  },
-  dividerText: {
-    marginHorizontal: 12,
-    color: colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-  socialButtons: {
-    gap: 0,
   },
   demoHint: {
     marginTop: 24,
@@ -675,6 +419,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     fontStyle: 'italic',
+    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
@@ -725,94 +470,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  verificationContainer: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  verificationIconContainer: {
-    marginBottom: 24,
-    padding: 20,
-    backgroundColor: colors.highlight,
-    borderRadius: 60,
-  },
-  verificationTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  verificationMessage: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  verificationEmail: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  verificationInstructions: {
-    fontSize: 15,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
-    paddingHorizontal: 16,
-  },
-  verificationActions: {
-    width: '100%',
-    maxWidth: 400,
-  },
-  backToSignInButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  backToSignInText: {
-    color: colors.primary,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  verificationNote: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: colors.highlight,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    maxWidth: 400,
-  },
-  verificationNoteText: {
-    flex: 1,
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginLeft: 8,
-    lineHeight: 18,
-  },
-  debugWarning: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 12,
-    padding: 12,
-    backgroundColor: '#fff3cd',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ffc107',
-    maxWidth: 400,
-  },
-  debugWarningText: {
-    flex: 1,
-    fontSize: 11,
-    color: '#856404',
-    marginLeft: 8,
-    lineHeight: 16,
   },
 });

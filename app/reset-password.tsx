@@ -13,14 +13,13 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiPost } from '@/utils/api';
+import { supabase } from '@/lib/supabase';
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
-  const { token } = useLocalSearchParams<{ token: string }>();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,12 +30,8 @@ export default function ResetPasswordScreen() {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    console.log('[RESET PASSWORD] Screen loaded with token:', token ? 'YES' : 'NO');
-    if (!token) {
-      console.error('[RESET PASSWORD] No token found in URL');
-      showError('Invalid reset link. Please request a new password reset.');
-    }
-  }, [token]);
+    console.log('[RESET PASSWORD] Screen loaded');
+  }, []);
 
   const showError = (message: string) => {
     console.error('[RESET PASSWORD] Error:', message);
@@ -47,18 +42,13 @@ export default function ResetPasswordScreen() {
   const handleSubmit = async () => {
     console.log('[RESET PASSWORD] Submit button pressed');
 
-    if (!token) {
-      showError('Invalid reset link. Please request a new password reset.');
-      return;
-    }
-
     if (!newPassword.trim()) {
       showError('Please enter a new password.');
       return;
     }
 
-    if (newPassword.length < 8) {
-      showError('Password must be at least 8 characters long.');
+    if (newPassword.length < 6) {
+      showError('Password must be at least 6 characters long.');
       return;
     }
 
@@ -69,32 +59,22 @@ export default function ResetPasswordScreen() {
 
     setLoading(true);
     try {
-      console.log('[RESET PASSWORD] Calling /api/auth/reset-password...');
-      // Better Auth expects { token, newPassword } for password reset
-      const response = await apiPost('/api/auth/reset-password', {
-        token,
-        newPassword,
+      console.log('[RESET PASSWORD] Calling Supabase updateUser...');
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
       });
-      console.log('[RESET PASSWORD] Success:', response);
+
+      if (error) {
+        console.error('[RESET PASSWORD] Error:', error.message);
+        showError(error.message);
+        return;
+      }
+
+      console.log('[RESET PASSWORD] Success');
       setSuccessModalVisible(true);
     } catch (error: any) {
       console.error('[RESET PASSWORD] Error:', error);
-      // Extract clean error message from API error format "API error: 400 - {...}"
-      let errorMessage = 'Failed to reset password. The link may have expired.';
-      if (error.message) {
-        const match = error.message.match(/API error: \d+ - (.+)/);
-        if (match) {
-          try {
-            const parsed = JSON.parse(match[1]);
-            errorMessage = parsed.error || parsed.message || errorMessage;
-          } catch {
-            errorMessage = match[1] || errorMessage;
-          }
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      showError(errorMessage);
+      showError(error.message || 'Failed to reset password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -103,13 +83,6 @@ export default function ResetPasswordScreen() {
   const handleSuccessClose = () => {
     setSuccessModalVisible(false);
     router.replace('/auth');
-  };
-
-  const handleErrorClose = () => {
-    setErrorModalVisible(false);
-    if (!token) {
-      router.replace('/auth');
-    }
   };
 
   return (
@@ -141,7 +114,7 @@ export default function ResetPasswordScreen() {
 
             <Text style={styles.title}>Create New Password</Text>
             <Text style={styles.subtitle}>
-              Enter your new password below. Make sure it's at least 8 characters long.
+              Enter your new password below. Make sure it's at least 6 characters long.
             </Text>
 
             <View style={styles.form}>
@@ -212,13 +185,13 @@ export default function ResetPasswordScreen() {
                 <Text style={styles.requirementsTitle}>Password Requirements:</Text>
                 <View style={styles.requirementItem}>
                   <IconSymbol
-                    ios_icon_name={newPassword.length >= 8 ? 'checkmark.circle.fill' : 'circle'}
-                    android_material_icon_name={newPassword.length >= 8 ? 'check-circle' : 'radio-button-unchecked'}
+                    ios_icon_name={newPassword.length >= 6 ? 'checkmark.circle.fill' : 'circle'}
+                    android_material_icon_name={newPassword.length >= 6 ? 'check-circle' : 'radio-button-unchecked'}
                     size={16}
-                    color={newPassword.length >= 8 ? colors.success : colors.textSecondary}
+                    color={newPassword.length >= 6 ? colors.success : colors.textSecondary}
                   />
-                  <Text style={[styles.requirementText, newPassword.length >= 8 && styles.requirementMet]}>
-                    At least 8 characters
+                  <Text style={[styles.requirementText, newPassword.length >= 6 && styles.requirementMet]}>
+                    At least 6 characters
                   </Text>
                 </View>
                 <View style={styles.requirementItem}>
@@ -294,7 +267,7 @@ export default function ResetPasswordScreen() {
           visible={errorModalVisible}
           transparent
           animationType="fade"
-          onRequestClose={handleErrorClose}
+          onRequestClose={() => setErrorModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.errorModal}>
@@ -310,7 +283,7 @@ export default function ResetPasswordScreen() {
               <Text style={styles.errorModalMessage}>{errorMessage}</Text>
               <TouchableOpacity
                 style={styles.errorModalButton}
-                onPress={handleErrorClose}
+                onPress={() => setErrorModalVisible(false)}
               >
                 <Text style={styles.errorModalButtonText}>OK</Text>
               </TouchableOpacity>

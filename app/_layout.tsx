@@ -15,7 +15,7 @@ import {
   ThemeProvider,
 } from "@react-navigation/native";
 import "react-native-reanimated";
-import { Stack, useRouter, useSegments } from "expo-router";
+import { Stack } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { colors } from "@/styles/commonStyles";
 
@@ -23,45 +23,13 @@ SplashScreen.preventAutoHideAsync();
 
 /**
  * Auth Bootstrap Component
- * Handles the auth initialization flow:
- * 1. Shows loading while checking session
- * 2. Redirects to auth screen if not authenticated
- * 3. Redirects to app if authenticated
+ * Shows loading while checking Supabase session
  */
 function AuthBootstrap({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const segments = useSegments();
-
-  useEffect(() => {
-    if (loading) {
-      console.log('🔄 [AUTH BOOTSTRAP] Still loading auth state...');
-      return;
-    }
-
-    const inAuthGroup = 
-      segments[0] === 'auth' || 
-      segments[0] === 'auth-callback' || 
-      segments[0] === 'auth-popup-callback' || 
-      segments[0] === 'auth-popup' ||
-      segments[0] === 'verify-email' ||
-      segments[0] === 'reset-password' ||
-      segments[0] === 'forgot-password';
-    console.log('🔐 [AUTH BOOTSTRAP] Auth state resolved:', { user: !!user, inAuthGroup, segments });
-
-    if (!user && !inAuthGroup) {
-      // Not authenticated and not on auth screen - redirect to auth
-      console.log('🔐 [AUTH BOOTSTRAP] Not authenticated, redirecting to /auth');
-      router.replace('/auth');
-    } else if (user && inAuthGroup) {
-      // Authenticated but on auth screen - redirect to app
-      console.log('🔐 [AUTH BOOTSTRAP] Authenticated, redirecting to /(tabs)/(home)');
-      router.replace('/(tabs)/(home)');
-    }
-  }, [user, loading, segments]);
+  const { isLoading } = useAuth();
 
   // Show loading splash while checking auth
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -105,8 +73,6 @@ export default function RootLayout() {
             <AuthBootstrap>
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="auth" options={{ headerShown: false }} />
-                <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
-                <Stack.Screen name="auth-popup-callback" options={{ headerShown: false }} />
                 <Stack.Screen name="verify-email" options={{ headerShown: false }} />
                 <Stack.Screen name="reset-password" options={{ headerShown: true, title: 'Reset Password' }} />
                 <Stack.Screen name="forgot-password" options={{ headerShown: true, title: 'Forgot Password' }} />
@@ -116,7 +82,6 @@ export default function RootLayout() {
               </Stack>
             </AuthBootstrap>
             <StatusBar style="auto" />
-            {/* Global Toast Component */}
             <Toast />
           </ThemeProvider>
         </WidgetProvider>

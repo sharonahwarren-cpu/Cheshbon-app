@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { apiPost } from '@/utils/api';
+import { supabase } from '@/lib/supabase';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -50,34 +50,22 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      // Better Auth endpoint is POST /api/auth/request-password-reset
-      // (NOT /api/auth/forget-password - that endpoint does not exist in Better Auth)
-      console.log('[FORGOT PASSWORD] Calling /api/auth/request-password-reset...');
-      const response = await apiPost('/api/auth/request-password-reset', {
-        email: email.trim(),
-        redirectTo: '/reset-password',
+      console.log('[FORGOT PASSWORD] Calling Supabase resetPasswordForEmail...');
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
       });
-      console.log('[FORGOT PASSWORD] Success:', response);
-      // Always show success modal (backend doesn't reveal if email exists)
+
+      if (error) {
+        console.error('[FORGOT PASSWORD] Error:', error.message);
+        showError(error.message);
+        return;
+      }
+
+      console.log('[FORGOT PASSWORD] Success');
       setSuccessModalVisible(true);
     } catch (error: any) {
       console.error('[FORGOT PASSWORD] Error:', error);
-      // Extract clean error message from API error format "API error: 400 - {...}"
-      let errorMessage = 'Failed to send reset link. Please try again.';
-      if (error.message) {
-        const match = error.message.match(/API error: \d+ - (.+)/);
-        if (match) {
-          try {
-            const parsed = JSON.parse(match[1]);
-            errorMessage = parsed.error || parsed.message || errorMessage;
-          } catch {
-            errorMessage = match[1] || errorMessage;
-          }
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      showError(errorMessage);
+      showError(error.message || 'Failed to send reset link. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -172,19 +160,6 @@ export default function ForgotPasswordScreen() {
                 <Text style={styles.backButtonText}>Back to Sign In</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.helpContainer}>
-              <Text style={styles.helpText}>
-                Need help? Contact us at{' '}
-                <Text style={styles.helpEmail}>cheshbon.app.me@gmail.com</Text>
-              </Text>
-            </View>
-
-            <View style={styles.debugContainer}>
-              <Text style={styles.debugText}>
-                ⚠️ If reset emails link to localhost, the backend FRONTEND_URL environment variable must be set to your production domain (e.g., https://cheshbon.app) in the Specular dashboard.
-              </Text>
-            </View>
           </ScrollView>
         </KeyboardAvoidingView>
 
@@ -207,11 +182,7 @@ export default function ForgotPasswordScreen() {
                 <Text style={styles.successModalTitle}>Email Sent!</Text>
               </View>
               <Text style={styles.successModalMessage}>
-                If an account with that email exists, a password reset link has been sent.
-                Please check your inbox and spam folder.
-              </Text>
-              <Text style={styles.successModalNote}>
-                The link will expire in 1 hour.
+                Check your email for a password reset link. The link will expire in 1 hour.
               </Text>
               <TouchableOpacity
                 style={styles.successModalButton}
@@ -346,38 +317,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  helpContainer: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: colors.highlight,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  helpText: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  helpEmail: {
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  debugContainer: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#fff3cd',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ffc107',
-  },
-  debugText: {
-    fontSize: 12,
-    color: '#856404',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -413,13 +352,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 12,
-  },
-  successModalNote: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    fontStyle: 'italic',
     marginBottom: 20,
   },
   successModalButton: {
