@@ -54,11 +54,11 @@ export const getUserPreferences = async () => {
   }
   
   return data || {
-    notificationsEnabled: true,
-    notificationAlarms: [],
+    notifications_enabled: true,
+    notification_alarms: [],
     reflection_categories_enabled: false,
     reflection_categories: [],
-    preferredHomeScreen: 'goals-detailed',
+    preferred_home_screen: 'goals-detailed',
   };
 };
 
@@ -66,55 +66,64 @@ export const updateUserPreferences = async (preferences: any) => {
   const userId = await getCurrentUserId();
   
   // CRITICAL FIX: Only send snake_case fields to Supabase
-  // Remove any camelCase fields that don't exist in the database
+  // Build the update object with ONLY valid database columns
   const dbPreferences: any = {
     user_id: userId,
     updated_at: new Date().toISOString(),
   };
   
-  // Map camelCase to snake_case and only include valid database columns
+  // Map both camelCase and snake_case inputs to snake_case output
+  if (preferences.notifications_enabled !== undefined) {
+    dbPreferences.notifications_enabled = preferences.notifications_enabled;
+  }
   if (preferences.notificationsEnabled !== undefined) {
     dbPreferences.notifications_enabled = preferences.notificationsEnabled;
   }
-  if (preferences.notifications_enabled !== undefined) {
-    dbPreferences.notifications_enabled = preferences.notifications_enabled;
+  
+  if (preferences.notification_alarms !== undefined) {
+    dbPreferences.notification_alarms = preferences.notification_alarms;
   }
   if (preferences.notificationAlarms !== undefined) {
     dbPreferences.notification_alarms = preferences.notificationAlarms;
   }
-  if (preferences.notification_alarms !== undefined) {
-    dbPreferences.notification_alarms = preferences.notification_alarms;
+  
+  if (preferences.reflection_categories_enabled !== undefined) {
+    dbPreferences.reflection_categories_enabled = preferences.reflection_categories_enabled;
   }
   if (preferences.reflectionCategoriesEnabled !== undefined) {
     dbPreferences.reflection_categories_enabled = preferences.reflectionCategoriesEnabled;
   }
-  if (preferences.reflection_categories_enabled !== undefined) {
-    dbPreferences.reflection_categories_enabled = preferences.reflection_categories_enabled;
+  
+  if (preferences.reflection_categories !== undefined) {
+    dbPreferences.reflection_categories = preferences.reflection_categories;
   }
   if (preferences.reflectionCategories !== undefined) {
     dbPreferences.reflection_categories = preferences.reflectionCategories;
   }
-  if (preferences.reflection_categories !== undefined) {
-    dbPreferences.reflection_categories = preferences.reflection_categories;
+  
+  if (preferences.preferred_home_screen !== undefined) {
+    dbPreferences.preferred_home_screen = preferences.preferred_home_screen;
   }
   if (preferences.preferredHomeScreen !== undefined) {
     dbPreferences.preferred_home_screen = preferences.preferredHomeScreen;
   }
-  if (preferences.preferred_home_screen !== undefined) {
-    dbPreferences.preferred_home_screen = preferences.preferred_home_screen;
+  
+  if (preferences.alternative_calendar !== undefined) {
+    dbPreferences.alternative_calendar = preferences.alternative_calendar;
   }
   if (preferences.alternativeCalendar !== undefined) {
     dbPreferences.alternative_calendar = preferences.alternativeCalendar;
   }
-  if (preferences.alternative_calendar !== undefined) {
-    dbPreferences.alternative_calendar = preferences.alternative_calendar;
-  }
   
   console.log('[Supabase API] Updating user preferences with:', dbPreferences);
   
+  // CRITICAL FIX: Use upsert with onConflict to handle duplicate key constraint
   const { data, error } = await supabase
     .from('user_preferences')
-    .upsert(dbPreferences)
+    .upsert(dbPreferences, { 
+      onConflict: 'user_id',  // Specify the unique constraint column
+      ignoreDuplicates: false  // Update existing row instead of ignoring
+    })
     .select()
     .single();
   
@@ -906,12 +915,27 @@ export const getReflections = async (date?: string) => {
 export const createReflection = async (reflection: any) => {
   const userId = await getCurrentUserId();
   
+  // Map camelCase to snake_case for reflection fields
+  const reflectionData: any = {
+    user_id: userId,
+    entry_date: reflection.entry_date || reflection.entryDate,
+    category: reflection.category,
+    type: reflection.type,
+    description: reflection.description,
+    linked_goal_id: reflection.linked_goal_id || reflection.linkedGoalId || null,
+    outcome: reflection.outcome,
+    currency_change: reflection.currency_change || reflection.currencyChange || null,
+    gained_ids: reflection.gained_ids || reflection.gainedIds || [],
+    lost_ids: reflection.lost_ids || reflection.lostIds || [],
+    motivation_ids: reflection.motivation_ids || reflection.motivationIds || [],
+    was_worth_it: reflection.was_worth_it !== undefined ? reflection.was_worth_it : reflection.wasWorthIt,
+    additional_thoughts: reflection.additional_thoughts || reflection.additionalThoughts || null,
+    strategy_effectiveness: reflection.strategy_effectiveness || reflection.strategyEffectiveness || [],
+  };
+  
   const { data, error } = await supabase
     .from('reflections')
-    .insert({
-      user_id: userId,
-      ...reflection,
-    })
+    .insert(reflectionData)
     .select()
     .single();
   
@@ -922,12 +946,46 @@ export const createReflection = async (reflection: any) => {
 export const updateReflection = async (id: string, updates: any) => {
   const userId = await getCurrentUserId();
   
+  // Map camelCase to snake_case for reflection fields
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  };
+  
+  if (updates.entry_date !== undefined || updates.entryDate !== undefined) {
+    updateData.entry_date = updates.entry_date || updates.entryDate;
+  }
+  if (updates.category !== undefined) updateData.category = updates.category;
+  if (updates.type !== undefined) updateData.type = updates.type;
+  if (updates.description !== undefined) updateData.description = updates.description;
+  if (updates.linked_goal_id !== undefined || updates.linkedGoalId !== undefined) {
+    updateData.linked_goal_id = updates.linked_goal_id || updates.linkedGoalId || null;
+  }
+  if (updates.outcome !== undefined) updateData.outcome = updates.outcome;
+  if (updates.currency_change !== undefined || updates.currencyChange !== undefined) {
+    updateData.currency_change = updates.currency_change || updates.currencyChange || null;
+  }
+  if (updates.gained_ids !== undefined || updates.gainedIds !== undefined) {
+    updateData.gained_ids = updates.gained_ids || updates.gainedIds || [];
+  }
+  if (updates.lost_ids !== undefined || updates.lostIds !== undefined) {
+    updateData.lost_ids = updates.lost_ids || updates.lostIds || [];
+  }
+  if (updates.motivation_ids !== undefined || updates.motivationIds !== undefined) {
+    updateData.motivation_ids = updates.motivation_ids || updates.motivationIds || [];
+  }
+  if (updates.was_worth_it !== undefined || updates.wasWorthIt !== undefined) {
+    updateData.was_worth_it = updates.was_worth_it !== undefined ? updates.was_worth_it : updates.wasWorthIt;
+  }
+  if (updates.additional_thoughts !== undefined || updates.additionalThoughts !== undefined) {
+    updateData.additional_thoughts = updates.additional_thoughts || updates.additionalThoughts || null;
+  }
+  if (updates.strategy_effectiveness !== undefined || updates.strategyEffectiveness !== undefined) {
+    updateData.strategy_effectiveness = updates.strategy_effectiveness || updates.strategyEffectiveness || [];
+  }
+  
   const { data, error } = await supabase
     .from('reflections')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', id)
     .eq('user_id', userId)
     .select()
@@ -975,12 +1033,16 @@ export const getJournals = async (date?: string) => {
 export const createJournal = async (journal: any) => {
   const userId = await getCurrentUserId();
   
+  // Map camelCase to snake_case
+  const journalData: any = {
+    user_id: userId,
+    content: journal.content,
+    entry_date: journal.entry_date || journal.entryDate,
+  };
+  
   const { data, error } = await supabase
     .from('journals')
-    .insert({
-      user_id: userId,
-      ...journal,
-    })
+    .insert(journalData)
     .select()
     .single();
   
@@ -991,12 +1053,19 @@ export const createJournal = async (journal: any) => {
 export const updateJournal = async (id: string, updates: any) => {
   const userId = await getCurrentUserId();
   
+  // Map camelCase to snake_case
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  };
+  
+  if (updates.content !== undefined) updateData.content = updates.content;
+  if (updates.entry_date !== undefined || updates.entryDate !== undefined) {
+    updateData.entry_date = updates.entry_date || updates.entryDate;
+  }
+  
   const { data, error } = await supabase
     .from('journals')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', id)
     .eq('user_id', userId)
     .select()
@@ -1041,12 +1110,20 @@ export const getAlarms = async () => {
 export const createAlarm = async (alarm: any) => {
   const userId = await getCurrentUserId();
   
+  // Map camelCase to snake_case
+  const alarmData: any = {
+    user_id: userId,
+    title: alarm.title,
+    goal_id: alarm.goal_id || alarm.goalId || null,
+    enabled: alarm.enabled !== undefined ? alarm.enabled : true,
+    time: alarm.time,
+    triggers: alarm.triggers || [],
+    secondary_alarms: alarm.secondary_alarms || alarm.secondaryAlarms || [],
+  };
+  
   const { data, error } = await supabase
     .from('alarms')
-    .insert({
-      user_id: userId,
-      ...alarm,
-    })
+    .insert(alarmData)
     .select()
     .single();
   
@@ -1057,12 +1134,25 @@ export const createAlarm = async (alarm: any) => {
 export const updateAlarm = async (id: string, updates: any) => {
   const userId = await getCurrentUserId();
   
+  // Map camelCase to snake_case
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  };
+  
+  if (updates.title !== undefined) updateData.title = updates.title;
+  if (updates.goal_id !== undefined || updates.goalId !== undefined) {
+    updateData.goal_id = updates.goal_id || updates.goalId || null;
+  }
+  if (updates.enabled !== undefined) updateData.enabled = updates.enabled;
+  if (updates.time !== undefined) updateData.time = updates.time;
+  if (updates.triggers !== undefined) updateData.triggers = updates.triggers;
+  if (updates.secondary_alarms !== undefined || updates.secondaryAlarms !== undefined) {
+    updateData.secondary_alarms = updates.secondary_alarms || updates.secondaryAlarms;
+  }
+  
   const { data, error } = await supabase
     .from('alarms')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', id)
     .eq('user_id', userId)
     .select()
