@@ -56,8 +56,8 @@ export const getUserPreferences = async () => {
   return data || {
     notificationsEnabled: true,
     notificationAlarms: [],
-    reflectionCategoriesEnabled: false,
-    reflectionCategories: [],
+    reflection_categories_enabled: false,
+    reflection_categories: [],
     preferredHomeScreen: 'goals-detailed',
   };
 };
@@ -65,13 +65,56 @@ export const getUserPreferences = async () => {
 export const updateUserPreferences = async (preferences: any) => {
   const userId = await getCurrentUserId();
   
+  // CRITICAL FIX: Only send snake_case fields to Supabase
+  // Remove any camelCase fields that don't exist in the database
+  const dbPreferences: any = {
+    user_id: userId,
+    updated_at: new Date().toISOString(),
+  };
+  
+  // Map camelCase to snake_case and only include valid database columns
+  if (preferences.notificationsEnabled !== undefined) {
+    dbPreferences.notifications_enabled = preferences.notificationsEnabled;
+  }
+  if (preferences.notifications_enabled !== undefined) {
+    dbPreferences.notifications_enabled = preferences.notifications_enabled;
+  }
+  if (preferences.notificationAlarms !== undefined) {
+    dbPreferences.notification_alarms = preferences.notificationAlarms;
+  }
+  if (preferences.notification_alarms !== undefined) {
+    dbPreferences.notification_alarms = preferences.notification_alarms;
+  }
+  if (preferences.reflectionCategoriesEnabled !== undefined) {
+    dbPreferences.reflection_categories_enabled = preferences.reflectionCategoriesEnabled;
+  }
+  if (preferences.reflection_categories_enabled !== undefined) {
+    dbPreferences.reflection_categories_enabled = preferences.reflection_categories_enabled;
+  }
+  if (preferences.reflectionCategories !== undefined) {
+    dbPreferences.reflection_categories = preferences.reflectionCategories;
+  }
+  if (preferences.reflection_categories !== undefined) {
+    dbPreferences.reflection_categories = preferences.reflection_categories;
+  }
+  if (preferences.preferredHomeScreen !== undefined) {
+    dbPreferences.preferred_home_screen = preferences.preferredHomeScreen;
+  }
+  if (preferences.preferred_home_screen !== undefined) {
+    dbPreferences.preferred_home_screen = preferences.preferred_home_screen;
+  }
+  if (preferences.alternativeCalendar !== undefined) {
+    dbPreferences.alternative_calendar = preferences.alternativeCalendar;
+  }
+  if (preferences.alternative_calendar !== undefined) {
+    dbPreferences.alternative_calendar = preferences.alternative_calendar;
+  }
+  
+  console.log('[Supabase API] Updating user preferences with:', dbPreferences);
+  
   const { data, error } = await supabase
     .from('user_preferences')
-    .upsert({
-      user_id: userId,
-      ...preferences,
-      updated_at: new Date().toISOString(),
-    })
+    .upsert(dbPreferences)
     .select()
     .single();
   

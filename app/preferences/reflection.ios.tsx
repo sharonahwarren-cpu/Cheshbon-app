@@ -75,12 +75,10 @@ export default function ReflectionPreferencesScreen() {
     console.log('[ReflectionPreferences] Saving reflection preferences:', updatedPreferences);
     setSaving(true);
     try {
+      // CRITICAL FIX: Only send snake_case fields
       await supabaseApi.updateUserPreferences({
         reflection_categories_enabled: updatedPreferences.reflectionCategoriesEnabled,
         reflection_categories: updatedPreferences.reflectionCategories,
-        // Keep camelCase for compatibility
-        reflectionCategoriesEnabled: updatedPreferences.reflectionCategoriesEnabled,
-        reflectionCategories: updatedPreferences.reflectionCategories,
       });
       showSuccess('Preferences saved');
     } catch (error) {
@@ -102,7 +100,13 @@ export default function ReflectionPreferencesScreen() {
   };
 
   const toggleReflectionCategories = async (value: boolean) => {
-    const updated = { ...preferences, reflectionCategoriesEnabled: value };
+    // CRITICAL FIX: When toggling ON, select ALL categories by default
+    const updatedCategories = value ? BEHAVIOR_CATEGORIES : [];
+    const updated = { 
+      ...preferences, 
+      reflectionCategoriesEnabled: value,
+      reflectionCategories: updatedCategories,
+    };
     setPreferences(updated);
     await savePreferences(updated);
   };
