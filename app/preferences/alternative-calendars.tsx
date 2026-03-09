@@ -13,7 +13,7 @@ import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPut } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import { getLocalTimezone } from '@/utils/dateUtils';
 
 export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
@@ -133,14 +133,18 @@ export default function AlternativeCalendarsScreen() {
     console.log('[AlternativeCalendars] Loading preferences');
     setLoading(true);
     try {
-      const data = await authenticatedGet<any>('/api/user-preferences');
-      console.log('[AlternativeCalendars] Preferences loaded:', data);
-      const prefs = (data as any)?.data || data;
-      setSelectedCalendar((prefs.alternativeCalendar as CalendarType) ?? 'gregorian');
-      setMitzvotGoalsEnabled(prefs.mitzvotGoalsEnabled ?? false);
+      const prefs = await supabaseApi.getUserPreferences();
+      console.log('[AlternativeCalendars] Preferences loaded:', prefs);
+      
+      // Handle both snake_case and camelCase
+      const calendar = prefs?.alternative_calendar || prefs?.alternativeCalendar || 'gregorian';
+      const mitzvotEnabled = prefs?.mitzvot_goals_enabled ?? prefs?.mitzvotGoalsEnabled ?? false;
+      
+      setSelectedCalendar(calendar as CalendarType);
+      setMitzvotGoalsEnabled(mitzvotEnabled);
       
       // Log the stored timezone vs device timezone for debugging
-      const storedTimezone = prefs.timezone;
+      const storedTimezone = prefs?.timezone;
       const currentDeviceTimezone = getLocalTimezone();
       console.log('[AlternativeCalendars] Timezone info:', {
         stored: storedTimezone,
@@ -152,7 +156,7 @@ export default function AlternativeCalendarsScreen() {
       if (storedTimezone && storedTimezone !== currentDeviceTimezone) {
         console.log('[AlternativeCalendars] Timezone changed, updating to:', currentDeviceTimezone);
         try {
-          await authenticatedPut('/api/user-preferences', { timezone: currentDeviceTimezone });
+          await supabaseApi.updateUserPreferences({ timezone: currentDeviceTimezone });
           console.log('[AlternativeCalendars] Timezone updated to:', currentDeviceTimezone);
         } catch (tzError) {
           console.warn('[AlternativeCalendars] Failed to update timezone:', tzError);
@@ -176,8 +180,9 @@ export default function AlternativeCalendarsScreen() {
       console.log('[AlternativeCalendars] Device timezone detected:', deviceTimezone);
       
       // Save both the calendar preference and the device timezone to the backend
-      await authenticatedPut('/api/user-preferences', { 
-        alternativeCalendar: calendar,
+      await supabaseApi.updateUserPreferences({ 
+        alternative_calendar: calendar,
+        alternativeCalendar: calendar, // Keep camelCase for compatibility
         timezone: deviceTimezone,
       });
       console.log('[AlternativeCalendars] Calendar preference and timezone saved successfully:', { calendar, timezone: deviceTimezone });
@@ -202,7 +207,10 @@ export default function AlternativeCalendarsScreen() {
     setMitzvotGoalsEnabled(enabled);
     setSaving(true);
     try {
-      await authenticatedPut('/api/user-preferences', { mitzvotGoalsEnabled: enabled });
+      await supabaseApi.updateUserPreferences({ 
+        mitzvot_goals_enabled: enabled,
+        mitzvotGoalsEnabled: enabled, // Keep camelCase for compatibility
+      });
       console.log('[AlternativeCalendars] Mitzvot goals preference saved');
       setSuccessMessage(enabled ? 'Mitzvot goals activated' : 'Mitzvot goals deactivated');
       setTimeout(() => setSuccessMessage(''), 3000);

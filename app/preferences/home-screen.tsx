@@ -12,7 +12,7 @@ import { Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPut } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 
 const HOME_SCREEN_OPTIONS = [
   { value: 'reflect', label: 'Reflect', description: 'Start with reflection screen' },
@@ -35,11 +35,14 @@ export default function HomeScreenPreferencesScreen() {
     console.log('[HomeScreenPreferences] Loading home screen preference');
     setLoading(true);
     try {
-      const data = await authenticatedGet<any>('/api/user-preferences');
-      const prefs = (data as any)?.data || data;
-      setPreferredHomeScreen(prefs.preferredHomeScreen ?? 'reflect');
+      const prefs = await supabaseApi.getUserPreferences();
+      const homeScreen = prefs?.preferred_home_screen || prefs?.preferredHomeScreen || 'reflect';
+      setPreferredHomeScreen(homeScreen);
+      console.log('[HomeScreenPreferences] Loaded preference:', homeScreen);
     } catch (error) {
       console.error('[HomeScreenPreferences] Error loading preferences:', error);
+      setErrorMessage('Failed to load preferences');
+      setTimeout(() => setErrorMessage(''), 3000);
     } finally {
       setLoading(false);
     }
@@ -49,7 +52,10 @@ export default function HomeScreenPreferencesScreen() {
     setPreferredHomeScreen(value);
     setSaving(true);
     try {
-      await authenticatedPut('/api/user-preferences', { preferredHomeScreen: value });
+      await supabaseApi.updateUserPreferences({ 
+        preferred_home_screen: value,
+        preferredHomeScreen: value // Keep both for compatibility
+      });
       console.log('[HomeScreenPreferences] Home screen preference saved:', value);
       setSuccessMessage('Preferences saved');
       setTimeout(() => setSuccessMessage(''), 3000);

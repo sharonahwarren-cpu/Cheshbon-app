@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPut } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 
 interface NotificationAlarm {
   id: string;
@@ -31,6 +31,8 @@ interface NotificationAlarm {
 interface UserPreferences {
   notificationsEnabled: boolean;
   notificationAlarms?: NotificationAlarm[];
+  notifications_enabled?: boolean;
+  notification_alarms?: NotificationAlarm[];
 }
 
 export default function NotificationPreferencesScreen() {
@@ -56,21 +58,31 @@ export default function NotificationPreferencesScreen() {
   }, []);
 
   const loadPreferences = async () => {
-    console.log('Loading notification preferences');
+    console.log('[NotificationPreferences] Loading notification preferences');
     setLoading(true);
     try {
-      const data = await authenticatedGet<UserPreferences>('/api/user-preferences');
-      const prefs = (data as any)?.data || data;
-      let alarms = prefs.notificationAlarms ?? [];
+      const prefs = await supabaseApi.getUserPreferences();
+      console.log('[NotificationPreferences] Loaded preferences:', prefs);
+      
+      // Handle both snake_case and camelCase
+      const notificationsEnabled = prefs?.notifications_enabled ?? prefs?.notificationsEnabled ?? false;
+      let alarms = prefs?.notification_alarms ?? prefs?.notificationAlarms ?? [];
+      
+      // Parse if it's a JSON string
       if (typeof alarms === 'string') {
-        try { alarms = JSON.parse(alarms); } catch { alarms = []; }
+        try { 
+          alarms = JSON.parse(alarms); 
+        } catch { 
+          alarms = []; 
+        }
       }
+      
       setPreferences({
-        notificationsEnabled: prefs.notificationsEnabled ?? false,
+        notificationsEnabled,
         notificationAlarms: Array.isArray(alarms) ? alarms : [],
       });
     } catch (error) {
-      console.error('Error loading preferences:', error);
+      console.error('[NotificationPreferences] Error loading preferences:', error);
       showError('Failed to load preferences');
     } finally {
       setLoading(false);
@@ -78,13 +90,19 @@ export default function NotificationPreferencesScreen() {
   };
 
   const savePreferences = async (updatedPreferences: UserPreferences) => {
-    console.log('Saving notification preferences:', updatedPreferences);
+    console.log('[NotificationPreferences] Saving notification preferences:', updatedPreferences);
     setSaving(true);
     try {
-      await authenticatedPut('/api/user-preferences', updatedPreferences);
+      await supabaseApi.updateUserPreferences({
+        notifications_enabled: updatedPreferences.notificationsEnabled,
+        notification_alarms: updatedPreferences.notificationAlarms,
+        // Keep camelCase for compatibility
+        notificationsEnabled: updatedPreferences.notificationsEnabled,
+        notificationAlarms: updatedPreferences.notificationAlarms,
+      });
       showSuccess('Preferences saved');
     } catch (error) {
-      console.error('Error saving preferences:', error);
+      console.error('[NotificationPreferences] Error saving preferences:', error);
       showError('Failed to save preferences');
     } finally {
       setSaving(false);
@@ -116,7 +134,7 @@ export default function NotificationPreferencesScreen() {
   };
 
   const openEditAlarmModal = (alarm: NotificationAlarm) => {
-    console.log('Opening edit alarm modal for:', alarm);
+    console.log('[NotificationPreferences] Opening edit alarm modal for:', alarm);
     setEditingAlarm(alarm);
     setAlarmName(alarm.name);
     const [hours, minutes] = alarm.time.split(':');
@@ -125,7 +143,7 @@ export default function NotificationPreferencesScreen() {
     setAlarmTime(time);
     setAlarmFrequency(alarm.frequency);
     setAlarmModalVisible(true);
-    console.log('Modal opened with time:', formatTime12Hour(time));
+    console.log('[NotificationPreferences] Modal opened with time:', formatTime12Hour(time));
   };
 
   const handleSaveAlarm = async () => {
@@ -172,18 +190,18 @@ export default function NotificationPreferencesScreen() {
   };
 
   const onTimeChange = (event: any, selectedDate?: Date) => {
-    console.log('Time picker changed:', event, selectedDate);
+    console.log('[NotificationPreferences] Time picker changed:', event, selectedDate);
     if (Platform.OS === 'android') {
       setShowTimePicker(false);
     }
     if (selectedDate) {
       setAlarmTime(selectedDate);
-      console.log('Alarm time updated to:', formatTime12Hour(selectedDate));
+      console.log('[NotificationPreferences] Alarm time updated to:', formatTime12Hour(selectedDate));
     }
   };
 
   const handleTimeButtonPress = () => {
-    console.log('Time button pressed - opening time picker');
+    console.log('[NotificationPreferences] Time button pressed - opening time picker');
     setShowTimePicker(true);
   };
 

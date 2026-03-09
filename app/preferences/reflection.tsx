@@ -13,11 +13,13 @@ import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPut } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 
 interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
+  reflection_categories_enabled?: boolean;
+  reflection_categories?: string[];
 }
 
 const BEHAVIOR_CATEGORIES = ['Action', 'Speech', 'Thought', 'Feeling'];
@@ -38,21 +40,31 @@ export default function ReflectionPreferencesScreen() {
   }, []);
 
   const loadPreferences = async () => {
-    console.log('Loading reflection preferences');
+    console.log('[ReflectionPreferences] Loading reflection preferences');
     setLoading(true);
     try {
-      const data = await authenticatedGet<UserPreferences>('/api/user-preferences');
-      const prefs = (data as any)?.data || data;
-      let categories = prefs.reflectionCategories ?? BEHAVIOR_CATEGORIES;
+      const prefs = await supabaseApi.getUserPreferences();
+      console.log('[ReflectionPreferences] Loaded preferences:', prefs);
+      
+      // Handle both snake_case and camelCase
+      const categoriesEnabled = prefs?.reflection_categories_enabled ?? prefs?.reflectionCategoriesEnabled ?? true;
+      let categories = prefs?.reflection_categories ?? prefs?.reflectionCategories ?? BEHAVIOR_CATEGORIES;
+      
+      // Parse if it's a JSON string
       if (typeof categories === 'string') {
-        try { categories = JSON.parse(categories); } catch { categories = BEHAVIOR_CATEGORIES; }
+        try { 
+          categories = JSON.parse(categories); 
+        } catch { 
+          categories = BEHAVIOR_CATEGORIES; 
+        }
       }
+      
       setPreferences({
-        reflectionCategoriesEnabled: prefs.reflectionCategoriesEnabled ?? true,
+        reflectionCategoriesEnabled: categoriesEnabled,
         reflectionCategories: Array.isArray(categories) ? categories : BEHAVIOR_CATEGORIES,
       });
     } catch (error) {
-      console.error('Error loading preferences:', error);
+      console.error('[ReflectionPreferences] Error loading preferences:', error);
       showError('Failed to load preferences');
     } finally {
       setLoading(false);
@@ -60,13 +72,19 @@ export default function ReflectionPreferencesScreen() {
   };
 
   const savePreferences = async (updatedPreferences: UserPreferences) => {
-    console.log('Saving reflection preferences:', updatedPreferences);
+    console.log('[ReflectionPreferences] Saving reflection preferences:', updatedPreferences);
     setSaving(true);
     try {
-      await authenticatedPut('/api/user-preferences', updatedPreferences);
+      await supabaseApi.updateUserPreferences({
+        reflection_categories_enabled: updatedPreferences.reflectionCategoriesEnabled,
+        reflection_categories: updatedPreferences.reflectionCategories,
+        // Keep camelCase for compatibility
+        reflectionCategoriesEnabled: updatedPreferences.reflectionCategoriesEnabled,
+        reflectionCategories: updatedPreferences.reflectionCategories,
+      });
       showSuccess('Preferences saved');
     } catch (error) {
-      console.error('Error saving preferences:', error);
+      console.error('[ReflectionPreferences] Error saving preferences:', error);
       showError('Failed to save preferences');
     } finally {
       setSaving(false);
