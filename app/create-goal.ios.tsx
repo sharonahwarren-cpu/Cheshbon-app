@@ -252,8 +252,8 @@ export default function CreateGoalScreen() {
       ];
 
       if (editingGoalId) {
-        promises.push(authenticatedGet<any>(`/api/goals/${editingGoalId}`));
-        promises.push(authenticatedGet<any>('/api/alarms'));
+        promises.push(supabaseApi.getGoalById(editingGoalId));
+        promises.push(supabaseApi.getAlarms());
       }
 
       const results = await Promise.all(promises);
@@ -575,114 +575,50 @@ export default function CreateGoalScreen() {
         }
       }
 
+      // CRITICAL FIX: Supabase expects snake_case column names ONLY
       const goalData: any = {
         title: title.trim(),
         description: description.trim() || undefined,
-        parentGoalId,
-        lifeAreaId,
-        behaviorCategories: behaviorCategories.length > 0 ? behaviorCategories : undefined,
+        parent_goal_id: parentGoalId || null,
+        life_area_id: lifeAreaId || null,
+        behavior_categories: behaviorCategories.length > 0 ? behaviorCategories : [],
         type,
-        strategyIds: strategyIds.length > 0 ? strategyIds : undefined,
-        scheduleType: scheduleConfig.scheduleType, // Keep for frontend compatibility
-        scheduleRecurrenceType, // CRITICAL: Send the correct field for backend
-        scheduleTimesPerDay: scheduleConfig.timesPerDay,
-        // CRITICAL FIX: Backend PUT handler reads 'selectedWeekdays', not 'scheduleDaysOfWeek'.
-        selectedWeekdays: scheduleConfig.weekdays,
-        scheduleDaysOfWeek: scheduleConfig.weekdays,
-        scheduleWeekendsOnly: scheduleConfig.weekendsOnly,
-        scheduleWeekdaysOnly: scheduleConfig.weekdaysOnly,
-        // CRITICAL FIX: Backend PUT handler reads 'selectedFortnightDays', not 'scheduleFortnightDays'.
-        selectedFortnightDays: scheduleConfig.fortnightDays,
-        scheduleFortnightDays: scheduleConfig.fortnightDays,
-        scheduleFortnightWeek: scheduleConfig.fortnightWeek,
-        // CRITICAL FIX: Backend reads 'scheduleFortnightEvenOdd' for fortnight week type.
-        scheduleFortnightEvenOdd: scheduleConfig.fortnightWeek === 'week1' ? 'even' : scheduleConfig.fortnightWeek === 'week2' ? 'odd' : undefined,
-        // CRITICAL FIX: Backend PUT handler reads 'monthlyDates', not 'scheduleMonthlyDates'.
-        monthlyDates: scheduleConfig.monthlyDates,
-        scheduleDatesOfMonth: scheduleConfig.monthlyDates,
-        // CRITICAL FIX: Backend PUT handler reads 'monthlyWeekdayRules', not 'scheduleMonthlyWeekdayPositions'.
-        monthlyWeekdayRules: scheduleConfig.monthlyWeekdayPositions,
-        scheduleMonthlyWeekdayPositions: scheduleConfig.monthlyWeekdayPositions,
-        scheduleMonthlyRangeStart: scheduleConfig.monthlyRangeStart,
-        scheduleMonthlyRangeEnd: scheduleConfig.monthlyRangeEnd,
-        // CRITICAL FIX: Backend reads 'scheduleMonthlyRange' as {start, end} object.
-        scheduleMonthlyRange: (scheduleConfig.monthlyRangeStart && scheduleConfig.monthlyRangeEnd)
-          ? { start: scheduleConfig.monthlyRangeStart, end: scheduleConfig.monthlyRangeEnd }
-          : undefined,
-        scheduleMonthlyRandomCount: scheduleConfig.monthlyRandomCount,
-        scheduleMonthlyCalendarType: scheduleConfig.monthlyCalendarType,
-        scheduleMonthlyUseAlternativeCalendar: scheduleConfig.monthlyUseAlternativeCalendar,
-        scheduleMonthlyCalendarEvent: scheduleConfig.monthlyCalendarEvent,
-        // ✅ YEARLY SCHEDULE: Send new {month, day} format as jsonb
-        yearlyDates: yearlyDatesForBackend,
-        scheduleDatesOfYear: yearlyDatesForBackend,
-        scheduleYearlyDates: yearlyDatesForBackend,
-        yearlyRanges: yearlyRangesForBackend,
-        scheduleYearlyRanges: yearlyRangesForBackend,
-        scheduleYearlyCalendarType: scheduleConfig.yearlyCalendarType,
-        scheduleYearlyUseAlternativeCalendar: scheduleConfig.yearlyUseAlternativeCalendar,
-        scheduleYearlyCalendarEvent: scheduleConfig.yearlyCalendarEvent,
-        // CRITICAL FIX: Backend PUT handler reads 'startDate'/'endDate', not 'scheduleStartDate'/'scheduleEndDate'.
-        startDate: scheduleConfig.startDate instanceof Date ? scheduleConfig.startDate.toISOString() : scheduleConfig.startDate,
-        endDate: scheduleConfig.endDate instanceof Date ? scheduleConfig.endDate.toISOString() : scheduleConfig.endDate,
-        scheduleStartDate: scheduleConfig.startDate,
-        scheduleEndDate: scheduleConfig.endDate,
-        // CRITICAL FIX: Backend PUT handler reads 'scheduleExclusions', not 'scheduleExclusionDates'.
-        scheduleExclusions: scheduleConfig.exclusionDates?.map((d: any) => d instanceof Date ? d.toISOString() : d),
-        scheduleExclusionDates: scheduleConfig.exclusionDates,
-        calendarType: scheduleConfig.calendarType,
+        strategy_ids: strategyIds.length > 0 ? strategyIds : [],
+        schedule_config: scheduleConfig, // Store entire config as JSONB
       };
       
-      console.log('[CreateGoal iOS] Schedule data being sent:', {
-        scheduleType: goalData.scheduleType,
-        scheduleRecurrenceType: goalData.scheduleRecurrenceType,
-        scheduleDaysOfWeek: goalData.scheduleDaysOfWeek
-      });
+      console.log('[CreateGoal iOS] Goal data being sent:', JSON.stringify(goalData, null, 2));
       
       // Include alarms field when editing a goal
       if (editingGoalId && goalAlarms.length > 0) {
         goalData.alarms = goalAlarms.map(alarm => ({ id: alarm.id }));
-        console.log('[API] Including alarms in goal update:', goalData.alarms);
+        console.log('[CreateGoal iOS] Including alarms in goal update:', goalData.alarms);
       }
 
-      // CRITICAL FIX: Supabase expects snake_case column names ONLY
-      // Remove any camelCase fields before sending to Supabase
+      // CRITICAL FIX: Reward and consequence data must use snake_case
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
         goalData.reward_currency_id = rewardCurrencyId;
         goalData.reward_successes = parseInt(rewardSuccesses, 10);
         goalData.reward_amount = parseInt(rewardAmount, 10);
-        console.log('Setting reward data:', { rewardCurrencyId, rewardSuccesses, rewardAmount });
+        console.log('[CreateGoal iOS] Setting reward data:', { rewardCurrencyId, rewardSuccesses, rewardAmount });
       } else {
         goalData.reward_currency_id = null;
         goalData.reward_successes = null;
         goalData.reward_amount = null;
-        console.log('Clearing reward data');
+        console.log('[CreateGoal iOS] Clearing reward data');
       }
 
       if (consequenceCurrencyId && consequenceFailures && consequenceAmount) {
         goalData.consequence_currency_id = consequenceCurrencyId;
         goalData.consequence_failures = parseInt(consequenceFailures, 10);
         goalData.consequence_amount = parseInt(consequenceAmount, 10);
-        console.log('Setting consequence data:', { consequenceCurrencyId, consequenceFailures, consequenceAmount });
+        console.log('[CreateGoal iOS] Setting consequence data:', { consequenceCurrencyId, consequenceFailures, consequenceAmount });
       } else {
         goalData.consequence_currency_id = null;
         goalData.consequence_failures = null;
         goalData.consequence_amount = null;
-        console.log('Clearing consequence data');
+        console.log('[CreateGoal iOS] Clearing consequence data');
       }
-      
-      // Clean up: Remove ALL camelCase fields that don't exist in Supabase schema
-      // Supabase will reject unknown column names
-      delete goalData.rewardCurrencyId;
-      delete goalData.rewardSuccesses;
-      delete goalData.rewardAmount;
-      delete goalData.consequenceCurrencyId;
-      delete goalData.consequenceFailures;
-      delete goalData.consequenceAmount;
-      delete goalData.parentGoalId;
-      delete goalData.lifeAreaId;
-      delete goalData.behaviorCategories;
-      delete goalData.strategyIds;
 
       let createdOrUpdatedGoal: any;
       
