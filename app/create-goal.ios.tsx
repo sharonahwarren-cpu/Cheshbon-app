@@ -645,27 +645,40 @@ export default function CreateGoalScreen() {
         console.log('[API] Including alarms in goal update:', goalData.alarms);
       }
 
+      // CRITICAL FIX: Supabase expects separate columns, not nested objects
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
-        goalData.reward = {
-          currencyId: rewardCurrencyId,
-          successes: parseInt(rewardSuccesses),
-          amount: parseInt(rewardAmount),
-        };
-        console.log('Setting reward data:', goalData.reward);
+        goalData.rewardCurrencyId = rewardCurrencyId;
+        goalData.reward_currency_id = rewardCurrencyId;
+        goalData.rewardSuccesses = parseInt(rewardSuccesses);
+        goalData.reward_successes = parseInt(rewardSuccesses);
+        goalData.rewardAmount = parseInt(rewardAmount);
+        goalData.reward_amount = parseInt(rewardAmount);
+        console.log('Setting reward data:', { rewardCurrencyId, rewardSuccesses, rewardAmount });
       } else {
-        goalData.reward = null;
+        goalData.rewardCurrencyId = null;
+        goalData.reward_currency_id = null;
+        goalData.rewardSuccesses = null;
+        goalData.reward_successes = null;
+        goalData.rewardAmount = null;
+        goalData.reward_amount = null;
         console.log('Clearing reward data');
       }
 
       if (consequenceCurrencyId && consequenceFailures && consequenceAmount) {
-        goalData.consequence = {
-          currencyId: consequenceCurrencyId,
-          failures: parseInt(consequenceFailures),
-          amount: parseInt(consequenceAmount),
-        };
-        console.log('Setting consequence data:', goalData.consequence);
+        goalData.consequenceCurrencyId = consequenceCurrencyId;
+        goalData.consequence_currency_id = consequenceCurrencyId;
+        goalData.consequenceFailures = parseInt(consequenceFailures);
+        goalData.consequence_failures = parseInt(consequenceFailures);
+        goalData.consequenceAmount = parseInt(consequenceAmount);
+        goalData.consequence_amount = parseInt(consequenceAmount);
+        console.log('Setting consequence data:', { consequenceCurrencyId, consequenceFailures, consequenceAmount });
       } else {
-        goalData.consequence = null;
+        goalData.consequenceCurrencyId = null;
+        goalData.consequence_currency_id = null;
+        goalData.consequenceFailures = null;
+        goalData.consequence_failures = null;
+        goalData.consequenceAmount = null;
+        goalData.consequence_amount = null;
         console.log('Clearing consequence data');
       }
 

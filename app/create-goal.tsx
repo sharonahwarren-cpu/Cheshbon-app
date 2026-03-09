@@ -709,24 +709,37 @@ export default function CreateGoalScreen() {
       
       console.log('[CreateGoal] Submitting goal data:', JSON.stringify(goalData, null, 2));
 
+      // CRITICAL FIX: Supabase expects separate columns, not nested objects
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
-        goalData.reward = {
-          currencyId: rewardCurrencyId,
-          successes: parseInt(rewardSuccesses),
-          amount: parseInt(rewardAmount),
-        };
+        goalData.rewardCurrencyId = rewardCurrencyId;
+        goalData.reward_currency_id = rewardCurrencyId;
+        goalData.rewardSuccesses = parseInt(rewardSuccesses);
+        goalData.reward_successes = parseInt(rewardSuccesses);
+        goalData.rewardAmount = parseInt(rewardAmount);
+        goalData.reward_amount = parseInt(rewardAmount);
       } else {
-        goalData.reward = null;
+        goalData.rewardCurrencyId = null;
+        goalData.reward_currency_id = null;
+        goalData.rewardSuccesses = null;
+        goalData.reward_successes = null;
+        goalData.rewardAmount = null;
+        goalData.reward_amount = null;
       }
 
       if (consequenceCurrencyId && consequenceFailures && consequenceAmount) {
-        goalData.consequence = {
-          currencyId: consequenceCurrencyId,
-          failures: parseInt(consequenceFailures),
-          amount: parseInt(consequenceAmount),
-        };
+        goalData.consequenceCurrencyId = consequenceCurrencyId;
+        goalData.consequence_currency_id = consequenceCurrencyId;
+        goalData.consequenceFailures = parseInt(consequenceFailures);
+        goalData.consequence_failures = parseInt(consequenceFailures);
+        goalData.consequenceAmount = parseInt(consequenceAmount);
+        goalData.consequence_amount = parseInt(consequenceAmount);
       } else {
-        goalData.consequence = null;
+        goalData.consequenceCurrencyId = null;
+        goalData.consequence_currency_id = null;
+        goalData.consequenceFailures = null;
+        goalData.consequence_failures = null;
+        goalData.consequenceAmount = null;
+        goalData.consequence_amount = null;
       }
 
       let createdOrUpdatedGoal: any;
