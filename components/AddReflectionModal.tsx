@@ -552,7 +552,8 @@ const styles = StyleSheet.create({
   strategyDescription: {
     fontSize: 13,
     color: colors.textSecondary,
-    marginBottom: 4,
+    marginTop: 2,
+    lineHeight: 18,
   },
   strategyStats: {
     flexDirection: 'row',
@@ -1285,7 +1286,7 @@ export function AddReflectionModal({
 
     try {
       setLoading(true);
-      console.log('[AddReflectionModal] Creating strategy with name:', newItemName);
+      console.log('[AddReflectionModal] Creating strategy with name:', newItemName, 'and description:', newItemDescription);
       const newStrategy = await supabaseApi.createStrategy({
         name: newItemName,
         description: newItemDescription || undefined,
