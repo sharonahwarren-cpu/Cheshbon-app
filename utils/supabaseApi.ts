@@ -24,6 +24,18 @@ const handleError = (error: PostgrestError | null, operation: string) => {
   }
 };
 
+// Helper to normalize goal type to uppercase (database expects 'RESTRAINING' or 'PROACTIVE')
+const normalizeGoalType = (type: string | undefined): string | undefined => {
+  if (!type) return undefined;
+  const upperType = type.toUpperCase();
+  if (upperType === 'RESTRAINING' || upperType === 'PROACTIVE') {
+    return upperType;
+  }
+  // Default to PROACTIVE if invalid
+  console.warn(`[Supabase API] Invalid goal type "${type}", defaulting to PROACTIVE`);
+  return 'PROACTIVE';
+};
+
 // ============================================================================
 // USER PREFERENCES
 // ============================================================================
@@ -340,12 +352,15 @@ export const getGoalById = async (id: string) => {
 export const createGoal = async (goal: any) => {
   const userId = await getCurrentUserId();
   
+  // CRITICAL FIX: Normalize type to uppercase (database expects 'RESTRAINING' or 'PROACTIVE')
+  const normalizedType = normalizeGoalType(goal.type);
+  
   // Map frontend field names to Supabase snake_case column names
   const goalData: any = {
     user_id: userId,
     title: goal.title,
     description: goal.description,
-    type: goal.type,
+    type: normalizedType,
     status: goal.status || 'ACTIVE',
     life_area_id: goal.lifeAreaId || goal.life_area_id || null,
     behavior_categories: goal.behaviorCategories || goal.behavior_categories || [],
@@ -389,7 +404,7 @@ export const updateGoal = async (id: string, updates: any) => {
   // Only include fields that are actually being updated
   if (updates.title !== undefined) updateData.title = updates.title;
   if (updates.description !== undefined) updateData.description = updates.description;
-  if (updates.type !== undefined) updateData.type = updates.type;
+  if (updates.type !== undefined) updateData.type = normalizeGoalType(updates.type);
   if (updates.status !== undefined) updateData.status = updates.status;
   if (updates.lifeAreaId !== undefined || updates.life_area_id !== undefined) {
     updateData.life_area_id = updates.life_area_id || updates.lifeAreaId || null;
