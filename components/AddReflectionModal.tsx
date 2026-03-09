@@ -543,6 +543,17 @@ const styles = StyleSheet.create({
   strategyListItemContent: {
     flex: 1,
   },
+  strategyName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  strategyDescription: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
   strategyStats: {
     flexDirection: 'row',
     gap: 8,
@@ -697,7 +708,10 @@ export function AddReflectionModal({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
-  const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'];
+  const availableCategories = userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought', 'Feeling'];
+
+  console.log('[AddReflectionModal] Available categories:', availableCategories);
+  console.log('[AddReflectionModal] Categories enabled:', categoriesEnabled);
 
   // Helper function to get the display category for a reflection
   const getReflectionDisplayCategory = (reflection: Reflection): string | undefined => {
@@ -1129,6 +1143,7 @@ export function AddReflectionModal({
       const dateString = localDate;
       console.log(`[AddReflectionModal] Date string (local ${localZone}): ${dateString} (from UTC: ${selectedDate.toISOString()})`);
       
+      // CRITICAL FIX: Filter out strategies with null worked status before saving
       const validStrategyEffectiveness = strategyEffectiveness.filter(se => se.worked !== null);
       
       const payload: any = {
@@ -1152,6 +1167,7 @@ export function AddReflectionModal({
 
       console.log('[AddReflectionModal] CRITICAL DEBUG - Payload being sent to backend:', JSON.stringify(payload, null, 2));
       console.log('[AddReflectionModal] CRITICAL DEBUG - Category in payload:', payload.category);
+      console.log('[AddReflectionModal] CRITICAL DEBUG - Strategy effectiveness in payload:', payload.strategyEffectiveness);
 
       let savedReflection;
       if (editingReflection) {
@@ -2046,9 +2062,12 @@ export function AddReflectionModal({
                                   onPress={() => toggleStrategy(strategy.id)}
                                 >
                                   <View style={styles.strategyListItemContent}>
-                                    <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
-                                      {strategy.name}
-                                    </Text>
+                                    <Text style={styles.strategyName}>{strategy.name}</Text>
+                                    {strategy.description && (
+                                      <Text style={styles.strategyDescription} numberOfLines={2}>
+                                        {strategy.description}
+                                      </Text>
+                                    )}
                                     <View style={styles.strategyStats}>
                                       <Text style={styles.strategyStatText}>{successRateText}</Text>
                                       <Text style={styles.strategyStatText}>•</Text>
@@ -2175,6 +2194,11 @@ export function AddReflectionModal({
                                   <Text style={[styles.goalItemText, isSelected && styles.goalItemTextSelected]}>
                                     {strategy.name}
                                   </Text>
+                                  {strategy.description && (
+                                    <Text style={styles.strategyDescription} numberOfLines={2}>
+                                      {strategy.description}
+                                    </Text>
+                                  )}
                                   <View style={styles.strategyStats}>
                                     <Text style={styles.strategyStatText}>{successRateText}</Text>
                                     <Text style={styles.strategyStatText}>•</Text>
