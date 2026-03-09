@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import { ConfirmModal } from '@/components/ConfirmModal';
 
 interface MitzvahCategory {
@@ -45,9 +45,9 @@ export default function MitzvotCategoriesScreen() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await authenticatedGet('/api/mitzvot-categories');
-      const data = Array.isArray(res) ? res : (res?.data || []);
-      setCategories(data);
+      const { data, error } = await supabaseApi.getMitzvotCategories();
+      if (error) throw error;
+      setCategories(data || []);
     } catch (error) {
       showError('Failed to load categories');
     } finally {
@@ -67,10 +67,12 @@ export default function MitzvotCategoriesScreen() {
       setLoading(true);
       const payload = { name: formData.name.trim(), description: formData.description?.trim() || undefined };
       if (editingItem) {
-        await authenticatedPut(`/api/mitzvot-categories/${editingItem.id}`, payload);
+        const { error } = await supabaseApi.updateMitzvahCategory(editingItem.id, payload);
+        if (error) throw error;
         showSuccess('Category updated');
       } else {
-        await authenticatedPost('/api/mitzvot-categories', payload);
+        const { error } = await supabaseApi.createMitzvahCategory(payload);
+        if (error) throw error;
         showSuccess('Category created');
       }
       setShowModal(false);
@@ -88,7 +90,8 @@ export default function MitzvotCategoriesScreen() {
     try {
       setLoading(true);
       setShowConfirmDelete(false);
-      await authenticatedDelete(`/api/mitzvot-categories/${deleteItemId}`);
+      const { error } = await supabaseApi.deleteMitzvahCategory(deleteItemId);
+      if (error) throw error;
       showSuccess('Category deleted');
       await loadData();
     } catch (error: any) {

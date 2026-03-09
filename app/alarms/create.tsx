@@ -17,7 +17,7 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import { getLocalTimezone } from '@/utils/dateUtils';
 import { DatePickerModal } from '@/components/DatePickerModal';
 import type { Alarm, AlarmTrigger, CalendarType, TriggerType } from '@/types/alarm';
@@ -166,9 +166,9 @@ export default function CreateAlarmScreen() {
     console.log('Loading alarm for editing:', params.id);
 
     try {
-      console.log(`[API] Requesting GET /api/alarms/${params.id}...`);
-      const response = await authenticatedGet<Alarm>(`/api/alarms/${params.id}`);
-      const alarm = (response as any)?.data || response;
+      console.log(`[API] Requesting alarm from Supabase: ${params.id}...`);
+      const { data: alarm, error } = await supabaseApi.getAlarm(params.id as string);
+      if (error) throw error;
 
       setTitle(alarm.title);
       setTriggers(alarm.triggers || []);
@@ -319,13 +319,15 @@ export default function CreateAlarmScreen() {
       }
 
       if (isEditing) {
-        console.log(`[API] Requesting PUT /api/alarms/${params.id}...`);
-        await authenticatedPut(`/api/alarms/${params.id}`, alarmData);
+        console.log(`[API] Updating alarm in Supabase: ${params.id}...`);
+        const { error } = await supabaseApi.updateAlarm(params.id as string, alarmData);
+        if (error) throw error;
         console.log('Alarm updated successfully');
       } else {
-        console.log('[API] Requesting POST /api/alarms...');
-        const createdAlarm = await authenticatedPost<any>('/api/alarms', alarmData);
-        const alarmId = createdAlarm?.id || (createdAlarm as any)?.data?.id;
+        console.log('[API] Creating alarm in Supabase...');
+        const { data: createdAlarm, error } = await supabaseApi.createAlarm(alarmData);
+        if (error) throw error;
+        const alarmId = createdAlarm?.id;
         console.log('Alarm created successfully:', alarmId);
         
         // If creating from a goal, update the goal's alarms field to track this alarm
@@ -333,8 +335,8 @@ export default function CreateAlarmScreen() {
           console.log('[API] Updating goal alarms field with new alarm ID:', alarmId);
           try {
             // Fetch current goal to get existing alarm IDs
-            const goalData = await authenticatedGet<any>(`/api/goals/${params.goalId}`);
-            const goal = (goalData as any)?.data || goalData;
+            const { data: goal, error: goalError } = await supabaseApi.getGoal(params.goalId as string);
+            if (goalError) throw goalError;
             
             // Parse existing alarms field
             let existingAlarmIds: string[] = [];
@@ -353,9 +355,10 @@ export default function CreateAlarmScreen() {
             const updatedAlarmIds = [...existingAlarmIds, alarmId];
             console.log('[API] Updated goal alarm IDs:', updatedAlarmIds);
             
-            await authenticatedPut(`/api/goals/${params.goalId}`, {
+            const { error: updateError } = await supabaseApi.updateGoal(params.goalId as string, {
               alarms: updatedAlarmIds.map(id => ({ id })),
             });
+            if (updateError) throw updateError;
             console.log('[API] Goal alarms field updated successfully');
           } catch (goalUpdateError: any) {
             console.error('[API] Error updating goal alarms field:', goalUpdateError);

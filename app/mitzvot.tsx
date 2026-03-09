@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete, getBearerToken, BACKEND_URL } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -105,12 +105,14 @@ export default function MitzvotScreen() {
     console.log('[Mitzvot] Loading data...');
     setLoading(true);
     try {
-      const [mitzvotRes, categoriesRes] = await Promise.all([
-        authenticatedGet('/api/mitzvot'),
-        authenticatedGet('/api/mitzvot-categories'),
+      const [mitzvotResult, categoriesResult] = await Promise.all([
+        supabaseApi.getMitzvot(),
+        supabaseApi.getMitzvotCategories(),
       ]);
-      setMitzvot(Array.isArray(mitzvotRes) ? mitzvotRes : (mitzvotRes?.data || []));
-      setCategories(Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes?.data || []));
+      if (mitzvotResult.error) throw mitzvotResult.error;
+      if (categoriesResult.error) throw categoriesResult.error;
+      setMitzvot(mitzvotResult.data || []);
+      setCategories(categoriesResult.data || []);
     } catch (error) {
       showError('Failed to load mitzvot data');
     } finally {
@@ -121,7 +123,8 @@ export default function MitzvotScreen() {
   const loadImportStatus = async () => {
     try {
       console.log('[Mitzvot] Loading import status...');
-      const status = await authenticatedGet<{ totalSystemMitzvot: number; userHasImported: boolean; systemMitzvotAvailable?: boolean }>('/api/mitzvot/import-status');
+      const { data: status, error } = await supabaseApi.getMitzvotImportStatus();
+      if (error) throw error;
       setImportStatus({
         totalSystemMitzvot: status.totalSystemMitzvot ?? 0,
         userHasImported: status.userHasImported ?? false,
@@ -235,10 +238,12 @@ export default function MitzvotScreen() {
 
       console.log('[Mitzvot] Saving mitzvah payload:', payload);
       if (editingItem) {
-        await authenticatedPut(`/api/mitzvot/${editingItem.id}`, payload);
+        const { error } = await supabaseApi.updateMitzvah(editingItem.id, payload);
+        if (error) throw error;
         showSuccess('Mitzvah updated');
       } else {
-        await authenticatedPost('/api/mitzvot', payload);
+        const { error } = await supabaseApi.createMitzvah(payload);
+        if (error) throw error;
         showSuccess('Mitzvah created');
       }
       setShowModal(false);
@@ -256,7 +261,8 @@ export default function MitzvotScreen() {
     try {
       setLoading(true);
       setShowConfirmDelete(false);
-      await authenticatedDelete(`/api/mitzvot/${deleteItemId}`);
+      const { error } = await supabaseApi.deleteMitzvah(deleteItemId);
+      if (error) throw error;
       showSuccess('Mitzvah deleted');
       await loadData();
     } catch (error: any) {
@@ -269,7 +275,8 @@ export default function MitzvotScreen() {
   const handleToggleStatus = async (item: Mitzvah) => {
     try {
       const newStatus = item.status === 'ACTIVE' ? 'DEACTIVATED' : 'ACTIVE';
-      await authenticatedPut(`/api/mitzvot/${item.id}`, { status: newStatus });
+      const { error } = await supabaseApi.updateMitzvah(item.id, { status: newStatus });
+      if (error) throw error;
       showSuccess(`Mitzvah ${newStatus === 'ACTIVE' ? 'activated' : 'deactivated'}`);
       await loadData();
     } catch (error: any) {
@@ -279,49 +286,14 @@ export default function MitzvotScreen() {
 
   const handleDownloadTemplate = async () => {
     try {
-      console.log('[Mitzvot] Downloading CSV template from backend...');
-      const token = await getBearerToken();
-      if (!token) {
-        throw new Error('Authentication token not found. Please sign in.');
-      }
+      console.log('[Mitzvot] Downloading CSV template...');
+      const { data: csvContent, error } = await supabaseApi.downloadMitzvotTemplate();
+      if (error) throw error;
 
-      const response = await fetch(`${BACKEND_URL}/api/mitzvot/template-csv`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        // Fall back to local template generation if backend fails
-        console.warn('[Mitzvot] Backend template failed, using local template');
-        const templateHeaders = 'mitzvah_number,title,type,location,description,source,applies_to,primary_domain,subdomain,tags,mode';
-        const templateExample = '1,Love your neighbor as yourself,PROACTIVE,Everywhere,Treat others with kindness and respect,Leviticus 19:18,All Jews,Interpersonal Mitzvot,Kindness,"kindness,love,respect",Positive Action';
-        const csvContent = `${templateHeaders}\n${templateExample}\n`;
-
-        if (Platform.OS === 'web') {
-          const blob = new Blob([csvContent], { type: 'text/csv' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'mitzvot_template.csv';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        } else {
-          const fileUri = `${FileSystem.cacheDirectory}mitzvot_template.csv`;
-          await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
-        }
-        showSuccess('Template downloaded!');
-        return;
-      }
-
-      const csvContent = await response.text();
-      console.log('[Mitzvot] Template received, length:', csvContent.length);
+      console.log('[Mitzvot] Template received, length:', csvContent?.length || 0);
 
       if (Platform.OS === 'web') {
-        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const blob = new Blob([csvContent || ''], { type: 'text/csv' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -333,7 +305,7 @@ export default function MitzvotScreen() {
         showSuccess('Template downloaded!');
       } else {
         const fileUri = `${FileSystem.cacheDirectory}mitzvot_template.csv`;
-        await FileSystem.writeAsStringAsync(fileUri, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+        await FileSystem.writeAsStringAsync(fileUri, csvContent || '', { encoding: FileSystem.EncodingType.UTF8 });
         showSuccess(`Template saved to cache directory`);
       }
     } catch (error: any) {
@@ -348,12 +320,13 @@ export default function MitzvotScreen() {
       setInitializingSystem(true);
       setShowImportModal(false);
 
-      const result = await authenticatedPost('/api/mitzvot/initialize-system', {});
+      const { data: result, error } = await supabaseApi.initializeSystemMitzvot();
+      if (error) throw error;
       console.log('[Mitzvot] Initialize result:', result);
 
-      const importedCount = result.imported || 0;
-      const skippedCount = result.skipped || 0;
-      const errors = result.errors || [];
+      const importedCount = result?.imported || 0;
+      const skippedCount = result?.skipped || 0;
+      const errors = result?.errors || [];
 
       let message = '';
       if (importedCount > 0) {
@@ -412,44 +385,15 @@ export default function MitzvotScreen() {
       const fileContent = await FileSystem.readAsStringAsync(file.uri);
       console.log('[Mitzvot] File content length:', fileContent.length);
 
-      const formData = new FormData();
-      
-      if (Platform.OS === 'web') {
-        const blob = new Blob([fileContent], { type: 'text/csv' });
-        formData.append('file', blob, file.name);
-      } else {
-        formData.append('file', {
-          uri: file.uri,
-          type: 'text/csv',
-          name: file.name,
-        } as any);
-      }
+      console.log('[Mitzvot] Uploading CSV to Supabase...');
+      const { data: result_data, error: uploadError } = await supabaseApi.importMitzvotCSV(fileContent);
+      if (uploadError) throw uploadError;
 
-      console.log('[Mitzvot] Uploading CSV to /api/mitzvot/import-csv...');
-      const token = await getBearerToken();
-      if (!token) {
-        throw new Error('Authentication token not found. Please sign in.');
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/mitzvot/import-csv`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Import failed' }));
-        throw new Error(errorData.message || `Import failed with status ${response.status}`);
-      }
-
-      const result_data = await response.json();
       console.log('[Mitzvot] Import result:', result_data);
 
-      const importedCount = result_data.imported || 0;
-      const skippedCount = result_data.skipped || 0;
-      const errors = result_data.errors || [];
+      const importedCount = result_data?.imported || 0;
+      const skippedCount = result_data?.skipped || 0;
+      const errors = result_data?.errors || [];
 
       let message = `Successfully imported ${importedCount} mitzvot`;
       if (skippedCount > 0) {

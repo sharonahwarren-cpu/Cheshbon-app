@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedPost, authenticatedPut } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import { useRouter } from 'expo-router';
 import { getLocalTimezone } from '@/utils/dateUtils';
 
@@ -1155,14 +1155,18 @@ export function AddReflectionModal({
 
       let savedReflection;
       if (editingReflection) {
-        savedReflection = await authenticatedPut(`/api/reflections/${editingReflection.id}`, payload);
+        const { data, error } = await supabaseApi.updateReflection(editingReflection.id, payload);
+        if (error) throw error;
+        savedReflection = data;
       } else {
-        savedReflection = await authenticatedPost('/api/reflections', payload);
+        const { data, error } = await supabaseApi.createReflection(payload);
+        if (error) throw error;
+        savedReflection = data;
       }
 
       console.log('[AddReflectionModal] Reflection saved successfully, calling onSave callback');
       console.log('[AddReflectionModal] CRITICAL DEBUG - Saved reflection from backend:', JSON.stringify(savedReflection, null, 2));
-      onSave(savedReflection?.data || savedReflection);
+      onSave(savedReflection);
       
       if (sourceScreen === 'express') {
         console.log('[AddReflectionModal] Navigating back to Express screen');
@@ -1201,13 +1205,14 @@ export function AddReflectionModal({
 
     try {
       setLoading(true);
-      const newGain = await authenticatedPost('/api/gains-losses', {
+      const { data: newGain, error } = await supabaseApi.createGainLoss({
         name: newItemName,
         type: 'Gain',
       });
+      if (error) throw error;
       
-      gainsLosses.push(newGain?.data || newGain);
-      gainedIds.push((newGain?.data || newGain).id);
+      gainsLosses.push(newGain);
+      gainedIds.push(newGain.id);
       setNewItemName('');
       setShowCreateGainModal(false);
     } catch (error) {
@@ -1226,13 +1231,14 @@ export function AddReflectionModal({
 
     try {
       setLoading(true);
-      const newLoss = await authenticatedPost('/api/gains-losses', {
+      const { data: newLoss, error } = await supabaseApi.createGainLoss({
         name: newItemName,
         type: 'Loss',
       });
+      if (error) throw error;
       
-      gainsLosses.push(newLoss?.data || newLoss);
-      lostIds.push((newLoss?.data || newLoss).id);
+      gainsLosses.push(newLoss);
+      lostIds.push(newLoss.id);
       setNewItemName('');
       setShowCreateLossModal(false);
     } catch (error) {
@@ -1251,13 +1257,14 @@ export function AddReflectionModal({
 
     try {
       setLoading(true);
-      const newStrategy = await authenticatedPost('/api/strategies', {
+      const { data: newStrategy, error } = await supabaseApi.createStrategy({
         name: newItemName,
         description: newItemDescription || undefined,
         category: category || undefined,
       });
+      if (error) throw error;
       
-      strategies.push(newStrategy?.data || newStrategy);
+      strategies.push(newStrategy);
       setNewItemName('');
       setNewItemDescription('');
       setShowCreateStrategyModal(false);

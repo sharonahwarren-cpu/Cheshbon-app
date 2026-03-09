@@ -17,7 +17,7 @@ import { DatePickerModal } from './DatePickerModal';
 import { DateTime } from 'luxon';
 import { useRouter } from 'expo-router';
 import { generateScheduleSummary } from '@/utils/scheduleDescriptions';
-import { authenticatedGet } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import { getNextActivations, type GoalSchedule } from '@/utils/scheduleCalculations';
 
 export type ScheduleType = 'Always Active' | 'Weekly' | 'Fortnightly' | 'Monthly' | 'Yearly';
@@ -201,12 +201,13 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
 
   const fetchBackendScheduleSummary = useCallback(async () => {
     if (!goalId) return;
-    console.log('[GoalScheduler] Fetching fresh schedule summary from backend for goal:', goalId);
+    console.log('[GoalScheduler] Fetching fresh schedule summary from Supabase for goal:', goalId);
     console.log('[GoalScheduler] Backend will delete old occurrences and generate fresh ones based on current config');
     setLoadingBackendSummary(true);
     setBackendSummaryError(null);
     try {
-      const result = await authenticatedGet<BackendScheduleSummary>(`/api/goals/${goalId}/schedule-summary`);
+      const { data: result, error } = await supabaseApi.getGoalScheduleSummary(goalId);
+      if (error) throw error;
       console.log('[GoalScheduler] Fresh schedule summary received:', result);
       setBackendSummary(result);
     } catch (error: any) {
@@ -221,7 +222,7 @@ export function GoalScheduler({ config, onChange, alternativeCalendar, goalId }:
   // Fetch backend schedule summary ONLY on initial mount (when goalId is first available).
   useEffect(() => {
     if (goalId && config.scheduleType !== 'Always Active') {
-      console.log('[GoalScheduler] Component mounted, fetching saved schedule summary from backend');
+      console.log('[GoalScheduler] Component mounted, fetching saved schedule summary from Supabase');
       fetchBackendScheduleSummary();
     } else {
       setBackendSummary(null);

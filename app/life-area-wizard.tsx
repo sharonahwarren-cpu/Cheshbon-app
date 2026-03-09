@@ -17,7 +17,7 @@ import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { authenticatedGet, authenticatedPost, authenticatedPut, authenticatedDelete } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import { COLOR_PALETTE } from '@/utils/colorPalette';
 import { ConfirmModal } from '@/components/ConfirmModal';
 
@@ -98,13 +98,16 @@ export default function LifeAreaWizardScreen() {
     console.log('[LifeAreaWizard] Loading data...');
     setLoading(true);
     try {
-      const [lifeAreasRes, goalsRes] = await Promise.all([
-        authenticatedGet('/api/life-areas'),
-        authenticatedGet('/api/goals'),
+      const [lifeAreasResult, goalsResult] = await Promise.all([
+        supabaseApi.getLifeAreas(),
+        supabaseApi.getGoals(),
       ]);
 
-      const lifeAreasData = Array.isArray(lifeAreasRes) ? lifeAreasRes : (lifeAreasRes?.data || []);
-      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
+      if (lifeAreasResult.error) throw lifeAreasResult.error;
+      if (goalsResult.error) throw goalsResult.error;
+
+      const lifeAreasData = lifeAreasResult.data || [];
+      const goalsData = goalsResult.data || [];
       
       setLifeAreas(lifeAreasData);
       setGoals(goalsData);
@@ -164,10 +167,10 @@ export default function LifeAreaWizardScreen() {
   const loadGoals = async () => {
     console.log('[LifeAreaWizard] Reloading goals...');
     try {
-      const goalsRes = await authenticatedGet('/api/goals');
-      const goalsData = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []);
-      setGoals(goalsData);
-      console.log('[LifeAreaWizard] Goals reloaded, count:', goalsData.length);
+      const { data: goalsData, error } = await supabaseApi.getGoals();
+      if (error) throw error;
+      setGoals(goalsData || []);
+      console.log('[LifeAreaWizard] Goals reloaded, count:', goalsData?.length || 0);
     } catch (error: any) {
       console.error('[LifeAreaWizard] Error reloading goals:', error);
     }
@@ -210,12 +213,14 @@ export default function LifeAreaWizardScreen() {
       if (savedLifeAreaId) {
         // Update existing life area
         console.log('[API] Updating life area:', savedLifeAreaId);
-        result = await authenticatedPut(`/api/life-areas/${savedLifeAreaId}`, lifeAreaData);
+        const { error } = await supabaseApi.updateLifeArea(savedLifeAreaId, lifeAreaData);
+        if (error) throw error;
       } else {
         // Create new life area
         console.log('[API] Creating life area:', lifeAreaData);
-        result = await authenticatedPost('/api/life-areas', lifeAreaData);
-        const createdId = result?.id || result?.data?.id;
+        const { data: created, error } = await supabaseApi.createLifeArea(lifeAreaData);
+        if (error) throw error;
+        const createdId = created?.id;
         console.log('[API] Life area created with ID:', createdId);
         setSavedLifeAreaId(createdId);
       }
@@ -242,7 +247,8 @@ export default function LifeAreaWizardScreen() {
     
     try {
       console.log('[API] Linking goal to life area:', { goalId, lifeAreaId: savedLifeAreaId });
-      await authenticatedPost(`/api/life-areas/${savedLifeAreaId}/goals`, { goalId });
+      const { error } = await supabaseApi.linkGoalToLifeArea(savedLifeAreaId, goalId);
+      if (error) throw error;
       
       // Update local state immediately
       setLinkedGoalIds([...linkedGoalIds, goalId]);
@@ -258,7 +264,8 @@ export default function LifeAreaWizardScreen() {
     
     try {
       console.log('[API] Unlinking goal from life area:', { goalId, lifeAreaId: savedLifeAreaId });
-      await authenticatedDelete(`/api/life-areas/${savedLifeAreaId}/goals/${goalId}`);
+      const { error } = await supabaseApi.unlinkGoalFromLifeArea(savedLifeAreaId, goalId);
+      if (error) throw error;
       
       // Update local state immediately
       setLinkedGoalIds(linkedGoalIds.filter(id => id !== goalId));

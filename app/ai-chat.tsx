@@ -18,7 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet, authenticatedPost, authenticatedDelete, apiGet } from '@/utils/api';
+import * as supabaseApi from '@/utils/supabaseApi';
 import * as Speech from 'expo-speech';
 import { useAudioRecorder, RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -120,7 +120,8 @@ export default function AIChatScreen() {
   const checkHealth = async () => {
     try {
       console.log('[AI Chat] Checking backend health...');
-      const health = await apiGet<HealthStatus>('/api/health');
+      const { data: health, error } = await supabaseApi.getHealthStatus();
+      if (error) throw error;
       console.log('[AI Chat] Health status:', health);
       setHealthStatus(health);
       
@@ -279,8 +280,8 @@ export default function AIChatScreen() {
     console.log('[AI Chat] Loading conversations...');
     try {
       setLoading(true);
-      const response = await authenticatedGet('/api/reflection-chat/conversations');
-      const conversationsData = Array.isArray(response) ? response : (response?.data || []);
+      const { data: conversationsData, error } = await supabaseApi.getConversations();
+      if (error) throw error;
       console.log('[AI Chat] Loaded conversations:', conversationsData.length);
       setConversations(conversationsData);
       
@@ -309,8 +310,8 @@ export default function AIChatScreen() {
     console.log('[AI Chat] Loading messages for conversation:', conversationId);
     try {
       setLoading(true);
-      const response = await authenticatedGet(`/api/reflection-chat/conversations/${conversationId}/messages`);
-      const messagesData = Array.isArray(response) ? response : (response?.data || []);
+      const { data: messagesData, error } = await supabaseApi.getConversationMessages(conversationId);
+      if (error) throw error;
       console.log('[AI Chat] Loaded messages:', messagesData.length);
       setMessages(messagesData);
     } catch (error) {
@@ -325,8 +326,8 @@ export default function AIChatScreen() {
     console.log('[AI Chat] Creating new conversation...');
     try {
       if (!silent) setLoading(true);
-      const response = await authenticatedPost('/api/reflection-chat/conversations', {});
-      const newConversation = response?.data || response;
+      const { data: newConversation, error } = await supabaseApi.createConversation();
+      if (error) throw error;
       console.log('[AI Chat] New conversation created:', newConversation);
       
       setConversations(prev => {
@@ -482,8 +483,8 @@ export default function AIChatScreen() {
 
     if (!conversationId) {
       try {
-        const response = await authenticatedPost('/api/reflection-chat/conversations', {});
-        const newConversation = response?.data || response;
+        const { data: newConversation, error: createError } = await supabaseApi.createConversation();
+        if (createError) throw createError;
         conversationId = newConversation.id;
         justCreatedConversation.current = newConversation.id;
         setCurrentConversationId(conversationId);
@@ -521,10 +522,8 @@ export default function AIChatScreen() {
 
     try {
       console.log('[AI Chat] Sending audio message to backend...');
-      const apiResponse = await authenticatedPost(
-        `/api/reflection-chat/conversations/${conversationId}/messages`,
-        { audioBase64 }
-      );
+      const { data: apiResponse, error: sendError } = await supabaseApi.sendAudioMessage(conversationId, audioBase64);
+      if (sendError) throw sendError;
 
       // Backend returns: { response, transcribedText? }
       const transcribedText = apiResponse.transcribedText || '(voice message)';
@@ -552,10 +551,9 @@ export default function AIChatScreen() {
       // Speak the AI response
       speakText(aiText);
       // Refresh conversations list to update titles
-      authenticatedGet('/api/reflection-chat/conversations')
-        .then((res: any) => {
-          const data = Array.isArray(res) ? res : (res?.data || []);
-          setConversations(data);
+      supabaseApi.getConversations()
+        .then(({ data }) => {
+          if (data) setConversations(data);
         })
         .catch(err => console.warn('[AI Chat] Failed to refresh conversations:', err));
     } catch (error: any) {
@@ -625,9 +623,8 @@ export default function AIChatScreen() {
     try {
       setSending(true);
       console.log('[AI Chat] Sending text message...');
-      const response = await authenticatedPost(`/api/reflection-chat/conversations/${conversationId}/messages`, {
-        message: userMessage,
-      });
+      const { data: response, error: sendError } = await supabaseApi.sendTextMessage(conversationId, userMessage);
+      if (sendError) throw sendError;
 
       // Backend returns: { response }
       const aiText = response.response || 'No response';
@@ -653,10 +650,9 @@ export default function AIChatScreen() {
       // Speak the AI response
       speakText(aiText);
       // Refresh conversations list to update titles
-      authenticatedGet('/api/reflection-chat/conversations')
-        .then((res: any) => {
-          const data = Array.isArray(res) ? res : (res?.data || []);
-          setConversations(data);
+      supabaseApi.getConversations()
+        .then(({ data }) => {
+          if (data) setConversations(data);
         })
         .catch(err => console.warn('[AI Chat] Failed to refresh conversations:', err));
     } catch (error: any) {

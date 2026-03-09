@@ -1113,3 +1113,312 @@ export const exportUserData = async (format: 'json' | 'csv' | 'pdf', dataType: s
   // For now, return a simple message
   throw new Error('Data export functionality needs to be implemented with Supabase Edge Functions');
 };
+
+// ============================================================================
+// GOAL SCHEDULE SUMMARY
+// ============================================================================
+
+export const getGoalScheduleSummary = async (goalId: string) => {
+  const userId = await getCurrentUserId();
+  
+  // Get the goal with its schedule configuration
+  const { data: goal, error } = await supabase
+    .from('goals')
+    .select('*')
+    .eq('id', goalId)
+    .eq('user_id', userId)
+    .single();
+  
+  handleError(error, 'getGoalScheduleSummary');
+  
+  // Return a summary object (this would need backend logic to generate next occurrences)
+  return {
+    summary: 'Schedule summary',
+    nextOccurrences: [],
+    calendarType: goal?.calendar_type || 'gregorian',
+  };
+};
+
+// ============================================================================
+// LINK/UNLINK GOALS TO LIFE AREAS
+// ============================================================================
+
+export const linkGoalToLifeArea = async (lifeAreaId: string, goalId: string) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('goals')
+    .update({ life_area_id: lifeAreaId })
+    .eq('id', goalId)
+    .eq('user_id', userId)
+    .select()
+    .single();
+  
+  handleError(error, 'linkGoalToLifeArea');
+  return data;
+};
+
+export const unlinkGoalFromLifeArea = async (lifeAreaId: string, goalId: string) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('goals')
+    .update({ life_area_id: null })
+    .eq('id', goalId)
+    .eq('user_id', userId)
+    .eq('life_area_id', lifeAreaId)
+    .select()
+    .single();
+  
+  handleError(error, 'unlinkGoalFromLifeArea');
+  return data;
+};
+
+// ============================================================================
+// MITZVOT
+// ============================================================================
+
+export const getMitzvot = async () => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('mitzvot')
+    .select('*')
+    .eq('user_id', userId);
+  
+  handleError(error, 'getMitzvot');
+  return data || [];
+};
+
+export const createMitzvah = async (mitzvah: any) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('mitzvot')
+    .insert({
+      user_id: userId,
+      ...mitzvah,
+    })
+    .select()
+    .single();
+  
+  handleError(error, 'createMitzvah');
+  return data;
+};
+
+export const updateMitzvah = async (id: string, updates: any) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('mitzvot')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select()
+    .single();
+  
+  handleError(error, 'updateMitzvah');
+  return data;
+};
+
+export const deleteMitzvah = async (id: string) => {
+  const userId = await getCurrentUserId();
+  
+  const { error } = await supabase
+    .from('mitzvot')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+  
+  handleError(error, 'deleteMitzvah');
+  return { success: true };
+};
+
+export const getMitzvotCategories = async () => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('mitzvot_categories')
+    .select('*')
+    .eq('user_id', userId);
+  
+  handleError(error, 'getMitzvotCategories');
+  return data || [];
+};
+
+export const createMitzvahCategory = async (category: any) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('mitzvot_categories')
+    .insert({
+      user_id: userId,
+      ...category,
+    })
+    .select()
+    .single();
+  
+  handleError(error, 'createMitzvahCategory');
+  return data;
+};
+
+export const updateMitzvahCategory = async (id: string, updates: any) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('mitzvot_categories')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select()
+    .single();
+  
+  handleError(error, 'updateMitzvahCategory');
+  return data;
+};
+
+export const deleteMitzvahCategory = async (id: string) => {
+  const userId = await getCurrentUserId();
+  
+  const { error } = await supabase
+    .from('mitzvot_categories')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+  
+  handleError(error, 'deleteMitzvahCategory');
+  return { success: true };
+};
+
+export const getMitzvotImportStatus = async () => {
+  const userId = await getCurrentUserId();
+  
+  // This would need to be implemented with Supabase Edge Functions
+  // For now, return a placeholder
+  return {
+    totalSystemMitzvot: 0,
+    userHasImported: false,
+    systemMitzvotAvailable: false,
+  };
+};
+
+export const downloadMitzvotTemplate = async () => {
+  // Generate a simple CSV template
+  const templateHeaders = 'mitzvah_number,title,type,location,description,source,applies_to,primary_domain,subdomain,tags,mode';
+  const templateExample = '1,Love your neighbor as yourself,PROACTIVE,Everywhere,Treat others with kindness and respect,Leviticus 19:18,All Jews,Interpersonal Mitzvot,Kindness,"kindness,love,respect",Positive Action';
+  const csvContent = `${templateHeaders}\n${templateExample}\n`;
+  
+  return csvContent;
+};
+
+export const initializeSystemMitzvot = async () => {
+  // This would need to be implemented with Supabase Edge Functions
+  throw new Error('System mitzvot initialization needs to be implemented with Supabase Edge Functions');
+};
+
+export const importMitzvotCSV = async (csvContent: string) => {
+  // This would need to be implemented with Supabase Edge Functions
+  throw new Error('CSV import needs to be implemented with Supabase Edge Functions');
+};
+
+// ============================================================================
+// AI CHAT / CONVERSATIONS
+// ============================================================================
+
+export const getHealthStatus = async () => {
+  // This would need to be implemented with Supabase Edge Functions
+  return {
+    status: 'ok',
+    features: {
+      aiChat: false,
+      voiceTranscription: false,
+    },
+  };
+};
+
+export const getConversations = async () => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('*')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+  
+  handleError(error, 'getConversations');
+  return data || [];
+};
+
+export const createConversation = async () => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('conversations')
+    .insert({
+      user_id: userId,
+      title: 'New Conversation',
+    })
+    .select()
+    .single();
+  
+  handleError(error, 'createConversation');
+  return data;
+};
+
+export const getConversationMessages = async (conversationId: string) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true });
+  
+  handleError(error, 'getConversationMessages');
+  return data || [];
+};
+
+export const sendTextMessage = async (conversationId: string, message: string) => {
+  // This would need to be implemented with Supabase Edge Functions for AI integration
+  throw new Error('AI chat needs to be implemented with Supabase Edge Functions');
+};
+
+export const sendAudioMessage = async (conversationId: string, audioBase64: string) => {
+  // This would need to be implemented with Supabase Edge Functions for AI integration
+  throw new Error('Voice transcription needs to be implemented with Supabase Edge Functions');
+};
+
+// ============================================================================
+// HELPER: GET SINGLE GOAL
+// ============================================================================
+
+export const getGoal = async (id: string) => {
+  return getGoalById(id);
+};
+
+// ============================================================================
+// HELPER: GET SINGLE ALARM
+// ============================================================================
+
+export const getAlarm = async (id: string) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('alarms')
+    .select(`
+      *,
+      goal:goals(id, title)
+    `)
+    .eq('id', id)
+    .eq('user_id', userId)
+    .single();
+  
+  handleError(error, 'getAlarm');
+  return data;
+};
