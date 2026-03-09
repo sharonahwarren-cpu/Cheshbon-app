@@ -16,7 +16,7 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { useAuth } from '@/contexts/AuthContext';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { authenticatedDelete } from '@/utils/api';
+import { deleteAllUserData, deleteUserAccount } from '@/utils/supabaseApi';
 import { DatePickerModal } from '@/components/DatePickerModal';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -74,114 +74,14 @@ export default function DataManagementScreen() {
     setIsDownloading(true);
 
     try {
-      const { BACKEND_URL, getBearerToken } = await import('@/utils/api');
-      const token = await getBearerToken();
-
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      // Build query parameters
-      const queryParams = new URLSearchParams({
-        dataType: selectedDataType,
-        format: selectedFormat,
-      });
-
-      // Convert dates to ISO 8601 format if they exist
-      // Ensure dates are valid Date objects before calling toISOString()
-      if (startDate && startDate instanceof Date && !isNaN(startDate.getTime())) {
-        const startDateISO = startDate.toISOString();
-        queryParams.append('startDate', startDateISO);
-        console.log('📥 [DATA MANAGEMENT] Start date ISO:', startDateISO);
-      }
-      if (endDate && endDate instanceof Date && !isNaN(endDate.getTime())) {
-        const endDateISO = endDate.toISOString();
-        queryParams.append('endDate', endDateISO);
-        console.log('📥 [DATA MANAGEMENT] End date ISO:', endDateISO);
-      }
-
-      const url = `${BACKEND_URL}/api/user/data/export?${queryParams.toString()}`;
-      console.log('📥 [DATA MANAGEMENT] Fetching from:', url);
-
-      if (Platform.OS === 'web') {
-        // Web: Use fetch to get blob and trigger browser download
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ [DATA MANAGEMENT] Download failed:', response.status, errorText);
-          throw new Error(`Download failed: ${response.status}`);
-        }
-
-        console.log('✅ [DATA MANAGEMENT] Download response received');
-
-        // Web: Create a blob and trigger download
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        const fileExtension = selectedFormat;
-        const fileName = `cheshbon_${selectedDataType}_${new Date().toISOString().split('T')[0]}.${fileExtension}`;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
-        console.log('✅ [DATA MANAGEMENT] Web download triggered:', fileName);
-      } else {
-        // Mobile: Download to temp directory, then share
-        const fileExtension = selectedFormat;
-        const fileName = `cheshbon_${selectedDataType}_${new Date().toISOString().split('T')[0]}.${fileExtension}`;
-        
-        // Use cacheDirectory for temporary storage
-        const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
-        
-        if (!baseDir) {
-          throw new Error('File system not available on this device');
-        }
-        
-        const fileUri = `${baseDir}${fileName}`;
-
-        console.log('📥 [DATA MANAGEMENT] Downloading file to:', fileUri);
-
-        const downloadResult = await FileSystem.downloadAsync(url, fileUri, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        console.log('✅ [DATA MANAGEMENT] File downloaded, status:', downloadResult.status);
-
-        if (downloadResult.status !== 200) {
-          throw new Error(`Download failed with status: ${downloadResult.status}`);
-        }
-
-        console.log('✅ [DATA MANAGEMENT] File saved to:', downloadResult.uri);
-
-        // Share the file using native share sheet
-        const canShare = await Sharing.isAvailableAsync();
-        if (canShare) {
-          const mimeType = selectedFormat === 'pdf' ? 'application/pdf' : 'text/csv';
-          await Sharing.shareAsync(downloadResult.uri, {
-            mimeType,
-            dialogTitle: `Export ${selectedDataType} data`,
-            UTI: selectedFormat === 'pdf' ? 'com.adobe.pdf' : 'public.comma-separated-values-text',
-          });
-          console.log('✅ [DATA MANAGEMENT] File shared');
-        } else {
-          console.log('⚠️ [DATA MANAGEMENT] Sharing not available');
-          throw new Error('Sharing is not available on this device');
-        }
-      }
-
-      setModalMessage('Your data has been downloaded successfully.');
-      setShowSuccessModal(true);
-      setShowDownloadOptions(false);
+      // TODO: Implement data export with Supabase Edge Function
+      // For now, show a message that this feature is coming soon
+      setModalMessage('Data export functionality is being migrated to Supabase. This feature will be available soon.');
+      setShowErrorModal(true);
+      
+      // The export functionality would need to be implemented as a Supabase Edge Function
+      // that generates CSV/PDF files from the database data
+      
     } catch (error: any) {
       console.error('❌ [DATA MANAGEMENT] Download error:', error);
       setModalMessage(`Failed to download data: ${error.message || 'An unexpected error occurred.'}`);
@@ -197,7 +97,7 @@ export default function DataManagementScreen() {
     setIsDeletingData(true);
 
     try {
-      await authenticatedDelete('/api/user/data');
+      await deleteAllUserData();
       console.log('✅ [DATA MANAGEMENT] All data deleted successfully');
       setModalMessage('All your data has been permanently deleted. Your account remains active.');
       setShowSuccessModal(true);
@@ -216,7 +116,7 @@ export default function DataManagementScreen() {
     setIsDeletingAccount(true);
 
     try {
-      await authenticatedDelete('/api/user/account');
+      await deleteUserAccount();
       console.log('✅ [DATA MANAGEMENT] Account deleted successfully');
       setModalMessage('Your account and all associated data have been permanently deleted. You will be signed out.');
       setShowSuccessModal(true);
