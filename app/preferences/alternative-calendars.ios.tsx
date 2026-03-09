@@ -7,14 +7,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Switch,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as supabaseApi from '@/utils/supabaseApi';
-import { getLocalTimezone } from '@/utils/dateUtils';
 
 export type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 
@@ -118,12 +116,10 @@ export default function AlternativeCalendarsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedCalendar, setSelectedCalendar] = useState<CalendarType>('gregorian');
-  const [mitzvotGoalsEnabled, setMitzvotGoalsEnabled] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
   const today = new Date();
-  const deviceTimezone = getLocalTimezone();
 
   useEffect(() => {
     loadPreferences();
@@ -136,32 +132,11 @@ export default function AlternativeCalendarsScreen() {
       const prefs = await supabaseApi.getUserPreferences();
       console.log('[AlternativeCalendars] Preferences loaded:', prefs);
       
-      // Handle both snake_case and camelCase
-      const calendar = prefs?.alternative_calendar || prefs?.alternativeCalendar || 'gregorian';
-      const mitzvotEnabled = prefs?.mitzvot_goals_enabled ?? prefs?.mitzvotGoalsEnabled ?? false;
+      // Get the alternative_calendar field from database
+      const calendar = prefs?.alternative_calendar || 'gregorian';
       
       setSelectedCalendar(calendar as CalendarType);
-      setMitzvotGoalsEnabled(mitzvotEnabled);
-      
-      // Log the stored timezone vs device timezone for debugging
-      const storedTimezone = prefs?.timezone;
-      const currentDeviceTimezone = getLocalTimezone();
-      console.log('[AlternativeCalendars] Timezone info:', {
-        stored: storedTimezone,
-        device: currentDeviceTimezone,
-        match: storedTimezone === currentDeviceTimezone,
-      });
-      
-      // If timezone has changed (e.g., user traveled), auto-update it
-      if (storedTimezone && storedTimezone !== currentDeviceTimezone) {
-        console.log('[AlternativeCalendars] Timezone changed, updating to:', currentDeviceTimezone);
-        try {
-          await supabaseApi.updateUserPreferences({ timezone: currentDeviceTimezone });
-          console.log('[AlternativeCalendars] Timezone updated to:', currentDeviceTimezone);
-        } catch (tzError) {
-          console.warn('[AlternativeCalendars] Failed to update timezone:', tzError);
-        }
-      }
+      console.log('[AlternativeCalendars] Calendar type set to:', calendar);
     } catch (error) {
       console.error('[AlternativeCalendars] Error loading preferences:', error);
       setErrorMessage('Failed to load preferences');
@@ -175,19 +150,13 @@ export default function AlternativeCalendarsScreen() {
     console.log('[AlternativeCalendars] Saving calendar preference:', calendar);
     setSaving(true);
     try {
-      // Detect device timezone and save alongside calendar preference
-      const deviceTimezone = getLocalTimezone();
-      console.log('[AlternativeCalendars] Device timezone detected:', deviceTimezone);
-      
-      // Save both the calendar preference and the device timezone to the backend
+      // Save only the alternative_calendar field (the only field that exists in the database)
       await supabaseApi.updateUserPreferences({ 
         alternative_calendar: calendar,
-        alternativeCalendar: calendar, // Keep camelCase for compatibility
-        timezone: deviceTimezone,
       });
-      console.log('[AlternativeCalendars] Calendar preference and timezone saved successfully:', { calendar, timezone: deviceTimezone });
-      setSuccessMessage(`Calendar preference saved (Timezone: ${deviceTimezone})`);
-      setTimeout(() => setSuccessMessage(''), 4000);
+      console.log('[AlternativeCalendars] Calendar preference saved successfully:', calendar);
+      setSuccessMessage('Calendar preference saved');
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
       console.error('[AlternativeCalendars] Error saving preferences:', error);
       setErrorMessage('Failed to save preferences');
@@ -200,34 +169,6 @@ export default function AlternativeCalendarsScreen() {
   const selectCalendar = async (calendar: CalendarType) => {
     setSelectedCalendar(calendar);
     await saveCalendar(calendar);
-  };
-
-  const toggleMitzvotGoals = async (enabled: boolean) => {
-    console.log('[AlternativeCalendars] Toggling Mitzvot goals:', enabled);
-    setMitzvotGoalsEnabled(enabled);
-    setSaving(true);
-    try {
-      await supabaseApi.updateUserPreferences({ 
-        mitzvot_goals_enabled: enabled,
-        mitzvotGoalsEnabled: enabled, // Keep camelCase for compatibility
-      });
-      console.log('[AlternativeCalendars] Mitzvot goals preference saved');
-      setSuccessMessage(enabled ? 'Mitzvot goals activated' : 'Mitzvot goals deactivated');
-      setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (error) {
-      console.error('[AlternativeCalendars] Error saving Mitzvot preference:', error);
-      setErrorMessage('Failed to save preference');
-      setTimeout(() => setErrorMessage(''), 3000);
-      // Revert on error
-      setMitzvotGoalsEnabled(!enabled);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleManageMitzvot = () => {
-    console.log('[AlternativeCalendars] Navigating to Mitzvot screen');
-    router.push('/mitzvot' as any);
   };
 
   if (loading) {
@@ -246,8 +187,6 @@ export default function AlternativeCalendarsScreen() {
       </SafeAreaView>
     );
   }
-
-  const showMitzvotSection = selectedCalendar === 'hebrew' && false; // Hidden per user request
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -272,7 +211,7 @@ export default function AlternativeCalendarsScreen() {
         ) : null}
 
         <Text style={styles.description}>
-          Choose an alternative calendar to display alongside the standard Gregorian calendar. This is a Beta Testing Feature only and may not fully work yet.
+          Choose an alternative calendar to display alongside the standard Gregorian calendar on the home screen.
         </Text>
 
         {CALENDAR_OPTIONS.map((option) => {
@@ -307,52 +246,6 @@ export default function AlternativeCalendarsScreen() {
           );
         })}
 
-        {showMitzvotSection && (
-          <View style={styles.mitzvotSection}>
-            <View style={styles.mitzvotHeader}>
-              <View style={styles.mitzvotTitleRow}>
-                <IconSymbol
-                  ios_icon_name="star.fill"
-                  android_material_icon_name="star"
-                  size={24}
-                  color={colors.accent}
-                />
-                <Text style={styles.mitzvotTitle}>Mitzvot Goals</Text>
-              </View>
-              <Switch
-                value={mitzvotGoalsEnabled}
-                onValueChange={toggleMitzvotGoals}
-                disabled={saving}
-                trackColor={{ false: colors.border, true: colors.primary }}
-                thumbColor={colors.background}
-              />
-            </View>
-            <Text style={styles.mitzvotDescription}>
-              Enable Mitzvot goals to track the 613 commandments from Jewish tradition. You can manage and import Mitzvot from a CSV file.
-            </Text>
-            {mitzvotGoalsEnabled && (
-              <TouchableOpacity
-                style={styles.manageMitzvotButton}
-                onPress={handleManageMitzvot}
-              >
-                <IconSymbol
-                  ios_icon_name="list.bullet"
-                  android_material_icon_name="list"
-                  size={20}
-                  color={colors.primary}
-                />
-                <Text style={styles.manageMitzvotButtonText}>Manage Mitzvot & Import CSV</Text>
-                <IconSymbol
-                  ios_icon_name="chevron.right"
-                  android_material_icon_name="arrow-forward"
-                  size={18}
-                  color={colors.textSecondary}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
         {selectedCalendar !== 'gregorian' && (
           <View style={styles.previewCard}>
             <Text style={styles.previewTitle}>Date Preview</Text>
@@ -384,18 +277,9 @@ export default function AlternativeCalendarsScreen() {
           <Text style={styles.infoText}>
             When an alternative calendar is selected:
           </Text>
-          <Text style={styles.infoItem}>• Goal scheduling and alarms can be set using either calendar</Text>
+          <Text style={styles.infoItem}>• Dates on the home screen will show both calendars</Text>
           <Text style={styles.infoItem}>• The Gregorian calendar remains the primary system calendar</Text>
-          <Text style={styles.infoItem}>• All dates are stored as UTC timestamps for accuracy across timezones</Text>
-          <View style={styles.timezoneRow}>
-            <IconSymbol
-              ios_icon_name="clock.fill"
-              android_material_icon_name="schedule"
-              size={16}
-              color={colors.accent}
-            />
-            <Text style={styles.timezoneText}>Device timezone: {deviceTimezone}</Text>
-          </View>
+          <Text style={styles.infoItem}>• All dates are stored as standard dates for accuracy</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -486,56 +370,11 @@ const styles = StyleSheet.create({
     color: colors.primary,
     opacity: 0.8,
   },
-  mitzvotSection: {
-    backgroundColor: `${colors.accent}10`,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 2,
-    borderColor: `${colors.accent}30`,
-  },
-  mitzvotHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  mitzvotTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  mitzvotTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  mitzvotDescription: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  manageMitzvotButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.card,
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  manageMitzvotButtonText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    color: colors.primary,
-  },
   previewCard: {
     backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
+    marginTop: 8,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: colors.cardBorder,
@@ -594,19 +433,5 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
     marginBottom: 2,
-  },
-  timezoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: `${colors.accent}20`,
-  },
-  timezoneText: {
-    fontSize: 13,
-    color: colors.accent,
-    fontWeight: '600',
   },
 });

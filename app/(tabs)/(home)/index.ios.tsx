@@ -3,8 +3,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { IconSymbol } from "@/components/IconSymbol";
 import React, { useState, useEffect, useRef } from "react";
 import { colors } from "@/styles/commonStyles";
-import { getLocalTimezone } from '@/utils/dateUtils';
-import { DateTime } from 'luxon';
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -15,7 +13,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Modal,
-  Image,
   TextInput,
   KeyboardAvoidingView,
   RefreshControl,
@@ -137,6 +134,7 @@ interface UserPreferences {
   reflectionCategoriesEnabled?: boolean;
   reflectionCategories?: string[];
   preferredHomeScreen?: 'reflect' | 'goals-detailed' | 'goals-concise';
+  alternative_calendar?: 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 }
 
 interface JournalEntry {
@@ -146,6 +144,8 @@ interface JournalEntry {
   createdAt: string;
   updatedAt: string;
 }
+
+type CalendarType = 'gregorian' | 'hebrew' | 'chinese' | 'islamic';
 
 const styles = StyleSheet.create({
   container: {
@@ -182,6 +182,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     minWidth: 120,
     textAlign: 'center',
+  },
+  alternativeDateText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 2,
   },
   todayButton: {
     paddingHorizontal: 12,
@@ -427,8 +433,63 @@ function formatDateLocal(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatAlternativeDate(date: Date, calendarType: string): string {
-  return formatDateLocal(date);
+function toHebrewDate(date: Date): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('he-IL-u-ca-hebrew', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    return formatter.format(date);
+  } catch {
+    return '';
+  }
+}
+
+function toChineseDate(date: Date): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    return formatter.format(date);
+  } catch {
+    return '';
+  }
+}
+
+function toIslamicDate(date: Date): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US-u-ca-islamic', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    return formatter.format(date);
+  } catch {
+    return '';
+  }
+}
+
+function formatAlternativeDate(date: Date, calendarType: CalendarType): string {
+  if (calendarType === 'gregorian') {
+    return '';
+  }
+
+  if (calendarType === 'hebrew') {
+    return toHebrewDate(date);
+  }
+
+  if (calendarType === 'chinese') {
+    return toChineseDate(date);
+  }
+
+  if (calendarType === 'islamic') {
+    return toIslamicDate(date);
+  }
+
+  return '';
 }
 
 export default function HomeScreen() {
@@ -458,6 +519,7 @@ export default function HomeScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [viewMode, setViewMode] = useState<'concise' | 'detailed'>('detailed');
+  const [alternativeCalendar, setAlternativeCalendar] = useState<CalendarType>('gregorian');
 
   useEffect(() => {
     console.log('HomeScreen (iOS): Initial load');
@@ -537,6 +599,8 @@ export default function HomeScreen() {
 
       console.log('HomeScreen (iOS): Data loaded successfully');
       console.log('HomeScreen (iOS): Goals count:', goalsData.length);
+      console.log('HomeScreen (iOS): User preferences:', preferencesData);
+      
       setGoals(goalsData);
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData, goalsData));
       setCurrencies(currenciesData);
@@ -544,6 +608,11 @@ export default function HomeScreen() {
       setStrategies(strategiesData);
       setReflections(reflectionsData);
       setUserPreferences(preferencesData);
+      
+      // Set alternative calendar from preferences
+      const calendarType = preferencesData.alternative_calendar || 'gregorian';
+      setAlternativeCalendar(calendarType as CalendarType);
+      console.log('HomeScreen (iOS): Alternative calendar set to:', calendarType);
       
       // Set view mode from preferences
       const preferredView = preferencesData.preferredHomeScreen;
@@ -980,6 +1049,9 @@ export default function HomeScreen() {
 
   const ungroupedGoals = getUngroupedGoals();
   const hasAnyGoals = goals.length > 0;
+  
+  // Get alternative date string
+  const alternativeDateStr = formatAlternativeDate(selectedDate, alternativeCalendar);
 
   if (loading) {
     return (
@@ -1002,7 +1074,12 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowDatePicker(true)}>
-            <Text style={styles.dateText}>{formatDateDisplay(selectedDate)}</Text>
+            <View>
+              <Text style={styles.dateText}>{formatDateDisplay(selectedDate)}</Text>
+              {alternativeDateStr && (
+                <Text style={styles.alternativeDateText}>{alternativeDateStr}</Text>
+              )}
+            </View>
           </TouchableOpacity>
           <TouchableOpacity style={styles.dateButton} onPress={handleNextDay}>
             <IconSymbol
