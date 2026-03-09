@@ -272,7 +272,31 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   goalCardConcise: {
-    padding: 12,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 8,
+  },
+  goalRowConcise: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButtonIconConcise: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successButtonIconConcise: {
+    backgroundColor: '#10b981',
+  },
+  statItemConcise: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
   goalHeader: {
     flexDirection: 'row',
@@ -876,9 +900,31 @@ export default function HomeScreen() {
   };
 
   const calculateDailyCurrencyTallies = (goal: ActivatedGoal) => {
+    // Calculate currency changes for today based on goal configuration
+    let rewardCount = 0;
+    let consequenceCount = 0;
+    
+    // Check if goal has reward configuration
+    if (goal.rewardCurrencyId && goal.rewardSuccesses && goal.rewardAmount) {
+      // Calculate how many rewards earned today
+      const successesNeeded = goal.rewardSuccesses;
+      if (goal.todaySuccessCount >= successesNeeded) {
+        rewardCount = Math.floor(goal.todaySuccessCount / successesNeeded);
+      }
+    }
+    
+    // Check if goal has consequence configuration
+    if (goal.consequenceCurrencyId && goal.consequenceFailures && goal.consequenceAmount) {
+      // Calculate how many consequences incurred today
+      const failuresNeeded = goal.consequenceFailures;
+      if (goal.todayStruggleCount >= failuresNeeded) {
+        consequenceCount = Math.floor(goal.todayStruggleCount / failuresNeeded);
+      }
+    }
+    
     return {
-      reward: 0,
-      consequence: 0,
+      reward: rewardCount,
+      consequence: consequenceCount,
     };
   };
 
@@ -933,15 +979,130 @@ export default function HomeScreen() {
   const renderGoalCard = (goal: ActivatedGoal, isConcise: boolean = false) => {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
     
+    if (isConcise) {
+      // Concise view: One-line layout with all stats
+      const bestStreakValue = goal.bestStreak || 0;
+      const currentStreakValue = goal.currentStreak || 0;
+      const totalSuccessesValue = goal.successCount || 0;
+      const totalStrugglesValue = goal.struggleCount || 0;
+      const rewardsEarnedToday = dailyTallies.reward;
+      const consequencesEarnedToday = dailyTallies.consequence;
+      
+      return (
+        <View key={goal.id} style={styles.goalCardConcise}>
+          <View style={styles.goalRowConcise}>
+            {/* Goal Title */}
+            <Text style={styles.goalTitleConcise} numberOfLines={1}>{goal.title}</Text>
+            
+            {/* Action Buttons */}
+            <TouchableOpacity
+              style={styles.actionButtonIconConcise}
+              onPress={() => handleGoalStruggle(goal.id)}
+            >
+              <IconSymbol
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
+                size={20}
+                color="#fff"
+              />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.actionButtonIconConcise, styles.successButtonIconConcise]}
+              onPress={() => handleGoalSuccess(goal.id)}
+            >
+              <IconSymbol
+                ios_icon_name="checkmark"
+                android_material_icon_name="check"
+                size={20}
+                color="#fff"
+              />
+            </TouchableOpacity>
+            
+            {/* Best Streak */}
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{bestStreakValue}</Text>
+              <IconSymbol
+                ios_icon_name="star.fill"
+                android_material_icon_name="star"
+                size={16}
+                color="#f59e0b"
+              />
+            </View>
+            
+            {/* Current Streak */}
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{currentStreakValue}</Text>
+              <IconSymbol
+                ios_icon_name="flame.fill"
+                android_material_icon_name="local-fire-department"
+                size={16}
+                color="#f59e0b"
+              />
+            </View>
+            
+            {/* Total Struggles */}
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{totalStrugglesValue}</Text>
+              <IconSymbol
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
+                size={16}
+                color="#ef4444"
+              />
+            </View>
+            
+            {/* Total Successes */}
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{totalSuccessesValue}</Text>
+              <IconSymbol
+                ios_icon_name="checkmark"
+                android_material_icon_name="check"
+                size={16}
+                color="#10b981"
+              />
+            </View>
+            
+            {/* Rewards Earned Today */}
+            {rewardsEarnedToday > 0 && goal.rewardCurrencyId && (
+              <View style={styles.statItemConcise}>
+                <Text style={styles.statTextConcise}>{rewardsEarnedToday}</Text>
+                <IconSymbol
+                  ios_icon_name="gift.fill"
+                  android_material_icon_name="card-giftcard"
+                  size={16}
+                  color="#10b981"
+                />
+              </View>
+            )}
+            
+            {/* Consequences Earned Today */}
+            {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
+              <View style={styles.statItemConcise}>
+                <Text style={styles.statTextConcise}>{consequencesEarnedToday}</Text>
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle.fill"
+                  android_material_icon_name="warning"
+                  size={16}
+                  color="#ef4444"
+                />
+              </View>
+            )}
+          </View>
+        </View>
+      );
+    }
+    
+    // Detailed view: Original layout
     return (
-      <View key={goal.id} style={[styles.goalCard, isConcise && styles.goalCardConcise]}>
-        <View style={[styles.goalHeader, isConcise && styles.goalHeaderConcise]}>
-          <Text style={[styles.goalTitle, isConcise && styles.goalTitleConcise]}>{goal.title}</Text>
+      <View key={goal.id} style={styles.goalCard}>
+        <View style={styles.goalHeader}>
+          <Text style={styles.goalTitle}>{goal.title}</Text>
           <TouchableOpacity onPress={() => handleEditGoal(goal.id)}>
             <IconSymbol
               ios_icon_name="pencil"
               android_material_icon_name="edit"
-              size={isConcise ? 18 : 20}
+              size={20}
               color={colors.textSecondary}
             />
           </TouchableOpacity>
@@ -949,47 +1110,47 @@ export default function HomeScreen() {
 
         <View style={styles.goalActions}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.successButton, isConcise && styles.actionButtonConcise]}
+            style={[styles.actionButton, styles.successButton]}
             onPress={() => handleGoalSuccess(goal.id)}
           >
-            <Text style={[styles.actionButtonText, isConcise && styles.actionButtonTextConcise]}>Success</Text>
+            <Text style={styles.actionButtonText}>Success</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.struggleButton, isConcise && styles.actionButtonConcise]}
+            style={[styles.actionButton, styles.struggleButton]}
             onPress={() => handleGoalStruggle(goal.id)}
           >
-            <Text style={[styles.actionButtonText, isConcise && styles.actionButtonTextConcise]}>Struggle</Text>
+            <Text style={styles.actionButtonText}>Struggle</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.goalStats, isConcise && styles.goalStatsConcise]}>
+        <View style={styles.goalStats}>
           <View style={styles.statItem}>
             <IconSymbol
               ios_icon_name="checkmark.circle"
               android_material_icon_name="check-circle"
-              size={isConcise ? 14 : 16}
+              size={16}
               color="#10b981"
             />
-            <Text style={[styles.statText, isConcise && styles.statTextConcise]}>{goal.todaySuccessCount}</Text>
+            <Text style={styles.statText}>{goal.todaySuccessCount}</Text>
           </View>
           <View style={styles.statItem}>
             <IconSymbol
               ios_icon_name="xmark.circle"
               android_material_icon_name="cancel"
-              size={isConcise ? 14 : 16}
+              size={16}
               color="#ef4444"
             />
-            <Text style={[styles.statText, isConcise && styles.statTextConcise]}>{goal.todayStruggleCount}</Text>
+            <Text style={styles.statText}>{goal.todayStruggleCount}</Text>
           </View>
           {goal.currentStreak && goal.currentStreak > 0 && (
             <View style={styles.statItem}>
               <IconSymbol
                 ios_icon_name="flame"
                 android_material_icon_name="local-fire-department"
-                size={isConcise ? 14 : 16}
+                size={16}
                 color="#f59e0b"
               />
-              <Text style={[styles.statText, isConcise && styles.statTextConcise]}>{goal.currentStreak}</Text>
+              <Text style={styles.statText}>{goal.currentStreak}</Text>
             </View>
           )}
         </View>
