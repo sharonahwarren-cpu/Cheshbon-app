@@ -1155,13 +1155,13 @@ export function AddReflectionModal({
 
       let savedReflection;
       if (editingReflection) {
-        const { data, error } = await supabaseApi.updateReflection(editingReflection.id, payload);
-        if (error) throw error;
-        savedReflection = data;
+        savedReflection = await supabaseApi.updateReflection(editingReflection.id, payload);
       } else {
-        const { data, error } = await supabaseApi.createReflection(payload);
-        if (error) throw error;
-        savedReflection = data;
+        savedReflection = await supabaseApi.createReflection(payload);
+      }
+      
+      if (!savedReflection) {
+        throw new Error('Failed to save reflection - no data returned');
       }
 
       console.log('[AddReflectionModal] Reflection saved successfully, calling onSave callback');
@@ -1205,11 +1205,17 @@ export function AddReflectionModal({
 
     try {
       setLoading(true);
-      const { data: newGain, error } = await supabaseApi.createGainLoss({
+      console.log('[AddReflectionModal] Creating gain with name:', newItemName);
+      const newGain = await supabaseApi.createGainLoss({
         name: newItemName,
         type: 'Gain',
       });
-      if (error) throw error;
+      
+      console.log('[AddReflectionModal] Gain created successfully:', newGain);
+      
+      if (!newGain || !newGain.id) {
+        throw new Error('Failed to create gain - no data returned');
+      }
       
       gainsLosses.push(newGain);
       gainedIds.push(newGain.id);
@@ -1231,11 +1237,17 @@ export function AddReflectionModal({
 
     try {
       setLoading(true);
-      const { data: newLoss, error } = await supabaseApi.createGainLoss({
+      console.log('[AddReflectionModal] Creating loss with name:', newItemName);
+      const newLoss = await supabaseApi.createGainLoss({
         name: newItemName,
         type: 'Loss',
       });
-      if (error) throw error;
+      
+      console.log('[AddReflectionModal] Loss created successfully:', newLoss);
+      
+      if (!newLoss || !newLoss.id) {
+        throw new Error('Failed to create loss - no data returned');
+      }
       
       gainsLosses.push(newLoss);
       lostIds.push(newLoss.id);
@@ -1257,12 +1269,18 @@ export function AddReflectionModal({
 
     try {
       setLoading(true);
-      const { data: newStrategy, error } = await supabaseApi.createStrategy({
+      console.log('[AddReflectionModal] Creating strategy with name:', newItemName);
+      const newStrategy = await supabaseApi.createStrategy({
         name: newItemName,
         description: newItemDescription || undefined,
         category: category || undefined,
       });
-      if (error) throw error;
+      
+      console.log('[AddReflectionModal] Strategy created successfully:', newStrategy);
+      
+      if (!newStrategy || !newStrategy.id) {
+        throw new Error('Failed to create strategy - no data returned');
+      }
       
       strategies.push(newStrategy);
       setNewItemName('');
