@@ -340,34 +340,92 @@ export const getGoalById = async (id: string) => {
 export const createGoal = async (goal: any) => {
   const userId = await getCurrentUserId();
   
+  // Map frontend field names to Supabase snake_case column names
+  const goalData: any = {
+    user_id: userId,
+    title: goal.title,
+    description: goal.description,
+    type: goal.type,
+    status: goal.status || 'ACTIVE',
+    life_area_id: goal.lifeAreaId || goal.life_area_id || null,
+    behavior_categories: goal.behaviorCategories || goal.behavior_categories || [],
+    reward_currency_id: goal.reward_currency_id || null,
+    reward_amount: goal.reward_amount || 0,
+    reward_successes: goal.reward_successes || 0,
+    consequence_currency_id: goal.consequence_currency_id || null,
+    consequence_amount: goal.consequence_amount || 0,
+    consequence_failures: goal.consequence_failures || 0,
+    success_count: goal.success_count || 0,
+    struggle_count: goal.struggle_count || 0,
+    current_streak: goal.current_streak || 0,
+    best_streak: goal.best_streak || 0,
+    schedule_config: goal.schedule_config || goal.scheduleConfig || null,
+  };
+  
+  console.log('[Supabase API] Creating goal with data:', JSON.stringify(goalData, null, 2));
+  
   const { data, error } = await supabase
     .from('goals')
-    .insert({
-      user_id: userId,
-      ...goal,
-    })
+    .insert(goalData)
     .select()
     .single();
   
-  handleError(error, 'createGoal');
+  if (error) {
+    console.error('[Supabase API] Error in createGoal:', error);
+    throw new Error(error.message);
+  }
+  
   return data;
 };
 
 export const updateGoal = async (id: string, updates: any) => {
   const userId = await getCurrentUserId();
   
+  // Map frontend field names to Supabase snake_case column names
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  };
+  
+  // Only include fields that are actually being updated
+  if (updates.title !== undefined) updateData.title = updates.title;
+  if (updates.description !== undefined) updateData.description = updates.description;
+  if (updates.type !== undefined) updateData.type = updates.type;
+  if (updates.status !== undefined) updateData.status = updates.status;
+  if (updates.lifeAreaId !== undefined || updates.life_area_id !== undefined) {
+    updateData.life_area_id = updates.life_area_id || updates.lifeAreaId || null;
+  }
+  if (updates.behaviorCategories !== undefined || updates.behavior_categories !== undefined) {
+    updateData.behavior_categories = updates.behavior_categories || updates.behaviorCategories || [];
+  }
+  if (updates.reward_currency_id !== undefined) updateData.reward_currency_id = updates.reward_currency_id;
+  if (updates.reward_amount !== undefined) updateData.reward_amount = updates.reward_amount;
+  if (updates.reward_successes !== undefined) updateData.reward_successes = updates.reward_successes;
+  if (updates.consequence_currency_id !== undefined) updateData.consequence_currency_id = updates.consequence_currency_id;
+  if (updates.consequence_amount !== undefined) updateData.consequence_amount = updates.consequence_amount;
+  if (updates.consequence_failures !== undefined) updateData.consequence_failures = updates.consequence_failures;
+  if (updates.success_count !== undefined) updateData.success_count = updates.success_count;
+  if (updates.struggle_count !== undefined) updateData.struggle_count = updates.struggle_count;
+  if (updates.current_streak !== undefined) updateData.current_streak = updates.current_streak;
+  if (updates.best_streak !== undefined) updateData.best_streak = updates.best_streak;
+  if (updates.schedule_config !== undefined || updates.scheduleConfig !== undefined) {
+    updateData.schedule_config = updates.schedule_config || updates.scheduleConfig || null;
+  }
+  
+  console.log('[Supabase API] Updating goal with data:', JSON.stringify(updateData, null, 2));
+  
   const { data, error } = await supabase
     .from('goals')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', id)
     .eq('user_id', userId)
     .select()
     .single();
   
-  handleError(error, 'updateGoal');
+  if (error) {
+    console.error('[Supabase API] Error in updateGoal:', error);
+    throw new Error(error.message);
+  }
+  
   return data;
 };
 

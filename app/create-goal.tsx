@@ -709,38 +709,40 @@ export default function CreateGoalScreen() {
       
       console.log('[CreateGoal] Submitting goal data:', JSON.stringify(goalData, null, 2));
 
-      // CRITICAL FIX: Supabase expects separate columns, not nested objects
+      // CRITICAL FIX: Supabase expects snake_case column names ONLY
+      // Remove any camelCase fields before sending to Supabase
       if (rewardCurrencyId && rewardSuccesses && rewardAmount) {
-        goalData.rewardCurrencyId = rewardCurrencyId;
         goalData.reward_currency_id = rewardCurrencyId;
-        goalData.rewardSuccesses = parseInt(rewardSuccesses);
-        goalData.reward_successes = parseInt(rewardSuccesses);
-        goalData.rewardAmount = parseInt(rewardAmount);
-        goalData.reward_amount = parseInt(rewardAmount);
+        goalData.reward_successes = parseInt(rewardSuccesses, 10);
+        goalData.reward_amount = parseInt(rewardAmount, 10);
       } else {
-        goalData.rewardCurrencyId = null;
         goalData.reward_currency_id = null;
-        goalData.rewardSuccesses = null;
         goalData.reward_successes = null;
-        goalData.rewardAmount = null;
         goalData.reward_amount = null;
       }
 
       if (consequenceCurrencyId && consequenceFailures && consequenceAmount) {
-        goalData.consequenceCurrencyId = consequenceCurrencyId;
         goalData.consequence_currency_id = consequenceCurrencyId;
-        goalData.consequenceFailures = parseInt(consequenceFailures);
-        goalData.consequence_failures = parseInt(consequenceFailures);
-        goalData.consequenceAmount = parseInt(consequenceAmount);
-        goalData.consequence_amount = parseInt(consequenceAmount);
+        goalData.consequence_failures = parseInt(consequenceFailures, 10);
+        goalData.consequence_amount = parseInt(consequenceAmount, 10);
       } else {
-        goalData.consequenceCurrencyId = null;
         goalData.consequence_currency_id = null;
-        goalData.consequenceFailures = null;
         goalData.consequence_failures = null;
-        goalData.consequenceAmount = null;
         goalData.consequence_amount = null;
       }
+      
+      // Clean up: Remove ALL camelCase fields that don't exist in Supabase schema
+      // Supabase will reject unknown column names
+      delete goalData.rewardCurrencyId;
+      delete goalData.rewardSuccesses;
+      delete goalData.rewardAmount;
+      delete goalData.consequenceCurrencyId;
+      delete goalData.consequenceFailures;
+      delete goalData.consequenceAmount;
+      delete goalData.parentGoalId;
+      delete goalData.lifeAreaId;
+      delete goalData.behaviorCategories;
+      delete goalData.strategyIds;
 
       let createdOrUpdatedGoal: any;
       
