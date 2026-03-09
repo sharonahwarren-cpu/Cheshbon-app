@@ -1,8 +1,8 @@
 
-import { LoadingButton } from '@/components/LoadingButton';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { LoadingButton } from '@/components/LoadingButton';
 import { getLocalTimezone } from '@/utils/dateUtils';
-import * as supabaseApi from '@/utils/supabaseApi';
+import { colors } from '@/styles/commonStyles';
 import React, { useState, useEffect } from 'react';
 import { IconSymbol } from '@/components/IconSymbol';
 import { DateTime } from 'luxon';
@@ -23,7 +23,7 @@ import {
   Switch,
 } from 'react-native';
 import { DatePickerModal } from '@/components/DatePickerModal';
-import { colors } from '@/styles/commonStyles';
+import * as supabaseApi from '@/utils/supabaseApi';
 
 interface Goal {
   id: string;
@@ -182,6 +182,7 @@ export default function CreateGoalScreen() {
   const [modalType, setModalType] = useState<'success' | 'error'>('success');
 
   useEffect(() => {
+    console.log('[CreateGoal] Component mounted, loading data...');
     loadData();
   }, []);
 
@@ -266,24 +267,59 @@ export default function CreateGoalScreen() {
   );
 
   const loadData = async () => {
-    console.log('Loading form data for goal creation/editing');
+    console.log('[CreateGoal] Loading form data for goal creation/editing');
     setLoading(true);
     try {
       const promises = [
-        supabaseApi.getGoals(),
-        supabaseApi.getLifeAreas(),
-        supabaseApi.getStrategies(),
-        supabaseApi.getCurrencies(),
-        supabaseApi.getUserPreferences(),
+        supabaseApi.getGoals().catch(err => {
+          console.error('[CreateGoal] Error loading goals:', err);
+          return [];
+        }),
+        supabaseApi.getLifeAreas().catch(err => {
+          console.error('[CreateGoal] Error loading life areas:', err);
+          return [];
+        }),
+        supabaseApi.getStrategies().catch(err => {
+          console.error('[CreateGoal] Error loading strategies:', err);
+          return [];
+        }),
+        supabaseApi.getCurrencies().catch(err => {
+          console.error('[CreateGoal] Error loading currencies:', err);
+          return [];
+        }),
+        supabaseApi.getUserPreferences().catch(err => {
+          console.error('[CreateGoal] Error loading preferences:', err);
+          return {
+            reflectionCategoriesEnabled: true,
+            reflectionCategories: ['Action', 'Speech', 'Thought'],
+            alternativeCalendar: 'gregorian',
+          };
+        }),
       ];
 
       if (editingGoalId) {
-        promises.push(supabaseApi.getGoalById(editingGoalId));
-        promises.push(supabaseApi.getAlarms());
+        promises.push(
+          supabaseApi.getGoalById(editingGoalId).catch(err => {
+            console.error('[CreateGoal] Error loading goal details:', err);
+            return null;
+          })
+        );
+        promises.push(
+          supabaseApi.getAlarms().catch(err => {
+            console.error('[CreateGoal] Error loading alarms:', err);
+            return [];
+          })
+        );
       }
 
       const results = await Promise.all(promises);
       const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData, allAlarmsData] = results;
+      
+      console.log('[CreateGoal] Data loaded successfully');
+      console.log('[CreateGoal] Goals:', goalsData.length);
+      console.log('[CreateGoal] Life Areas:', lifeAreasData.length);
+      console.log('[CreateGoal] Strategies:', strategiesData.length);
+      console.log('[CreateGoal] Currencies:', currenciesData.length);
       
       const preferences = preferencesData || {
         reflectionCategoriesEnabled: true,
@@ -295,7 +331,7 @@ export default function CreateGoalScreen() {
         try {
           preferences.reflectionCategories = JSON.parse(preferences.reflectionCategories);
         } catch (e) {
-          console.error('[API] Failed to parse reflectionCategories:', e);
+          console.error('[CreateGoal] Failed to parse reflectionCategories:', e);
           preferences.reflectionCategories = ['Action', 'Speech', 'Thought'];
         }
       }
@@ -317,7 +353,7 @@ export default function CreateGoalScreen() {
 
       if (editingGoalId && goalDetailsData) {
         const goalDetails = goalDetailsData;
-        console.log('[API] Goal details loaded for editing:', JSON.stringify(goalDetails, null, 2));
+        console.log('[CreateGoal] Goal details loaded for editing:', JSON.stringify(goalDetails, null, 2));
         
         setTitle(goalDetails.title || '');
         setDescription(goalDetails.description || '');
@@ -380,9 +416,10 @@ export default function CreateGoalScreen() {
         }
       }
     } catch (error: any) {
-      console.error('[API] Error loading form data:', error);
+      console.error('[CreateGoal] Error loading form data:', error);
       showError(error.message || 'Failed to load form data');
     } finally {
+      console.log('[CreateGoal] Loading complete');
       setLoading(false);
     }
   };
@@ -905,6 +942,7 @@ export default function CreateGoalScreen() {
         />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
@@ -2007,6 +2045,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   scrollView: {
     flex: 1,
