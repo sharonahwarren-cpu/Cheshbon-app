@@ -1,6 +1,15 @@
 
-import { IconSymbol } from '@/components/IconSymbol';
 import { LoadingButton } from '@/components/LoadingButton';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { getLocalTimezone } from '@/utils/dateUtils';
+import * as supabaseApi from '@/utils/supabaseApi';
+import React, { useState, useEffect } from 'react';
+import { IconSymbol } from '@/components/IconSymbol';
+import { DateTime } from 'luxon';
+import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
+import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
+import { useFocusEffect } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -13,17 +22,8 @@ import {
   Platform,
   Switch,
 } from 'react-native';
-import React, { useState, useEffect } from 'react';
-import { GoalScheduler, type ScheduleConfig } from '@/components/GoalScheduler';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { colors } from '@/styles/commonStyles';
-import * as supabaseApi from '@/utils/supabaseApi';
-import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { DatePickerModal } from '@/components/DatePickerModal';
-import { DateTime } from 'luxon';
-import { getLocalTimezone } from '@/utils/dateUtils';
+import { colors } from '@/styles/commonStyles';
 
 interface Goal {
   id: string;
@@ -70,6 +70,7 @@ interface Alarm {
 
 type BehaviorCategory = 'Action' | 'Speech' | 'Thought' | 'Feeling';
 type GoalType = 'Restraining' | 'Proactive';
+type TrackingType = 'once_per_day' | 'tally';
 
 export default function CreateGoalScreen() {
   const router = useRouter();
@@ -110,7 +111,10 @@ export default function CreateGoalScreen() {
   const [type, setType] = useState<GoalType>('Proactive');
   const [strategyIds, setStrategyIds] = useState<string[]>([]);
   
-  // New Goal Scheduler state - DEFAULT TO "Always Active"
+  // NEW: Tracking type state
+  const [trackingType, setTrackingType] = useState<TrackingType>('once_per_day');
+  
+  // NEW: Goal Scheduler state - DEFAULT TO "Always Active"
   const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig>({
     scheduleType: 'Always Active',
   });
@@ -159,6 +163,17 @@ export default function CreateGoalScreen() {
   const [showRewardCurrencyPicker, setShowRewardCurrencyPicker] = useState(false);
   const [showConsequenceCurrencyPicker, setShowConsequenceCurrencyPicker] = useState(false);
   const [showScheduleWizard, setShowScheduleWizard] = useState(false);
+  
+  // NEW: Create item modals
+  const [showCreateLifeAreaModal, setShowCreateLifeAreaModal] = useState(false);
+  const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
+  const [showCreateCurrencyModal, setShowCreateCurrencyModal] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemDescription, setNewItemDescription] = useState('');
+  const [newCurrencySymbol, setNewCurrencySymbol] = useState('');
+  const [newCurrencyType, setNewCurrencyType] = useState<'reward' | 'consequence'>('consequence');
+  const [newCurrencyOnSuccess, setNewCurrencyOnSuccess] = useState<'ADD' | 'SUBTRACT' | 'NONE'>('NONE');
+  const [newCurrencyOnFailure, setNewCurrencyOnFailure] = useState<'ADD' | 'SUBTRACT' | 'NONE'>('NONE');
   
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
@@ -241,6 +256,12 @@ export default function CreateGoalScreen() {
       if (editingGoalId && !loading) {
         reloadGoalAlarms();
       }
+      
+      // CRITICAL: Reload data when returning from Settings screen after creating Life Area/Strategy/Currency
+      if (!editingGoalId && !loading) {
+        console.log('[CreateGoal] Reloading data on focus (user may have created items in Settings)');
+        loadData();
+      }
     }, [editingGoalId, loading, reloadGoalAlarms])
   );
 
@@ -279,6 +300,10 @@ export default function CreateGoalScreen() {
         }
       }
       
+      console.log('[CreateGoal] User preferences loaded:', preferences);
+      console.log('[CreateGoal] Reflection categories enabled:', preferences.reflectionCategoriesEnabled);
+      console.log('[CreateGoal] Available categories:', preferences.reflectionCategories);
+      
       setGoals(goalsData);
       setLifeAreas(lifeAreasData);
       setStrategies(strategiesData);
@@ -301,6 +326,9 @@ export default function CreateGoalScreen() {
         setBehaviorCategories(goalDetails.behavior_categories || []);
         setType(goalDetails.type || 'Proactive');
         setStrategyIds(goalDetails.strategy_ids || []);
+        
+        // Load tracking type
+        setTrackingType(goalDetails.tracking_type || 'once_per_day');
         
         // Load schedule config - Supabase stores it as a JSONB field
         const scheduleConfigFromDb = goalDetails.schedule_config;
@@ -414,6 +442,7 @@ export default function CreateGoalScreen() {
         type: type.toUpperCase(), // Ensure uppercase for database enum
         strategy_ids: strategyIds.length > 0 ? strategyIds : null,
         schedule_config: scheduleConfig, // Store entire schedule config as JSONB
+        tracking_type: trackingType, // NEW: Store tracking type
       };
       
       console.log('[CreateGoal] Submitting goal data:', JSON.stringify(goalData, null, 2));
@@ -503,7 +532,8 @@ export default function CreateGoalScreen() {
         } else if (fromReflection === 'true') {
           router.push('/(tabs)/reflect');
         } else if (returnToSettings === 'true') {
-          router.back();
+          // CRITICAL: Navigate to settings with refresh parameter to ensure goals list updates
+          router.push('/(tabs)/settings?section=goals&refresh=true');
         } else {
           router.back();
         }
@@ -598,6 +628,127 @@ export default function CreateGoalScreen() {
     } finally {
       setShowDeleteAlarmConfirm(false);
       setAlarmToDelete(null);
+    }
+  };
+
+  // NEW: Handle creating Life Area from modal
+  const handleCreateLifeArea = async () => {
+    if (!newItemName.trim()) {
+      showError('Please enter a name for the life area');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('[CreateGoal] Creating life area:', newItemName);
+      const newLifeArea = await supabaseApi.createLifeArea({
+        name: newItemName.trim(),
+        display_order: lifeAreas.length,
+        show_progress: true,
+      });
+      
+      console.log('[CreateGoal] Life area created:', newLifeArea);
+      
+      // Add to local state
+      setLifeAreas([...lifeAreas, newLifeArea]);
+      
+      // Select the newly created life area
+      setLifeAreaId(newLifeArea.id);
+      
+      // Close modal and reset
+      setShowCreateLifeAreaModal(false);
+      setNewItemName('');
+      
+      showSuccess('Life area created successfully!');
+    } catch (error: any) {
+      console.error('[CreateGoal] Error creating life area:', error);
+      showError(error.message || 'Failed to create life area');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // NEW: Handle creating Strategy from modal
+  const handleCreateStrategy = async () => {
+    if (!newItemName.trim()) {
+      showError('Please enter a name for the strategy');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('[CreateGoal] Creating strategy:', newItemName);
+      const newStrategy = await supabaseApi.createStrategy({
+        name: newItemName.trim(),
+        description: newItemDescription.trim() || undefined,
+      });
+      
+      console.log('[CreateGoal] Strategy created:', newStrategy);
+      
+      // Add to local state
+      setStrategies([...strategies, newStrategy]);
+      
+      // Select the newly created strategy
+      setStrategyIds([...strategyIds, newStrategy.id]);
+      
+      // Close modal and reset
+      setShowCreateStrategyModal(false);
+      setNewItemName('');
+      setNewItemDescription('');
+      
+      showSuccess('Strategy created successfully!');
+    } catch (error: any) {
+      console.error('[CreateGoal] Error creating strategy:', error);
+      showError(error.message || 'Failed to create strategy');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // NEW: Handle creating Currency from modal
+  const handleCreateCurrency = async () => {
+    if (!newItemName.trim()) {
+      showError('Please enter a name for the currency');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('[CreateGoal] Creating currency:', newItemName);
+      const newCurrency = await supabaseApi.createCurrency({
+        name: newItemName.trim(),
+        symbol: newCurrencySymbol.trim() || undefined,
+        type: newCurrencyType,
+        onSuccess: newCurrencyOnSuccess,
+        onFailure: newCurrencyOnFailure,
+      });
+      
+      console.log('[CreateGoal] Currency created:', newCurrency);
+      
+      // Add to local state
+      setCurrencies([...currencies, newCurrency]);
+      
+      // Select the newly created currency based on context
+      if (showRewardCurrencyPicker) {
+        setRewardCurrencyId(newCurrency.id);
+      } else if (showConsequenceCurrencyPicker) {
+        setConsequenceCurrencyId(newCurrency.id);
+      }
+      
+      // Close modal and reset
+      setShowCreateCurrencyModal(false);
+      setNewItemName('');
+      setNewCurrencySymbol('');
+      setNewCurrencyType('consequence');
+      setNewCurrencyOnSuccess('NONE');
+      setNewCurrencyOnFailure('NONE');
+      
+      showSuccess('Currency created successfully!');
+    } catch (error: any) {
+      console.error('[CreateGoal] Error creating currency:', error);
+      showError(error.message || 'Failed to create currency');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -736,6 +887,12 @@ export default function CreateGoalScreen() {
   const submitButtonTitle = editingGoalId ? 'Update Goal' : 'Create Goal';
   const rewardActionText = getRewardActionText();
   const consequenceActionText = getConsequenceActionText();
+  
+  // CRITICAL: Filter behavior categories based on user preferences
+  const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
+  const availableCategories = categoriesEnabled 
+    ? (userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'])
+    : [];
 
   if (loading) {
     return (
@@ -791,6 +948,40 @@ export default function CreateGoalScreen() {
             numberOfLines={4}
           />
         </View>
+        
+        {/* NEW: Tracking Type */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Tracking Type</Text>
+          <Text style={styles.helperText}>
+            Choose how you want to track this goal each day
+          </Text>
+          <View style={styles.radioGroup}>
+            <TouchableOpacity
+              style={[styles.radio, trackingType === 'once_per_day' && styles.radioSelected]}
+              onPress={() => setTrackingType('once_per_day')}
+            >
+              <View style={styles.radioCircle}>
+                {trackingType === 'once_per_day' && <View style={styles.radioCircleInner} />}
+              </View>
+              <View style={styles.radioTextContainer}>
+                <Text style={styles.radioText}>Once per day</Text>
+                <Text style={styles.radioSubtext}>Mark as success or struggle once</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.radio, trackingType === 'tally' && styles.radioSelected]}
+              onPress={() => setTrackingType('tally')}
+            >
+              <View style={styles.radioCircle}>
+                {trackingType === 'tally' && <View style={styles.radioCircleInner} />}
+              </View>
+              <View style={styles.radioTextContainer}>
+                <Text style={styles.radioText}>Tally</Text>
+                <Text style={styles.radioSubtext}>Keep count of successes and struggles</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Parent Goal */}
         <View style={styles.section}>
@@ -826,8 +1017,8 @@ export default function CreateGoalScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Behaviour Categories */}
-        {userPreferences.reflectionCategoriesEnabled !== false && (
+        {/* Behaviour Categories - CRITICAL: Only show enabled categories */}
+        {categoriesEnabled && availableCategories.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.label}>
               Behaviour Categories
@@ -837,7 +1028,7 @@ export default function CreateGoalScreen() {
               Select which behaviour categories apply to this goal
             </Text>
             <View style={styles.checkboxGroup}>
-              {(userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought']).map((category) => {
+              {availableCategories.map((category) => {
                 const isSelected = behaviorCategories.includes(category as BehaviorCategory);
                 const getCategoryIcon = (cat: string) => {
                   const categoryLower = cat.toLowerCase();
@@ -1282,7 +1473,7 @@ export default function CreateGoalScreen() {
         </View>
       </Modal>
 
-      {/* Life Area Picker Modal */}
+      {/* Life Area Picker Modal - NEW: With Create button */}
       <Modal
         visible={showLifeAreaPicker}
         transparent
@@ -1315,12 +1506,27 @@ export default function CreateGoalScreen() {
                 </Text>
               </TouchableOpacity>
               {renderLifeAreaHierarchy(lifeAreas)}
+              <TouchableOpacity
+                style={styles.createNewButton}
+                onPress={() => {
+                  setShowLifeAreaPicker(false);
+                  setShowCreateLifeAreaModal(true);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.createNewText}>Create New Life Area</Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Strategy Picker Modal */}
+      {/* Strategy Picker Modal - NEW: With Create button */}
       <Modal
         visible={showStrategyPicker}
         transparent
@@ -1370,12 +1576,27 @@ export default function CreateGoalScreen() {
                   </TouchableOpacity>
                 );
               })}
+              <TouchableOpacity
+                style={styles.createNewButton}
+                onPress={() => {
+                  setShowStrategyPicker(false);
+                  setShowCreateStrategyModal(true);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.createNewText}>Create New Strategy</Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Reward Currency Picker Modal */}
+      {/* Reward Currency Picker Modal - NEW: With Create button */}
       <Modal
         visible={showRewardCurrencyPicker}
         transparent
@@ -1435,12 +1656,27 @@ export default function CreateGoalScreen() {
                   </TouchableOpacity>
                 );
               })}
+              <TouchableOpacity
+                style={styles.createNewButton}
+                onPress={() => {
+                  setShowRewardCurrencyPicker(false);
+                  setShowCreateCurrencyModal(true);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.createNewText}>Create New Currency</Text>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
       </Modal>
 
-      {/* Consequence Currency Picker Modal */}
+      {/* Consequence Currency Picker Modal - NEW: With Create button */}
       <Modal
         visible={showConsequenceCurrencyPicker}
         transparent
@@ -1500,7 +1736,175 @@ export default function CreateGoalScreen() {
                   </TouchableOpacity>
                 );
               })}
+              <TouchableOpacity
+                style={styles.createNewButton}
+                onPress={() => {
+                  setShowConsequenceCurrencyPicker(false);
+                  setShowCreateCurrencyModal(true);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="plus.circle.fill"
+                  android_material_icon_name="add-circle"
+                  size={20}
+                  color={colors.primary}
+                />
+                <Text style={styles.createNewText}>Create New Currency</Text>
+              </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* NEW: Create Life Area Modal */}
+      <Modal
+        visible={showCreateLifeAreaModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateLifeAreaModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.createItemModal}>
+            <Text style={styles.alertTitle}>Create Life Area</Text>
+            <TextInput
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Life area name..."
+              placeholderTextColor={colors.textSecondary}
+              autoFocus
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setShowCreateLifeAreaModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateLifeArea}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* NEW: Create Strategy Modal */}
+      <Modal
+        visible={showCreateStrategyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateStrategyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.createItemModal}>
+            <Text style={styles.alertTitle}>Create Strategy</Text>
+            <TextInput
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Strategy name..."
+              placeholderTextColor={colors.textSecondary}
+              autoFocus
+            />
+            <TextInput
+              style={[styles.input, styles.textArea, { marginTop: 12 }]}
+              value={newItemDescription}
+              onChangeText={setNewItemDescription}
+              placeholder="Description (optional)..."
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              numberOfLines={3}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setNewItemDescription('');
+                  setShowCreateStrategyModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateStrategy}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* NEW: Create Currency Modal */}
+      <Modal
+        visible={showCreateCurrencyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateCurrencyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.createItemModal}>
+            <Text style={styles.alertTitle}>Create Currency</Text>
+            <TextInput
+              style={styles.input}
+              value={newItemName}
+              onChangeText={setNewItemName}
+              placeholder="Currency name..."
+              placeholderTextColor={colors.textSecondary}
+              autoFocus
+            />
+            <TextInput
+              style={[styles.input, { marginTop: 12 }]}
+              value={newCurrencySymbol}
+              onChangeText={setNewCurrencySymbol}
+              placeholder="Symbol (e.g. $, ★, 🏆)..."
+              placeholderTextColor={colors.textSecondary}
+            />
+            <View style={styles.alertButtons}>
+              <TouchableOpacity
+                style={[styles.alertButton, styles.alertButtonSecondary]}
+                onPress={() => {
+                  setNewItemName('');
+                  setNewCurrencySymbol('');
+                  setNewCurrencyType('consequence');
+                  setNewCurrencyOnSuccess('NONE');
+                  setNewCurrencyOnFailure('NONE');
+                  setShowCreateCurrencyModal(false);
+                }}
+              >
+                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertButton}
+                onPress={handleCreateCurrency}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.background} />
+                ) : (
+                  <Text style={styles.alertButtonText}>Create</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1560,6 +1964,7 @@ export default function CreateGoalScreen() {
                   setType('Proactive');
                   setStrategyIds([]);
                   setScheduleConfig({ scheduleType: 'Always Active' });
+                  setTrackingType('once_per_day');
                   setRewardCurrencyId(undefined);
                   setRewardSuccesses('');
                   setRewardAmount('');
@@ -1728,6 +2133,14 @@ const styles = StyleSheet.create({
   radioText: {
     fontSize: 16,
     color: colors.text,
+  },
+  radioTextContainer: {
+    flex: 1,
+  },
+  radioSubtext: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   subLabel: {
     fontSize: 14,
@@ -1973,6 +2386,26 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 4,
   },
+  createNewButton: {
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  createNewText: {
+    fontSize: 15,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  createItemModal: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    padding: 20,
+    margin: 20,
+  },
   alertModal: {
     backgroundColor: colors.background,
     borderRadius: 20,
@@ -1992,11 +2425,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 20,
   },
+  alertButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
   alertButton: {
+    flex: 1,
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 32,
+    alignItems: 'center',
   },
   alertButtonError: {
     backgroundColor: '#ff4444',
