@@ -32,7 +32,8 @@ import {
   getUserPreferences,
   getJournals,
   createJournal,
-  updateJournal
+  updateJournal,
+  updateUserPreferences
 } from "@/utils/supabaseApi";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
 
@@ -200,6 +201,33 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: 8,
   },
+  viewToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 4,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  viewToggleButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  viewToggleButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  viewToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  viewToggleTextActive: {
+    color: '#fff',
+  },
   scrollContent: {
     padding: 16,
   },
@@ -216,6 +244,7 @@ const styles = StyleSheet.create({
   },
   lifeAreaIcon: {
     marginRight: 12,
+    fontSize: 24,
   },
   lifeAreaInfo: {
     flex: 1,
@@ -236,17 +265,26 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
+  goalCardConcise: {
+    padding: 12,
+  },
   goalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
   },
+  goalHeaderConcise: {
+    marginBottom: 8,
+  },
   goalTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text,
     flex: 1,
+  },
+  goalTitleConcise: {
+    fontSize: 15,
   },
   goalActions: {
     flexDirection: 'row',
@@ -259,6 +297,11 @@ const styles = StyleSheet.create({
     minWidth: 80,
     alignItems: 'center',
   },
+  actionButtonConcise: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minWidth: 60,
+  },
   successButton: {
     backgroundColor: '#10b981',
   },
@@ -270,10 +313,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  actionButtonTextConcise: {
+    fontSize: 13,
+  },
   goalStats: {
     flexDirection: 'row',
     gap: 16,
     marginTop: 8,
+  },
+  goalStatsConcise: {
+    gap: 12,
+    marginTop: 4,
   },
   statItem: {
     flexDirection: 'row',
@@ -283,6 +333,9 @@ const styles = StyleSheet.create({
   statText: {
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  statTextConcise: {
+    fontSize: 13,
   },
   emptyState: {
     padding: 32,
@@ -355,6 +408,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
+  ungroupedSection: {
+    marginBottom: 16,
+  },
+  ungroupedHeader: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
 });
 
 function formatDateLocal(date: Date): string {
@@ -394,6 +457,7 @@ export default function HomeScreen() {
   const [successMessage, setSuccessMessage] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [viewMode, setViewMode] = useState<'concise' | 'detailed'>('detailed');
 
   useEffect(() => {
     console.log('HomeScreen (iOS): Initial load');
@@ -472,6 +536,7 @@ export default function HomeScreen() {
       ]);
 
       console.log('HomeScreen (iOS): Data loaded successfully');
+      console.log('HomeScreen (iOS): Goals count:', goalsData.length);
       setGoals(goalsData);
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData, goalsData));
       setCurrencies(currenciesData);
@@ -479,6 +544,14 @@ export default function HomeScreen() {
       setStrategies(strategiesData);
       setReflections(reflectionsData);
       setUserPreferences(preferencesData);
+      
+      // Set view mode from preferences
+      const preferredView = preferencesData.preferredHomeScreen;
+      if (preferredView === 'goals-concise') {
+        setViewMode('concise');
+      } else if (preferredView === 'goals-detailed') {
+        setViewMode('detailed');
+      }
       
       if (journalsData.length > 0) {
         setJournalEntry(journalsData[0]);
@@ -720,6 +793,19 @@ export default function HomeScreen() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  const handleViewModeChange = async (mode: 'concise' | 'detailed') => {
+    console.log('HomeScreen (iOS): Changing view mode to:', mode);
+    setViewMode(mode);
+    
+    // Save preference
+    try {
+      const preferredScreen = mode === 'concise' ? 'goals-concise' : 'goals-detailed';
+      await updateUserPreferences({ preferredHomeScreen: preferredScreen });
+    } catch (error) {
+      console.error('HomeScreen (iOS): Error saving view preference:', error);
+    }
+  };
+
   const calculateDailyCurrencyTallies = (goal: ActivatedGoal) => {
     return {
       reward: 0,
@@ -775,18 +861,18 @@ export default function HomeScreen() {
     return goal.currentStreak || 0;
   };
 
-  const renderGoalCard = (goal: ActivatedGoal) => {
+  const renderGoalCard = (goal: ActivatedGoal, isConcise: boolean = false) => {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
     
     return (
-      <View key={goal.id} style={styles.goalCard}>
-        <View style={styles.goalHeader}>
-          <Text style={styles.goalTitle}>{goal.title}</Text>
+      <View key={goal.id} style={[styles.goalCard, isConcise && styles.goalCardConcise]}>
+        <View style={[styles.goalHeader, isConcise && styles.goalHeaderConcise]}>
+          <Text style={[styles.goalTitle, isConcise && styles.goalTitleConcise]}>{goal.title}</Text>
           <TouchableOpacity onPress={() => handleEditGoal(goal.id)}>
             <IconSymbol
               ios_icon_name="pencil"
               android_material_icon_name="edit"
-              size={20}
+              size={isConcise ? 18 : 20}
               color={colors.textSecondary}
             />
           </TouchableOpacity>
@@ -794,47 +880,47 @@ export default function HomeScreen() {
 
         <View style={styles.goalActions}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.successButton]}
+            style={[styles.actionButton, styles.successButton, isConcise && styles.actionButtonConcise]}
             onPress={() => handleGoalSuccess(goal.id)}
           >
-            <Text style={styles.actionButtonText}>Success</Text>
+            <Text style={[styles.actionButtonText, isConcise && styles.actionButtonTextConcise]}>Success</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionButton, styles.struggleButton]}
+            style={[styles.actionButton, styles.struggleButton, isConcise && styles.actionButtonConcise]}
             onPress={() => handleGoalStruggle(goal.id)}
           >
-            <Text style={styles.actionButtonText}>Struggle</Text>
+            <Text style={[styles.actionButtonText, isConcise && styles.actionButtonTextConcise]}>Struggle</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.goalStats}>
+        <View style={[styles.goalStats, isConcise && styles.goalStatsConcise]}>
           <View style={styles.statItem}>
             <IconSymbol
               ios_icon_name="checkmark.circle"
               android_material_icon_name="check-circle"
-              size={16}
+              size={isConcise ? 14 : 16}
               color="#10b981"
             />
-            <Text style={styles.statText}>{goal.todaySuccessCount}</Text>
+            <Text style={[styles.statText, isConcise && styles.statTextConcise]}>{goal.todaySuccessCount}</Text>
           </View>
           <View style={styles.statItem}>
             <IconSymbol
               ios_icon_name="xmark.circle"
               android_material_icon_name="cancel"
-              size={16}
+              size={isConcise ? 14 : 16}
               color="#ef4444"
             />
-            <Text style={styles.statText}>{goal.todayStruggleCount}</Text>
+            <Text style={[styles.statText, isConcise && styles.statTextConcise]}>{goal.todayStruggleCount}</Text>
           </View>
           {goal.currentStreak && goal.currentStreak > 0 && (
             <View style={styles.statItem}>
               <IconSymbol
                 ios_icon_name="flame"
                 android_material_icon_name="local-fire-department"
-                size={16}
+                size={isConcise ? 14 : 16}
                 color="#f59e0b"
               />
-              <Text style={styles.statText}>{goal.currentStreak}</Text>
+              <Text style={[styles.statText, isConcise && styles.statTextConcise]}>{goal.currentStreak}</Text>
             </View>
           )}
         </View>
@@ -843,7 +929,7 @@ export default function HomeScreen() {
   };
 
   const renderConciseGoalCard = (goal: ActivatedGoal) => {
-    return renderGoalCard(goal);
+    return renderGoalCard(goal, true);
   };
 
   const renderLifeAreaNode = (area: LifeAreaNode, depth: number = 0) => {
@@ -853,7 +939,8 @@ export default function HomeScreen() {
     if (!hasGoals) return null;
 
     const totalGoals = countTotalGoals(area);
-    const statsText = `${totalGoals} goal${totalGoals !== 1 ? 's' : ''}`;
+    const goalsText = `${totalGoals} goal${totalGoals !== 1 ? 's' : ''}`;
+    const statsText = goalsText;
 
     return (
       <View key={area.id} style={[styles.lifeAreaContainer, { marginLeft: depth * 16 }]}>
@@ -878,13 +965,21 @@ export default function HomeScreen() {
 
         {isExpanded && (
           <>
-            {area.goals.map(goal => renderGoalCard(goal))}
+            {area.goals.map(goal => renderGoalCard(goal, viewMode === 'concise'))}
             {area.children.map(child => renderLifeAreaNode(child, depth + 1))}
           </>
         )}
       </View>
     );
   };
+
+  // Get goals without a life area
+  const getUngroupedGoals = (): ActivatedGoal[] => {
+    return goals.filter(g => !g.lifeArea || !g.lifeArea.id);
+  };
+
+  const ungroupedGoals = getUngroupedGoals();
+  const hasAnyGoals = goals.length > 0;
 
   if (loading) {
     return (
@@ -947,6 +1042,28 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* View Mode Toggle */}
+      {hasAnyGoals && (
+        <View style={styles.viewToggle}>
+          <TouchableOpacity
+            style={[styles.viewToggleButton, viewMode === 'concise' && styles.viewToggleButtonActive]}
+            onPress={() => handleViewModeChange('concise')}
+          >
+            <Text style={[styles.viewToggleText, viewMode === 'concise' && styles.viewToggleTextActive]}>
+              Concise
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewToggleButton, viewMode === 'detailed' && styles.viewToggleButtonActive]}
+            onPress={() => handleViewModeChange('detailed')}
+          >
+            <Text style={[styles.viewToggleText, viewMode === 'detailed' && styles.viewToggleTextActive]}>
+              Detailed
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <ScrollView
         ref={scrollViewRef}
         style={styles.container}
@@ -961,7 +1078,7 @@ export default function HomeScreen() {
           />
         }
       >
-        {lifeAreas.length === 0 ? (
+        {!hasAnyGoals ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>
               No goals yet. Tap the + button to create your first goal!
@@ -974,7 +1091,16 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          lifeAreas.map(area => renderLifeAreaNode(area))
+          <>
+            {lifeAreas.map(area => renderLifeAreaNode(area))}
+            
+            {ungroupedGoals.length > 0 && (
+              <View style={styles.ungroupedSection}>
+                <Text style={styles.ungroupedHeader}>Other Goals</Text>
+                {ungroupedGoals.map(goal => renderGoalCard(goal, viewMode === 'concise'))}
+              </View>
+            )}
+          </>
         )}
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
