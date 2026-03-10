@@ -904,7 +904,7 @@ export default function HomeScreen() {
           
           {/* Reflect Icon */}
           <TouchableOpacity
-            style={styles.reflectButtonIconConcise}
+            style={[styles.reflectButtonIconConcise, { backgroundColor: "#7C9885" }]}
             onPress={(e) => {
               e.stopPropagation();
               console.log('HomeScreen: Opening reflection modal for goal:', goal.id);
@@ -939,7 +939,7 @@ export default function HomeScreen() {
           
           {/* Success Button - RIGHTMOST */}
           <TouchableOpacity
-            style={[styles.actionButtonIconConcise, styles.successButtonIconConcise]}
+            style={[styles.actionButtonIconConcise, styles.successButtonIconConcise, { backgroundColor: "#7C9885" }]}
             onPress={(e) => {
               e.stopPropagation();
               handleGoalSuccess(goal.id);

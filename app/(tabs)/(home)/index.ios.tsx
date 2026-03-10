@@ -391,11 +391,6 @@ const styles = StyleSheet.create({
   successButton: {
     backgroundColor: '#10b981',
   },
-  actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
 });
 
 function formatDateLocal(date: Date): string {
@@ -483,7 +478,7 @@ export default function HomeScreen() {
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [showReflectionModal, setShowReflectionModal] = useState(false);
   const [editingReflection, setEditingReflection] = useState<Reflection | null>(null);
-  const [prefilledGoalId, setPrefilledGoalId] = useState<string | undefined>(undefined);
+  const [prefilledGoalData, setPrefilledGoalData] = useState<any>(undefined);
   const [showJournalModal, setShowJournalModal] = useState(false);
   const [journalContent, setJournalContent] = useState('');
   const [journalEntry, setJournalEntry] = useState<JournalEntry | null>(null);
@@ -725,8 +720,8 @@ export default function HomeScreen() {
     router.push('/create-goal');
   };
 
-  const openAddReflectionModal = (goalId?: string) => {
-    console.log('HomeScreen (iOS): Opening add reflection modal', goalId ? `for goal: ${goalId}` : '');
+  const openAddReflectionModal = (goalId?: string, outcome?: 'success' | 'struggled') => {
+    console.log('HomeScreen (iOS): Opening add reflection modal', goalId ? `for goal: ${goalId}` : '', outcome ? `with outcome: ${outcome}` : '');
     
     if (goalId) {
       const goal = goals.find(g => g.id === goalId);
@@ -736,35 +731,28 @@ export default function HomeScreen() {
           title: goal.title,
           behaviorCategories: goal.behaviorCategories,
           type: goal.type,
+          outcome,
         });
         
         // Build prefilled data with Quick Entry format
-        const prefilledData = {
+        const prefilled = {
           id: goal.id,
           category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
           type: goal.type === 'RESTRAINING' ? 'Restraint' as const : 'Proactive' as const,
           description: `Quick Entry - ${goal.title}`,
           behaviorCategories: goal.behaviorCategories,
+          outcome: outcome,
           selectedDate: selectedDate,
         };
         
+        console.log('HomeScreen (iOS): Setting prefilledGoalData:', prefilled);
         setEditingReflection(null);
-        setPrefilledGoalId(undefined);
+        setPrefilledGoalData(prefilled);
         setShowReflectionModal(true);
-        
-        // Use a small delay to ensure modal is mounted before passing prefilled data
-        setTimeout(() => {
-          setShowReflectionModal(false);
-          setTimeout(() => {
-            setEditingReflection(null);
-            setPrefilledGoalId(goal.id);
-            setShowReflectionModal(true);
-          }, 50);
-        }, 50);
       }
     } else {
       setEditingReflection(null);
-      setPrefilledGoalId(undefined);
+      setPrefilledGoalData(undefined);
       setShowReflectionModal(true);
     }
   };
@@ -772,7 +760,7 @@ export default function HomeScreen() {
   const openEditReflectionModal = (reflection: Reflection) => {
     console.log('HomeScreen (iOS): Opening edit reflection modal:', reflection.id);
     setEditingReflection(reflection);
-    setPrefilledGoalId(undefined);
+    setPrefilledGoalData(undefined);
     setShowReflectionModal(true);
   };
 
@@ -780,7 +768,7 @@ export default function HomeScreen() {
     console.log('HomeScreen (iOS): Reflection saved:', reflection.id);
     setShowReflectionModal(false);
     setEditingReflection(null);
-    setPrefilledGoalId(undefined);
+    setPrefilledGoalData(undefined);
     showSuccess('Reflection saved!');
     loadData();
   };
@@ -1232,7 +1220,7 @@ export default function HomeScreen() {
               style={[styles.actionButton, styles.successButton, { marginTop: 16 }]}
               onPress={handleCreateGoal}
             >
-              <Text style={styles.actionButtonText}>Create Goal</Text>
+              <Text style={styles.modalButtonText}>Create Goal</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1269,7 +1257,7 @@ export default function HomeScreen() {
           onClose={() => {
             setShowReflectionModal(false);
             setEditingReflection(null);
-            setPrefilledGoalId(undefined);
+            setPrefilledGoalData(undefined);
           }}
           onSave={handleReflectionSaved}
           selectedDate={selectedDate}
@@ -1280,7 +1268,7 @@ export default function HomeScreen() {
           gainsLosses={gainsLosses}
           strategies={strategies}
           motivations={motivations}
-          prefilledGoalId={prefilledGoalId}
+          prefilledGoalData={prefilledGoalData}
         />
       )}
 
