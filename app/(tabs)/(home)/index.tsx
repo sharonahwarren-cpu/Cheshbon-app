@@ -37,6 +37,7 @@ import {
   updateGoal
 } from "@/utils/supabaseApi";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
+import { ReflectionListModal } from "@/components/ReflectionListModal";
 
 interface DailyEntry {
   id: string;
@@ -425,6 +426,10 @@ export default function HomeScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showReflectionListModal, setShowReflectionListModal] = useState(false);
+  const [reflectionListGoalId, setReflectionListGoalId] = useState<string | undefined>(undefined);
+  const [reflectionListOutcome, setReflectionListOutcome] = useState<'success' | 'struggled' | undefined>(undefined);
+  const [reflectionListTitle, setReflectionListTitle] = useState('');
 
   useEffect(() => {
     console.log('HomeScreen: Initial load');
@@ -796,6 +801,24 @@ export default function HomeScreen() {
     }
   };
 
+  const handleOpenReflectionList = (goal: ActivatedGoal, outcome: 'success' | 'struggled') => {
+    console.log('HomeScreen: Opening reflection list for goal:', goal.id, 'outcome:', outcome);
+    setReflectionListGoalId(goal.id);
+    setReflectionListOutcome(outcome);
+    setReflectionListTitle(`${goal.title} - ${outcome === 'success' ? 'Successes' : 'Struggles'}`);
+    setShowReflectionListModal(true);
+  };
+
+  const handleCloseReflectionList = () => {
+    console.log('HomeScreen: Closing reflection list');
+    setShowReflectionListModal(false);
+    setReflectionListGoalId(undefined);
+    setReflectionListOutcome(undefined);
+    setReflectionListTitle('');
+    // Reload data to reflect any changes made in the modal
+    loadData();
+  };
+
   const handleOpenJournalModal = () => {
     console.log('HomeScreen: Opening journal modal');
     setShowJournalModal(true);
@@ -1015,9 +1038,15 @@ export default function HomeScreen() {
             </View>
           )}
           
-          {/* Success Count - Show only if applicable */}
+          {/* Success Count - Show only if applicable - CLICKABLE */}
           {(!isOneTimeGoal || shouldShowTickForOncePerDay) && (
-            <View style={styles.statItemConcise}>
+            <TouchableOpacity
+              style={styles.statItemConcise}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleOpenReflectionList(goal, 'success');
+              }}
+            >
               <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
               <IconSymbol
                 ios_icon_name={isOneTimeGoal ? "checkmark.circle.fill" : "checkmark"}
@@ -1025,12 +1054,18 @@ export default function HomeScreen() {
                 size={16}
                 color={colors.success}
               />
-            </View>
+            </TouchableOpacity>
           )}
           
-          {/* Struggle Count - HIDDEN for one-time goals */}
+          {/* Struggle Count - HIDDEN for one-time goals - CLICKABLE */}
           {!isOneTimeGoal && (
-            <View style={styles.statItemConcise}>
+            <TouchableOpacity
+              style={styles.statItemConcise}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleOpenReflectionList(goal, 'struggled');
+              }}
+            >
               <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
               <IconSymbol
                 ios_icon_name="xmark"
@@ -1038,7 +1073,7 @@ export default function HomeScreen() {
                 size={16}
                 color={colors.error}
               />
-            </View>
+            </TouchableOpacity>
           )}
           
           {/* Reflect Icon */}
@@ -1295,6 +1330,17 @@ export default function HomeScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {showReflectionListModal && reflectionListGoalId && reflectionListOutcome && (
+        <ReflectionListModal
+          visible={showReflectionListModal}
+          onClose={handleCloseReflectionList}
+          title={reflectionListTitle}
+          filterType={reflectionListOutcome === 'success' ? 'successes' : 'struggles'}
+          goalId={reflectionListGoalId}
+          startDate={formatDateLocal(selectedDate)}
+          endDate={formatDateLocal(selectedDate)}
+        />
+      )}
 
     </SafeAreaView>
   );

@@ -15,6 +15,8 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import { authenticatedGet } from '@/utils/api';
 import { AddReflectionModal } from '@/components/AddReflectionModal';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import * as supabaseApi from '@/utils/supabaseApi';
 
 interface Reflection {
   id: string;
@@ -123,6 +125,8 @@ export function ReflectionListModal({
   const [reflections, setReflections] = useState<Reflection[]>([]);
   const [selectedReflection, setSelectedReflection] = useState<Reflection | null>(null);
   const [showReflectionModal, setShowReflectionModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [reflectionToDelete, setReflectionToDelete] = useState<Reflection | null>(null);
   
   // Data for AddReflectionModal
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -284,19 +288,97 @@ export function ReflectionListModal({
     }
   };
 
-  const handleViewReflection = (reflection: Reflection) => {
-    console.log('[ReflectionListModal] Opening reflection:', reflection.id);
+  const handleEditReflection = (reflection: Reflection) => {
+    console.log('[ReflectionListModal] Opening reflection for editing:', reflection.id);
     setSelectedReflection(reflection);
     setShowReflectionModal(true);
   };
 
+  const handleDeleteReflection = (reflection: Reflection) => {
+    console.log('[ReflectionListModal] Confirming delete for reflection:', reflection.id);
+    setReflectionToDelete(reflection);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteReflection = async () => {
+    if (!reflectionToDelete) return;
+    
+    try {
+      console.log('[ReflectionListModal] Deleting reflection:', reflectionToDelete.id);
+      
+      // Delete the reflection
+      await supabaseApi.deleteReflection(reflectionToDelete.id);
+      
+      // If reflection was linked to a goal, recalculate goal stats
+      if (reflectionToDelete.linkedGoalId) {
+        console.log('[ReflectionListModal] Recalculating stats for goal:', reflectionToDelete.linkedGoalId);
+        
+        // Get all remaining reflections for this goal
+        const allReflections = await supabaseApi.getReflections();
+        const goalReflections = allReflections.filter((r: any) => r.linked_goal_id === reflectionToDelete.linkedGoalId);
+        
+        // Recalculate success and struggle counts
+        const successCount = goalReflections.filter((r: any) => r.outcome === 'success').length;
+        const struggleCount = goalReflections.filter((r: any) => r.outcome === 'struggled').length;
+        
+        // Recalculate streaks
+        const sortedReflections = goalReflections
+          .sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+        
+        let currentStreak = 0;
+        let bestStreak = 0;
+        let tempStreak = 0;
+        
+        for (const r of sortedReflections) {
+          if ((r as any).outcome === 'success') {
+            tempStreak++;
+            if (tempStreak > bestStreak) {
+              bestStreak = tempStreak;
+            }
+          } else if ((r as any).outcome === 'struggled') {
+            if (currentStreak === 0) {
+              currentStreak = tempStreak;
+            }
+            tempStreak = 0;
+          }
+        }
+        
+        if (currentStreak === 0) {
+          currentStreak = tempStreak;
+        }
+        
+        // Update the goal with recalculated stats
+        await supabaseApi.updateGoal(reflectionToDelete.linkedGoalId, {
+          success_count: successCount,
+          struggle_count: struggleCount,
+          current_streak: currentStreak,
+          best_streak: bestStreak,
+        });
+      }
+      
+      // Remove from local state
+      setReflections(prevReflections =>
+        prevReflections.filter(r => r.id !== reflectionToDelete.id)
+      );
+      
+      setShowDeleteConfirm(false);
+      setReflectionToDelete(null);
+      
+      console.log('[ReflectionListModal] Reflection deleted successfully');
+    } catch (error: any) {
+      console.error('[ReflectionListModal] Error deleting reflection:', error);
+      setErrorMessage(error.message || 'Failed to delete reflection');
+      setShowDeleteConfirm(false);
+      setReflectionToDelete(null);
+    }
+  };
+
   const handleReflectionSaved = (updatedReflection: Reflection) => {
-    console.log('[ReflectionListModal] Reflection saved, updating list');
-    setReflections(prevReflections =>
-      prevReflections.map(r => r.id === updatedReflection.id ? updatedReflection : r)
-    );
+    console.log('[ReflectionListModal] Reflection saved, reloading list');
     setShowReflectionModal(false);
     setSelectedReflection(null);
+    // Reload reflections to get updated data
+    loadReflections();
   };
 
   const handleCloseReflectionModal = () => {
@@ -406,10 +488,7 @@ export function ReflectionListModal({
                 
                 return (
                   <React.Fragment key={index}>
-                    <TouchableOpacity
-                      style={styles.reflectionCard}
-                      onPress={() => handleViewReflection(reflection)}
-                    >
+                    <View style={styles.reflectionCard}>
                       <View style={styles.reflectionHeader}>
                         <View style={styles.reflectionHeaderLeft}>
                           <IconSymbol
@@ -420,31 +499,56 @@ export function ReflectionListModal({
                           />
                           <Text style={styles.reflectionDate}>{formattedDate}</Text>
                         </View>
-                        <View style={styles.reflectionBadges}>
-                          {typeIcon && (
-                            <View style={styles.badge}>
-                              <IconSymbol
-                                ios_icon_name={typeIcon.ios}
-                                android_material_icon_name={typeIcon.android}
-                                size={14}
-                                color={typeIcon.color}
-                              />
-                              <Text style={[styles.badgeText, { color: typeIcon.color }]}>
-                                {reflection.type}
-                              </Text>
-                            </View>
-                          )}
-                          {outcomeIcon && (
-                            <View style={styles.badge}>
-                              <IconSymbol
-                                ios_icon_name={outcomeIcon.ios}
-                                android_material_icon_name={outcomeIcon.android}
-                                size={14}
-                                color={outcomeIcon.color}
-                              />
-                            </View>
-                          )}
+                        <View style={styles.reflectionActions}>
+                          <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => handleEditReflection(reflection)}
+                          >
+                            <IconSymbol
+                              ios_icon_name="pencil"
+                              android_material_icon_name="edit"
+                              size={20}
+                              color={colors.primary}
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => handleDeleteReflection(reflection)}
+                          >
+                            <IconSymbol
+                              ios_icon_name="trash"
+                              android_material_icon_name="delete"
+                              size={20}
+                              color={colors.error}
+                            />
+                          </TouchableOpacity>
                         </View>
+                      </View>
+
+                      <View style={styles.reflectionBadges}>
+                        {typeIcon && (
+                          <View style={styles.badge}>
+                            <IconSymbol
+                              ios_icon_name={typeIcon.ios}
+                              android_material_icon_name={typeIcon.android}
+                              size={14}
+                              color={typeIcon.color}
+                            />
+                            <Text style={[styles.badgeText, { color: typeIcon.color }]}>
+                              {reflection.type}
+                            </Text>
+                          </View>
+                        )}
+                        {outcomeIcon && (
+                          <View style={styles.badge}>
+                            <IconSymbol
+                              ios_icon_name={outcomeIcon.ios}
+                              android_material_icon_name={outcomeIcon.android}
+                              size={14}
+                              color={outcomeIcon.color}
+                            />
+                          </View>
+                        )}
                       </View>
 
                       {reflection.linkedGoalTitle && (
@@ -464,17 +568,7 @@ export function ReflectionListModal({
                       <Text style={styles.reflectionDescription} numberOfLines={3}>
                         {reflection.description}
                       </Text>
-
-                      <View style={styles.reflectionFooter}>
-                        <Text style={styles.viewButtonText}>View Details</Text>
-                        <IconSymbol
-                          ios_icon_name="arrow.right"
-                          android_material_icon_name="arrow-forward"
-                          size={16}
-                          color={colors.primary}
-                        />
-                      </View>
-                    </TouchableOpacity>
+                    </View>
                   </React.Fragment>
                 );
               })}
@@ -499,6 +593,21 @@ export function ReflectionListModal({
           motivations={motivations}
         />
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        visible={showDeleteConfirm}
+        title="Delete Reflection"
+        message={`Are you sure you want to delete this reflection? This will also update the goal's statistics.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteReflection}
+        onCancel={() => {
+          setShowDeleteConfirm(false);
+          setReflectionToDelete(null);
+        }}
+        confirmColor={colors.error}
+      />
     </Modal>
   );
 }
@@ -637,15 +746,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 12,
   },
-  reflectionFooter: {
+  reflectionActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
+    gap: 12,
   },
-  viewButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary,
+  actionButton: {
+    padding: 4,
   },
 });
