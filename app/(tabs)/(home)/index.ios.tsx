@@ -1346,28 +1346,9 @@ export default function HomeScreen() {
     const isStreakFaded = hasNoEntriesYet;
     
     // Best streak should show when current streak equals best streak AND best streak > 1 (new record)
+    // CRITICAL FIX: For once_per_day goals, star appears when clicking success creates a new best streak
     const isNewRecord = currentStreakValue > 0 && currentStreakValue === bestStreakValue && bestStreakValue > 1;
     const shouldShowBestStreak = isOneTimeGoal ? isNewRecord : (bestStreakValue > 0 && hasCurrentStreak);
-    
-    console.log('HomeScreen (iOS): Rendering goal card:', {
-      goalId: goal.id,
-      title: goal.title,
-      trackingType: goal.trackingType,
-      todaySuccesses,
-      todayStruggles,
-      cumulativeSuccesses: goal.successCount,
-      cumulativeStruggles: goal.struggleCount,
-      displaySuccessCount,
-      displayStruggleCount,
-      currentStreak: currentStreakValue,
-      bestStreak: bestStreakValue,
-      isOneTimeGoal,
-      shouldShowSuccessForOncePerDay,
-      shouldShowStreak,
-      shouldShowBestStreak,
-      isSuccessButtonDisabled,
-      isStruggleButtonDisabled,
-    });
     
     return (
       <TouchableOpacity 

@@ -1271,6 +1271,7 @@ export default function HomeScreen() {
     const isStreakFaded = hasNoEntriesYet;
     
     // Best streak should show when current streak equals best streak AND best streak > 1 (new record)
+    // CRITICAL FIX: For once_per_day goals, star appears when clicking success creates a new best streak
     const isNewRecord = currentStreakValue > 0 && currentStreakValue === bestStreakValue && bestStreakValue > 1;
     const shouldShowBestStreak = isOneTimeGoal ? isNewRecord : (bestStreakValue > 0 && hasCurrentStreak)
     
