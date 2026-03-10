@@ -460,6 +460,12 @@ export default function CreateGoalScreen() {
       return;
     }
 
+    // CRITICAL FIX: Validate that Type is selected
+    if (!type) {
+      showError('Please select a goal type (Proactive or Restraining)');
+      return;
+    }
+
     const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
     if (categoriesEnabled && behaviorCategories.length === 0) {
       showError('Please select at least one behaviour category');
@@ -1100,9 +1106,15 @@ export default function CreateGoalScreen() {
           </View>
         )}
 
-        {/* Type */}
+        {/* Type - CRITICAL FIX: Made required */}
         <View style={styles.section}>
-          <Text style={styles.label}>Type</Text>
+          <Text style={styles.label}>
+            Type
+            <Text style={styles.required}> *</Text>
+          </Text>
+          <Text style={styles.helperText}>
+            Choose whether this is a goal to do something (Proactive) or avoid something (Restraining)
+          </Text>
           <View style={styles.radioGroup}>
             {(['Proactive', 'Restraining'] as GoalType[]).map((goalType) => {
               const isSelected = type === goalType;
@@ -1111,7 +1123,10 @@ export default function CreateGoalScreen() {
                 <TouchableOpacity
                   key={goalType}
                   style={[styles.radio, isSelected && styles.radioSelected]}
-                  onPress={() => setType(goalType)}
+                  onPress={() => {
+                    console.log('[CreateGoal] User selected goal type:', goalType);
+                    setType(goalType);
+                  }}
                 >
                   <View style={styles.radioCircle}>
                     {isSelected && <View style={styles.radioCircleInner} />}
