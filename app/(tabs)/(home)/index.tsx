@@ -946,7 +946,7 @@ export default function HomeScreen() {
           {/* Struggle Button - HIDDEN for one-time goals */}
           {!isOneTimeGoal && (
             <TouchableOpacity
-              style={styles.actionButtonIconConcise}
+              style={[styles.actionButtonIconConcise, { backgroundColor: "#B87C6C" }]}
               onPress={(e) => {
                 e.stopPropagation();
                 handleGoalStruggle(goal.id);
