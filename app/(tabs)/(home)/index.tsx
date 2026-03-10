@@ -387,9 +387,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
+    color: '#fff',
   },
 });
 
@@ -1227,53 +1227,74 @@ export default function HomeScreen() {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
     const isOneTimeGoal = goal.trackingType === 'once_per_day';
     
-    // CRITICAL FIX: For tally goals, show TODAY'S counts (reset daily)
-    // For once_per_day goals, show CUMULATIVE counts
+    // CRITICAL: Check if action recorded TODAY
     const todaySuccesses = goal.todaySuccessCount || 0;
     const todayStruggles = goal.todayStruggleCount || 0;
+    const hasActionToday = todaySuccesses > 0 || todayStruggles > 0;
     
-    // Display values based on tracking type
-    let displaySuccessCount: number;
-    let displayStruggleCount: number;
+    console.log('HomeScreen: Rendering goal card:', {
+      goalId: goal.id,
+      title: goal.title,
+      trackingType: goal.trackingType,
+      todaySuccesses,
+      todayStruggles,
+      hasActionToday,
+      successCount: goal.successCount,
+      struggleCount: goal.struggleCount,
+      currentStreak: goal.currentStreak,
+      bestStreak: goal.bestStreak,
+    });
     
-    if (isOneTimeGoal) {
-      // Once per day: Show cumulative total
-      displaySuccessCount = goal.successCount || 0;
-      displayStruggleCount = goal.struggleCount || 0;
-    } else {
-      // Tally: Show today's count only
-      displaySuccessCount = todaySuccesses;
-      displayStruggleCount = todayStruggles;
-    }
+    // For once_per_day goals: Buttons are disabled after action is recorded
+    const isSuccessButtonDisabled = isOneTimeGoal && hasActionToday;
+    const isStruggleButtonDisabled = isOneTimeGoal && hasActionToday;
+    
+    // ICON DISPLAY LOGIC FOR ONCE PER DAY GOALS:
+    // - If NO action today and no entries ever: Show ONLY faded streak icon with "1" (potential streak)
+    // - If success recorded today: Show trophy (cumulative count), star (if new record), visible streak
+    // - If struggle recorded today: Show x (cumulative count), NO star, NO streak
     
     const bestStreakValue = goal.bestStreak || 0;
     const currentStreakValue = goal.currentStreak || 0;
     const rewardsEarnedToday = dailyTallies.reward;
     const consequencesEarnedToday = dailyTallies.consequence;
     
-    // For once_per_day goals, only show icons if action recorded TODAY
-    const hasActionToday = todaySuccesses > 0 || todayStruggles > 0;
-    const shouldShowSuccessForOncePerDay = isOneTimeGoal && todaySuccesses > 0;
-    const shouldShowStruggleForOncePerDay = isOneTimeGoal && todayStruggles > 0;
+    // For TALLY goals: Always show tick and x with today's counts
+    const displaySuccessCount = isOneTimeGoal ? (goal.successCount || 0) : todaySuccesses;
+    const displayStruggleCount = isOneTimeGoal ? (goal.struggleCount || 0) : todayStruggles;
     
-    // CRITICAL FIX: Disable buttons for once_per_day goals after action is recorded
-    const isSuccessButtonDisabled = isOneTimeGoal && hasActionToday;
-    const isStruggleButtonDisabled = isOneTimeGoal && hasActionToday;
+    // ONCE PER DAY ICON VISIBILITY RULES:
+    // Trophy: Show ONLY if success recorded today
+    // X: Show ONLY if struggle recorded today
+    // Star: Show ONLY if success recorded today AND current streak === best streak AND best streak > 1
+    // Streak: Show faded "1" if no action today AND no entries ever, show visible current streak if success recorded today
     
-    // Streak logic for "Once per day" goals:
-    // - If no entries yet (successCount === 0 && struggleCount === 0), show faded streak with "1" (potential streak)
-    // - If current streak > 0, show visible streak icon
-    // - If current streak === best streak AND best streak > 1, show star (new record)
-    const hasNoEntriesYet = isOneTimeGoal && (goal.successCount === 0 && goal.struggleCount === 0);
-    const hasCurrentStreak = currentStreakValue > 0;
-    const shouldShowStreak = isOneTimeGoal ? (hasNoEntriesYet || hasCurrentStreak) : hasCurrentStreak;
-    const streakDisplayValue = hasNoEntriesYet ? 1 : currentStreakValue;
-    const isStreakFaded = hasNoEntriesYet;
+    const shouldShowTrophy = isOneTimeGoal && todaySuccesses > 0;
+    const shouldShowX = isOneTimeGoal && todayStruggles > 0;
     
-    // Best streak should show when current streak equals best streak AND best streak > 1 (new record)
-    // CRITICAL FIX: For once_per_day goals, star appears when clicking success creates a new best streak
+    // Streak logic for once_per_day:
+    // - No action today AND no entries ever: Show faded streak with "1"
+    // - Success today: Show visible streak with current streak value
+    // - Struggle today: NO streak icon
+    const hasNoEntriesEver = goal.successCount === 0 && goal.struggleCount === 0;
+    const hasSuccessToday = todaySuccesses > 0;
+    const hasStruggleToday = todayStruggles > 0;
+    
+    // For once_per_day: Show streak ONLY if (no action today and no entries ever) OR (success today)
+    // For tally: Show streak if current streak > 0
+    const shouldShowStreak = isOneTimeGoal 
+      ? ((hasNoEntriesEver && !hasActionToday) || hasSuccessToday)
+      : (currentStreakValue > 0);
+    
+    const streakDisplayValue = (isOneTimeGoal && hasNoEntriesEver && !hasActionToday) ? 1 : currentStreakValue;
+    const isStreakFaded = isOneTimeGoal && hasNoEntriesEver && !hasActionToday;
+    
+    // Star (best streak) logic for once_per_day:
+    // Show ONLY if success recorded today AND current streak === best streak AND best streak > 1
     const isNewRecord = currentStreakValue > 0 && currentStreakValue === bestStreakValue && bestStreakValue > 1;
-    const shouldShowBestStreak = isOneTimeGoal ? isNewRecord : (bestStreakValue > 0 && hasCurrentStreak)
+    const shouldShowBestStreak = isOneTimeGoal 
+      ? (hasSuccessToday && isNewRecord) 
+      : (bestStreakValue > 0 && currentStreakValue > 0);
     
     return (
       <TouchableOpacity 
@@ -1313,7 +1334,7 @@ export default function HomeScreen() {
               </View>
             )}
             
-            {/* Best Streak - Only show if there's a current streak */}
+            {/* Best Streak (Star) - Only show based on tracking type rules */}
             {shouldShowBestStreak && (
               <View style={styles.statItemConcise}>
                 <Text style={styles.statTextConcise}>{bestStreakValue}</Text>
@@ -1327,7 +1348,7 @@ export default function HomeScreen() {
               </View>
             )}
             
-            {/* Current Streak - Show faded if no entries yet, visible if active streak */}
+            {/* Current Streak (Fire) - Show based on tracking type rules */}
             {shouldShowStreak && (
               <View style={styles.statItemConcise}>
                 <Text style={styles.statTextConcise}>{streakDisplayValue}</Text>
@@ -1341,10 +1362,10 @@ export default function HomeScreen() {
               </View>
             )}
             
-            {/* Success Count - Show trophy for once_per_day, tick for tally - CLICKABLE */}
+            {/* Success Count - Trophy for once_per_day (only if success today), Tick for tally (always) */}
             {isOneTimeGoal ? (
               // Once per day: Show trophy ONLY if success recorded today
-              shouldShowSuccessForOncePerDay && (
+              shouldShowTrophy && (
                 <TouchableOpacity
                   style={styles.statItemConcise}
                   onPress={(e) => {
@@ -1380,10 +1401,10 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
             
-            {/* Struggle Count - Show x for once_per_day ONLY if struggle recorded today, always show for tally - CLICKABLE */}
+            {/* Struggle Count - X for once_per_day (only if struggle today), X for tally (always) */}
             {isOneTimeGoal ? (
               // Once per day: Show x ONLY if struggle recorded today
-              shouldShowStruggleForOncePerDay && (
+              shouldShowX && (
                 <TouchableOpacity
                   style={styles.statItemConcise}
                   onPress={(e) => {
@@ -1419,7 +1440,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
             
-            {/* Reflect Icon */}
+            {/* Reflect Icon - Always show */}
             <TouchableOpacity
               style={[styles.reflectButtonIconConcise, { backgroundColor: "#7C9885" }]}
               onPress={(e) => {
@@ -1436,7 +1457,7 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
             
-            {/* Struggle Button - Always show for tally, show for once_per_day */}
+            {/* Struggle Button - Fade if disabled for once_per_day */}
             <TouchableOpacity
               style={[
                 styles.actionButtonIconConcise, 
@@ -1459,7 +1480,7 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
             
-            {/* Success Button - RIGHTMOST */}
+            {/* Success Button - RIGHTMOST - Fade if disabled for once_per_day */}
             <TouchableOpacity
               style={[
                 styles.actionButtonIconConcise, 
