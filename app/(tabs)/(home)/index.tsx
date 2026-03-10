@@ -1256,6 +1256,10 @@ export default function HomeScreen() {
     const shouldShowSuccessForOncePerDay = isOneTimeGoal && todaySuccesses > 0;
     const shouldShowStruggleForOncePerDay = isOneTimeGoal && todayStruggles > 0;
     
+    // CRITICAL FIX: Disable buttons for once_per_day goals after action is recorded
+    const isSuccessButtonDisabled = isOneTimeGoal && hasActionToday;
+    const isStruggleButtonDisabled = isOneTimeGoal && hasActionToday;
+    
     // Streak logic for "Once per day" goals:
     // - If no entries yet (successCount === 0 && struggleCount === 0), show faded streak with "1" (potential streak)
     // - If current streak > 0, show visible streak icon
@@ -1433,11 +1437,18 @@ export default function HomeScreen() {
             
             {/* Struggle Button - Always show for tally, show for once_per_day */}
             <TouchableOpacity
-              style={[styles.actionButtonIconConcise, { backgroundColor: "#B87C6C" }]}
+              style={[
+                styles.actionButtonIconConcise, 
+                { backgroundColor: "#B87C6C" },
+                isStruggleButtonDisabled && { opacity: 0.5 }
+              ]}
               onPress={(e) => {
                 e.stopPropagation();
-                handleGoalStruggle(goal.id);
+                if (!isStruggleButtonDisabled) {
+                  handleGoalStruggle(goal.id);
+                }
               }}
+              disabled={isStruggleButtonDisabled}
             >
               <IconSymbol
                 ios_icon_name="xmark"
@@ -1449,11 +1460,19 @@ export default function HomeScreen() {
             
             {/* Success Button - RIGHTMOST */}
             <TouchableOpacity
-              style={[styles.actionButtonIconConcise, styles.successButtonIconConcise, { backgroundColor: "#7C9885" }]}
+              style={[
+                styles.actionButtonIconConcise, 
+                styles.successButtonIconConcise, 
+                { backgroundColor: "#7C9885" },
+                isSuccessButtonDisabled && { opacity: 0.5 }
+              ]}
               onPress={(e) => {
                 e.stopPropagation();
-                handleGoalSuccess(goal.id);
+                if (!isSuccessButtonDisabled) {
+                  handleGoalSuccess(goal.id);
+                }
               }}
+              disabled={isSuccessButtonDisabled}
             >
               <IconSymbol
                 ios_icon_name="checkmark"
