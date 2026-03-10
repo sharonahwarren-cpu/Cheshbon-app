@@ -31,7 +31,8 @@ import {
   createJournal,
   updateJournal,
   updateUserPreferences,
-  updateGoal
+  updateGoal,
+  getReflectionMotivations
 } from "@/utils/supabaseApi";
 import { AddReflectionModal } from "@/components/AddReflectionModal";
 
@@ -103,6 +104,13 @@ interface Strategy {
   failureCount: number;
   timesUsed: number;
   successRate: number;
+}
+
+interface Motivation {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface Reflection {
@@ -261,18 +269,18 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#ef4444',
+    backgroundColor: colors.error,
     alignItems: 'center',
     justifyContent: 'center',
   },
   successButtonIconConcise: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.success,
   },
   reflectButtonIconConcise: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -469,6 +477,7 @@ export default function HomeScreen() {
   const [currencies, setCurrencies] = useState<Currency[]>([]);
   const [gainsLosses, setGainsLosses] = useState<GainLoss[]>([]);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
+  const [motivations, setMotivations] = useState<Motivation[]>([]);
   const [reflections, setReflections] = useState<Reflection[]>([]);
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({});
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
@@ -546,6 +555,7 @@ export default function HomeScreen() {
         currenciesData,
         gainsLossesData,
         strategiesData,
+        motivationsData,
         reflectionsData,
         preferencesData,
         journalsData,
@@ -555,6 +565,7 @@ export default function HomeScreen() {
         getCurrencies(),
         getGainsLosses(),
         getStrategies(),
+        getReflectionMotivations(),
         getReflections(dateStr),
         getUserPreferences(),
         getJournals(dateStr),
@@ -562,6 +573,7 @@ export default function HomeScreen() {
 
       console.log('HomeScreen (iOS): Data loaded successfully');
       console.log('HomeScreen (iOS): Goals count:', goalsData.length);
+      console.log('HomeScreen (iOS): Motivations count:', motivationsData.length);
       console.log('HomeScreen (iOS): User preferences:', preferencesData);
       
       setGoals(goalsData);
@@ -569,6 +581,7 @@ export default function HomeScreen() {
       setCurrencies(currenciesData);
       setGainsLosses(gainsLossesData);
       setStrategies(strategiesData);
+      setMotivations(motivationsData);
       setReflections(reflectionsData);
       setUserPreferences(preferencesData);
       
@@ -628,6 +641,7 @@ export default function HomeScreen() {
         return;
       }
       
+      // Create daily entry
       await createDailyEntry({
         goal_id: goalId,
         type: 'success',
@@ -635,6 +649,7 @@ export default function HomeScreen() {
         timestamp: new Date().toISOString(),
       });
 
+      // Update goal counts and streaks
       const newSuccessCount = (goal.successCount || 0) + 1;
       const newCurrentStreak = (goal.currentStreak || 0) + 1;
       const newBestStreak = Math.max(newCurrentStreak, goal.bestStreak || 0);
@@ -664,6 +679,7 @@ export default function HomeScreen() {
         return;
       }
       
+      // Create daily entry
       await createDailyEntry({
         goal_id: goalId,
         type: 'struggle',
@@ -671,6 +687,7 @@ export default function HomeScreen() {
         timestamp: new Date().toISOString(),
       });
 
+      // Update goal counts and reset streak
       const newStruggleCount = (goal.struggleCount || 0) + 1;
       
       await updateGoal(goalId, {
@@ -710,9 +727,46 @@ export default function HomeScreen() {
 
   const openAddReflectionModal = (goalId?: string) => {
     console.log('HomeScreen (iOS): Opening add reflection modal', goalId ? `for goal: ${goalId}` : '');
-    setEditingReflection(null);
-    setPrefilledGoalId(goalId);
-    setShowReflectionModal(true);
+    
+    if (goalId) {
+      const goal = goals.find(g => g.id === goalId);
+      if (goal) {
+        console.log('HomeScreen (iOS): Prefilling reflection modal with goal data:', {
+          id: goal.id,
+          title: goal.title,
+          behaviorCategories: goal.behaviorCategories,
+          type: goal.type,
+        });
+        
+        // Build prefilled data with Quick Entry format
+        const prefilledData = {
+          id: goal.id,
+          category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+          type: goal.type === 'RESTRAINING' ? 'Restraint' as const : 'Proactive' as const,
+          description: `Quick Entry - ${goal.title}`,
+          behaviorCategories: goal.behaviorCategories,
+          selectedDate: selectedDate,
+        };
+        
+        setEditingReflection(null);
+        setPrefilledGoalId(undefined);
+        setShowReflectionModal(true);
+        
+        // Use a small delay to ensure modal is mounted before passing prefilled data
+        setTimeout(() => {
+          setShowReflectionModal(false);
+          setTimeout(() => {
+            setEditingReflection(null);
+            setPrefilledGoalId(goal.id);
+            setShowReflectionModal(true);
+          }, 50);
+        }, 50);
+      }
+    } else {
+      setEditingReflection(null);
+      setPrefilledGoalId(undefined);
+      setShowReflectionModal(true);
+    }
   };
 
   const openEditReflectionModal = (reflection: Reflection) => {
@@ -1225,7 +1279,7 @@ export default function HomeScreen() {
           editingReflection={editingReflection}
           gainsLosses={gainsLosses}
           strategies={strategies}
-          motivations={[]}
+          motivations={motivations}
           prefilledGoalId={prefilledGoalId}
         />
       )}
