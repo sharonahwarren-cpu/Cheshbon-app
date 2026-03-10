@@ -252,9 +252,9 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   actionButtonIconConcise: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#ef4444',
     alignItems: 'center',
     justifyContent: 'center',
@@ -263,9 +263,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#10b981',
   },
   reflectButtonIconConcise: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
@@ -938,7 +938,7 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="text.bubble.fill"
               android_material_icon_name="chat-bubble"
-              size={20}
+              size={16}
               color="#fff"
             />
           </TouchableOpacity>
@@ -955,7 +955,7 @@ export default function HomeScreen() {
               <IconSymbol
                 ios_icon_name="xmark"
                 android_material_icon_name="close"
-                size={20}
+                size={16}
                 color="#fff"
               />
             </TouchableOpacity>
@@ -972,7 +972,7 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="checkmark"
               android_material_icon_name="check"
-              size={20}
+              size={16}
               color="#fff"
             />
           </TouchableOpacity>
@@ -1120,7 +1120,7 @@ export default function HomeScreen() {
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         {successMessage && !showSuccessModal ? (
-          <Text style={styles.successText}>{successMessage}</Text>
+          <Text style={[styles.successText, { color: "#117058" }]}>{successMessage}</Text>
         ) : null}
       </ScrollView>
 

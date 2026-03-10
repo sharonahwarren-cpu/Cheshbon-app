@@ -266,9 +266,9 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   actionButtonIconConcise: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.error,
     alignItems: 'center',
     justifyContent: 'center',
@@ -277,9 +277,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
   },
   reflectButtonIconConcise: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.success,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1064,7 +1064,7 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="text.bubble.fill"
               android_material_icon_name="chat-bubble"
-              size={20}
+              size={16}
               color="#fff"
             />
           </TouchableOpacity>
@@ -1081,7 +1081,7 @@ export default function HomeScreen() {
               <IconSymbol
                 ios_icon_name="xmark"
                 android_material_icon_name="close"
-                size={20}
+                size={16}
                 color="#fff"
               />
             </TouchableOpacity>
@@ -1098,7 +1098,7 @@ export default function HomeScreen() {
             <IconSymbol
               ios_icon_name="checkmark"
               android_material_icon_name="check"
-              size={20}
+              size={16}
               color="#fff"
             />
           </TouchableOpacity>

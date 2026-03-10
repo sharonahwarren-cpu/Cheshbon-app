@@ -672,7 +672,8 @@ export function AddReflectionModal({
   const strategyNameInputRef = useRef<TextInput>(null);
   const strategyDescInputRef = useRef<TextInput>(null);
   
-  // If prefilledGoalData is provided (from Express), start at Step 3
+  // If prefilledGoalData is provided (from Goal screen), start at Step 3
+  // Steps 1 and 2 are prefilled automatically
   const initialStep = prefilledGoalData ? 3 : 1;
   
   const [step, setStep] = useState(initialStep);
