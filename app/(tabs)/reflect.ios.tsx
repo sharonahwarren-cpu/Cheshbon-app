@@ -399,7 +399,71 @@ export default function ReflectScreen() {
     console.log('[Reflect iOS] Deleting reflection:', id);
     try {
       setLoading(true);
+      
+      // Find the reflection to get its linked goal
+      const reflection = reflections.find(r => r.id === id);
+      
+      // Delete the reflection
       await supabaseApi.deleteReflection(id);
+      
+      // If reflection was linked to a goal, recalculate goal stats
+      if (reflection && reflection.linkedGoalId) {
+        console.log('[Reflect iOS] Reflection was linked to goal, recalculating stats for goal:', reflection.linkedGoalId);
+        
+        // Get all remaining reflections for this goal
+        const allReflections = await supabaseApi.getReflections();
+        const goalReflections = allReflections.filter((r: any) => r.linked_goal_id === reflection.linkedGoalId);
+        
+        // Recalculate success and struggle counts
+        const successCount = goalReflections.filter((r: any) => r.outcome === 'success').length;
+        const struggleCount = goalReflections.filter((r: any) => r.outcome === 'struggled').length;
+        
+        // Recalculate streaks
+        // Sort reflections by date (newest first)
+        const sortedReflections = goalReflections
+          .sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+        
+        let currentStreak = 0;
+        let bestStreak = 0;
+        let tempStreak = 0;
+        
+        // Calculate current streak (from most recent date backwards)
+        for (const r of sortedReflections) {
+          if ((r as any).outcome === 'success') {
+            tempStreak++;
+            if (tempStreak > bestStreak) {
+              bestStreak = tempStreak;
+            }
+          } else if ((r as any).outcome === 'struggled') {
+            if (currentStreak === 0) {
+              // If we haven't set current streak yet, it means the most recent entries were successes
+              currentStreak = tempStreak;
+            }
+            tempStreak = 0;
+          }
+        }
+        
+        // If we never hit a struggle, the current streak is the temp streak
+        if (currentStreak === 0) {
+          currentStreak = tempStreak;
+        }
+        
+        console.log('[Reflect iOS] Recalculated stats:', {
+          successCount,
+          struggleCount,
+          currentStreak,
+          bestStreak,
+        });
+        
+        // Update the goal with recalculated stats
+        await supabaseApi.updateGoal(reflection.linkedGoalId, {
+          success_count: successCount,
+          struggle_count: struggleCount,
+          current_streak: currentStreak,
+          best_streak: bestStreak,
+        });
+      }
+      
       setReflections(reflections.filter(r => r.id !== id));
       showSuccess('Reflection deleted successfully');
     } catch (error) {

@@ -808,6 +808,73 @@ export default function HomeScreen() {
   const handleDeleteReflection = async (id: string) => {
     try {
       console.log('HomeScreen (iOS): Deleting reflection:', id);
+      
+      // Find the reflection to get its linked goal
+      const reflection = reflections.find(r => r.id === id);
+      
+      // Delete the reflection
+      const { deleteReflection } = await import('@/utils/supabaseApi');
+      await deleteReflection(id);
+      
+      // If reflection was linked to a goal, recalculate goal stats
+      if (reflection && reflection.linkedGoalId) {
+        console.log('HomeScreen (iOS): Reflection was linked to goal, recalculating stats for goal:', reflection.linkedGoalId);
+        
+        // Get all remaining reflections for this goal
+        const { getReflections } = await import('@/utils/supabaseApi');
+        const allReflections = await getReflections();
+        const goalReflections = allReflections.filter(r => r.linked_goal_id === reflection.linkedGoalId);
+        
+        // Recalculate success and struggle counts
+        const successCount = goalReflections.filter(r => r.outcome === 'success').length;
+        const struggleCount = goalReflections.filter(r => r.outcome === 'struggled').length;
+        
+        // Recalculate streaks
+        // Sort reflections by date (newest first)
+        const sortedReflections = goalReflections
+          .sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+        
+        let currentStreak = 0;
+        let bestStreak = 0;
+        let tempStreak = 0;
+        
+        // Calculate current streak (from most recent date backwards)
+        for (const r of sortedReflections) {
+          if (r.outcome === 'success') {
+            tempStreak++;
+            if (tempStreak > bestStreak) {
+              bestStreak = tempStreak;
+            }
+          } else if (r.outcome === 'struggled') {
+            if (currentStreak === 0) {
+              // If we haven't set current streak yet, it means the most recent entries were successes
+              currentStreak = tempStreak;
+            }
+            tempStreak = 0;
+          }
+        }
+        
+        // If we never hit a struggle, the current streak is the temp streak
+        if (currentStreak === 0) {
+          currentStreak = tempStreak;
+        }
+        
+        console.log('HomeScreen (iOS): Recalculated stats:', {
+          successCount,
+          struggleCount,
+          currentStreak,
+          bestStreak,
+        });
+        
+        // Update the goal with recalculated stats
+        await updateGoal(reflection.linkedGoalId, {
+          success_count: successCount,
+          struggle_count: struggleCount,
+          current_streak: currentStreak,
+          best_streak: bestStreak,
+        });
+      }
+      
       showSuccess('Reflection deleted!');
       await loadData();
     } catch (error: any) {
@@ -954,28 +1021,39 @@ export default function HomeScreen() {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
     const isOneTimeGoal = goal.trackingType === 'once_per_day';
     
-    // Calculate today's counts from dailyEntries
+    // CRITICAL FIX: For tally goals, show TODAY'S counts (reset daily)
+    // For once_per_day goals, show CUMULATIVE counts
     const todaySuccesses = goal.todaySuccessCount || 0;
     const todayStruggles = goal.todayStruggleCount || 0;
     
-    // Calculate values - CUMULATIVE counts from database
+    // Display values based on tracking type
+    let displaySuccessCount: number;
+    let displayStruggleCount: number;
+    
+    if (isOneTimeGoal) {
+      // Once per day: Show cumulative total
+      displaySuccessCount = goal.successCount || 0;
+      displayStruggleCount = 0; // Hidden for once_per_day goals
+    } else {
+      // Tally: Show today's count only
+      displaySuccessCount = todaySuccesses;
+      displayStruggleCount = todayStruggles;
+    }
+    
     const bestStreakValue = goal.bestStreak || 0;
     const currentStreakValue = goal.currentStreak || 0;
-    const totalSuccessesValue = goal.successCount || 0;
-    const totalStrugglesValue = goal.struggleCount || 0;
     const rewardsEarnedToday = dailyTallies.reward;
     const consequencesEarnedToday = dailyTallies.consequence;
     
-    // For once_per_day goals, show streak icons when there's a current streak
-    // Streak should appear after first success
+    // For once_per_day goals, only show tick if success recorded TODAY
+    const shouldShowTickForOncePerDay = isOneTimeGoal && todaySuccesses > 0;
+    
+    // Streak logic: Show streak icons when there's a current streak
     const hasCurrentStreak = currentStreakValue > 0;
     const shouldShowStreak = hasCurrentStreak;
-    const shouldFadeStreak = false; // Never fade for once_per_day goals
     
     // Best streak should show when it exists and there's a current streak
     const shouldShowBestStreak = bestStreakValue > 0 && hasCurrentStreak;
-    const isNewBest = bestStreakValue === currentStreakValue && bestStreakValue > 0;
-    const shouldFadeBestStreak = false; // Never fade for once_per_day goals
     
     console.log('HomeScreen (iOS): Rendering goal card:', {
       goalId: goal.id,
@@ -983,11 +1061,14 @@ export default function HomeScreen() {
       trackingType: goal.trackingType,
       todaySuccesses,
       todayStruggles,
-      totalSuccesses: totalSuccessesValue,
-      totalStruggles: totalStrugglesValue,
+      cumulativeSuccesses: goal.successCount,
+      cumulativeStruggles: goal.struggleCount,
+      displaySuccessCount,
+      displayStruggleCount,
       currentStreak: currentStreakValue,
       bestStreak: bestStreakValue,
       isOneTimeGoal,
+      shouldShowTickForOncePerDay,
       shouldShowStreak,
       shouldShowBestStreak,
     });
@@ -1056,21 +1137,23 @@ export default function HomeScreen() {
             </View>
           )}
           
-          {/* Total Successes */}
-          <View style={styles.statItemConcise}>
-            <Text style={styles.statTextConcise}>{totalSuccessesValue}</Text>
-            <IconSymbol
-              ios_icon_name="checkmark"
-              android_material_icon_name="check"
-              size={16}
-              color={colors.success}
-            />
-          </View>
+          {/* Success Count - Show only if applicable */}
+          {(!isOneTimeGoal || shouldShowTickForOncePerDay) && (
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
+              <IconSymbol
+                ios_icon_name={isOneTimeGoal ? "checkmark.circle.fill" : "checkmark"}
+                android_material_icon_name={isOneTimeGoal ? "check-circle" : "check"}
+                size={16}
+                color={colors.success}
+              />
+            </View>
+          )}
           
-          {/* Total Struggles - HIDDEN for one-time goals */}
+          {/* Struggle Count - HIDDEN for one-time goals */}
           {!isOneTimeGoal && (
             <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{totalStrugglesValue}</Text>
+              <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
               <IconSymbol
                 ios_icon_name="xmark"
                 android_material_icon_name="close"
