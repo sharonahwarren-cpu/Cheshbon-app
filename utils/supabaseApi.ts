@@ -439,6 +439,7 @@ export const createGoal = async (goal: any) => {
     status: goal.status || 'ACTIVE',
     life_area_id: goal.lifeAreaId || goal.life_area_id || null,
     behavior_categories: goal.behaviorCategories || goal.behavior_categories || [],
+    tracking_type: goal.tracking_type || 'tally', // NEW: Add tracking_type field
     reward_currency_id: goal.reward_currency_id || null,
     reward_amount: goal.reward_amount || 0,
     reward_successes: goal.reward_successes || 0,
@@ -487,6 +488,8 @@ export const updateGoal = async (id: string, updates: any) => {
   if (updates.behaviorCategories !== undefined || updates.behavior_categories !== undefined) {
     updateData.behavior_categories = updates.behavior_categories || updates.behaviorCategories || [];
   }
+  // NEW: Add tracking_type field handling
+  if (updates.tracking_type !== undefined) updateData.tracking_type = updates.tracking_type;
   if (updates.reward_currency_id !== undefined) updateData.reward_currency_id = updates.reward_currency_id;
   if (updates.reward_amount !== undefined) updateData.reward_amount = updates.reward_amount;
   if (updates.reward_successes !== undefined) updateData.reward_successes = updates.reward_successes;
