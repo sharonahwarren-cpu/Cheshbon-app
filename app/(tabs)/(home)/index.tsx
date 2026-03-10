@@ -1271,7 +1271,7 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity 
         key={goal.id} 
-        style={styles.goalCardConcise}
+        style={[styles.goalCardConcise, { paddingTop: 0, paddingBottom: 0, paddingRight: 0 }]}
         onPress={() => handleEditGoal(goal.id)}
       >
         <View style={styles.goalRowConcise}>
