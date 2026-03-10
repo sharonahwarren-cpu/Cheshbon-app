@@ -1,3 +1,4 @@
+
 import { IconSymbol } from "@/components/IconSymbol";
 import { colors } from "@/styles/commonStyles";
 import { getLocalTimezone } from '@/utils/dateUtils';
@@ -591,6 +592,41 @@ export default function HomeScreen() {
       const isOncePerDay = goal.trackingType === 'once_per_day';
       const isOneTimeOnly = goal.trackingType === 'one_time_only';
       
+      // Optimistic UI update - update state immediately
+      const updatedGoals = goals.map(g => {
+        if (g.id === goalId) {
+          if (isOncePerDay || isOneTimeOnly) {
+            const hasSuccessToday = g.todaySuccessCount > 0;
+            if (hasSuccessToday) {
+              // Undo success
+              return {
+                ...g,
+                todaySuccessCount: 0,
+                todayStruggleCount: 0,
+              };
+            } else {
+              // Add success
+              return {
+                ...g,
+                todaySuccessCount: 1,
+                todayStruggleCount: 0,
+              };
+            }
+          } else {
+            // Tally type
+            return {
+              ...g,
+              todaySuccessCount: g.todaySuccessCount + 1,
+            };
+          }
+        }
+        return g;
+      });
+      
+      setGoals(updatedGoals);
+      setLifeAreas(buildLifeAreaHierarchy(lifeAreas.map(a => ({ ...a })), updatedGoals));
+      
+      // Background database sync
       if (isOncePerDay || isOneTimeOnly) {
         const { getReflections, deleteReflection, createReflection: createReflectionFn } = await import('@/utils/supabaseApi');
         const todayReflections = await getReflections(dateStr);
@@ -600,7 +636,6 @@ export default function HomeScreen() {
         const todayStruggleReflection = goalTodayReflections.find((r: any) => r.outcome === 'struggled');
         
         if (todaySuccessReflection) {
-          console.log('HomeScreen: Undoing success for once_per_day/one_time_only goal');
           await deleteReflection(todaySuccessReflection.id);
           
           const todaySuccessEntry = goal.dailyEntries?.find(e => e.type === 'success');
@@ -646,15 +681,12 @@ export default function HomeScreen() {
           });
         } else {
           if (todayStruggleReflection) {
-            console.log('HomeScreen: Changing struggle to success for once_per_day/one_time_only goal');
             await deleteReflection(todayStruggleReflection.id);
             
             const todayStruggleEntry = goal.dailyEntries?.find(e => e.type === 'struggle');
             if (todayStruggleEntry) {
               await deleteDailyEntry(todayStruggleEntry.id);
             }
-          } else {
-            console.log('HomeScreen: Recording success for once_per_day/one_time_only goal');
           }
           
           await createDailyEntry({
@@ -727,7 +759,6 @@ export default function HomeScreen() {
           linked_goal_id: goalId,
           outcome: 'success',
         });
-        console.log('HomeScreen: Reflection created for success');
 
         const newSuccessCount = (goal.successCount || 0) + 1;
         const newCurrentStreak = (goal.currentStreak || 0) + 1;
@@ -740,10 +771,13 @@ export default function HomeScreen() {
         });
       }
 
+      // Reload data in background to sync with database
       await loadData();
     } catch (error: any) {
       console.error('HomeScreen: Error recording success:', error);
       showError(error.message || 'Failed to record success');
+      // Reload to revert optimistic update
+      await loadData();
     }
   };
 
@@ -758,158 +792,56 @@ export default function HomeScreen() {
         return;
       }
       
-      const isOncePerDay = goal.trackingType === 'once_per_day';
+      const isTally = goal.trackingType === 'tally';
       
-      if (isOncePerDay) {
-        const { getReflections, deleteReflection, createReflection: createReflectionFn } = await import('@/utils/supabaseApi');
-        const todayReflections = await getReflections(dateStr);
-        const goalTodayReflections = todayReflections.filter((r: any) => r.linked_goal_id === goalId);
-        
-        const todaySuccessReflection = goalTodayReflections.find((r: any) => r.outcome === 'success');
-        const todayStruggleReflection = goalTodayReflections.find((r: any) => r.outcome === 'struggled');
-        
-        if (todayStruggleReflection) {
-          console.log('HomeScreen: Undoing struggle for once_per_day goal');
-          await deleteReflection(todayStruggleReflection.id);
-          
-          const todayStruggleEntry = goal.dailyEntries?.find(e => e.type === 'struggle');
-          if (todayStruggleEntry) {
-            await deleteDailyEntry(todayStruggleEntry.id);
+      // Optimistic UI update - update state immediately
+      const updatedGoals = goals.map(g => {
+        if (g.id === goalId) {
+          if (isTally) {
+            return {
+              ...g,
+              todayStruggleCount: g.todayStruggleCount + 1,
+            };
           }
-          
-          const allReflections = await getReflections();
-          const goalReflections = allReflections.filter((r: any) => r.linked_goal_id === goalId);
-          const successCount = goalReflections.filter((r: any) => r.outcome === 'success').length;
-          const struggleCount = goalReflections.filter((r: any) => r.outcome === 'struggled').length;
-          
-          const sortedReflections = goalReflections
-            .sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
-          
-          let currentStreak = 0;
-          let bestStreak = 0;
-          let tempStreak = 0;
-          
-          for (const r of sortedReflections) {
-            if ((r as any).outcome === 'success') {
-              tempStreak++;
-              if (tempStreak > bestStreak) {
-                bestStreak = tempStreak;
-              }
-            } else if ((r as any).outcome === 'struggled') {
-              if (currentStreak === 0) {
-                currentStreak = tempStreak;
-              }
-              tempStreak = 0;
-            }
-          }
-          
-          if (currentStreak === 0) {
-            currentStreak = tempStreak;
-          }
-          
-          await updateGoal(goalId, {
-            success_count: successCount,
-            struggle_count: struggleCount,
-            current_streak: currentStreak,
-            best_streak: bestStreak,
-          });
-        } else {
-          if (todaySuccessReflection) {
-            console.log('HomeScreen: Changing success to struggle for once_per_day goal');
-            await deleteReflection(todaySuccessReflection.id);
-            
-            const todaySuccessEntry = goal.dailyEntries?.find(e => e.type === 'success');
-            if (todaySuccessEntry) {
-              await deleteDailyEntry(todaySuccessEntry.id);
-            }
-          } else {
-            console.log('HomeScreen: Recording struggle for once_per_day goal');
-          }
-          
-          await createDailyEntry({
-            goal_id: goalId,
-            type: 'struggle',
-            entry_date: dateStr,
-            timestamp: new Date().toISOString(),
-          });
-          
-          await createReflectionFn({
-            entry_date: dateStr,
-            category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
-            type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
-            description: `Quick Entry - ${goal.title}`,
-            linked_goal_id: goalId,
-            outcome: 'struggled',
-          });
-          
-          const allReflections = await getReflections();
-          const goalReflections = allReflections.filter((r: any) => r.linked_goal_id === goalId);
-          const successCount = goalReflections.filter((r: any) => r.outcome === 'success').length;
-          const struggleCount = goalReflections.filter((r: any) => r.outcome === 'struggled').length;
-          
-          const sortedReflections = goalReflections
-            .sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
-          
-          let currentStreak = 0;
-          let bestStreak = 0;
-          let tempStreak = 0;
-          
-          for (const r of sortedReflections) {
-            if ((r as any).outcome === 'success') {
-              tempStreak++;
-              if (tempStreak > bestStreak) {
-                bestStreak = tempStreak;
-              }
-            } else if ((r as any).outcome === 'struggled') {
-              if (currentStreak === 0) {
-                currentStreak = tempStreak;
-              }
-              tempStreak = 0;
-            }
-          }
-          
-          if (currentStreak === 0) {
-            currentStreak = tempStreak;
-          }
-          
-          await updateGoal(goalId, {
-            success_count: successCount,
-            struggle_count: struggleCount,
-            current_streak: 0,
-            best_streak: bestStreak,
-          });
         }
-      } else {
-        await createDailyEntry({
-          goal_id: goalId,
-          type: 'struggle',
-          entry_date: dateStr,
-          timestamp: new Date().toISOString(),
-        });
+        return g;
+      });
+      
+      setGoals(updatedGoals);
+      setLifeAreas(buildLifeAreaHierarchy(lifeAreas.map(a => ({ ...a })), updatedGoals));
+      
+      // Background database sync
+      await createDailyEntry({
+        goal_id: goalId,
+        type: 'struggle',
+        entry_date: dateStr,
+        timestamp: new Date().toISOString(),
+      });
 
-        const { createReflection } = await import('@/utils/supabaseApi');
-        await createReflection({
-          entry_date: dateStr,
-          category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
-          type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
-          description: `Quick Entry - ${goal.title}`,
-          linked_goal_id: goalId,
-          outcome: 'struggled',
-        });
-        console.log('HomeScreen: Reflection created for struggle');
+      const { createReflection } = await import('@/utils/supabaseApi');
+      await createReflection({
+        entry_date: dateStr,
+        category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+        type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
+        description: `Quick Entry - ${goal.title}`,
+        linked_goal_id: goalId,
+        outcome: 'struggled',
+      });
 
-        const newStruggleCount = (goal.struggleCount || 0) + 1;
-        
-        await updateGoal(goalId, {
-          struggle_count: newStruggleCount,
-          current_streak: 0,
-        });
-      }
+      const newStruggleCount = (goal.struggleCount || 0) + 1;
+      
+      await updateGoal(goalId, {
+        struggle_count: newStruggleCount,
+        current_streak: 0,
+      });
 
+      // Reload data in background to sync with database
       await loadData();
     } catch (error: any) {
       console.error('HomeScreen: Error recording struggle:', error);
       showError(error.message || 'Failed to record struggle');
+      // Reload to revert optimistic update
+      await loadData();
     }
   };
 
@@ -1263,10 +1195,10 @@ export default function HomeScreen() {
       : (bestStreakValue > 0 && currentStreakValue > 0);
     
     const isSuccessButtonFaded = (isOncePerDay || isOneTimeOnly) && hasActionToday;
-    const isStruggleButtonFaded = isOncePerDay && hasActionToday;
+    const isStruggleButtonFaded = false; // Never fade struggle button for tally
     
     const shouldShowTrophy = (isOncePerDay || isOneTimeOnly) && hasSuccessToday;
-    const shouldShowX = isOncePerDay && hasStruggleToday;
+    const shouldShowX = false; // Never show X for once_per_day
     
     const shouldShowTallyTick = isTally && todaySuccesses > 0;
     const shouldShowTallyX = isTally && todayStruggles > 0;
@@ -1301,26 +1233,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
             
             {isTally && (
-              <TouchableOpacity
-                style={[
-                  styles.struggleButtonIconConcise,
-                  isStruggleButtonFaded && styles.fadedButton
-                ]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleGoalStruggle(goal.id);
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="xmark"
-                  android_material_icon_name="close"
-                  size={16}
-                  color="#fff"
-                />
-              </TouchableOpacity>
-            )}
-            
-            {isOncePerDay && (
               <TouchableOpacity
                 style={[
                   styles.struggleButtonIconConcise,
@@ -1426,24 +1338,6 @@ export default function HomeScreen() {
                 android_material_icon_name="check"
                 size={16}
                 color="#7C9885"
-              />
-            </TouchableOpacity>
-          )}
-          
-          {shouldShowX && (
-            <TouchableOpacity
-              style={styles.statItemConcise}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleOpenReflectionList(goal, 'struggled');
-              }}
-            >
-              <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
-              <IconSymbol
-                ios_icon_name="xmark"
-                android_material_icon_name="close"
-                size={16}
-                color="#B87C6C"
               />
             </TouchableOpacity>
           )}
