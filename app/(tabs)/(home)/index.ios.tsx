@@ -675,11 +675,8 @@ export default function HomeScreen() {
         best_streak: newBestStreak,
       });
 
-      // Reload data FIRST to update UI
+      // Reload data to update UI - NO SUCCESS MESSAGE POPUP
       await loadData();
-      
-      // THEN show success message
-      showSuccess('Success recorded!');
     } catch (error: any) {
       console.error('HomeScreen (iOS): Error recording success:', error);
       showError(error.message || 'Failed to record success');
@@ -725,11 +722,8 @@ export default function HomeScreen() {
         current_streak: 0,
       });
 
-      // Reload data FIRST to update UI
+      // Reload data to update UI - NO SUCCESS MESSAGE POPUP
       await loadData();
-      
-      // THEN show success message
-      showSuccess('Struggle recorded!');
     } catch (error: any) {
       console.error('HomeScreen (iOS): Error recording struggle:', error);
       showError(error.message || 'Failed to record struggle');
@@ -964,7 +958,7 @@ export default function HomeScreen() {
     const todaySuccesses = goal.todaySuccessCount || 0;
     const todayStruggles = goal.todayStruggleCount || 0;
     
-    // Calculate values
+    // Calculate values - CUMULATIVE counts from database
     const bestStreakValue = goal.bestStreak || 0;
     const currentStreakValue = goal.currentStreak || 0;
     const totalSuccessesValue = goal.successCount || 0;
@@ -972,15 +966,16 @@ export default function HomeScreen() {
     const rewardsEarnedToday = dailyTallies.reward;
     const consequencesEarnedToday = dailyTallies.consequence;
     
-    // Determine if streak should be shown and faded
+    // For once_per_day goals, show streak icons when there's a current streak
+    // Streak should appear after first success
     const hasCurrentStreak = currentStreakValue > 0;
-    const shouldFadeStreak = todaySuccesses === 0 && hasCurrentStreak;
     const shouldShowStreak = hasCurrentStreak;
+    const shouldFadeStreak = false; // Never fade for once_per_day goals
     
-    // Determine if best streak should be shown and faded
-    const shouldShowBestStreak = hasCurrentStreak && bestStreakValue > 0;
+    // Best streak should show when it exists and there's a current streak
+    const shouldShowBestStreak = bestStreakValue > 0 && hasCurrentStreak;
     const isNewBest = bestStreakValue === currentStreakValue && bestStreakValue > 0;
-    const shouldFadeBestStreak = !isNewBest && shouldShowBestStreak;
+    const shouldFadeBestStreak = false; // Never fade for once_per_day goals
     
     console.log('HomeScreen (iOS): Rendering goal card:', {
       goalId: goal.id,
@@ -993,6 +988,8 @@ export default function HomeScreen() {
       currentStreak: currentStreakValue,
       bestStreak: bestStreakValue,
       isOneTimeGoal,
+      shouldShowStreak,
+      shouldShowBestStreak,
     });
     
     return (
@@ -1292,9 +1289,6 @@ export default function HomeScreen() {
         )}
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-        {successMessage && !showSuccessModal ? (
-          <Text style={styles.successText}>{successMessage}</Text>
-        ) : null}
       </ScrollView>
 
       {showDatePicker && (
@@ -1365,25 +1359,7 @@ export default function HomeScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal
-        visible={showSuccessModal}
-        transparent
-        animationType="fade"
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { padding: 32 }]}>
-            <IconSymbol
-              ios_icon_name="checkmark.circle.fill"
-              android_material_icon_name="check-circle"
-              size={48}
-              color="#10b981"
-            />
-            <Text style={[styles.successText, { marginTop: 16, fontSize: 18 }]}>
-              {successMessage}
-            </Text>
-          </View>
-        </View>
-      </Modal>
+
     </SafeAreaView>
   );
 }
