@@ -644,6 +644,18 @@ export default function HomeScreen() {
         timestamp: new Date().toISOString(),
       });
 
+      // Create reflection record for the success
+      const { createReflection } = await import('@/utils/supabaseApi');
+      await createReflection({
+        entry_date: dateStr,
+        category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+        type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
+        description: `Quick Entry - ${goal.title}`,
+        linked_goal_id: goalId,
+        outcome: 'success',
+      });
+      console.log('HomeScreen (iOS): Reflection created for success');
+
       // Update goal counts and streaks
       const newSuccessCount = (goal.successCount || 0) + 1;
       const newCurrentStreak = (goal.currentStreak || 0) + 1;
@@ -681,6 +693,18 @@ export default function HomeScreen() {
         entry_date: dateStr,
         timestamp: new Date().toISOString(),
       });
+
+      // Create reflection record for the struggle
+      const { createReflection } = await import('@/utils/supabaseApi');
+      await createReflection({
+        entry_date: dateStr,
+        category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+        type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
+        description: `Quick Entry - ${goal.title}`,
+        linked_goal_id: goalId,
+        outcome: 'struggled',
+      });
+      console.log('HomeScreen (iOS): Reflection created for struggle');
 
       // Update goal counts and reset streak
       const newStruggleCount = (goal.struggleCount || 0) + 1;
