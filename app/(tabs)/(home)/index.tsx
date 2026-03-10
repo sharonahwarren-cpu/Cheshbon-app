@@ -1256,12 +1256,19 @@ export default function HomeScreen() {
     const shouldShowSuccessForOncePerDay = isOneTimeGoal && todaySuccesses > 0;
     const shouldShowStruggleForOncePerDay = isOneTimeGoal && todayStruggles > 0;
     
-    // Streak logic: Show streak icons when there's a current streak
+    // Streak logic for "Once per day" goals:
+    // - If no entries yet (successCount === 0 && struggleCount === 0), show faded streak with "1" (potential streak)
+    // - If current streak > 0, show visible streak icon
+    // - If current streak === best streak AND best streak > 1, show star (new record)
+    const hasNoEntriesYet = isOneTimeGoal && (goal.successCount === 0 && goal.struggleCount === 0);
     const hasCurrentStreak = currentStreakValue > 0;
-    const shouldShowStreak = hasCurrentStreak;
+    const shouldShowStreak = isOneTimeGoal ? (hasNoEntriesYet || hasCurrentStreak) : hasCurrentStreak;
+    const streakDisplayValue = hasNoEntriesYet ? 1 : currentStreakValue;
+    const isStreakFaded = hasNoEntriesYet;
     
-    // Best streak should show when it exists and there's a current streak
-    const shouldShowBestStreak = bestStreakValue > 0 && hasCurrentStreak
+    // Best streak should show when current streak equals best streak AND best streak > 1 (new record)
+    const isNewRecord = currentStreakValue > 0 && currentStreakValue === bestStreakValue && bestStreakValue > 1;
+    const shouldShowBestStreak = isOneTimeGoal ? isNewRecord : (bestStreakValue > 0 && hasCurrentStreak)
     
     return (
       <TouchableOpacity 
@@ -1315,16 +1322,16 @@ export default function HomeScreen() {
               </View>
             )}
             
-            {/* Current Streak - Only show if there's a current streak */}
+            {/* Current Streak - Show faded if no entries yet, visible if active streak */}
             {shouldShowStreak && (
               <View style={styles.statItemConcise}>
-                <Text style={styles.statTextConcise}>{currentStreakValue}</Text>
+                <Text style={styles.statTextConcise}>{streakDisplayValue}</Text>
                 <IconSymbol
                   ios_icon_name="flame.fill"
                   android_material_icon_name="local-fire-department"
                   size={16}
                   color="#f59e0b"
-                  style={styles.streakIconVisible}
+                  style={isStreakFaded ? styles.streakIconFaded : styles.streakIconVisible}
                 />
               </View>
             )}
