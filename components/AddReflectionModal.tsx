@@ -674,9 +674,7 @@ export function AddReflectionModal({
   
   // If prefilledGoalData is provided (from Goal screen), start at Step 3
   // Steps 1 and 2 are prefilled automatically
-  const initialStep = prefilledGoalData ? 3 : 1;
-  
-  const [step, setStep] = useState(initialStep);
+  const [step, setStep] = useState(1);
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [type, setType] = useState<'Restraint' | 'Proactive'>('Proactive');
   const [description, setDescription] = useState('');
@@ -749,6 +747,7 @@ export function AddReflectionModal({
       const displayCategory = getReflectionDisplayCategory(editingReflection);
       console.log('[AddReflectionModal] Display category for editing reflection:', displayCategory);
       
+      setStep(1);
       setOutcome(editingReflection.outcome);
       setLinkedGoalId(editingReflection.linkedGoalId);
       setCategory(displayCategory);
@@ -771,6 +770,8 @@ export function AddReflectionModal({
         : prefilledGoalData.category;
       
       console.log('[AddReflectionModal] Setting behavior category to:', behaviorCategory);
+      console.log('[AddReflectionModal] Auto-advancing to Step 3 for Quick Entry');
+      
       setCategory(behaviorCategory);
       setType(prefilledGoalData.type || 'Proactive');
       setDescription(prefilledGoalData.description || '');
@@ -783,6 +784,9 @@ export function AddReflectionModal({
       setSelectedMotivationIds([]);
       setStrategyEffectiveness([]);
       setFutureStrategyId(undefined);
+      
+      // Auto-advance to Step 3 since Steps 1 and 2 are prefilled
+      setStep(3);
     } else if (prefilledGoalId) {
       console.log('[AddReflectionModal] prefilledGoalId provided without prefilledGoalData, looking up goal:', prefilledGoalId);
       const goal = goals.find(g => g.id === prefilledGoalId);
@@ -794,6 +798,7 @@ export function AddReflectionModal({
           setCategory(undefined);
         }
       }
+      setStep(1);
       setLinkedGoalId(prefilledGoalId);
       setOutcome(undefined);
       setType('Proactive');
@@ -807,6 +812,7 @@ export function AddReflectionModal({
       setFutureStrategyId(undefined);
     } else {
       console.log('[AddReflectionModal] No prefill data, clearing all fields');
+      setStep(1);
       setOutcome(undefined);
       setLinkedGoalId(undefined);
       setCategory(undefined);

@@ -675,8 +675,11 @@ export default function HomeScreen() {
         best_streak: newBestStreak,
       });
 
-      showSuccess('Success recorded!');
+      // Reload data FIRST to update UI
       await loadData();
+      
+      // THEN show success message
+      showSuccess('Success recorded!');
     } catch (error: any) {
       console.error('HomeScreen (iOS): Error recording success:', error);
       showError(error.message || 'Failed to record success');
@@ -722,8 +725,11 @@ export default function HomeScreen() {
         current_streak: 0,
       });
 
-      showSuccess('Struggle recorded!');
+      // Reload data FIRST to update UI
       await loadData();
+      
+      // THEN show success message
+      showSuccess('Struggle recorded!');
     } catch (error: any) {
       console.error('HomeScreen (iOS): Error recording struggle:', error);
       showError(error.message || 'Failed to record struggle');

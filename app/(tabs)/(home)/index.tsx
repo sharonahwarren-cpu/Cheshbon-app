@@ -587,8 +587,11 @@ export default function HomeScreen() {
         best_streak: newBestStreak,
       });
 
-      showSuccess('Success recorded!');
+      // Reload data FIRST to update UI
       await loadData();
+      
+      // THEN show success message
+      showSuccess('Success recorded!');
     } catch (error: any) {
       console.error('HomeScreen: Error recording success:', error);
       showError(error.message || 'Failed to record success');
@@ -635,8 +638,11 @@ export default function HomeScreen() {
         current_streak: 0, // Reset streak on struggle
       });
 
-      showSuccess('Struggle recorded!');
+      // Reload data FIRST to update UI
       await loadData();
+      
+      // THEN show success message
+      showSuccess('Struggle recorded!');
     } catch (error: any) {
       console.error('HomeScreen: Error recording struggle:', error);
       showError(error.message || 'Failed to record struggle');
@@ -665,11 +671,41 @@ export default function HomeScreen() {
     router.push('/create-goal');
   };
 
-  const openAddReflectionModal = (goalId?: string) => {
-    console.log('HomeScreen: Opening add reflection modal', goalId ? `for goal: ${goalId}` : '');
-    setEditingReflection(null);
-    setPrefilledGoalId(goalId);
-    setShowReflectionModal(true);
+  const openAddReflectionModal = (goalId?: string, outcome?: 'success' | 'struggled') => {
+    console.log('HomeScreen: Opening add reflection modal', goalId ? `for goal: ${goalId}` : '', outcome ? `with outcome: ${outcome}` : '');
+    
+    if (goalId) {
+      const goal = goals.find(g => g.id === goalId);
+      if (goal) {
+        console.log('HomeScreen: Prefilling reflection modal with goal data:', {
+          id: goal.id,
+          title: goal.title,
+          behaviorCategories: goal.behaviorCategories,
+          type: goal.type,
+          outcome,
+        });
+        
+        // Build prefilled data with Quick Entry format
+        const prefilled = {
+          id: goal.id,
+          category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+          type: goal.type === 'RESTRAINING' ? 'Restraint' as const : 'Proactive' as const,
+          description: `Quick Entry - ${goal.title}`,
+          behaviorCategories: goal.behaviorCategories,
+          outcome: outcome,
+          selectedDate: selectedDate,
+        };
+        
+        console.log('HomeScreen: Setting prefilledGoalData:', prefilled);
+        setEditingReflection(null);
+        setPrefilledGoalId(prefilled as any);
+        setShowReflectionModal(true);
+      }
+    } else {
+      setEditingReflection(null);
+      setPrefilledGoalId(undefined);
+      setShowReflectionModal(true);
+    }
   };
 
   const openEditReflectionModal = (reflection: Reflection) => {
@@ -1141,7 +1177,7 @@ export default function HomeScreen() {
           gainsLosses={gainsLosses}
           strategies={strategies}
           motivations={[]}
-          prefilledGoalId={prefilledGoalId}
+          prefilledGoalData={prefilledGoalId as any}
         />
       )}
 
