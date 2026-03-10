@@ -556,19 +556,47 @@ export const getGoalsWithDailyEntries = async (date: string) => {
   
   handleError(entriesError, 'getGoalsWithDailyEntries - entries');
   
-  // Combine goals with their daily entries
+  // Combine goals with their daily entries and map snake_case to camelCase
   const goalsWithEntries = goals?.map(goal => {
     const goalEntries = entries?.filter(entry => entry.goal_id === goal.id) || [];
     const todaySuccessCount = goalEntries.filter(e => e.type === 'success').length;
     const todayStruggleCount = goalEntries.filter(e => e.type === 'struggle').length;
     
+    // CRITICAL FIX: Map snake_case database fields to camelCase for frontend
     return {
-      ...goal,
-      dailyEntries: goalEntries,
+      id: goal.id,
+      title: goal.title,
+      description: goal.description,
+      type: goal.type,
+      status: goal.status,
+      lifeArea: goal.life_area,
+      behaviorCategories: goal.behavior_categories || [],
+      trackingType: goal.tracking_type || 'tally',
+      // CUMULATIVE COUNTS from database (these are the total counts, not today's counts)
+      successCount: goal.success_count || 0,
+      struggleCount: goal.struggle_count || 0,
+      currentStreak: goal.current_streak || 0,
+      bestStreak: goal.best_streak || 0,
+      // Currency fields
+      rewardCurrencyId: goal.reward_currency_id,
+      rewardAmount: goal.reward_amount,
+      rewardSuccesses: goal.reward_successes,
+      consequenceCurrencyId: goal.consequence_currency_id,
+      consequenceAmount: goal.consequence_amount,
+      consequenceFailures: goal.consequence_failures,
+      // Schedule config
+      scheduleConfig: goal.schedule_config,
+      // Today's counts from daily entries
       todaySuccessCount,
       todayStruggleCount,
+      dailyEntries: goalEntries,
+      // Timestamps
+      createdAt: goal.created_at,
+      updatedAt: goal.updated_at,
     };
   });
+  
+  console.log('[Supabase API] getGoalsWithDailyEntries - Sample goal data:', goalsWithEntries?.[0]);
   
   return goalsWithEntries || [];
 };
