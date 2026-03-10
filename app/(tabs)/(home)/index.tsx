@@ -66,7 +66,7 @@ interface ActivatedGoal {
   consequenceCurrencyId?: string;
   consequenceFailures?: number;
   consequenceAmount?: number;
-  trackingType?: 'once_per_day' | 'tally';
+  trackingType?: 'once_per_day' | 'tally' | 'one_time_only';
 }
 
 interface LifeAreaNode {
@@ -262,24 +262,32 @@ const styles = StyleSheet.create({
   },
   goalActionButtons: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 0,
   },
   actionButtonIconConcise: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#ef4444',
+    width: 32,
+    height: 32,
+    borderRadius: 0,
+    backgroundColor: '#7C9885',
     alignItems: 'center',
     justifyContent: 'center',
   },
   successButtonIconConcise: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#7C9885',
   },
   reflectButtonIconConcise: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 0,
     backgroundColor: '#B87C6C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  struggleButtonIconConcise: {
+    width: 32,
+    height: 32,
+    borderRadius: 0,
+    backgroundColor: '#ef4444',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -298,6 +306,9 @@ const styles = StyleSheet.create({
   },
   streakIconVisible: {
     opacity: 1,
+  },
+  fadedButton: {
+    opacity: 0.3,
   },
   emptyState: {
     padding: 32,
@@ -570,8 +581,9 @@ export default function HomeScreen() {
       }
       
       const isOncePerDay = goal.trackingType === 'once_per_day';
+      const isOneTimeOnly = goal.trackingType === 'one_time_only';
       
-      if (isOncePerDay) {
+      if (isOncePerDay || isOneTimeOnly) {
         const { getReflections, deleteReflection, createReflection: createReflectionFn } = await import('@/utils/supabaseApi');
         const todayReflections = await getReflections(dateStr);
         const goalTodayReflections = todayReflections.filter((r: any) => r.linked_goal_id === goalId);
@@ -580,7 +592,7 @@ export default function HomeScreen() {
         const todayStruggleReflection = goalTodayReflections.find((r: any) => r.outcome === 'struggled');
         
         if (todaySuccessReflection) {
-          console.log('HomeScreen: Undoing success for once_per_day goal');
+          console.log('HomeScreen: Undoing success for once_per_day/one_time_only goal');
           await deleteReflection(todaySuccessReflection.id);
           
           const todaySuccessEntry = goal.dailyEntries?.find(e => e.type === 'success');
@@ -626,7 +638,7 @@ export default function HomeScreen() {
           });
         } else {
           if (todayStruggleReflection) {
-            console.log('HomeScreen: Changing struggle to success for once_per_day goal');
+            console.log('HomeScreen: Changing struggle to success for once_per_day/one_time_only goal');
             await deleteReflection(todayStruggleReflection.id);
             
             const todayStruggleEntry = goal.dailyEntries?.find(e => e.type === 'struggle');
@@ -634,7 +646,7 @@ export default function HomeScreen() {
               await deleteDailyEntry(todayStruggleEntry.id);
             }
           } else {
-            console.log('HomeScreen: Recording success for once_per_day goal');
+            console.log('HomeScreen: Recording success for once_per_day/one_time_only goal');
           }
           
           await createDailyEntry({
@@ -1040,6 +1052,7 @@ export default function HomeScreen() {
     console.log('HomeScreen: Opening reflection list for goal:', goal.id, 'outcome:', outcome, 'trackingType:', goal.trackingType);
     
     const isOncePerDay = goal.trackingType === 'once_per_day';
+    const isOneTimeOnly = goal.trackingType === 'one_time_only';
     
     setReflectionListGoalId(goal.id);
     setReflectionListOutcome(outcome);
@@ -1197,7 +1210,9 @@ export default function HomeScreen() {
 
   const renderConciseGoalCard = (goal: ActivatedGoal) => {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
-    const isOneTimeGoal = goal.trackingType === 'once_per_day';
+    const isOncePerDay = goal.trackingType === 'once_per_day';
+    const isOneTimeOnly = goal.trackingType === 'one_time_only';
+    const isTally = goal.trackingType === 'tally';
     
     const todaySuccesses = goal.todaySuccessCount || 0;
     const todayStruggles = goal.todayStruggleCount || 0;
@@ -1221,23 +1236,29 @@ export default function HomeScreen() {
     const rewardsEarnedToday = dailyTallies.reward;
     const consequencesEarnedToday = dailyTallies.consequence;
     
-    const displaySuccessCount = isOneTimeGoal ? (goal.successCount || 0) : todaySuccesses;
-    const displayStruggleCount = isOneTimeGoal ? (goal.struggleCount || 0) : todayStruggles;
+    const displaySuccessCount = (isOncePerDay || isOneTimeOnly) ? (goal.successCount || 0) : todaySuccesses;
+    const displayStruggleCount = (isOncePerDay || isOneTimeOnly) ? (goal.struggleCount || 0) : todayStruggles;
     
     const hasSuccessToday = todaySuccesses > 0;
     const hasStruggleToday = todayStruggles > 0;
     
-    const shouldShowStreak = isOneTimeGoal 
+    const shouldShowStreak = (isOncePerDay || isOneTimeOnly)
       ? (!hasActionToday || hasSuccessToday)
       : (currentStreakValue > 0);
     
-    const streakDisplayValue = (isOneTimeGoal && !hasActionToday) ? 1 : currentStreakValue;
-    const isStreakFaded = isOneTimeGoal && !hasActionToday;
+    const streakDisplayValue = ((isOncePerDay || isOneTimeOnly) && !hasActionToday) ? 1 : currentStreakValue;
+    const isStreakFaded = (isOncePerDay || isOneTimeOnly) && !hasActionToday;
     
     const isNewRecord = currentStreakValue > 0 && currentStreakValue === bestStreakValue && bestStreakValue > 1;
-    const shouldShowBestStreak = isOneTimeGoal 
+    const shouldShowBestStreak = (isOncePerDay || isOneTimeOnly)
       ? (hasSuccessToday && isNewRecord) 
       : (bestStreakValue > 0 && currentStreakValue > 0);
+    
+    const isSuccessButtonFaded = (isOncePerDay || isOneTimeOnly) && hasActionToday;
+    const isStruggleButtonFaded = isOncePerDay && hasActionToday;
+    
+    const shouldShowTrophy = (isOncePerDay || isOneTimeOnly) && hasSuccessToday;
+    const shouldShowX = isOncePerDay && hasStruggleToday;
     
     return (
       <TouchableOpacity 
@@ -1252,11 +1273,11 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={[
                 styles.actionButtonIconConcise, 
-                styles.successButtonIconConcise, 
-                { backgroundColor: "#7C9885" }
+                styles.successButtonIconConcise,
+                isSuccessButtonFaded && styles.fadedButton
               ]}
-              onPressIn={() => isOneTimeGoal && handleSuccessPressIn(goal.id)}
-              onPressOut={() => isOneTimeGoal ? handleSuccessPressOut(goal.id) : handleGoalSuccess(goal.id)}
+              onPressIn={() => (isOncePerDay || isOneTimeOnly) && handleSuccessPressIn(goal.id)}
+              onPressOut={() => (isOncePerDay || isOneTimeOnly) ? handleSuccessPressOut(goal.id) : handleGoalSuccess(goal.id)}
               delayPressIn={0}
             >
               <IconSymbol
@@ -1269,8 +1290,7 @@ export default function HomeScreen() {
             
             <TouchableOpacity
               style={[
-                styles.reflectButtonIconConcise,
-                { backgroundColor: "#B87C6C" }
+                styles.reflectButtonIconConcise
               ]}
               onPress={(e) => {
                 e.stopPropagation();
@@ -1289,6 +1309,26 @@ export default function HomeScreen() {
         </View>
         
         <View style={styles.goalIconsRow}>
+          {!isOneTimeOnly && (
+            <TouchableOpacity
+              style={[
+                styles.struggleButtonIconConcise,
+                isStruggleButtonFaded && styles.fadedButton
+              ]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleGoalStruggle(goal.id);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
+                size={16}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
+          
           {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
             <View style={styles.statItemConcise}>
               <Text style={styles.statTextConcise}>{consequencesEarnedToday}</Text>
@@ -1339,25 +1379,7 @@ export default function HomeScreen() {
             </View>
           )}
           
-          {isOneTimeGoal ? (
-            !hasActionToday ? null : (
-              <TouchableOpacity
-                style={styles.statItemConcise}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleOpenReflectionList(goal, 'success');
-                }}
-              >
-                <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
-                <IconSymbol
-                  ios_icon_name="trophy.fill"
-                  android_material_icon_name="emoji-events"
-                  size={16}
-                  color="#FFD700"
-                />
-              </TouchableOpacity>
-            )
-          ) : (
+          {shouldShowTrophy && (
             <TouchableOpacity
               style={styles.statItemConcise}
               onPress={(e) => {
@@ -1367,10 +1389,28 @@ export default function HomeScreen() {
             >
               <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
               <IconSymbol
-                ios_icon_name="checkmark"
-                android_material_icon_name="check"
+                ios_icon_name="trophy.fill"
+                android_material_icon_name="emoji-events"
                 size={16}
-                color={colors.success}
+                color="#FFD700"
+              />
+            </TouchableOpacity>
+          )}
+          
+          {shouldShowX && (
+            <TouchableOpacity
+              style={styles.statItemConcise}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleOpenReflectionList(goal, 'struggled');
+              }}
+            >
+              <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
+              <IconSymbol
+                ios_icon_name="xmark.circle.fill"
+                android_material_icon_name="cancel"
+                size={16}
+                color="#ef4444"
               />
             </TouchableOpacity>
           )}
