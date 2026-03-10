@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -804,63 +804,25 @@ export default function HomeScreen() {
     const rewardsEarnedToday = dailyTallies.reward;
     const consequencesEarnedToday = dailyTallies.consequence;
     
-    // Determine if streak should be faded (no success today)
-    const shouldFadeStreak = goal.todaySuccessCount === 0;
+    // Determine if streak should be shown and faded
+    const hasCurrentStreak = currentStreakValue > 0;
+    const shouldFadeStreak = goal.todaySuccessCount === 0 && hasCurrentStreak;
+    const shouldShowStreak = hasCurrentStreak;
+    
+    // Determine if best streak should be shown and faded
+    const shouldShowBestStreak = hasCurrentStreak && bestStreakValue > 0;
+    const isNewBest = bestStreakValue === currentStreakValue && bestStreakValue > 0;
+    const shouldFadeBestStreak = !isNewBest && shouldShowBestStreak;
     
     return (
-      <View key={goal.id} style={styles.goalCardConcise}>
+      <TouchableOpacity 
+        key={goal.id} 
+        style={styles.goalCardConcise}
+        onPress={() => handleEditGoal(goal.id)}
+      >
         <View style={styles.goalRowConcise}>
           {/* Goal Name - LEFT SIDE */}
           <Text style={styles.goalNameConcise} numberOfLines={1}>{goal.title}</Text>
-          
-          {/* Best Streak */}
-          {bestStreakValue > 0 && (
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{bestStreakValue}</Text>
-              <IconSymbol
-                ios_icon_name="star.fill"
-                android_material_icon_name="star"
-                size={16}
-                color="#f59e0b"
-              />
-            </View>
-          )}
-          
-          {/* Current Streak */}
-          <View style={styles.statItemConcise}>
-            <Text style={styles.statTextConcise}>{currentStreakValue}</Text>
-            <IconSymbol
-              ios_icon_name="flame.fill"
-              android_material_icon_name="local-fire-department"
-              size={16}
-              color="#f59e0b"
-              style={shouldFadeStreak ? styles.streakIconFaded : styles.streakIconVisible}
-            />
-          </View>
-          
-          {/* Total Struggles - HIDDEN for one-time goals */}
-          {!isOneTimeGoal && (
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{totalStrugglesValue}</Text>
-              <IconSymbol
-                ios_icon_name="xmark"
-                android_material_icon_name="close"
-                size={16}
-                color="#ef4444"
-              />
-            </View>
-          )}
-          
-          {/* Total Successes */}
-          <View style={styles.statItemConcise}>
-            <Text style={styles.statTextConcise}>{totalSuccessesValue}</Text>
-            <IconSymbol
-              ios_icon_name="checkmark"
-              android_material_icon_name="check"
-              size={16}
-              color="#10b981"
-            />
-          </View>
           
           {/* Consequences Earned Today */}
           {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
@@ -888,38 +850,63 @@ export default function HomeScreen() {
             </View>
           )}
           
-          {/* Action Buttons - RIGHT SIDE */}
-          <TouchableOpacity
-            style={[styles.actionButtonIconConcise, styles.successButtonIconConcise]}
-            onPress={() => handleGoalSuccess(goal.id)}
-          >
+          {/* Best Streak - Only show if there's a current streak */}
+          {shouldShowBestStreak && (
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{bestStreakValue}</Text>
+              <IconSymbol
+                ios_icon_name="star.fill"
+                android_material_icon_name="star"
+                size={16}
+                color="#f59e0b"
+                style={shouldFadeBestStreak ? styles.streakIconFaded : styles.streakIconVisible}
+              />
+            </View>
+          )}
+          
+          {/* Current Streak - Only show if there's a current streak */}
+          {shouldShowStreak && (
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{currentStreakValue}</Text>
+              <IconSymbol
+                ios_icon_name="flame.fill"
+                android_material_icon_name="local-fire-department"
+                size={16}
+                color="#f59e0b"
+                style={shouldFadeStreak ? styles.streakIconFaded : styles.streakIconVisible}
+              />
+            </View>
+          )}
+          
+          {/* Total Successes */}
+          <View style={styles.statItemConcise}>
+            <Text style={styles.statTextConcise}>{totalSuccessesValue}</Text>
             <IconSymbol
               ios_icon_name="checkmark"
               android_material_icon_name="check"
-              size={20}
-              color="#fff"
+              size={16}
+              color={colors.success}
             />
-          </TouchableOpacity>
+          </View>
           
-          {/* Struggle Button - HIDDEN for one-time goals */}
+          {/* Total Struggles - HIDDEN for one-time goals */}
           {!isOneTimeGoal && (
-            <TouchableOpacity
-              style={styles.actionButtonIconConcise}
-              onPress={() => handleGoalStruggle(goal.id)}
-            >
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{totalStrugglesValue}</Text>
               <IconSymbol
                 ios_icon_name="xmark"
                 android_material_icon_name="close"
-                size={20}
-                color="#fff"
+                size={16}
+                color={colors.error}
               />
-            </TouchableOpacity>
+            </View>
           )}
           
-          {/* Reflect Icon - RIGHTMOST */}
+          {/* Reflect Icon */}
           <TouchableOpacity
             style={styles.reflectButtonIconConcise}
-            onPress={() => {
+            onPress={(e) => {
+              e.stopPropagation();
               console.log('HomeScreen: Opening reflection modal for goal:', goal.id);
               openAddReflectionModal(goal.id);
             }}
@@ -931,8 +918,42 @@ export default function HomeScreen() {
               color="#fff"
             />
           </TouchableOpacity>
+          
+          {/* Struggle Button - HIDDEN for one-time goals */}
+          {!isOneTimeGoal && (
+            <TouchableOpacity
+              style={styles.actionButtonIconConcise}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleGoalStruggle(goal.id);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
+                size={20}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
+          
+          {/* Success Button - RIGHTMOST */}
+          <TouchableOpacity
+            style={[styles.actionButtonIconConcise, styles.successButtonIconConcise]}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleGoalSuccess(goal.id);
+            }}
+          >
+            <IconSymbol
+              ios_icon_name="checkmark"
+              android_material_icon_name="check"
+              size={20}
+              color="#fff"
+            />
+          </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
