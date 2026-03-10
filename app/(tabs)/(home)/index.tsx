@@ -238,13 +238,14 @@ const styles = StyleSheet.create({
   goalCardConcise: {
     backgroundColor: colors.card,
     borderRadius: 8,
-    padding: 8,
+    padding: 12,
     marginBottom: 8,
   },
   goalRowConcise: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
+    marginBottom: 6,
   },
   goalNameConcise: {
     flex: 1,
@@ -257,7 +258,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
-    marginTop: 4,
   },
   goalActionButtons: {
     flexDirection: 'column',
@@ -1248,9 +1248,11 @@ export default function HomeScreen() {
       bestStreak: goal.bestStreak,
     });
     
-    // For once_per_day goals: Buttons are NOT faded when no entries for the day
-    const isSuccessButtonDisabled = false;
-    const isStruggleButtonDisabled = false;
+    // BUTTON FADING LOGIC FOR ONCE PER DAY:
+    // Buttons are faded ONLY when an entry exists for today
+    // When entry is deleted, buttons return to unfaded state
+    const isSuccessButtonFaded = isOneTimeGoal && hasActionToday;
+    const isStruggleButtonFaded = isOneTimeGoal && hasActionToday;
     
     // ICON DISPLAY LOGIC FOR ONCE PER DAY GOALS:
     // - If NO action today: Show ONLY faded streak icon with "1" (potential streak), NO trophy, NO x
@@ -1316,15 +1318,12 @@ export default function HomeScreen() {
                 styles.actionButtonIconConcise, 
                 styles.successButtonIconConcise, 
                 { backgroundColor: "#7C9885" },
-                isSuccessButtonDisabled && { opacity: 0.5 }
+                isSuccessButtonFaded && { opacity: 0.5 }
               ]}
               onPress={(e) => {
                 e.stopPropagation();
-                if (!isSuccessButtonDisabled) {
-                  handleGoalSuccess(goal.id);
-                }
+                handleGoalSuccess(goal.id);
               }}
-              disabled={isSuccessButtonDisabled}
             >
               <IconSymbol
                 ios_icon_name="checkmark"
@@ -1339,15 +1338,12 @@ export default function HomeScreen() {
               style={[
                 styles.actionButtonIconConcise, 
                 { backgroundColor: "#B87C6C" },
-                isStruggleButtonDisabled && { opacity: 0.5 }
+                isStruggleButtonFaded && { opacity: 0.5 }
               ]}
               onPress={(e) => {
                 e.stopPropagation();
-                if (!isStruggleButtonDisabled) {
-                  handleGoalStruggle(goal.id);
-                }
+                handleGoalStruggle(goal.id);
               }}
-              disabled={isStruggleButtonDisabled}
             >
               <IconSymbol
                 ios_icon_name="xmark"
@@ -1359,7 +1355,7 @@ export default function HomeScreen() {
           </View>
         </View>
         
-        {/* Icons Row - UNDER THE GOAL NAME */}
+        {/* Icons Row - DIRECTLY UNDER THE GOAL NAME */}
         <View style={styles.goalIconsRow}>
           {/* Consequences Earned Today */}
           {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
