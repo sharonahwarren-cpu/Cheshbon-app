@@ -1297,7 +1297,27 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
             
-            {!isOneTimeOnly && (
+            {isTally && (
+              <TouchableOpacity
+                style={[
+                  styles.struggleButtonIconConcise,
+                  isStruggleButtonFaded && styles.fadedButton
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleGoalStruggle(goal.id);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={16}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            )}
+            
+            {isOncePerDay && (
               <TouchableOpacity
                 style={[
                   styles.struggleButtonIconConcise,
@@ -1399,10 +1419,10 @@ export default function HomeScreen() {
             >
               <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
               <IconSymbol
-                ios_icon_name="trophy.fill"
-                android_material_icon_name="emoji-events"
+                ios_icon_name="checkmark"
+                android_material_icon_name="check"
                 size={16}
-                color="#FFD700"
+                color="#7C9885"
               />
             </TouchableOpacity>
           )}
@@ -1417,10 +1437,10 @@ export default function HomeScreen() {
             >
               <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
               <IconSymbol
-                ios_icon_name="xmark.circle.fill"
-                android_material_icon_name="cancel"
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
                 size={16}
-                color="#ef4444"
+                color="#B87C6C"
               />
             </TouchableOpacity>
           )}
@@ -1435,10 +1455,10 @@ export default function HomeScreen() {
             >
               <Text style={styles.statTextConcise}>{todaySuccesses}</Text>
               <IconSymbol
-                ios_icon_name="checkmark.circle.fill"
-                android_material_icon_name="check-circle"
+                ios_icon_name="checkmark"
+                android_material_icon_name="check"
                 size={16}
-                color="#10b981"
+                color="#7C9885"
               />
             </TouchableOpacity>
           )}
@@ -1453,10 +1473,10 @@ export default function HomeScreen() {
             >
               <Text style={styles.statTextConcise}>{todayStruggles}</Text>
               <IconSymbol
-                ios_icon_name="xmark.circle.fill"
-                android_material_icon_name="cancel"
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
                 size={16}
-                color="#ef4444"
+                color="#B87C6C"
               />
             </TouchableOpacity>
           )}
