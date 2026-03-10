@@ -13,10 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
-import { authenticatedGet } from '@/utils/api';
 import { AddReflectionModal } from '@/components/AddReflectionModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import * as supabaseApi from '@/utils/supabaseApi';
+import { supabase } from '@/lib/supabase';
 
 interface Reflection {
   id: string;
@@ -108,6 +108,7 @@ interface ReflectionListModalProps {
   goalId?: string;
   startDate?: string;
   endDate?: string;
+  showAllReflections?: boolean; // If true, ignore date filters (for cumulative counts)
 }
 
 export function ReflectionListModal({
@@ -119,6 +120,7 @@ export function ReflectionListModal({
   goalId,
   startDate,
   endDate,
+  showAllReflections = false,
 }: ReflectionListModalProps) {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -139,50 +141,84 @@ export function ReflectionListModal({
   const loadReflections = useCallback(async () => {
     if (!visible || !filterType) return;
     
-    console.log('[ReflectionListModal] Loading reflections with filter:', filterType, filterValue);
+    console.log('[ReflectionListModal] Loading reflections with filter:', filterType, filterValue, 'goalId:', goalId, 'startDate:', startDate, 'endDate:', endDate);
     setLoading(true);
     setErrorMessage('');
     
     try {
-      const params = new URLSearchParams();
+      const userId = await supabaseApi.getCurrentUserId();
       
+      // Build Supabase query
+      let query = supabase
+        .from('reflections')
+        .select(`
+          *,
+          goal:goals(id, title)
+        `)
+        .eq('user_id', userId);
+      
+      // Apply goal filter if provided
       if (goalId) {
-        params.append('goalId', goalId);
+        query = query.eq('linked_goal_id', goalId);
       }
       
+      // Apply outcome filter
       if (filterType === 'wins') {
-        params.append('wasWorthIt', 'true');
+        query = query.eq('was_worth_it', true);
       } else if (filterType === 'losses') {
-        params.append('wasWorthIt', 'false');
+        query = query.eq('was_worth_it', false);
       } else if (filterType === 'successes') {
-        params.append('outcome', 'success');
+        query = query.eq('outcome', 'success');
       } else if (filterType === 'struggles') {
-        params.append('outcome', 'struggled');
+        query = query.eq('outcome', 'struggled');
       } else if (filterType === 'behavior' && filterValue) {
-        params.append('category', filterValue);
+        query = query.eq('category', filterValue);
       }
       
-      if (startDate) {
-        params.append('startDate', startDate);
+      // CRITICAL FIX: Only apply date filters if showAllReflections is false
+      // For cumulative counts (like "once per day" goals), we want ALL reflections
+      // For daily views (tally goals), we filter by date
+      if (!showAllReflections && startDate && endDate) {
+        // Single day view - apply date filter
+        console.log('[ReflectionListModal] Filtering by date range:', startDate, 'to', endDate);
+        query = query.gte('entry_date', startDate);
+        query = query.lte('entry_date', endDate);
+      } else {
+        // Cumulative view - show ALL reflections for this goal
+        console.log('[ReflectionListModal] Showing all reflections (cumulative view)');
       }
       
-      if (endDate) {
-        params.append('endDate', endDate);
+      // Order by date (newest first)
+      query = query.order('entry_date', { ascending: false });
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('[ReflectionListModal] Supabase error:', error);
+        throw new Error(error.message);
       }
       
-      // Add ordering parameters for chronological order (newest first)
-      params.append('orderBy', 'entryDate');
-      params.append('orderDirection', 'desc');
+      let reflectionsData = data || [];
       
-      // CRITICAL: Exclude pure currency transactions from all report pop-ups
-      // Pure currency transactions are identified by the backend flag, not by keywords
-      params.append('isPureCurrencyTransaction', 'false');
-      
-      const endpoint = `/api/reflections?${params.toString()}`;
-      console.log('[ReflectionListModal] Fetching from endpoint:', endpoint);
-      
-      const response = await authenticatedGet(endpoint);
-      let reflectionsData = Array.isArray(response) ? response : (response?.data || []);
+      // Map snake_case to camelCase for frontend
+      reflectionsData = reflectionsData.map((r: any) => ({
+        id: r.id,
+        entryDate: r.entry_date,
+        category: r.category,
+        type: r.type,
+        description: r.description,
+        linkedGoalId: r.linked_goal_id,
+        linkedGoalTitle: r.goal?.title,
+        outcome: r.outcome,
+        currencyChange: r.currency_change,
+        gainedIds: r.gained_ids || [],
+        lostIds: r.lost_ids || [],
+        motivationIds: r.motivation_ids || [],
+        wasWorthIt: r.was_worth_it,
+        additionalThoughts: r.additional_thoughts,
+        strategyEffectiveness: r.strategy_effectiveness || [],
+        createdAt: r.created_at,
+      }));
       
       // Additional filtering for specific report types
       if (filterType === 'gainslosses') {
@@ -210,7 +246,7 @@ export function ReflectionListModal({
     } finally {
       setLoading(false);
     }
-  }, [visible, filterType, filterValue, goalId, startDate, endDate]);
+  }, [visible, filterType, filterValue, goalId, startDate, endDate, showAllReflections]);
 
   useEffect(() => {
     if (visible) {
@@ -225,60 +261,54 @@ export function ReflectionListModal({
     try {
       // Use Promise.allSettled so individual failures don't block the rest
       const [goalsResult, currenciesResult, gainsLossesResult, strategiesResult, motivationsResult, preferencesResult] = await Promise.allSettled([
-        authenticatedGet('/api/goals'),
-        authenticatedGet('/api/currencies'),
-        authenticatedGet('/api/gains-losses'),
-        authenticatedGet('/api/strategies'),
-        authenticatedGet('/api/reflection-motivations'),
-        authenticatedGet('/api/preferences'),
+        supabaseApi.getGoals(),
+        supabaseApi.getCurrencies(),
+        supabaseApi.getGainsLosses(),
+        supabaseApi.getStrategies(),
+        supabaseApi.getReflectionMotivations(),
+        supabaseApi.getUserPreferences(),
       ]);
 
       if (goalsResult.status === 'fulfilled') {
-        const goalsRes = goalsResult.value;
-        setGoals(Array.isArray(goalsRes) ? goalsRes : (goalsRes?.data || []));
+        setGoals(goalsResult.value || []);
       } else {
         console.warn('[ReflectionListModal] Failed to load goals:', goalsResult.reason);
         setGoals([]);
       }
 
       if (currenciesResult.status === 'fulfilled') {
-        const currenciesRes = currenciesResult.value;
-        setCurrencies(Array.isArray(currenciesRes) ? currenciesRes : (currenciesRes?.data || []));
+        setCurrencies(currenciesResult.value || []);
       } else {
         console.warn('[ReflectionListModal] Failed to load currencies:', currenciesResult.reason);
         setCurrencies([]);
       }
 
       if (gainsLossesResult.status === 'fulfilled') {
-        const gainsLossesRes = gainsLossesResult.value;
-        setGainsLosses(Array.isArray(gainsLossesRes) ? gainsLossesRes : (gainsLossesRes?.data || []));
+        setGainsLosses(gainsLossesResult.value || []);
       } else {
         console.warn('[ReflectionListModal] Failed to load gains/losses:', gainsLossesResult.reason);
         setGainsLosses([]);
       }
 
       if (strategiesResult.status === 'fulfilled') {
-        const strategiesRes = strategiesResult.value;
-        setStrategies(Array.isArray(strategiesRes) ? strategiesRes : (strategiesRes?.data || []));
+        setStrategies(strategiesResult.value || []);
       } else {
         console.warn('[ReflectionListModal] Failed to load strategies:', strategiesResult.reason);
         setStrategies([]);
       }
 
       if (motivationsResult.status === 'fulfilled') {
-        const motivationsRes = motivationsResult.value;
-        setMotivations(Array.isArray(motivationsRes) ? motivationsRes : (motivationsRes?.data || []));
+        setMotivations(motivationsResult.value || []);
       } else {
         console.warn('[ReflectionListModal] Failed to load motivations:', motivationsResult.reason);
         setMotivations([]);
       }
 
       if (preferencesResult.status === 'fulfilled') {
-        const preferencesRes = preferencesResult.value;
-        setUserPreferences(preferencesRes?.data || preferencesRes || {});
+        setUserPreferences(preferencesResult.value || {});
         console.log('[ReflectionListModal] Preferences loaded successfully');
       } else {
-        console.log('[ReflectionListModal] Preferences endpoint not available, using defaults:', preferencesResult.reason?.message);
+        console.log('[ReflectionListModal] Preferences not available, using defaults');
         setUserPreferences({});
       }
 

@@ -259,12 +259,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   goalNameConcise: {
-    flex: 1,
+    width: '100%',
     fontSize: 15,
     fontWeight: '500',
     color: colors.text,
+    marginBottom: 8,
+  },
+  goalIconsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   actionButtonIconConcise: {
     width: 28,
@@ -492,6 +500,7 @@ export default function HomeScreen() {
   const [reflectionListGoalId, setReflectionListGoalId] = useState<string | undefined>(undefined);
   const [reflectionListOutcome, setReflectionListOutcome] = useState<'success' | 'struggled' | undefined>(undefined);
   const [reflectionListTitle, setReflectionListTitle] = useState('');
+  const [reflectionListShowAll, setReflectionListShowAll] = useState(false);
 
   useEffect(() => {
     console.log('HomeScreen (iOS): Initial load');
@@ -889,10 +898,17 @@ export default function HomeScreen() {
   };
 
   const handleOpenReflectionList = (goal: ActivatedGoal, outcome: 'success' | 'struggled') => {
-    console.log('HomeScreen (iOS): Opening reflection list for goal:', goal.id, 'outcome:', outcome);
+    console.log('HomeScreen (iOS): Opening reflection list for goal:', goal.id, 'outcome:', outcome, 'trackingType:', goal.trackingType);
+    
+    // CRITICAL FIX: For "once per day" goals showing cumulative counts, 
+    // we should show ALL reflections, not just today's
+    // For tally goals, we show only today's reflections
+    const isOncePerDay = goal.trackingType === 'once_per_day';
+    
     setReflectionListGoalId(goal.id);
     setReflectionListOutcome(outcome);
     setReflectionListTitle(`${goal.title} - ${outcome === 'success' ? 'Successes' : 'Struggles'}`);
+    setReflectionListShowAll(isOncePerDay); // Show all reflections for once per day goals
     setShowReflectionListModal(true);
   };
 
@@ -902,6 +918,7 @@ export default function HomeScreen() {
     setReflectionListGoalId(undefined);
     setReflectionListOutcome(undefined);
     setReflectionListTitle('');
+    setReflectionListShowAll(false);
     // Reload data to reflect any changes made in the modal
     loadData();
   };
@@ -1103,151 +1120,154 @@ export default function HomeScreen() {
         onPress={() => handleEditGoal(goal.id)}
       >
         <View style={styles.goalRowConcise}>
-          {/* Goal Name - LEFT SIDE */}
-          <Text style={styles.goalNameConcise} numberOfLines={1}>{goal.title}</Text>
+          {/* Goal Name - FULL WIDTH ON TOP */}
+          <Text style={styles.goalNameConcise} numberOfLines={2}>{goal.title}</Text>
           
-          {/* Consequences Earned Today */}
-          {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{consequencesEarnedToday}</Text>
-              <IconSymbol
-                ios_icon_name="exclamationmark.triangle.fill"
-                android_material_icon_name="warning"
-                size={16}
-                color="#ef4444"
-              />
-            </View>
-          )}
-          
-          {/* Rewards Earned Today */}
-          {rewardsEarnedToday > 0 && goal.rewardCurrencyId && (
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{rewardsEarnedToday}</Text>
-              <IconSymbol
-                ios_icon_name="gift.fill"
-                android_material_icon_name="card-giftcard"
-                size={16}
-                color="#10b981"
-              />
-            </View>
-          )}
-          
-          {/* Best Streak - Only show if there's a current streak */}
-          {shouldShowBestStreak && (
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{bestStreakValue}</Text>
-              <IconSymbol
-                ios_icon_name="star.fill"
-                android_material_icon_name="star"
-                size={16}
-                color="#f59e0b"
-                style={styles.streakIconVisible}
-              />
-            </View>
-          )}
-          
-          {/* Current Streak - Only show if there's a current streak */}
-          {shouldShowStreak && (
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{currentStreakValue}</Text>
-              <IconSymbol
-                ios_icon_name="flame.fill"
-                android_material_icon_name="local-fire-department"
-                size={16}
-                color="#f59e0b"
-                style={styles.streakIconVisible}
-              />
-            </View>
-          )}
-          
-          {/* Success Count - Show only if applicable - CLICKABLE */}
-          {(!isOneTimeGoal || shouldShowTickForOncePerDay) && (
+          {/* Icons Row - UNDER THE GOAL NAME */}
+          <View style={styles.goalIconsRow}>
+            {/* Consequences Earned Today */}
+            {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
+              <View style={styles.statItemConcise}>
+                <Text style={styles.statTextConcise}>{consequencesEarnedToday}</Text>
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle.fill"
+                  android_material_icon_name="warning"
+                  size={16}
+                  color="#ef4444"
+                />
+              </View>
+            )}
+            
+            {/* Rewards Earned Today */}
+            {rewardsEarnedToday > 0 && goal.rewardCurrencyId && (
+              <View style={styles.statItemConcise}>
+                <Text style={styles.statTextConcise}>{rewardsEarnedToday}</Text>
+                <IconSymbol
+                  ios_icon_name="gift.fill"
+                  android_material_icon_name="card-giftcard"
+                  size={16}
+                  color="#10b981"
+                />
+              </View>
+            )}
+            
+            {/* Best Streak - Only show if there's a current streak */}
+            {shouldShowBestStreak && (
+              <View style={styles.statItemConcise}>
+                <Text style={styles.statTextConcise}>{bestStreakValue}</Text>
+                <IconSymbol
+                  ios_icon_name="star.fill"
+                  android_material_icon_name="star"
+                  size={16}
+                  color="#f59e0b"
+                  style={styles.streakIconVisible}
+                />
+              </View>
+            )}
+            
+            {/* Current Streak - Only show if there's a current streak */}
+            {shouldShowStreak && (
+              <View style={styles.statItemConcise}>
+                <Text style={styles.statTextConcise}>{currentStreakValue}</Text>
+                <IconSymbol
+                  ios_icon_name="flame.fill"
+                  android_material_icon_name="local-fire-department"
+                  size={16}
+                  color="#f59e0b"
+                  style={styles.streakIconVisible}
+                />
+              </View>
+            )}
+            
+            {/* Success Count - Show only if applicable - CLICKABLE */}
+            {(!isOneTimeGoal || shouldShowTickForOncePerDay) && (
+              <TouchableOpacity
+                style={styles.statItemConcise}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleOpenReflectionList(goal, 'success');
+                }}
+              >
+                <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
+                <IconSymbol
+                  ios_icon_name={isOneTimeGoal ? "checkmark.circle.fill" : "checkmark"}
+                  android_material_icon_name={isOneTimeGoal ? "check-circle" : "check"}
+                  size={16}
+                  color={colors.success}
+                />
+              </TouchableOpacity>
+            )}
+            
+            {/* Struggle Count - HIDDEN for one-time goals AFTER success recorded - CLICKABLE */}
+            {!isOneTimeGoal && (
+              <TouchableOpacity
+                style={styles.statItemConcise}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleOpenReflectionList(goal, 'struggled');
+                }}
+              >
+                <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={16}
+                  color={colors.error}
+                />
+              </TouchableOpacity>
+            )}
+            
+            {/* Reflect Icon */}
             <TouchableOpacity
-              style={styles.statItemConcise}
+              style={styles.reflectButtonIconConcise}
               onPress={(e) => {
                 e.stopPropagation();
-                handleOpenReflectionList(goal, 'success');
-              }}
-            >
-              <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
-              <IconSymbol
-                ios_icon_name={isOneTimeGoal ? "checkmark.circle.fill" : "checkmark"}
-                android_material_icon_name={isOneTimeGoal ? "check-circle" : "check"}
-                size={16}
-                color={colors.success}
-              />
-            </TouchableOpacity>
-          )}
-          
-          {/* Struggle Count - HIDDEN for one-time goals - CLICKABLE */}
-          {!isOneTimeGoal && (
-            <TouchableOpacity
-              style={styles.statItemConcise}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleOpenReflectionList(goal, 'struggled');
-              }}
-            >
-              <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
-              <IconSymbol
-                ios_icon_name="xmark"
-                android_material_icon_name="close"
-                size={16}
-                color={colors.error}
-              />
-            </TouchableOpacity>
-          )}
-          
-          {/* Reflect Icon */}
-          <TouchableOpacity
-            style={styles.reflectButtonIconConcise}
-            onPress={(e) => {
-              e.stopPropagation();
-              console.log('HomeScreen (iOS): Opening reflection modal for goal:', goal.id);
-              openAddReflectionModal(goal.id);
-            }}
-          >
-            <IconSymbol
-              ios_icon_name="text.bubble.fill"
-              android_material_icon_name="chat-bubble"
-              size={16}
-              color="#fff"
-            />
-          </TouchableOpacity>
-          
-          {/* Struggle Button - HIDDEN for one-time goals */}
-          {!isOneTimeGoal && (
-            <TouchableOpacity
-              style={styles.actionButtonIconConcise}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleGoalStruggle(goal.id);
+                console.log('HomeScreen (iOS): Opening reflection modal for goal:', goal.id);
+                openAddReflectionModal(goal.id);
               }}
             >
               <IconSymbol
-                ios_icon_name="xmark"
-                android_material_icon_name="close"
+                ios_icon_name="text.bubble.fill"
+                android_material_icon_name="chat-bubble"
                 size={16}
                 color="#fff"
               />
             </TouchableOpacity>
-          )}
-          
-          {/* Success Button - RIGHTMOST */}
-          <TouchableOpacity
-            style={[styles.actionButtonIconConcise, styles.successButtonIconConcise]}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleGoalSuccess(goal.id);
-            }}
-          >
-            <IconSymbol
-              ios_icon_name="checkmark"
-              android_material_icon_name="check"
-              size={16}
-              color="#fff"
-            />
-          </TouchableOpacity>
+            
+            {/* Struggle Button - HIDDEN for one-time goals AFTER success recorded */}
+            {!isOneTimeGoal && (
+              <TouchableOpacity
+                style={styles.actionButtonIconConcise}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleGoalStruggle(goal.id);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={16}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            )}
+            
+            {/* Success Button - RIGHTMOST */}
+            <TouchableOpacity
+              style={[styles.actionButtonIconConcise, styles.successButtonIconConcise]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleGoalSuccess(goal.id);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="checkmark"
+                android_material_icon_name="check"
+                size={16}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -1486,6 +1506,7 @@ export default function HomeScreen() {
           goalId={reflectionListGoalId}
           startDate={formatDateLocal(selectedDate)}
           endDate={formatDateLocal(selectedDate)}
+          showAllReflections={reflectionListShowAll}
         />
       )}
 
