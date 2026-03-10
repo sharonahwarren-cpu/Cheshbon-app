@@ -20,6 +20,11 @@ export const appleRed = "#FF3B30";
 
 export const borderColor = "#A1A1AA80";
 export const appleGreen = "#34C759";
+
+// Theme colors - Sage green and rust
+export const sageGreen = "#7C9885";
+export const rust = "#B87C6C";
+
 export const Colors = {
   light: {
     text: "#11181C",

@@ -239,12 +239,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
+    position: 'relative',
   },
   goalRowConcise: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 2,
+    paddingRight: 100,
   },
   goalNameConcise: {
     flex: 1,
@@ -262,6 +264,9 @@ const styles = StyleSheet.create({
   goalActionButtons: {
     flexDirection: 'row',
     gap: 0,
+    position: 'absolute',
+    top: 0,
+    right: 0,
   },
   actionButtonIconConcise: {
     width: 32,
@@ -286,7 +291,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 0,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#B87C6C',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1263,6 +1268,9 @@ export default function HomeScreen() {
     const shouldShowTrophy = (isOncePerDay || isOneTimeOnly) && hasSuccessToday;
     const shouldShowX = isOncePerDay && hasStruggleToday;
     
+    const shouldShowTallyTick = isTally && todaySuccesses > 0;
+    const shouldShowTallyX = isTally && todayStruggles > 0;
+    
     return (
       <TouchableOpacity 
         key={goal.id} 
@@ -1273,6 +1281,45 @@ export default function HomeScreen() {
           <Text style={styles.goalNameConcise} numberOfLines={2}>{goal.title}</Text>
           
           <View style={styles.goalActionButtons}>
+            <TouchableOpacity
+              style={[
+                styles.reflectButtonIconConcise,
+                isSuccessButtonFaded && styles.fadedButton
+              ]}
+              onPress={(e) => {
+                e.stopPropagation();
+                console.log('HomeScreen: Opening reflection modal for goal:', goal.id);
+                openAddReflectionModal(goal.id);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="text.bubble.fill"
+                android_material_icon_name="chat-bubble"
+                size={16}
+                color="#fff"
+              />
+            </TouchableOpacity>
+            
+            {!isOneTimeOnly && (
+              <TouchableOpacity
+                style={[
+                  styles.struggleButtonIconConcise,
+                  isStruggleButtonFaded && styles.fadedButton
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleGoalStruggle(goal.id);
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={16}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+            )}
+            
             <TouchableOpacity
               style={[
                 styles.actionButtonIconConcise, 
@@ -1290,47 +1337,10 @@ export default function HomeScreen() {
                 color="#fff"
               />
             </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.reflectButtonIconConcise
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                console.log('HomeScreen: Opening reflection modal for goal:', goal.id);
-                openAddReflectionModal(goal.id);
-              }}
-            >
-              <IconSymbol
-                ios_icon_name="text.bubble.fill"
-                android_material_icon_name="chat-bubble"
-                size={16}
-                color="#fff"
-              />
-            </TouchableOpacity>
           </View>
         </View>
         
         <View style={styles.goalIconsRow}>
-          {!isOneTimeOnly && (
-            <TouchableOpacity
-              style={[
-                styles.struggleButtonIconConcise,
-                isStruggleButtonFaded && styles.fadedButton
-              ]}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleGoalStruggle(goal.id);
-              }}
-            >
-              <IconSymbol
-                ios_icon_name="xmark"
-                android_material_icon_name="close"
-                size={16}
-                color="#fff"
-              />
-            </TouchableOpacity>
-          )}
           
           {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
             <View style={styles.statItemConcise}>
@@ -1409,6 +1419,42 @@ export default function HomeScreen() {
               }}
             >
               <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
+              <IconSymbol
+                ios_icon_name="xmark.circle.fill"
+                android_material_icon_name="cancel"
+                size={16}
+                color="#ef4444"
+              />
+            </TouchableOpacity>
+          )}
+          
+          {shouldShowTallyTick && (
+            <TouchableOpacity
+              style={styles.statItemConcise}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleOpenReflectionList(goal, 'success');
+              }}
+            >
+              <Text style={styles.statTextConcise}>{todaySuccesses}</Text>
+              <IconSymbol
+                ios_icon_name="checkmark.circle.fill"
+                android_material_icon_name="check-circle"
+                size={16}
+                color="#10b981"
+              />
+            </TouchableOpacity>
+          )}
+          
+          {shouldShowTallyX && (
+            <TouchableOpacity
+              style={styles.statItemConcise}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleOpenReflectionList(goal, 'struggled');
+              }}
+            >
+              <Text style={styles.statTextConcise}>{todayStruggles}</Text>
               <IconSymbol
                 ios_icon_name="xmark.circle.fill"
                 android_material_icon_name="cancel"
