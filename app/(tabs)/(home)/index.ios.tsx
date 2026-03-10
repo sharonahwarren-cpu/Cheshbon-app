@@ -568,8 +568,7 @@ export default function HomeScreen() {
 
       console.log('HomeScreen (iOS): Data loaded successfully');
       console.log('HomeScreen (iOS): Goals count:', goalsData.length);
-      console.log('HomeScreen (iOS): Motivations count:', motivationsData.length);
-      console.log('HomeScreen (iOS): User preferences:', preferencesData);
+      console.log('HomeScreen (iOS): Sample goal data:', goalsData[0]);
       
       setGoals(goalsData);
       setLifeAreas(buildLifeAreaHierarchy(lifeAreasData, goalsData));
@@ -582,7 +581,6 @@ export default function HomeScreen() {
       
       const calendarType = preferencesData.alternative_calendar || 'gregorian';
       setAlternativeCalendar(calendarType as CalendarType);
-      console.log('HomeScreen (iOS): Alternative calendar set to:', calendarType);
       
       if (journalsData.length > 0) {
         setJournalEntry(journalsData[0]);
@@ -636,6 +634,10 @@ export default function HomeScreen() {
         return;
       }
       
+      console.log('HomeScreen (iOS): Goal tracking type:', goal.trackingType);
+      console.log('HomeScreen (iOS): Current success count:', goal.successCount);
+      console.log('HomeScreen (iOS): Current streak:', goal.currentStreak);
+      
       // Create daily entry
       await createDailyEntry({
         goal_id: goalId,
@@ -660,6 +662,12 @@ export default function HomeScreen() {
       const newSuccessCount = (goal.successCount || 0) + 1;
       const newCurrentStreak = (goal.currentStreak || 0) + 1;
       const newBestStreak = Math.max(newCurrentStreak, goal.bestStreak || 0);
+      
+      console.log('HomeScreen (iOS): Updating goal with:', {
+        success_count: newSuccessCount,
+        current_streak: newCurrentStreak,
+        best_streak: newBestStreak,
+      });
       
       await updateGoal(goalId, {
         success_count: newSuccessCount,
@@ -946,6 +954,10 @@ export default function HomeScreen() {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
     const isOneTimeGoal = goal.trackingType === 'once_per_day';
     
+    // Calculate today's counts from dailyEntries
+    const todaySuccesses = goal.todaySuccessCount || 0;
+    const todayStruggles = goal.todayStruggleCount || 0;
+    
     // Calculate values
     const bestStreakValue = goal.bestStreak || 0;
     const currentStreakValue = goal.currentStreak || 0;
@@ -956,13 +968,26 @@ export default function HomeScreen() {
     
     // Determine if streak should be shown and faded
     const hasCurrentStreak = currentStreakValue > 0;
-    const shouldFadeStreak = goal.todaySuccessCount === 0 && hasCurrentStreak;
+    const shouldFadeStreak = todaySuccesses === 0 && hasCurrentStreak;
     const shouldShowStreak = hasCurrentStreak;
     
     // Determine if best streak should be shown and faded
     const shouldShowBestStreak = hasCurrentStreak && bestStreakValue > 0;
     const isNewBest = bestStreakValue === currentStreakValue && bestStreakValue > 0;
     const shouldFadeBestStreak = !isNewBest && shouldShowBestStreak;
+    
+    console.log('HomeScreen (iOS): Rendering goal card:', {
+      goalId: goal.id,
+      title: goal.title,
+      trackingType: goal.trackingType,
+      todaySuccesses,
+      todayStruggles,
+      totalSuccesses: totalSuccessesValue,
+      totalStruggles: totalStrugglesValue,
+      currentStreak: currentStreakValue,
+      bestStreak: bestStreakValue,
+      isOneTimeGoal,
+    });
     
     return (
       <TouchableOpacity 
