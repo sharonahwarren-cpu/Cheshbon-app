@@ -1118,7 +1118,7 @@ export default function HomeScreen() {
                 android_material_icon_name="star"
                 size={16}
                 color="#f59e0b"
-                style={shouldFadeBestStreak ? styles.streakIconFaded : styles.streakIconVisible}
+                style={styles.streakIconVisible}
               />
             </View>
           )}
@@ -1132,7 +1132,7 @@ export default function HomeScreen() {
                 android_material_icon_name="local-fire-department"
                 size={16}
                 color="#f59e0b"
-                style={shouldFadeStreak ? styles.streakIconFaded : styles.streakIconVisible}
+                style={styles.streakIconVisible}
               />
             </View>
           )}
