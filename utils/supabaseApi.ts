@@ -235,12 +235,21 @@ export const getCurrencies = async () => {
 export const createCurrency = async (currency: any) => {
   const userId = await getCurrentUserId();
   
+  // CRITICAL FIX: Map camelCase to snake_case for currency fields
+  const currencyData: any = {
+    user_id: userId,
+    name: currency.name,
+    symbol: currency.symbol || null,
+    type: currency.type || 'consequence',
+    on_success: currency.on_success || currency.onSuccess || 'NONE',
+    on_failure: currency.on_failure || currency.onFailure || 'NONE',
+  };
+  
+  console.log('[Supabase API] Creating currency with data:', currencyData);
+  
   const { data, error } = await supabase
     .from('currencies')
-    .insert({
-      user_id: userId,
-      ...currency,
-    })
+    .insert(currencyData)
     .select()
     .single();
   
@@ -251,12 +260,26 @@ export const createCurrency = async (currency: any) => {
 export const updateCurrency = async (id: string, updates: any) => {
   const userId = await getCurrentUserId();
   
+  // CRITICAL FIX: Map camelCase to snake_case for currency fields
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  };
+  
+  if (updates.name !== undefined) updateData.name = updates.name;
+  if (updates.symbol !== undefined) updateData.symbol = updates.symbol;
+  if (updates.type !== undefined) updateData.type = updates.type;
+  if (updates.on_success !== undefined || updates.onSuccess !== undefined) {
+    updateData.on_success = updates.on_success || updates.onSuccess;
+  }
+  if (updates.on_failure !== undefined || updates.onFailure !== undefined) {
+    updateData.on_failure = updates.on_failure || updates.onFailure;
+  }
+  
+  console.log('[Supabase API] Updating currency with data:', updateData);
+  
   const { data, error } = await supabase
     .from('currencies')
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    })
+    .update(updateData)
     .eq('id', id)
     .eq('user_id', userId)
     .select()

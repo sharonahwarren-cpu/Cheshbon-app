@@ -293,6 +293,14 @@ const styles = StyleSheet.create({
   successButtonIconConcise: {
     backgroundColor: '#10b981',
   },
+  reflectButtonIconConcise: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#3b82f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   statItemConcise: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -542,7 +550,7 @@ export default function HomeScreen() {
   const [successMessage, setSuccessMessage] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [viewMode, setViewMode] = useState<'concise' | 'detailed'>('detailed');
+  const [viewMode, setViewMode] = useState<'concise' | 'detailed'>('concise');
   const [alternativeCalendar, setAlternativeCalendar] = useState<CalendarType>('gregorian');
 
   useEffect(() => {
@@ -638,13 +646,8 @@ export default function HomeScreen() {
       setAlternativeCalendar(calendarType as CalendarType);
       console.log('HomeScreen (iOS): Alternative calendar set to:', calendarType);
       
-      // Set view mode from preferences
-      const preferredView = preferencesData.preferredHomeScreen;
-      if (preferredView === 'goals-concise') {
-        setViewMode('concise');
-      } else if (preferredView === 'goals-detailed') {
-        setViewMode('detailed');
-      }
+      // Always use concise view mode
+      setViewMode('concise');
       
       if (journalsData.length > 0) {
         setJournalEntry(journalsData[0]);
@@ -886,17 +889,9 @@ export default function HomeScreen() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  // View mode is always concise now
   const handleViewModeChange = async (mode: 'concise' | 'detailed') => {
-    console.log('HomeScreen (iOS): Changing view mode to:', mode);
-    setViewMode(mode);
-    
-    // Save preference
-    try {
-      const preferredScreen = mode === 'concise' ? 'goals-concise' : 'goals-detailed';
-      await updateUserPreferences({ preferredHomeScreen: preferredScreen });
-    } catch (error) {
-      console.error('HomeScreen (iOS): Error saving view preference:', error);
-    }
+    // No-op: always use concise
   };
 
   const calculateDailyCurrencyTallies = (goal: ActivatedGoal) => {
@@ -980,7 +975,7 @@ export default function HomeScreen() {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
     
     if (isConcise) {
-      // Concise view: One-line layout with all stats
+      // Concise view: One-line layout with all stats (RIGHT-TO-LEFT order)
       const bestStreakValue = goal.bestStreak || 0;
       const currentStreakValue = goal.currentStreak || 0;
       const totalSuccessesValue = goal.successCount || 0;
@@ -991,8 +986,27 @@ export default function HomeScreen() {
       return (
         <View key={goal.id} style={styles.goalCardConcise}>
           <View style={styles.goalRowConcise}>
-            {/* Goal Title */}
-            <Text style={styles.goalTitleConcise} numberOfLines={1}>{goal.title}</Text>
+            {/* Reflect Icon - NEW */}
+            <TouchableOpacity
+              style={styles.reflectButtonIconConcise}
+              onPress={() => {
+                console.log('HomeScreen (iOS): Opening reflection modal for goal:', goal.id);
+                router.push({
+                  pathname: '/(tabs)/reflect',
+                  params: {
+                    openModal: 'true',
+                    goalId: goal.id,
+                  },
+                });
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="text.bubble.fill"
+                android_material_icon_name="chat-bubble"
+                size={20}
+                color="#fff"
+              />
+            </TouchableOpacity>
             
             {/* Action Buttons */}
             <TouchableOpacity
@@ -1019,49 +1033,18 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
             
-            {/* Best Streak */}
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{bestStreakValue}</Text>
-              <IconSymbol
-                ios_icon_name="star.fill"
-                android_material_icon_name="star"
-                size={16}
-                color="#f59e0b"
-              />
-            </View>
-            
-            {/* Current Streak */}
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{currentStreakValue}</Text>
-              <IconSymbol
-                ios_icon_name="flame.fill"
-                android_material_icon_name="local-fire-department"
-                size={16}
-                color="#f59e0b"
-              />
-            </View>
-            
-            {/* Total Struggles */}
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{totalStrugglesValue}</Text>
-              <IconSymbol
-                ios_icon_name="xmark"
-                android_material_icon_name="close"
-                size={16}
-                color="#ef4444"
-              />
-            </View>
-            
-            {/* Total Successes */}
-            <View style={styles.statItemConcise}>
-              <Text style={styles.statTextConcise}>{totalSuccessesValue}</Text>
-              <IconSymbol
-                ios_icon_name="checkmark"
-                android_material_icon_name="check"
-                size={16}
-                color="#10b981"
-              />
-            </View>
+            {/* Consequences Earned Today */}
+            {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
+              <View style={styles.statItemConcise}>
+                <Text style={styles.statTextConcise}>{consequencesEarnedToday}</Text>
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle.fill"
+                  android_material_icon_name="warning"
+                  size={16}
+                  color="#ef4444"
+                />
+              </View>
+            )}
             
             {/* Rewards Earned Today */}
             {rewardsEarnedToday > 0 && goal.rewardCurrencyId && (
@@ -1076,18 +1059,52 @@ export default function HomeScreen() {
               </View>
             )}
             
-            {/* Consequences Earned Today */}
-            {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
-              <View style={styles.statItemConcise}>
-                <Text style={styles.statTextConcise}>{consequencesEarnedToday}</Text>
-                <IconSymbol
-                  ios_icon_name="exclamationmark.triangle.fill"
-                  android_material_icon_name="warning"
-                  size={16}
-                  color="#ef4444"
-                />
-              </View>
-            )}
+            {/* Total Successes */}
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{totalSuccessesValue}</Text>
+              <IconSymbol
+                ios_icon_name="checkmark"
+                android_material_icon_name="check"
+                size={16}
+                color="#10b981"
+              />
+            </View>
+            
+            {/* Total Struggles */}
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{totalStrugglesValue}</Text>
+              <IconSymbol
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
+                size={16}
+                color="#ef4444"
+              />
+            </View>
+            
+            {/* Current Streak */}
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{currentStreakValue}</Text>
+              <IconSymbol
+                ios_icon_name="flame.fill"
+                android_material_icon_name="local-fire-department"
+                size={16}
+                color="#f59e0b"
+              />
+            </View>
+            
+            {/* Best Streak */}
+            <View style={styles.statItemConcise}>
+              <Text style={styles.statTextConcise}>{bestStreakValue}</Text>
+              <IconSymbol
+                ios_icon_name="star.fill"
+                android_material_icon_name="star"
+                size={16}
+                color="#f59e0b"
+              />
+            </View>
+            
+            {/* Goal Title */}
+            <Text style={styles.goalTitleConcise} numberOfLines={1}>{goal.title}</Text>
           </View>
         </View>
       );
@@ -1280,27 +1297,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* View Mode Toggle */}
-      {hasAnyGoals && (
-        <View style={styles.viewToggle}>
-          <TouchableOpacity
-            style={[styles.viewToggleButton, viewMode === 'concise' && styles.viewToggleButtonActive]}
-            onPress={() => handleViewModeChange('concise')}
-          >
-            <Text style={[styles.viewToggleText, viewMode === 'concise' && styles.viewToggleTextActive]}>
-              Concise
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.viewToggleButton, viewMode === 'detailed' && styles.viewToggleButtonActive]}
-            onPress={() => handleViewModeChange('detailed')}
-          >
-            <Text style={[styles.viewToggleText, viewMode === 'detailed' && styles.viewToggleTextActive]}>
-              Detailed
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
+
 
       <ScrollView
         ref={scrollViewRef}
