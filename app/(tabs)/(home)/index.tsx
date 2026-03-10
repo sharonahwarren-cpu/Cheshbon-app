@@ -570,36 +570,171 @@ export default function HomeScreen() {
         return;
       }
       
-      // Create daily entry
-      await createDailyEntry({
-        goal_id: goalId,
-        type: 'success',
-        entry_date: dateStr,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Create reflection record for the success
-      const { createReflection } = await import('@/utils/supabaseApi');
-      await createReflection({
-        entry_date: dateStr,
-        category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
-        type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
-        description: `Quick Entry - ${goal.title}`,
-        linked_goal_id: goalId,
-        outcome: 'success',
-      });
-      console.log('HomeScreen: Reflection created for success');
-
-      // Update goal counts and streaks
-      const newSuccessCount = (goal.successCount || 0) + 1;
-      const newCurrentStreak = (goal.currentStreak || 0) + 1;
-      const newBestStreak = Math.max(newCurrentStreak, goal.bestStreak || 0);
+      const isOncePerDay = goal.trackingType === 'once_per_day';
       
-      await updateGoal(goalId, {
-        success_count: newSuccessCount,
-        current_streak: newCurrentStreak,
-        best_streak: newBestStreak,
-      });
+      if (isOncePerDay) {
+        // ONCE PER DAY LOGIC: Toggle behavior
+        // Check if there's already a success or struggle entry for today
+        const { getReflections, deleteReflection, createReflection: createReflectionFn } = await import('@/utils/supabaseApi');
+        const todayReflections = await getReflections(dateStr);
+        const goalTodayReflections = todayReflections.filter((r: any) => r.linked_goal_id === goalId);
+        
+        const todaySuccessReflection = goalTodayReflections.find((r: any) => r.outcome === 'success');
+        const todayStruggleReflection = goalTodayReflections.find((r: any) => r.outcome === 'struggled');
+        
+        if (todaySuccessReflection) {
+          // User clicked success again: UNDO success
+          console.log('HomeScreen: Undoing success for once_per_day goal');
+          await deleteReflection(todaySuccessReflection.id);
+          
+          // Delete daily entry
+          const todaySuccessEntry = goal.dailyEntries?.find(e => e.type === 'success');
+          if (todaySuccessEntry) {
+            await deleteDailyEntry(todaySuccessEntry.id);
+          }
+          
+          // Recalculate goal stats
+          const allReflections = await getReflections();
+          const goalReflections = allReflections.filter((r: any) => r.linked_goal_id === goalId);
+          const successCount = goalReflections.filter((r: any) => r.outcome === 'success').length;
+          const struggleCount = goalReflections.filter((r: any) => r.outcome === 'struggled').length;
+          
+          // Recalculate streaks
+          const sortedReflections = goalReflections
+            .sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+          
+          let currentStreak = 0;
+          let bestStreak = 0;
+          let tempStreak = 0;
+          
+          for (const r of sortedReflections) {
+            if ((r as any).outcome === 'success') {
+              tempStreak++;
+              if (tempStreak > bestStreak) {
+                bestStreak = tempStreak;
+              }
+            } else if ((r as any).outcome === 'struggled') {
+              if (currentStreak === 0) {
+                currentStreak = tempStreak;
+              }
+              tempStreak = 0;
+            }
+          }
+          
+          if (currentStreak === 0) {
+            currentStreak = tempStreak;
+          }
+          
+          await updateGoal(goalId, {
+            success_count: successCount,
+            struggle_count: struggleCount,
+            current_streak: currentStreak,
+            best_streak: bestStreak,
+          });
+        } else {
+          // User clicked success: RECORD success (potentially changing from struggle)
+          if (todayStruggleReflection) {
+            console.log('HomeScreen: Changing struggle to success for once_per_day goal');
+            await deleteReflection(todayStruggleReflection.id);
+            
+            // Delete struggle daily entry
+            const todayStruggleEntry = goal.dailyEntries?.find(e => e.type === 'struggle');
+            if (todayStruggleEntry) {
+              await deleteDailyEntry(todayStruggleEntry.id);
+            }
+          } else {
+            console.log('HomeScreen: Recording success for once_per_day goal');
+          }
+          
+          // Create new success entry
+          await createDailyEntry({
+            goal_id: goalId,
+            type: 'success',
+            entry_date: dateStr,
+            timestamp: new Date().toISOString(),
+          });
+          
+          await createReflectionFn({
+            entry_date: dateStr,
+            category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+            type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
+            description: `Quick Entry - ${goal.title}`,
+            linked_goal_id: goalId,
+            outcome: 'success',
+          });
+          
+          // Recalculate goal stats
+          const allReflections = await getReflections();
+          const goalReflections = allReflections.filter((r: any) => r.linked_goal_id === goalId);
+          const successCount = goalReflections.filter((r: any) => r.outcome === 'success').length;
+          const struggleCount = goalReflections.filter((r: any) => r.outcome === 'struggled').length;
+          
+          // Recalculate streaks
+          const sortedReflections = goalReflections
+            .sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+          
+          let currentStreak = 0;
+          let bestStreak = 0;
+          let tempStreak = 0;
+          
+          for (const r of sortedReflections) {
+            if ((r as any).outcome === 'success') {
+              tempStreak++;
+              if (tempStreak > bestStreak) {
+                bestStreak = tempStreak;
+              }
+            } else if ((r as any).outcome === 'struggled') {
+              if (currentStreak === 0) {
+                currentStreak = tempStreak;
+              }
+              tempStreak = 0;
+            }
+          }
+          
+          if (currentStreak === 0) {
+            currentStreak = tempStreak;
+          }
+          
+          await updateGoal(goalId, {
+            success_count: successCount,
+            struggle_count: struggleCount,
+            current_streak: currentStreak,
+            best_streak: bestStreak,
+          });
+        }
+      } else {
+        // TALLY LOGIC: Original behavior
+        // Create daily entry
+        await createDailyEntry({
+          goal_id: goalId,
+          type: 'success',
+          entry_date: dateStr,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Create reflection record for the success
+        const { createReflection } = await import('@/utils/supabaseApi');
+        await createReflection({
+          entry_date: dateStr,
+          category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+          type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
+          description: `Quick Entry - ${goal.title}`,
+          linked_goal_id: goalId,
+          outcome: 'success',
+        });
+        console.log('HomeScreen: Reflection created for success');
+
+        // Update goal counts and streaks
+        const newSuccessCount = (goal.successCount || 0) + 1;
+        const newCurrentStreak = (goal.currentStreak || 0) + 1;
+        const newBestStreak = Math.max(newCurrentStreak, goal.bestStreak || 0);
+        
+        await updateGoal(goalId, {
+          success_count: newSuccessCount,
+          current_streak: newCurrentStreak,
+          best_streak: newBestStreak,
+        });
+      }
 
       // Reload data to update UI - NO SUCCESS MESSAGE POPUP
       await loadData();
@@ -621,33 +756,168 @@ export default function HomeScreen() {
         return;
       }
       
-      // Create daily entry
-      await createDailyEntry({
-        goal_id: goalId,
-        type: 'struggle',
-        entry_date: dateStr,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Create reflection record for the struggle
-      const { createReflection } = await import('@/utils/supabaseApi');
-      await createReflection({
-        entry_date: dateStr,
-        category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
-        type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
-        description: `Quick Entry - ${goal.title}`,
-        linked_goal_id: goalId,
-        outcome: 'struggled',
-      });
-      console.log('HomeScreen: Reflection created for struggle');
-
-      // Update goal counts and reset streak
-      const newStruggleCount = (goal.struggleCount || 0) + 1;
+      const isOncePerDay = goal.trackingType === 'once_per_day';
       
-      await updateGoal(goalId, {
-        struggle_count: newStruggleCount,
-        current_streak: 0, // Reset streak on struggle
-      });
+      if (isOncePerDay) {
+        // ONCE PER DAY LOGIC: Toggle behavior
+        // Check if there's already a success or struggle entry for today
+        const { getReflections, deleteReflection, createReflection: createReflectionFn } = await import('@/utils/supabaseApi');
+        const todayReflections = await getReflections(dateStr);
+        const goalTodayReflections = todayReflections.filter((r: any) => r.linked_goal_id === goalId);
+        
+        const todaySuccessReflection = goalTodayReflections.find((r: any) => r.outcome === 'success');
+        const todayStruggleReflection = goalTodayReflections.find((r: any) => r.outcome === 'struggled');
+        
+        if (todayStruggleReflection) {
+          // User clicked struggle again: UNDO struggle
+          console.log('HomeScreen: Undoing struggle for once_per_day goal');
+          await deleteReflection(todayStruggleReflection.id);
+          
+          // Delete daily entry
+          const todayStruggleEntry = goal.dailyEntries?.find(e => e.type === 'struggle');
+          if (todayStruggleEntry) {
+            await deleteDailyEntry(todayStruggleEntry.id);
+          }
+          
+          // Recalculate goal stats
+          const allReflections = await getReflections();
+          const goalReflections = allReflections.filter((r: any) => r.linked_goal_id === goalId);
+          const successCount = goalReflections.filter((r: any) => r.outcome === 'success').length;
+          const struggleCount = goalReflections.filter((r: any) => r.outcome === 'struggled').length;
+          
+          // Recalculate streaks
+          const sortedReflections = goalReflections
+            .sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+          
+          let currentStreak = 0;
+          let bestStreak = 0;
+          let tempStreak = 0;
+          
+          for (const r of sortedReflections) {
+            if ((r as any).outcome === 'success') {
+              tempStreak++;
+              if (tempStreak > bestStreak) {
+                bestStreak = tempStreak;
+              }
+            } else if ((r as any).outcome === 'struggled') {
+              if (currentStreak === 0) {
+                currentStreak = tempStreak;
+              }
+              tempStreak = 0;
+            }
+          }
+          
+          if (currentStreak === 0) {
+            currentStreak = tempStreak;
+          }
+          
+          await updateGoal(goalId, {
+            success_count: successCount,
+            struggle_count: struggleCount,
+            current_streak: currentStreak,
+            best_streak: bestStreak,
+          });
+        } else {
+          // User clicked struggle: RECORD struggle (potentially changing from success)
+          if (todaySuccessReflection) {
+            console.log('HomeScreen: Changing success to struggle for once_per_day goal');
+            await deleteReflection(todaySuccessReflection.id);
+            
+            // Delete success daily entry
+            const todaySuccessEntry = goal.dailyEntries?.find(e => e.type === 'success');
+            if (todaySuccessEntry) {
+              await deleteDailyEntry(todaySuccessEntry.id);
+            }
+          } else {
+            console.log('HomeScreen: Recording struggle for once_per_day goal');
+          }
+          
+          // Create new struggle entry
+          await createDailyEntry({
+            goal_id: goalId,
+            type: 'struggle',
+            entry_date: dateStr,
+            timestamp: new Date().toISOString(),
+          });
+          
+          await createReflectionFn({
+            entry_date: dateStr,
+            category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+            type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
+            description: `Quick Entry - ${goal.title}`,
+            linked_goal_id: goalId,
+            outcome: 'struggled',
+          });
+          
+          // Recalculate goal stats
+          const allReflections = await getReflections();
+          const goalReflections = allReflections.filter((r: any) => r.linked_goal_id === goalId);
+          const successCount = goalReflections.filter((r: any) => r.outcome === 'success').length;
+          const struggleCount = goalReflections.filter((r: any) => r.outcome === 'struggled').length;
+          
+          // Recalculate streaks (reset on struggle)
+          const sortedReflections = goalReflections
+            .sort((a: any, b: any) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime());
+          
+          let currentStreak = 0;
+          let bestStreak = 0;
+          let tempStreak = 0;
+          
+          for (const r of sortedReflections) {
+            if ((r as any).outcome === 'success') {
+              tempStreak++;
+              if (tempStreak > bestStreak) {
+                bestStreak = tempStreak;
+              }
+            } else if ((r as any).outcome === 'struggled') {
+              if (currentStreak === 0) {
+                currentStreak = tempStreak;
+              }
+              tempStreak = 0;
+            }
+          }
+          
+          if (currentStreak === 0) {
+            currentStreak = tempStreak;
+          }
+          
+          await updateGoal(goalId, {
+            success_count: successCount,
+            struggle_count: struggleCount,
+            current_streak: 0, // Reset streak on struggle
+            best_streak: bestStreak,
+          });
+        }
+      } else {
+        // TALLY LOGIC: Original behavior
+        // Create daily entry
+        await createDailyEntry({
+          goal_id: goalId,
+          type: 'struggle',
+          entry_date: dateStr,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Create reflection record for the struggle
+        const { createReflection } = await import('@/utils/supabaseApi');
+        await createReflection({
+          entry_date: dateStr,
+          category: goal.behaviorCategories && goal.behaviorCategories.length > 0 ? goal.behaviorCategories[0] : undefined,
+          type: goal.type === 'RESTRAINING' ? 'Restraint' : 'Proactive',
+          description: `Quick Entry - ${goal.title}`,
+          linked_goal_id: goalId,
+          outcome: 'struggled',
+        });
+        console.log('HomeScreen: Reflection created for struggle');
+
+        // Update goal counts and reset streak
+        const newStruggleCount = (goal.struggleCount || 0) + 1;
+        
+        await updateGoal(goalId, {
+          struggle_count: newStruggleCount,
+          current_streak: 0, // Reset streak on struggle
+        });
+      }
 
       // Reload data to update UI - NO SUCCESS MESSAGE POPUP
       await loadData();
@@ -813,15 +1083,15 @@ export default function HomeScreen() {
   const handleOpenReflectionList = (goal: ActivatedGoal, outcome: 'success' | 'struggled') => {
     console.log('HomeScreen: Opening reflection list for goal:', goal.id, 'outcome:', outcome, 'trackingType:', goal.trackingType);
     
-    // CRITICAL FIX: For "once per day" goals showing cumulative counts, 
-    // we should show ALL reflections, not just today's
-    // For tally goals, we show only today's reflections
+    // CRITICAL FIX: When clicking on trophy/x icon for "once per day" goals,
+    // show ONLY TODAY'S entry (not all cumulative entries)
+    // The trophy/x shows cumulative count, but clicking it shows today's entry for editing/deleting
     const isOncePerDay = goal.trackingType === 'once_per_day';
     
     setReflectionListGoalId(goal.id);
     setReflectionListOutcome(outcome);
     setReflectionListTitle(`${goal.title} - ${outcome === 'success' ? 'Successes' : 'Struggles'}`);
-    setReflectionListShowAll(isOncePerDay); // Show all reflections for once per day goals
+    setReflectionListShowAll(false); // Always show only today's reflections when clicked from goal card
     setShowReflectionListModal(true);
   };
 
@@ -969,7 +1239,7 @@ export default function HomeScreen() {
     if (isOneTimeGoal) {
       // Once per day: Show cumulative total
       displaySuccessCount = goal.successCount || 0;
-      displayStruggleCount = 0; // Hidden for once_per_day goals
+      displayStruggleCount = goal.struggleCount || 0;
     } else {
       // Tally: Show today's count only
       displaySuccessCount = todaySuccesses;
@@ -981,8 +1251,10 @@ export default function HomeScreen() {
     const rewardsEarnedToday = dailyTallies.reward;
     const consequencesEarnedToday = dailyTallies.consequence;
     
-    // For once_per_day goals, only show tick if success recorded TODAY
-    const shouldShowTickForOncePerDay = isOneTimeGoal && todaySuccesses > 0;
+    // For once_per_day goals, only show icons if action recorded TODAY
+    const hasActionToday = todaySuccesses > 0 || todayStruggles > 0;
+    const shouldShowSuccessForOncePerDay = isOneTimeGoal && todaySuccesses > 0;
+    const shouldShowStruggleForOncePerDay = isOneTimeGoal && todayStruggles > 0;
     
     // Streak logic: Show streak icons when there's a current streak
     const hasCurrentStreak = currentStreakValue > 0;
@@ -1057,8 +1329,28 @@ export default function HomeScreen() {
               </View>
             )}
             
-            {/* Success Count - Show only if applicable - CLICKABLE */}
-            {(!isOneTimeGoal || shouldShowTickForOncePerDay) && (
+            {/* Success Count - Show trophy for once_per_day, tick for tally - CLICKABLE */}
+            {isOneTimeGoal ? (
+              // Once per day: Show trophy ONLY if success recorded today
+              shouldShowSuccessForOncePerDay && (
+                <TouchableOpacity
+                  style={styles.statItemConcise}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleOpenReflectionList(goal, 'success');
+                  }}
+                >
+                  <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
+                  <IconSymbol
+                    ios_icon_name="trophy.fill"
+                    android_material_icon_name="emoji-events"
+                    size={16}
+                    color="#FFD700"
+                  />
+                </TouchableOpacity>
+              )
+            ) : (
+              // Tally: Always show tick with today's count
               <TouchableOpacity
                 style={styles.statItemConcise}
                 onPress={(e) => {
@@ -1068,16 +1360,36 @@ export default function HomeScreen() {
               >
                 <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
                 <IconSymbol
-                  ios_icon_name={isOneTimeGoal ? "checkmark.circle.fill" : "checkmark"}
-                  android_material_icon_name={isOneTimeGoal ? "check-circle" : "check"}
+                  ios_icon_name="checkmark"
+                  android_material_icon_name="check"
                   size={16}
                   color={colors.success}
                 />
               </TouchableOpacity>
             )}
             
-            {/* Struggle Count - HIDDEN for one-time goals AFTER success recorded - CLICKABLE */}
-            {!isOneTimeGoal && (
+            {/* Struggle Count - Show x for once_per_day ONLY if struggle recorded today, always show for tally - CLICKABLE */}
+            {isOneTimeGoal ? (
+              // Once per day: Show x ONLY if struggle recorded today
+              shouldShowStruggleForOncePerDay && (
+                <TouchableOpacity
+                  style={styles.statItemConcise}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleOpenReflectionList(goal, 'struggled');
+                  }}
+                >
+                  <Text style={styles.statTextConcise}>{displayStruggleCount}</Text>
+                  <IconSymbol
+                    ios_icon_name="xmark"
+                    android_material_icon_name="close"
+                    size={16}
+                    color={colors.error}
+                  />
+                </TouchableOpacity>
+              )
+            ) : (
+              // Tally: Always show x with today's count
               <TouchableOpacity
                 style={styles.statItemConcise}
                 onPress={(e) => {
@@ -1112,23 +1424,21 @@ export default function HomeScreen() {
               />
             </TouchableOpacity>
             
-            {/* Struggle Button - HIDDEN for one-time goals AFTER success recorded */}
-            {!isOneTimeGoal && (
-              <TouchableOpacity
-                style={[styles.actionButtonIconConcise, { backgroundColor: "#B87C6C" }]}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleGoalStruggle(goal.id);
-                }}
-              >
-                <IconSymbol
-                  ios_icon_name="xmark"
-                  android_material_icon_name="close"
-                  size={16}
-                  color="#fff"
-                />
-              </TouchableOpacity>
-            )}
+            {/* Struggle Button - Always show for tally, show for once_per_day */}
+            <TouchableOpacity
+              style={[styles.actionButtonIconConcise, { backgroundColor: "#B87C6C" }]}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleGoalStruggle(goal.id);
+              }}
+            >
+              <IconSymbol
+                ios_icon_name="xmark"
+                android_material_icon_name="close"
+                size={16}
+                color="#fff"
+              />
+            </TouchableOpacity>
             
             {/* Success Button - RIGHTMOST */}
             <TouchableOpacity
