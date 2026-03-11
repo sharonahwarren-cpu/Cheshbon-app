@@ -186,6 +186,12 @@ const styles = StyleSheet.create({
   },
   calendarButton: {
     padding: 8,
+    alignItems: 'center',
+  },
+  calendarDateLabel: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   appLogo: {
     width: 56,
@@ -1543,6 +1549,11 @@ export default function HomeScreen() {
     router.push('/(tabs)/profile');
   };
 
+  const handleAppLogoPress = () => {
+    console.log('HomeScreen: Opening Reflect page');
+    router.push('/(tabs)/reflect');
+  };
+
   const handleDatePickerConfirm = (date: Date) => {
     console.log('HomeScreen: Date selected:', formatDateLocal(date));
     setSelectedDate(date);
@@ -1557,7 +1568,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        {/* Left: Calendar Icon */}
+        {/* Left: Calendar Icon with date label */}
         <View style={styles.headerLeft}>
           <TouchableOpacity style={styles.calendarButton} onPress={() => setShowDatePicker(true)}>
             <IconSymbol
@@ -1566,16 +1577,21 @@ export default function HomeScreen() {
               size={24}
               color={colors.text}
             />
+            <Text style={styles.calendarDateLabel}>
+              {isToday(selectedDate) ? 'Today' : formatDateDisplay(selectedDate)}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Center: App Logo (bigger) */}
+        {/* Center: App Logo (bigger) - Opens Reflect page */}
         <View style={styles.headerCenter}>
-          <Image 
-            source={require('@/assets/images/Chesbon_app_Logo Small.png')} 
-            style={styles.appLogo}
-            resizeMode="contain"
-          />
+          <TouchableOpacity onPress={handleAppLogoPress}>
+            <Image 
+              source={require('@/assets/images/Chesbon_app_Logo Small.png')} 
+              style={styles.appLogo}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
         </View>
 
         {/* Right: Profile Icon */}

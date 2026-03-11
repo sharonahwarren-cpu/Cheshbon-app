@@ -1769,3 +1769,43 @@ export const getAlarm = async (id: string) => {
   handleError(error, 'getAlarm');
   return data;
 };
+
+// ============================================================================
+// USER PROFILE
+// ============================================================================
+
+export const getProfile = async () => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+  
+  if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+    handleError(error, 'getProfile');
+  }
+  
+  return data || null;
+};
+
+export const updateProfile = async (updates: { name?: string; avatar_url?: string }) => {
+  const userId = await getCurrentUserId();
+  
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({
+      id: userId,
+      ...updates,
+      updated_at: new Date().toISOString(),
+    }, {
+      onConflict: 'id',
+      ignoreDuplicates: false,
+    })
+    .select()
+    .single();
+  
+  handleError(error, 'updateProfile');
+  return data;
+};
