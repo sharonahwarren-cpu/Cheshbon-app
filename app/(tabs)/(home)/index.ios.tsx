@@ -171,6 +171,42 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
+  headerLeft: {
+    width: 40,
+    alignItems: 'flex-start',
+  },
+  headerCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRight: {
+    width: 40,
+    alignItems: 'flex-end',
+  },
+  calendarButton: {
+    padding: 8,
+  },
+  appLogo: {
+    width: 56,
+    height: 56,
+  },
+  profileButton: {
+    padding: 4,
+  },
+  profileImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  defaultProfileIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#7C9885',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dateNavigation: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -467,6 +503,8 @@ export default function HomeScreen() {
   const [reflectionListTitle, setReflectionListTitle] = useState('');
   const [reflectionListShowAll, setReflectionListShowAll] = useState(false);
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     console.log('HomeScreen: Initial load');
@@ -487,6 +525,29 @@ export default function HomeScreen() {
     };
     
     cleanupAndLoad();
+    
+    // Fetch user avatar
+    const fetchUserAvatar = async () => {
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('avatar_url')
+            .eq('id', user.id)
+            .single();
+          
+          if (profile?.avatar_url) {
+            setUserAvatarUrl(profile.avatar_url);
+          }
+        }
+      } catch (error) {
+        console.error('HomeScreen: Error fetching user avatar:', error);
+      }
+    };
+    
+    fetchUserAvatar();
   }, []);
 
   useEffect(() => {
@@ -1477,55 +1538,76 @@ export default function HomeScreen() {
     );
   }
 
+  const handleProfilePress = () => {
+    console.log('HomeScreen: Navigating to profile');
+    router.push('/(tabs)/profile');
+  };
+
+  const handleDatePickerConfirm = (date: Date) => {
+    console.log('HomeScreen: Date selected:', formatDateLocal(date));
+    setSelectedDate(date);
+    setShowDatePicker(false);
+  };
+
+  const handleDatePickerCancel = () => {
+    console.log('HomeScreen: Date picker cancelled');
+    setShowDatePicker(false);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <View style={styles.dateNavigation}>
-          <TouchableOpacity style={styles.dateButton} onPress={handlePreviousDay}>
+        {/* Left: Calendar Icon */}
+        <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.calendarButton} onPress={() => setShowDatePicker(true)}>
             <IconSymbol
-              ios_icon_name="chevron.left"
-              android_material_icon_name="chevron-left"
+              ios_icon_name="calendar"
+              android_material_icon_name="event"
               size={24}
               color={colors.text}
             />
           </TouchableOpacity>
-          <Text style={styles.dateText}>{formatDateDisplay(selectedDate)}</Text>
-          <TouchableOpacity style={styles.dateButton} onPress={handleNextDay}>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={24}
-              color={colors.text}
-            />
-          </TouchableOpacity>
-          {!isToday(selectedDate) && (
-            <TouchableOpacity
-              style={styles.todayButton}
-              onPress={() => setSelectedDate(new Date())}
-            >
-              <Text style={styles.todayButtonText}>Today</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerButton} onPress={handleOpenJournalModal}>
-            <Image 
-              source={require('@/assets/images/Chesbon_app_Logo Small.png')} 
-              style={{ width: 24, height: 24 }}
-              resizeMode="contain"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton} onPress={handleCreateGoal}>
-            <IconSymbol
-              ios_icon_name="plus"
-              android_material_icon_name="add"
-              size={24}
-              color={colors.text}
-            />
+        {/* Center: App Logo (bigger) */}
+        <View style={styles.headerCenter}>
+          <Image 
+            source={require('@/assets/images/Chesbon_app_Logo Small.png')} 
+            style={styles.appLogo}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* Right: Profile Icon */}
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.profileButton} onPress={handleProfilePress}>
+            {userAvatarUrl ? (
+              <Image 
+                source={{ uri: userAvatarUrl }} 
+                style={styles.profileImage}
+              />
+            ) : (
+              <View style={styles.defaultProfileIcon}>
+                <IconSymbol
+                  ios_icon_name="person.fill"
+                  android_material_icon_name="person"
+                  size={20}
+                  color="#fff"
+                />
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Date Picker Modal */}
+      <DatePickerModal
+        visible={showDatePicker}
+        value={selectedDate}
+        mode="date"
+        onConfirm={handleDatePickerConfirm}
+        onCancel={handleDatePickerCancel}
+      />
 
       <ScrollView
         ref={scrollViewRef}
