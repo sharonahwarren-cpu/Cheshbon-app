@@ -1203,6 +1203,13 @@ export default function HomeScreen() {
     const shouldShowTallyTick = isTally && todaySuccesses > 0;
     const shouldShowTallyX = isTally && todayStruggles > 0;
     
+    // Get currency icon
+    const rewardCurrency = goal.rewardCurrencyId ? currencies.find(c => c.id === goal.rewardCurrencyId) : null;
+    const consequenceCurrency = goal.consequenceCurrencyId ? currencies.find(c => c.id === goal.consequenceCurrencyId) : null;
+    
+    const rewardIcon = rewardCurrency?.symbol || '🎁';
+    const consequenceIcon = consequenceCurrency?.symbol || '⚠️';
+    
     return (
       <TouchableOpacity 
         key={goal.id} 
@@ -1277,24 +1284,32 @@ export default function HomeScreen() {
           {consequencesEarnedToday > 0 && goal.consequenceCurrencyId && (
             <View style={styles.statItemConcise}>
               <Text style={styles.statTextConcise}>{consequencesEarnedToday}</Text>
-              <IconSymbol
-                ios_icon_name="exclamationmark.triangle.fill"
-                android_material_icon_name="warning"
-                size={16}
-                color="#ef4444"
-              />
+              {consequenceCurrency?.symbol ? (
+                <Text style={{ fontSize: 16, color: '#ef4444' }}>{consequenceCurrency.symbol}</Text>
+              ) : (
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle.fill"
+                  android_material_icon_name="warning"
+                  size={16}
+                  color="#7C9885"
+                />
+              )}
             </View>
           )}
           
           {rewardsEarnedToday > 0 && goal.rewardCurrencyId && (
             <View style={styles.statItemConcise}>
               <Text style={styles.statTextConcise}>{rewardsEarnedToday}</Text>
-              <IconSymbol
-                ios_icon_name="gift.fill"
-                android_material_icon_name="card-giftcard"
-                size={16}
-                color="#10b981"
-              />
+              {rewardCurrency?.symbol ? (
+                <Text style={{ fontSize: 16, color: '#10b981' }}>{rewardCurrency.symbol}</Text>
+              ) : (
+                <IconSymbol
+                  ios_icon_name="gift.fill"
+                  android_material_icon_name="card-giftcard"
+                  size={16}
+                  color="#7C9885"
+                />
+              )}
             </View>
           )}
           
@@ -1334,10 +1349,10 @@ export default function HomeScreen() {
             >
               <Text style={styles.statTextConcise}>{displaySuccessCount}</Text>
               <IconSymbol
-                ios_icon_name="checkmark"
-                android_material_icon_name="check"
+                ios_icon_name="trophy.fill"
+                android_material_icon_name="emoji-events"
                 size={16}
-                color="#7C9885"
+                color="#FFD700"
               />
             </TouchableOpacity>
           )}
