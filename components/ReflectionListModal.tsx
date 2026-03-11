@@ -336,6 +336,35 @@ export function ReflectionListModal({
     try {
       console.log('[ReflectionListModal] Deleting reflection:', reflectionToDelete.id);
       
+      // CRITICAL FIX: Delete corresponding daily_entry BEFORE deleting reflection
+      // This ensures data stays in sync and icon counts update correctly
+      if (reflectionToDelete.linkedGoalId) {
+        console.log('[ReflectionListModal] Finding and deleting corresponding daily_entry');
+        
+        // Get all daily entries for this goal on this date
+        const userId = await supabaseApi.getCurrentUserId();
+        const { data: dailyEntries, error: entriesError } = await supabase
+          .from('daily_entries')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('goal_id', reflectionToDelete.linkedGoalId)
+          .eq('entry_date', reflectionToDelete.entryDate);
+        
+        if (entriesError) {
+          console.error('[ReflectionListModal] Error fetching daily entries:', entriesError);
+        } else if (dailyEntries && dailyEntries.length > 0) {
+          // Find the entry that matches this reflection's outcome
+          const matchingEntry = dailyEntries.find(e => e.type === reflectionToDelete.outcome);
+          
+          if (matchingEntry) {
+            console.log('[ReflectionListModal] Deleting daily_entry:', matchingEntry.id);
+            await supabaseApi.deleteDailyEntry(matchingEntry.id);
+          } else {
+            console.warn('[ReflectionListModal] No matching daily_entry found for reflection');
+          }
+        }
+      }
+      
       // Delete the reflection
       await supabaseApi.deleteReflection(reflectionToDelete.id);
       
