@@ -8,7 +8,7 @@ import { useRouter } from "expo-router";
 import { useAuth } from "@/contexts/AuthContext";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import * as ImagePicker from 'expo-image-picker';
-import { getProfile, updateProfile } from "@/utils/supabaseApi";
+import { getProfile, updateProfile, getGravatarUrl } from "@/utils/supabaseApi";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function ProfileScreen() {
   const [showEditModal, setShowEditModal] = React.useState(false);
   const [editName, setEditName] = React.useState('');
   const [avatarUrl, setAvatarUrl] = React.useState<string | null>(null);
+  const [useGravatar, setUseGravatar] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
@@ -33,8 +34,16 @@ export default function ProfileScreen() {
       if (profile) {
         setEditName(profile.name || user?.name || '');
         setAvatarUrl(profile.avatar_url || null);
+        // Check if user is using Gravatar (avatar_url starts with gravatar.com)
+        setUseGravatar(profile.avatar_url?.includes('gravatar.com') || false);
       } else {
         setEditName(user?.name || '');
+        // Default to Gravatar if no profile exists
+        if (user?.email) {
+          const gravatarUrl = getGravatarUrl(user.email);
+          setAvatarUrl(gravatarUrl);
+          setUseGravatar(true);
+        }
       }
     } catch (error: any) {
       console.error('Error loading profile:', error);
@@ -92,10 +101,22 @@ export default function ProfileScreen() {
 
       if (!result.canceled && result.assets[0]) {
         setAvatarUrl(result.assets[0].uri);
+        setUseGravatar(false); // User chose custom image, disable Gravatar
       }
     } catch (error: any) {
       console.error('Error picking image:', error);
       setErrorMessage('Failed to pick image. Please try again.');
+      setShowErrorModal(true);
+    }
+  };
+
+  const handleUseGravatar = () => {
+    if (user?.email) {
+      const gravatarUrl = getGravatarUrl(user.email);
+      setAvatarUrl(gravatarUrl);
+      setUseGravatar(true);
+    } else {
+      setErrorMessage('No email address found for Gravatar');
       setShowErrorModal(true);
     }
   };
@@ -337,15 +358,36 @@ export default function ProfileScreen() {
                   <Text style={styles.editAvatarText}>{userInitial}</Text>
                 </View>
               )}
-              <TouchableOpacity style={styles.changePhotoButton} onPress={handlePickImage}>
-                <IconSymbol
-                  ios_icon_name="camera.fill"
-                  android_material_icon_name="photo-camera"
-                  size={16}
-                  color="#fff"
-                />
-                <Text style={styles.changePhotoText}>Change Photo</Text>
-              </TouchableOpacity>
+              <View style={styles.avatarButtonsRow}>
+                <TouchableOpacity style={styles.changePhotoButton} onPress={handlePickImage}>
+                  <IconSymbol
+                    ios_icon_name="camera.fill"
+                    android_material_icon_name="photo-camera"
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.changePhotoText}>Upload Photo</Text>
+                </TouchableOpacity>
+                {user?.email && (
+                  <TouchableOpacity 
+                    style={[styles.changePhotoButton, useGravatar && styles.gravatarButtonActive]} 
+                    onPress={handleUseGravatar}
+                  >
+                    <IconSymbol
+                      ios_icon_name="person.circle.fill"
+                      android_material_icon_name="account-circle"
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text style={styles.changePhotoText}>Use Gravatar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              {useGravatar && (
+                <Text style={styles.gravatarHint}>
+                  Using Gravatar from {user?.email}
+                </Text>
+              )}
             </View>
 
             <Text style={styles.inputLabel}>Name</Text>
@@ -642,19 +684,34 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     marginBottom: 12,
   },
+  avatarButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
   changePhotoButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primary,
     paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderRadius: 8,
     gap: 6,
+    flex: 1,
+  },
+  gravatarButtonActive: {
+    backgroundColor: '#10b981',
   },
   changePhotoText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
+  },
+  gravatarHint: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   inputLabel: {
     fontSize: 14,

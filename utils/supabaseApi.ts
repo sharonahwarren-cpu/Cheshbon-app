@@ -1793,11 +1793,54 @@ export const getProfile = async () => {
 export const updateProfile = async (updates: { name?: string; avatar_url?: string }) => {
   const userId = await getCurrentUserId();
   
+  let avatarUrl = updates.avatar_url;
+  
+  // If avatar_url is a local file URI (starts with file:// or content://), upload it to Supabase Storage
+  if (avatarUrl && (avatarUrl.startsWith('file://') || avatarUrl.startsWith('content://'))) {
+    console.log('[Supabase API] Uploading avatar image to storage...');
+    
+    try {
+      // Convert local URI to blob
+      const response = await fetch(avatarUrl);
+      const blob = await response.blob();
+      
+      // Generate unique filename
+      const fileExt = 'jpg'; // Default to jpg
+      const fileName = `${userId}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, blob, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+      
+      if (uploadError) {
+        console.error('[Supabase API] Error uploading avatar:', uploadError);
+        throw new Error('Failed to upload avatar image');
+      }
+      
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+      
+      avatarUrl = publicUrl;
+      console.log('[Supabase API] Avatar uploaded successfully:', avatarUrl);
+    } catch (error) {
+      console.error('[Supabase API] Error processing avatar upload:', error);
+      throw new Error('Failed to process avatar image');
+    }
+  }
+  
   const { data, error } = await supabase
     .from('profiles')
     .upsert({
       id: userId,
-      ...updates,
+      name: updates.name,
+      avatar_url: avatarUrl,
       updated_at: new Date().toISOString(),
     }, {
       onConflict: 'id',
@@ -1808,4 +1851,12 @@ export const updateProfile = async (updates: { name?: string; avatar_url?: strin
   
   handleError(error, 'updateProfile');
   return data;
+};
+
+// Helper to get Gravatar URL from email
+export const getGravatarUrl = (email: string, size: number = 200): string => {
+  // Use crypto-js for proper MD5 hashing
+  const CryptoJS = require('crypto-js');
+  const emailHash = CryptoJS.MD5(email.toLowerCase().trim()).toString();
+  return `https://www.gravatar.com/avatar/${emailHash}?s=${size}&d=identicon`;
 };

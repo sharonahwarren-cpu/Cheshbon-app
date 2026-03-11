@@ -536,17 +536,19 @@ export default function HomeScreen() {
     // Fetch user avatar
     const fetchUserAvatar = async () => {
       try {
+        const { getProfile, getGravatarUrl } = await import('@/utils/supabaseApi');
         const { supabase } = await import('@/lib/supabase');
         const { data: { user } } = await supabase.auth.getUser();
+        
         if (user) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('avatar_url')
-            .eq('id', user.id)
-            .single();
+          const profile = await getProfile();
           
           if (profile?.avatar_url) {
             setUserAvatarUrl(profile.avatar_url);
+          } else if (user.email) {
+            // Default to Gravatar if no custom avatar
+            const gravatarUrl = getGravatarUrl(user.email);
+            setUserAvatarUrl(gravatarUrl);
           }
         }
       } catch (error) {
