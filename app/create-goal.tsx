@@ -937,7 +937,7 @@ export default function CreateGoalScreen() {
     ? (userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'])
     : [];
 
-  if (loading) {
+  if (loading && !editingGoalId) {
     return (
       <SafeAreaView style={styles.container}>
         <Stack.Screen

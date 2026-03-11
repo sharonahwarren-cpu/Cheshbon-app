@@ -1979,12 +1979,12 @@ export function AddReflectionModal({
                       size={18}
                       color={colors.primary}
                     />
-                    <Text style={styles.label}>Was it worth it?</Text>
+                    <Text style={styles.label}>Was it worth it? (Optional)</Text>
                   </View>
                   <View style={styles.worthItRow}>
                     <TouchableOpacity
                       style={[styles.worthItBox, wasWorthIt === true && styles.worthItBoxYesSelected]}
-                      onPress={() => setWasWorthIt(true)}
+                      onPress={() => setWasWorthIt(wasWorthIt === true ? undefined : true)}
                     >
                       <IconSymbol
                         ios_icon_name="hand.thumbsup.fill"
@@ -1998,7 +1998,7 @@ export function AddReflectionModal({
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.worthItBox, wasWorthIt === false && styles.worthItBoxNoSelected]}
-                      onPress={() => setWasWorthIt(false)}
+                      onPress={() => setWasWorthIt(wasWorthIt === false ? undefined : false)}
                     >
                       <IconSymbol
                         ios_icon_name="hand.thumbsdown.fill"

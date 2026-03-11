@@ -238,7 +238,10 @@ const styles = StyleSheet.create({
   goalCardConcise: {
     backgroundColor: colors.card,
     borderRadius: 8,
-    padding: 12,
+    paddingTop: 1,
+    paddingBottom: 1,
+    paddingLeft: 1,
+    paddingRight: 0,
     marginBottom: 8,
     position: 'relative',
   },
@@ -1487,11 +1490,10 @@ export default function HomeScreen() {
 
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.headerButton} onPress={handleOpenJournalModal}>
-            <IconSymbol
-              ios_icon_name="book"
-              android_material_icon_name="menu-book"
-              size={24}
-              color={colors.text}
+            <Image 
+              source={require('@/assets/images/Chesbon_app_Logo Small.png')} 
+              style={{ width: 24, height: 24 }}
+              resizeMode="contain"
             />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton} onPress={handleCreateGoal}>
