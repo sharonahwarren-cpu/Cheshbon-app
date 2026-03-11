@@ -173,33 +173,41 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerLeft: {
-    width: 40,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
   },
   headerCenter: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerRight: {
-    width: 40,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  navButton: {
+    padding: 4,
   },
   calendarButton: {
-    padding: 8,
+    padding: 4,
     alignItems: 'center',
   },
   calendarDateLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: colors.textSecondary,
     marginTop: 2,
+    maxWidth: 80,
   },
   appLogo: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
   },
   profileButton: {
-    padding: 4,
+    padding: 2,
   },
   profileImage: {
     width: 32,
@@ -455,7 +463,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   successButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#7C9885',
   },
   actionButtonText: {
     color: '#fff',
@@ -1585,8 +1593,16 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        {/* Left: Calendar Icon with date label */}
+        {/* Left: Previous Day + Calendar Icon with date label */}
         <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.navButton} onPress={handlePreviousDay}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="chevron-left"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.calendarButton} onPress={() => setShowDatePicker(true)}>
             <IconSymbol
               ios_icon_name="calendar"
@@ -1594,9 +1610,17 @@ export default function HomeScreen() {
               size={24}
               color={colors.text}
             />
-            <Text style={styles.calendarDateLabel}>
+            <Text style={styles.calendarDateLabel} numberOfLines={1}>
               {isToday(selectedDate) ? 'Today' : formatDateDisplay(selectedDate)}
             </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navButton} onPress={handleNextDay}>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={24}
+              color={colors.text}
+            />
           </TouchableOpacity>
         </View>
 
