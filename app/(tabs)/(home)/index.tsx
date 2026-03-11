@@ -513,6 +513,32 @@ export default function HomeScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
 
+  // CRITICAL FIX: Fetch user avatar on every screen focus
+  // This ensures the avatar updates when returning from profile screen
+  const fetchUserAvatar = async () => {
+    try {
+      const { getProfile, getGravatarUrl } = await import('@/utils/supabaseApi');
+      const { supabase } = await import('@/lib/supabase');
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const profile = await getProfile();
+        
+        if (profile?.avatar_url) {
+          console.log('HomeScreen: Setting avatar from profile:', profile.avatar_url);
+          setUserAvatarUrl(profile.avatar_url);
+        } else if (user.email) {
+          // Default to Gravatar if no custom avatar
+          const gravatarUrl = getGravatarUrl(user.email);
+          console.log('HomeScreen: Setting avatar from Gravatar:', gravatarUrl);
+          setUserAvatarUrl(gravatarUrl);
+        }
+      }
+    } catch (error) {
+      console.error('HomeScreen: Error fetching user avatar:', error);
+    }
+  };
+
   useEffect(() => {
     console.log('HomeScreen: Initial load');
     
@@ -533,31 +559,24 @@ export default function HomeScreen() {
     
     cleanupAndLoad();
     
-    // Fetch user avatar
-    const fetchUserAvatar = async () => {
-      try {
-        const { getProfile, getGravatarUrl } = await import('@/utils/supabaseApi');
-        const { supabase } = await import('@/lib/supabase');
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (user) {
-          const profile = await getProfile();
-          
-          if (profile?.avatar_url) {
-            setUserAvatarUrl(profile.avatar_url);
-          } else if (user.email) {
-            // Default to Gravatar if no custom avatar
-            const gravatarUrl = getGravatarUrl(user.email);
-            setUserAvatarUrl(gravatarUrl);
-          }
-        }
-      } catch (error) {
-        console.error('HomeScreen: Error fetching user avatar:', error);
-      }
-    };
-    
+    // Fetch user avatar on initial load
     fetchUserAvatar();
   }, []);
+
+  // CRITICAL FIX: Refresh avatar when screen comes into focus
+  // This ensures avatar updates when returning from profile screen
+  useEffect(() => {
+    const unsubscribe = router.subscribe(() => {
+      console.log('HomeScreen: Router event - refreshing avatar');
+      fetchUserAvatar();
+    });
+    
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [router]);
 
   useEffect(() => {
     if (showSuccessModal) {

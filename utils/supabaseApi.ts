@@ -1795,19 +1795,27 @@ export const updateProfile = async (updates: { name?: string; avatar_url?: strin
   
   let avatarUrl = updates.avatar_url;
   
-  // If avatar_url is a local file URI (starts with file:// or content://), upload it to Supabase Storage
-  if (avatarUrl && (avatarUrl.startsWith('file://') || avatarUrl.startsWith('content://'))) {
-    console.log('[Supabase API] Uploading avatar image to storage...');
+  // CRITICAL FIX: Handle local file URIs, blob URLs, and content URIs
+  // These need to be uploaded to Supabase Storage to work on iOS
+  if (avatarUrl && (
+    avatarUrl.startsWith('file://') || 
+    avatarUrl.startsWith('content://') || 
+    avatarUrl.startsWith('blob:')
+  )) {
+    console.log('[Supabase API] Uploading avatar image to storage from local/blob URI...');
     
     try {
       // Convert local URI to blob
       const response = await fetch(avatarUrl);
       const blob = await response.blob();
       
-      // Generate unique filename
+      // CRITICAL FIX: Generate path that matches RLS policy
+      // RLS policy expects: avatars/{user_id}/{filename}
       const fileExt = 'jpg'; // Default to jpg
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const filePath = `avatars/${fileName}`;
+      const fileName = `avatar-${Date.now()}.${fileExt}`;
+      const filePath = `${userId}/${fileName}`;
+      
+      console.log('[Supabase API] Uploading to path:', filePath);
       
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -1819,7 +1827,7 @@ export const updateProfile = async (updates: { name?: string; avatar_url?: strin
       
       if (uploadError) {
         console.error('[Supabase API] Error uploading avatar:', uploadError);
-        throw new Error('Failed to upload avatar image');
+        throw new Error('Failed to upload avatar image: ' + uploadError.message);
       }
       
       // Get public URL
@@ -1828,11 +1836,13 @@ export const updateProfile = async (updates: { name?: string; avatar_url?: strin
         .getPublicUrl(filePath);
       
       avatarUrl = publicUrl;
-      console.log('[Supabase API] Avatar uploaded successfully:', avatarUrl);
-    } catch (error) {
+      console.log('[Supabase API] Avatar uploaded successfully to Supabase Storage:', avatarUrl);
+    } catch (error: any) {
       console.error('[Supabase API] Error processing avatar upload:', error);
-      throw new Error('Failed to process avatar image');
+      throw new Error('Failed to process avatar image: ' + (error.message || 'Unknown error'));
     }
+  } else if (avatarUrl) {
+    console.log('[Supabase API] Using existing avatar URL (Gravatar or Supabase Storage):', avatarUrl);
   }
   
   const { data, error } = await supabase
@@ -1850,6 +1860,7 @@ export const updateProfile = async (updates: { name?: string; avatar_url?: strin
     .single();
   
   handleError(error, 'updateProfile');
+  console.log('[Supabase API] Profile updated successfully with avatar:', data?.avatar_url);
   return data;
 };
 
