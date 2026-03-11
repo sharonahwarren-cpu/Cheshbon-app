@@ -18,8 +18,9 @@ import {
   TextInput,
   KeyboardAvoidingView,
 } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useCallback } from "react";
 import { 
   getGoalsWithDailyEntries, 
   createDailyEntry, 
@@ -564,18 +565,12 @@ export default function HomeScreen() {
 
   // CRITICAL FIX: Refresh avatar when screen comes into focus
   // This ensures avatar updates when returning from profile screen
-  useEffect(() => {
-    const unsubscribe = router.subscribe(() => {
-      console.log('HomeScreen: Router event - refreshing avatar');
+  useFocusEffect(
+    useCallback(() => {
+      console.log('HomeScreen: Screen focused - refreshing avatar');
       fetchUserAvatar();
-    });
-    
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [router]);
+    }, [])
+  );
 
   useEffect(() => {
     if (showSuccessModal) {
