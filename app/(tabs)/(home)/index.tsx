@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingTop: 1,
     paddingBottom: 1,
-    paddingLeft: 1,
+    paddingLeft: 3,
     paddingRight: 0,
     marginBottom: 8,
     position: 'relative',
@@ -1190,8 +1190,9 @@ export default function HomeScreen() {
     const rewardsEarnedToday = dailyTallies.reward;
     const consequencesEarnedToday = dailyTallies.consequence;
     
-    const displaySuccessCount = (isOncePerDay || isOneTimeOnly) ? (goal.successCount || 0) : todaySuccesses;
-    const displayStruggleCount = (isOncePerDay || isOneTimeOnly) ? (goal.struggleCount || 0) : todayStruggles;
+    // CRITICAL FIX: For tally goals, show TODAY's counts. For once_per_day/one_time_only, show cumulative counts
+    const displaySuccessCount = isTally ? todaySuccesses : (goal.successCount || 0);
+    const displayStruggleCount = isTally ? todayStruggles : (goal.struggleCount || 0);
     
     const hasSuccessToday = todaySuccesses > 0;
     const hasStruggleToday = todayStruggles > 0;
@@ -1208,9 +1209,12 @@ export default function HomeScreen() {
       ? (hasSuccessToday && isNewRecord) 
       : (bestStreakValue > 0 && currentStreakValue > 0);
     
+    // CRITICAL FIX: For once_per_day goals, buttons should fade ONLY if there's an action today
     const isSuccessButtonFaded = (isOncePerDay || isOneTimeOnly) && hasActionToday;
+    const isReflectButtonFaded = (isOncePerDay || isOneTimeOnly) && hasActionToday;
     const isStruggleButtonFaded = false; // Never fade struggle button for tally
     
+    // CRITICAL FIX: Trophy should show if there's a success today for once_per_day/one_time_only
     const shouldShowTrophy = (isOncePerDay || isOneTimeOnly) && hasSuccessToday;
     const shouldShowX = false; // Never show X for once_per_day
     
@@ -1224,7 +1228,7 @@ export default function HomeScreen() {
     const rewardIcon = rewardCurrency?.symbol || '🎁';
     const consequenceIcon = consequenceCurrency?.symbol || '⚠️';
     
-    // CRITICAL FIX: Apply Life Area color to goal card
+    // CRITICAL FIX: Apply Life Area color to goal card with increased padding
     const goalCardStyle = lifeAreaColor 
       ? [styles.goalCardConcise, { borderLeftWidth: 4, borderLeftColor: lifeAreaColor }]
       : styles.goalCardConcise;
@@ -1246,7 +1250,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={[
                 styles.reflectButtonIconConcise,
-                isSuccessButtonFaded && styles.fadedButton
+                isReflectButtonFaded && styles.fadedButton
               ]}
               onPress={(e) => {
                 e.stopPropagation();
