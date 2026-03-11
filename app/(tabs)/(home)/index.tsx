@@ -1005,11 +1005,15 @@ export default function HomeScreen() {
     
     const isOncePerDay = goal.trackingType === 'once_per_day';
     const isOneTimeOnly = goal.trackingType === 'one_time_only';
+    const isTally = goal.trackingType === 'tally';
     
     setReflectionListGoalId(goal.id);
     setReflectionListOutcome(outcome);
     setReflectionListTitle(`${goal.title} - ${outcome === 'success' ? 'Successes' : 'Struggles'}`);
-    setReflectionListShowAll(false);
+    
+    // CRITICAL FIX: For tally goals, show only TODAY's reflections (date-filtered)
+    // For once_per_day/one_time_only, show ALL reflections (cumulative)
+    setReflectionListShowAll(!isTally);
     setShowReflectionListModal(true);
   };
 

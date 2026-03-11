@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingTop: 1,
     paddingBottom: 1,
-    paddingLeft: 1,
+    paddingLeft: 3,
     paddingRight: 0,
     marginBottom: 8,
     position: 'relative',
@@ -1004,11 +1004,15 @@ export default function HomeScreen() {
     
     const isOncePerDay = goal.trackingType === 'once_per_day';
     const isOneTimeOnly = goal.trackingType === 'one_time_only';
+    const isTally = goal.trackingType === 'tally';
     
     setReflectionListGoalId(goal.id);
     setReflectionListOutcome(outcome);
     setReflectionListTitle(`${goal.title} - ${outcome === 'success' ? 'Successes' : 'Struggles'}`);
-    setReflectionListShowAll(false);
+    
+    // CRITICAL FIX: For tally goals, show only TODAY's reflections (date-filtered)
+    // For once_per_day/one_time_only, show ALL reflections (cumulative)
+    setReflectionListShowAll(!isTally);
     setShowReflectionListModal(true);
   };
 
@@ -1208,6 +1212,7 @@ export default function HomeScreen() {
       : (bestStreakValue > 0 && currentStreakValue > 0);
     
     const isSuccessButtonFaded = (isOncePerDay || isOneTimeOnly) && hasActionToday;
+    const isReflectButtonFaded = (isOncePerDay || isOneTimeOnly) && hasActionToday;
     const isStruggleButtonFaded = false; // Never fade struggle button for tally
     
     const shouldShowTrophy = (isOncePerDay || isOneTimeOnly) && hasSuccessToday;
