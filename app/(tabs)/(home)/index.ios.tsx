@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingTop: 1,
     paddingBottom: 1,
-    paddingLeft: 3,
+    paddingLeft: 5,
     paddingRight: 0,
     marginBottom: 8,
     position: 'relative',
@@ -603,39 +603,8 @@ export default function HomeScreen() {
       const isOncePerDay = goal.trackingType === 'once_per_day';
       const isOneTimeOnly = goal.trackingType === 'one_time_only';
       
-      // Optimistic UI update - update state immediately
-      const updatedGoals = goals.map(g => {
-        if (g.id === goalId) {
-          if (isOncePerDay || isOneTimeOnly) {
-            const hasSuccessToday = g.todaySuccessCount > 0;
-            if (hasSuccessToday) {
-              // Undo success
-              return {
-                ...g,
-                todaySuccessCount: 0,
-                todayStruggleCount: 0,
-              };
-            } else {
-              // Add success
-              return {
-                ...g,
-                todaySuccessCount: 1,
-                todayStruggleCount: 0,
-              };
-            }
-          } else {
-            // Tally type
-            return {
-              ...g,
-              todaySuccessCount: g.todaySuccessCount + 1,
-            };
-          }
-        }
-        return g;
-      });
-      
-      setGoals(updatedGoals);
-      setLifeAreas(buildLifeAreaHierarchy(lifeAreas.map(a => ({ ...a })), updatedGoals));
+      // CRITICAL FIX: Don't do optimistic updates - wait for backend to complete
+      // This prevents the race condition where UI updates but data doesn't save
       
       // Background database sync
       if (isOncePerDay || isOneTimeOnly) {
@@ -782,12 +751,13 @@ export default function HomeScreen() {
         });
       }
 
-      // Reload data in background to sync with database
+      // CRITICAL FIX: Reload data AFTER backend operations complete
+      // This ensures UI shows correct data and prevents race conditions
       await loadData();
     } catch (error: any) {
       console.error('HomeScreen: Error recording success:', error);
       showError(error.message || 'Failed to record success');
-      // Reload to revert optimistic update
+      // Reload to ensure UI is in sync with backend
       await loadData();
     }
   };
@@ -804,22 +774,6 @@ export default function HomeScreen() {
       }
       
       const isTally = goal.trackingType === 'tally';
-      
-      // Optimistic UI update - update state immediately
-      const updatedGoals = goals.map(g => {
-        if (g.id === goalId) {
-          if (isTally) {
-            return {
-              ...g,
-              todayStruggleCount: g.todayStruggleCount + 1,
-            };
-          }
-        }
-        return g;
-      });
-      
-      setGoals(updatedGoals);
-      setLifeAreas(buildLifeAreaHierarchy(lifeAreas.map(a => ({ ...a })), updatedGoals));
       
       // Background database sync
       await createDailyEntry({
@@ -1170,6 +1124,7 @@ export default function HomeScreen() {
     const isOneTimeOnly = goal.trackingType === 'one_time_only';
     const isTally = goal.trackingType === 'tally';
     
+    // CRITICAL FIX: Use the actual counts from the goal data
     const todaySuccesses = goal.todaySuccessCount || 0;
     const todayStruggles = goal.todayStruggleCount || 0;
     const hasActionToday = todaySuccesses > 0 || todayStruggles > 0;
@@ -1193,30 +1148,36 @@ export default function HomeScreen() {
     const rewardsEarnedToday = dailyTallies.reward;
     const consequencesEarnedToday = dailyTallies.consequence;
     
-    const displaySuccessCount = (isOncePerDay || isOneTimeOnly) ? (goal.successCount || 0) : todaySuccesses;
-    const displayStruggleCount = (isOncePerDay || isOneTimeOnly) ? (goal.struggleCount || 0) : todayStruggles;
+    // CRITICAL FIX: For tally goals, show TODAY's counts. For once_per_day/one_time_only, show cumulative counts
+    const displaySuccessCount = isTally ? todaySuccesses : (goal.successCount || 0);
+    const displayStruggleCount = isTally ? todayStruggles : (goal.struggleCount || 0);
     
     const hasSuccessToday = todaySuccesses > 0;
     const hasStruggleToday = todayStruggles > 0;
     
-    const shouldShowStreak = (isOncePerDay || isOneTimeOnly)
-      ? (!hasActionToday || hasSuccessToday)
-      : (currentStreakValue > 0);
+    // CRITICAL FIX: Streak logic
+    // For once_per_day/one_time_only: Show streak ONLY if there's a success today OR if there's a current streak from yesterday
+    // For tally: Never show streak (tally goals don't have streaks)
+    const shouldShowStreak = (isOncePerDay || isOneTimeOnly) && (hasSuccessToday || currentStreakValue > 0);
     
-    const streakDisplayValue = ((isOncePerDay || isOneTimeOnly) && !hasActionToday) ? 1 : currentStreakValue;
-    const isStreakFaded = (isOncePerDay || isOneTimeOnly) && !hasActionToday;
+    const streakDisplayValue = currentStreakValue;
+    const isStreakFaded = false; // Never fade streak - if it shows, it's real
     
     const isNewRecord = currentStreakValue > 0 && currentStreakValue === bestStreakValue && bestStreakValue > 1;
-    const shouldShowBestStreak = (isOncePerDay || isOneTimeOnly)
-      ? (hasSuccessToday && isNewRecord) 
-      : (bestStreakValue > 0 && currentStreakValue > 0);
+    const shouldShowBestStreak = (isOncePerDay || isOneTimeOnly) && hasSuccessToday && isNewRecord;
     
+    // CRITICAL FIX: Button fading logic
+    // For once_per_day/one_time_only: Fade buttons ONLY if there's an action today
+    // For tally: NEVER fade buttons (you can always add more)
     const isSuccessButtonFaded = (isOncePerDay || isOneTimeOnly) && hasActionToday;
     const isReflectButtonFaded = (isOncePerDay || isOneTimeOnly) && hasActionToday;
     const isStruggleButtonFaded = false; // Never fade struggle button for tally
     
+    // CRITICAL FIX: Trophy/X icon visibility
+    // For once_per_day/one_time_only: Show trophy ONLY if there's a success TODAY
+    // For tally: Show tick/X ONLY if there are counts TODAY
     const shouldShowTrophy = (isOncePerDay || isOneTimeOnly) && hasSuccessToday;
-    const shouldShowX = false; // Never show X for once_per_day
+    const shouldShowX = false; // Never show X for once_per_day (they don't track struggles cumulatively)
     
     const shouldShowTallyTick = isTally && todaySuccesses > 0;
     const shouldShowTallyX = isTally && todayStruggles > 0;
