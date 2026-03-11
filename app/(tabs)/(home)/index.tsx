@@ -208,32 +208,37 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   lifeAreaContainer: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   lifeAreaHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingLeft: 4,
     backgroundColor: colors.card,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: 4,
+    marginBottom: 6,
+    minHeight: 32,
+    borderLeftWidth: 4,
   },
   lifeAreaIcon: {
-    marginRight: 12,
-    fontSize: 24,
+    marginRight: 6,
+    marginLeft: 4,
+    fontSize: 16,
   },
   lifeAreaInfo: {
     flex: 1,
   },
   lifeAreaName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.text,
   },
   lifeAreaStats: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1,
   },
   goalCardConcise: {
     backgroundColor: colors.card,
@@ -565,6 +570,9 @@ export default function HomeScreen() {
         children: [],
         goals: goalsData.filter(g => g.lifeArea?.id === area.id),
       });
+      
+      // Auto-expand all life areas by default
+      setExpandedAreas(prev => new Set([...prev, area.id]));
     });
 
     const rootAreas: LifeAreaNode[] = [];
@@ -1215,13 +1223,17 @@ export default function HomeScreen() {
     const consequenceIcon = consequenceCurrency?.symbol || '⚠️';
     
     return (
-      <TouchableOpacity 
+      <View 
         key={goal.id} 
         style={styles.goalCardConcise}
-        onPress={() => handleEditGoal(goal.id)}
       >
         <View style={styles.goalRowConcise}>
-          <Text style={styles.goalNameConcise} numberOfLines={2}>{goal.title}</Text>
+          <TouchableOpacity 
+            style={{ flex: 1 }}
+            onPress={() => handleEditGoal(goal.id)}
+          >
+            <Text style={styles.goalNameConcise} numberOfLines={2}>{goal.title}</Text>
+          </TouchableOpacity>
           
           <View style={styles.goalActionButtons}>
             <TouchableOpacity
@@ -1397,7 +1409,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -1408,13 +1420,12 @@ export default function HomeScreen() {
     if (!hasGoals) return null;
 
     const totalGoals = countTotalGoals(area);
-    const goalsText = `${totalGoals} goal${totalGoals !== 1 ? 's' : ''}`;
-    const statsText = goalsText;
+    const areaColor = area.color || colors.primary;
 
     return (
       <View key={area.id} style={[styles.lifeAreaContainer, { marginLeft: depth * 16 }]}>
         <TouchableOpacity
-          style={styles.lifeAreaHeader}
+          style={[styles.lifeAreaHeader, { borderLeftColor: areaColor }]}
           onPress={() => toggleLifeArea(area.id)}
         >
           {area.icon && (
@@ -1422,12 +1433,11 @@ export default function HomeScreen() {
           )}
           <View style={styles.lifeAreaInfo}>
             <Text style={styles.lifeAreaName}>{area.name}</Text>
-            <Text style={styles.lifeAreaStats}>{statsText}</Text>
           </View>
           <IconSymbol
             ios_icon_name={isExpanded ? 'chevron.up' : 'chevron.down'}
             android_material_icon_name={isExpanded ? 'expand-less' : 'expand-more'}
-            size={24}
+            size={16}
             color={colors.textSecondary}
           />
         </TouchableOpacity>

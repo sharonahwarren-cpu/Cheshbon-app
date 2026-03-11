@@ -622,41 +622,13 @@ export default function CreateGoalScreen() {
     }
   };
 
-  // NEW: Handle creating Life Area from modal
-  const handleCreateLifeArea = async () => {
-    if (!newItemName.trim()) {
-      showError('Please enter a name for the life area');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      console.log('[CreateGoal iOS] Creating life area:', newItemName);
-      const newLifeArea = await supabaseApi.createLifeArea({
-        name: newItemName.trim(),
-        display_order: lifeAreas.length,
-        show_progress: true,
-      });
-      
-      console.log('[CreateGoal iOS] Life area created:', newLifeArea);
-      
-      // Add to local state
-      setLifeAreas([...lifeAreas, newLifeArea]);
-      
-      // Select the newly created life area
-      setLifeAreaId(newLifeArea.id);
-      
-      // Close modal and reset
-      setShowCreateLifeAreaModal(false);
-      setNewItemName('');
-      
-      showSuccess('Life area created successfully!');
-    } catch (error: any) {
-      console.error('[CreateGoal iOS] Error creating life area:', error);
-      showError(error.message || 'Failed to create life area');
-    } finally {
-      setLoading(false);
-    }
+  // NEW: Handle creating Life Area - Navigate to Life Area Wizard
+  const handleCreateLifeArea = () => {
+    console.log('[CreateGoal iOS] Navigating to Life Area Wizard');
+    setShowCreateLifeAreaModal(false);
+    setNewItemName('');
+    // Navigate to Life Area Wizard which has all the proper fields (icon, color, etc.)
+    router.push('/life-area-wizard');
   };
 
   // NEW: Handle creating Strategy from modal
@@ -1765,14 +1737,9 @@ export default function CreateGoalScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.createItemModal}>
             <Text style={styles.alertTitle}>Create Life Area</Text>
-            <TextInput
-              style={styles.input}
-              value={newItemName}
-              onChangeText={setNewItemName}
-              placeholder="Life area name..."
-              placeholderTextColor={colors.textSecondary}
-              autoFocus
-            />
+            <Text style={styles.alertMessage}>
+              You'll be taken to the Life Area Wizard where you can set the name, icon, color, and other properties.
+            </Text>
             <View style={styles.alertButtons}>
               <TouchableOpacity
                 style={[styles.alertButton, styles.alertButtonSecondary]}
@@ -1786,13 +1753,8 @@ export default function CreateGoalScreen() {
               <TouchableOpacity
                 style={styles.alertButton}
                 onPress={handleCreateLifeArea}
-                disabled={loading}
               >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.alertButtonText}>Create</Text>
-                )}
+                <Text style={styles.alertButtonText}>Continue</Text>
               </TouchableOpacity>
             </View>
           </View>
