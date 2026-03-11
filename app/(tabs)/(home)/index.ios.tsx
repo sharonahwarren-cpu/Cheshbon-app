@@ -470,7 +470,23 @@ export default function HomeScreen() {
 
   useEffect(() => {
     console.log('HomeScreen: Initial load');
-    loadData();
+    
+    // CRITICAL FIX: Clean up orphaned daily_entries on first load
+    // This fixes the bug where icon counts are wrong
+    const cleanupAndLoad = async () => {
+      try {
+        const { cleanupOrphanedDailyEntries } = await import('@/utils/supabaseApi');
+        const result = await cleanupOrphanedDailyEntries();
+        console.log('HomeScreen: Cleaned up orphaned entries:', result.deletedCount);
+      } catch (error) {
+        console.error('HomeScreen: Error cleaning up orphaned entries:', error);
+      }
+      
+      // Load data after cleanup
+      await loadData();
+    };
+    
+    cleanupAndLoad();
   }, []);
 
   useEffect(() => {
@@ -891,6 +907,28 @@ export default function HomeScreen() {
       console.log('HomeScreen: Deleting reflection:', id);
       
       const reflection = reflections.find(r => r.id === id);
+      
+      // CRITICAL FIX: Delete corresponding daily_entry BEFORE deleting reflection
+      // This ensures data stays in sync
+      if (reflection && reflection.linkedGoalId) {
+        console.log('HomeScreen: Finding and deleting corresponding daily_entry');
+        const dateStr = formatDateLocal(selectedDate);
+        
+        // Get the goal to find its daily entries
+        const goal = goals.find(g => g.id === reflection.linkedGoalId);
+        if (goal && goal.dailyEntries) {
+          // Find the daily entry that matches this reflection's outcome and date
+          const matchingEntry = goal.dailyEntries.find(e => 
+            e.type === reflection.outcome && 
+            formatDateLocal(new Date(e.timestamp)) === dateStr
+          );
+          
+          if (matchingEntry) {
+            console.log('HomeScreen: Deleting daily_entry:', matchingEntry.id);
+            await deleteDailyEntry(matchingEntry.id);
+          }
+        }
+      }
       
       const { deleteReflection } = await import('@/utils/supabaseApi');
       await deleteReflection(id);

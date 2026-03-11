@@ -1325,6 +1325,79 @@ export const getReportsData = async (timeFilter: string = 'all') => {
 // DATA MANAGEMENT
 // ============================================================================
 
+/**
+ * CRITICAL FIX: Clean up orphaned daily_entries that don't have corresponding reflections
+ * This fixes the bug where icon counts are wrong because daily_entries and reflections are out of sync
+ */
+export const cleanupOrphanedDailyEntries = async () => {
+  const userId = await getCurrentUserId();
+  
+  console.log('[Supabase API] Starting cleanup of orphaned daily_entries...');
+  
+  // Get all daily entries for the user
+  const { data: allEntries, error: entriesError } = await supabase
+    .from('daily_entries')
+    .select('*')
+    .eq('user_id', userId);
+  
+  handleError(entriesError, 'cleanupOrphanedDailyEntries - fetch entries');
+  
+  if (!allEntries || allEntries.length === 0) {
+    console.log('[Supabase API] No daily entries found');
+    return { deletedCount: 0 };
+  }
+  
+  console.log('[Supabase API] Found', allEntries.length, 'daily entries');
+  
+  // Get all reflections for the user
+  const { data: allReflections, error: reflectionsError } = await supabase
+    .from('reflections')
+    .select('*')
+    .eq('user_id', userId);
+  
+  handleError(reflectionsError, 'cleanupOrphanedDailyEntries - fetch reflections');
+  
+  console.log('[Supabase API] Found', allReflections?.length || 0, 'reflections');
+  
+  // Find orphaned entries (entries without matching reflections)
+  const orphanedEntries: string[] = [];
+  
+  for (const entry of allEntries) {
+    // Check if there's a matching reflection
+    const hasMatchingReflection = allReflections?.some(r => 
+      r.linked_goal_id === entry.goal_id &&
+      r.entry_date === entry.entry_date &&
+      r.outcome === entry.type
+    );
+    
+    if (!hasMatchingReflection) {
+      console.log('[Supabase API] Found orphaned entry:', {
+        id: entry.id,
+        goalId: entry.goal_id,
+        date: entry.entry_date,
+        type: entry.type,
+      });
+      orphanedEntries.push(entry.id);
+    }
+  }
+  
+  console.log('[Supabase API] Found', orphanedEntries.length, 'orphaned entries to delete');
+  
+  // Delete orphaned entries
+  if (orphanedEntries.length > 0) {
+    const { error: deleteError } = await supabase
+      .from('daily_entries')
+      .delete()
+      .in('id', orphanedEntries);
+    
+    handleError(deleteError, 'cleanupOrphanedDailyEntries - delete');
+    
+    console.log('[Supabase API] Successfully deleted', orphanedEntries.length, 'orphaned entries');
+  }
+  
+  return { deletedCount: orphanedEntries.length };
+};
+
 export const deleteAllUserData = async () => {
   const userId = await getCurrentUserId();
   
