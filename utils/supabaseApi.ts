@@ -550,20 +550,34 @@ export const getGoalsWithDailyEntries = async (date: string) => {
   
   handleError(goalsError, 'getGoalsWithDailyEntries');
   
-  // Get daily entries for the specified date
-  const { data: entries, error: entriesError } = await supabase
-    .from('daily_entries')
+  // CRITICAL FIX: Instead of using daily_entries table (which can get out of sync),
+  // count reflections directly for the specified date
+  // This ensures the counts are always accurate and match what ReflectionListModal shows
+  const { data: reflections, error: reflectionsError } = await supabase
+    .from('reflections')
     .select('*')
     .eq('user_id', userId)
     .eq('entry_date', date);
   
-  handleError(entriesError, 'getGoalsWithDailyEntries - entries');
+  handleError(reflectionsError, 'getGoalsWithDailyEntries - reflections');
   
-  // Combine goals with their daily entries and map snake_case to camelCase
+  console.log('[Supabase API] getGoalsWithDailyEntries - Found', reflections?.length || 0, 'reflections for date:', date);
+  
+  // Combine goals with their reflection counts and map snake_case to camelCase
   const goalsWithEntries = goals?.map(goal => {
-    const goalEntries = entries?.filter(entry => entry.goal_id === goal.id) || [];
-    const todaySuccessCount = goalEntries.filter(e => e.type === 'success').length;
-    const todayStruggleCount = goalEntries.filter(e => e.type === 'struggle').length;
+    // Count reflections for this goal on this date
+    const goalReflections = reflections?.filter(r => r.linked_goal_id === goal.id) || [];
+    const todaySuccessCount = goalReflections.filter(r => r.outcome === 'success').length;
+    const todayStruggleCount = goalReflections.filter(r => r.outcome === 'struggled').length;
+    
+    console.log('[Supabase API] Goal:', goal.title, 'todaySuccesses:', todaySuccessCount, 'todayStruggles:', todayStruggleCount);
+    
+    // Build dailyEntries array from reflections (for compatibility with existing code)
+    const dailyEntries = goalReflections.map(r => ({
+      id: r.id,
+      type: r.outcome === 'success' ? 'success' as const : 'struggle' as const,
+      timestamp: r.created_at,
+    }));
     
     // CRITICAL FIX: Map snake_case database fields to camelCase for frontend
     return {
@@ -589,10 +603,10 @@ export const getGoalsWithDailyEntries = async (date: string) => {
       consequenceFailures: goal.consequence_failures,
       // Schedule config
       scheduleConfig: goal.schedule_config,
-      // Today's counts from daily entries
+      // Today's counts from reflections (NOT daily_entries)
       todaySuccessCount,
       todayStruggleCount,
-      dailyEntries: goalEntries,
+      dailyEntries,
       // Timestamps
       createdAt: goal.created_at,
       updatedAt: goal.updated_at,
