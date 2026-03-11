@@ -86,12 +86,14 @@ export default function ProfileScreen() {
   };
 
   const handleEditProfile = () => {
-    setEditName(user?.name || '');
+    console.log('[PROFILE] Opening edit modal with current name:', editName);
+    // Don't reset editName here - keep the current value
     setShowEditModal(true);
   };
 
   const handlePickImage = async () => {
     try {
+      console.log('[PROFILE] Picking image...');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -100,11 +102,12 @@ export default function ProfileScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
+        console.log('[PROFILE] Image picked:', result.assets[0].uri);
         setAvatarUrl(result.assets[0].uri);
         setUseGravatar(false); // User chose custom image, disable Gravatar
       }
     } catch (error: any) {
-      console.error('Error picking image:', error);
+      console.error('[PROFILE] Error picking image:', error);
       setErrorMessage('Failed to pick image. Please try again.');
       setShowErrorModal(true);
     }
@@ -112,6 +115,7 @@ export default function ProfileScreen() {
 
   const handleUseGravatar = () => {
     if (user?.email) {
+      console.log('[PROFILE] Using Gravatar for email:', user.email);
       const gravatarUrl = getGravatarUrl(user.email);
       setAvatarUrl(gravatarUrl);
       setUseGravatar(true);
@@ -123,15 +127,17 @@ export default function ProfileScreen() {
 
   const handleSaveProfile = async () => {
     try {
+      console.log('[PROFILE] Saving profile with name:', editName, 'and avatar:', avatarUrl);
       setSaving(true);
       await updateProfile({
         name: editName,
         avatar_url: avatarUrl || undefined,
       });
+      console.log('[PROFILE] Profile saved successfully');
       setShowEditModal(false);
       await loadProfile();
     } catch (error: any) {
-      console.error('Error saving profile:', error);
+      console.error('[PROFILE] Error saving profile:', error);
       setErrorMessage('Failed to save profile. Please try again.');
       setShowErrorModal(true);
     } finally {
@@ -344,81 +350,96 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowEditModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.editModal}>
-            <Text style={styles.editModalTitle}>Edit Profile</Text>
-            
-            <View style={styles.editAvatarContainer}>
-              {avatarUrl ? (
-                <Image source={{ uri: avatarUrl }} style={styles.editAvatarImage} />
-              ) : (
-                <View style={styles.editAvatar}>
-                  <Text style={styles.editAvatarText}>{userInitial}</Text>
-                </View>
-              )}
-              <View style={styles.avatarButtonsRow}>
-                <TouchableOpacity style={styles.changePhotoButton} onPress={handlePickImage}>
-                  <IconSymbol
-                    ios_icon_name="camera.fill"
-                    android_material_icon_name="photo-camera"
-                    size={16}
-                    color="#fff"
-                  />
-                  <Text style={styles.changePhotoText}>Upload Photo</Text>
-                </TouchableOpacity>
-                {user?.email && (
-                  <TouchableOpacity 
-                    style={[styles.changePhotoButton, useGravatar && styles.gravatarButtonActive]} 
-                    onPress={handleUseGravatar}
-                  >
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowEditModal(false)}
+        >
+          <TouchableOpacity 
+            style={styles.editModal} 
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <ScrollView 
+              contentContainerStyle={styles.editModalContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.editModalTitle}>Edit Profile</Text>
+              
+              <View style={styles.editAvatarContainer}>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.editAvatarImage} />
+                ) : (
+                  <View style={styles.editAvatar}>
+                    <Text style={styles.editAvatarText}>{userInitial}</Text>
+                  </View>
+                )}
+                <View style={styles.avatarButtonsRow}>
+                  <TouchableOpacity style={styles.changePhotoButton} onPress={handlePickImage}>
                     <IconSymbol
-                      ios_icon_name="person.circle.fill"
-                      android_material_icon_name="account-circle"
+                      ios_icon_name="camera.fill"
+                      android_material_icon_name="photo-camera"
                       size={16}
                       color="#fff"
                     />
-                    <Text style={styles.changePhotoText}>Use Gravatar</Text>
+                    <Text style={styles.changePhotoText}>Upload Photo</Text>
                   </TouchableOpacity>
+                  {user?.email && (
+                    <TouchableOpacity 
+                      style={[styles.changePhotoButton, useGravatar && styles.gravatarButtonActive]} 
+                      onPress={handleUseGravatar}
+                    >
+                      <IconSymbol
+                        ios_icon_name="person.circle.fill"
+                        android_material_icon_name="account-circle"
+                        size={16}
+                        color="#fff"
+                      />
+                      <Text style={styles.changePhotoText}>Use Gravatar</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {useGravatar && (
+                  <Text style={styles.gravatarHint}>
+                    Using Gravatar from {user?.email}
+                  </Text>
                 )}
               </View>
-              {useGravatar && (
-                <Text style={styles.gravatarHint}>
-                  Using Gravatar from {user?.email}
-                </Text>
-              )}
-            </View>
 
-            <Text style={styles.inputLabel}>Name</Text>
-            <TextInput
-              style={styles.input}
-              value={editName}
-              onChangeText={setEditName}
-              placeholder="Enter your name"
-              placeholderTextColor={colors.textSecondary}
-            />
+              <Text style={styles.inputLabel}>Name</Text>
+              <TextInput
+                style={styles.input}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Enter your name"
+                placeholderTextColor={colors.textSecondary}
+                autoFocus={false}
+              />
 
-            <View style={styles.editModalButtons}>
-              <TouchableOpacity
-                style={[styles.editModalButton, styles.editModalButtonSecondary]}
-                onPress={() => setShowEditModal(false)}
-                disabled={saving}
-              >
-                <Text style={styles.editModalButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.editModalButton, styles.editModalButtonPrimary]}
-                onPress={handleSaveProfile}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.editModalButtonTextPrimary}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+              <View style={styles.editModalButtons}>
+                <TouchableOpacity
+                  style={[styles.editModalButton, styles.editModalButtonSecondary]}
+                  onPress={() => setShowEditModal(false)}
+                  disabled={saving}
+                >
+                  <Text style={styles.editModalButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.editModalButton, styles.editModalButtonPrimary]}
+                  onPress={handleSaveProfile}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.editModalButtonTextPrimary}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -643,14 +664,17 @@ const styles = StyleSheet.create({
   editModal: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 24,
     width: '90%',
     maxWidth: 400,
+    maxHeight: '80%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 8,
+  },
+  editModalContent: {
+    padding: 24,
   },
   editModalTitle: {
     fontSize: 20,
