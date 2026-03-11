@@ -1012,14 +1012,15 @@ export default function HomeScreen() {
     setShowReflectionListModal(true);
   };
 
-  const handleCloseReflectionList = () => {
-    console.log('HomeScreen: Closing reflection list');
+  const handleCloseReflectionList = async () => {
+    console.log('HomeScreen: Closing reflection list and reloading data');
     setShowReflectionListModal(false);
     setReflectionListGoalId(undefined);
     setReflectionListOutcome(undefined);
     setReflectionListTitle('');
     setReflectionListShowAll(false);
-    loadData();
+    // CRITICAL FIX: Reload data to update icon visibility and counts after reflection deletion
+    await loadData();
   };
 
   const handleOpenJournalModal = () => {
@@ -1159,7 +1160,7 @@ export default function HomeScreen() {
     }
   };
 
-  const renderConciseGoalCard = (goal: ActivatedGoal) => {
+  const renderConciseGoalCard = (goal: ActivatedGoal, lifeAreaColor?: string) => {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
     const isOncePerDay = goal.trackingType === 'once_per_day';
     const isOneTimeOnly = goal.trackingType === 'one_time_only';
@@ -1180,6 +1181,7 @@ export default function HomeScreen() {
       struggleCount: goal.struggleCount,
       currentStreak: goal.currentStreak,
       bestStreak: goal.bestStreak,
+      lifeAreaColor,
     });
     
     const bestStreakValue = goal.bestStreak || 0;
@@ -1221,10 +1223,15 @@ export default function HomeScreen() {
     const rewardIcon = rewardCurrency?.symbol || '🎁';
     const consequenceIcon = consequenceCurrency?.symbol || '⚠️';
     
+    // CRITICAL FIX: Apply Life Area color to goal card
+    const goalCardStyle = lifeAreaColor 
+      ? [styles.goalCardConcise, { borderLeftWidth: 4, borderLeftColor: lifeAreaColor }]
+      : styles.goalCardConcise;
+    
     return (
       <View 
         key={goal.id} 
-        style={styles.goalCardConcise}
+        style={goalCardStyle}
       >
         <View style={styles.goalRowConcise}>
           <TouchableOpacity 
@@ -1443,7 +1450,7 @@ export default function HomeScreen() {
 
         {isExpanded && (
           <>
-            {area.goals.map(goal => renderConciseGoalCard(goal))}
+            {area.goals.map(goal => renderConciseGoalCard(goal, areaColor))}
             {area.children.map(child => renderLifeAreaNode(child, depth + 1))}
           </>
         )}

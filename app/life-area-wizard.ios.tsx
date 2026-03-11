@@ -211,6 +211,7 @@ export default function LifeAreaWizardScreen() {
 
     setSubmitting(true);
     try {
+      // CRITICAL FIX: Use snake_case for backend API
       const lifeAreaData = {
         name: name.trim(),
         parentId,

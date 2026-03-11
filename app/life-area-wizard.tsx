@@ -200,27 +200,26 @@ export default function LifeAreaWizardScreen() {
 
     setSubmitting(true);
     try {
+      // CRITICAL FIX: Use snake_case for Supabase API
       const lifeAreaData = {
         name: name.trim(),
-        parentId,
+        parent_id: parentId,
         icon: icon || undefined,
         color: color || undefined,
-        displayOrder: lifeAreas.length,
-        showProgress,
+        display_order: lifeAreas.length,
+        show_progress: showProgress,
       };
 
       let result;
       if (savedLifeAreaId) {
         // Update existing life area
         console.log('[API] Updating life area:', savedLifeAreaId);
-        const { error } = await supabaseApi.updateLifeArea(savedLifeAreaId, lifeAreaData);
-        if (error) throw error;
+        result = await supabaseApi.updateLifeArea(savedLifeAreaId, lifeAreaData);
       } else {
         // Create new life area
         console.log('[API] Creating life area:', lifeAreaData);
-        const { data: created, error } = await supabaseApi.createLifeArea(lifeAreaData);
-        if (error) throw error;
-        const createdId = created?.id;
+        result = await supabaseApi.createLifeArea(lifeAreaData);
+        const createdId = result?.id;
         console.log('[API] Life area created with ID:', createdId);
         setSavedLifeAreaId(createdId);
       }
