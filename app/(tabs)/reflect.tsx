@@ -476,6 +476,11 @@ export default function ReflectScreen() {
     return { ios: 'sparkles', android: 'auto-awesome' };
   };
 
+  const handleBackToGoals = () => {
+    console.log('[Reflect] Navigating back to Goal Sheet');
+    router.push('/(tabs)/(home)');
+  };
+
   const dateDisplay = formatDate(selectedDate);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
@@ -524,6 +529,14 @@ export default function ReflectScreen() {
 
       <View style={styles.container}>
         <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackToGoals} style={styles.backButton}>
+            <IconSymbol
+              ios_icon_name="chevron.left"
+              android_material_icon_name="arrow-back"
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Reflect</Text>
           <TouchableOpacity onPress={() => router.push('/search-journals')}>
             <IconSymbol
@@ -1005,10 +1018,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 8,
   },
+  backButton: {
+    padding: 8,
+  },
   headerTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: colors.text,
+    flex: 1,
+    textAlign: 'center',
   },
   dateNavigator: {
     flexDirection: 'row',
