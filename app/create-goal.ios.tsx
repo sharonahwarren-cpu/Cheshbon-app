@@ -264,17 +264,27 @@ export default function CreateGoalScreen() {
     console.log('Loading form data for goal creation/editing');
     setLoading(true);
     try {
+      // CRITICAL FIX: Add timeout to prevent infinite loading
+      const loadWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> => {
+        return Promise.race([
+          promise,
+          new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+          )
+        ]);
+      };
+
       const promises = [
-        supabaseApi.getGoals(),
-        supabaseApi.getLifeAreas(),
-        supabaseApi.getStrategies(),
-        supabaseApi.getCurrencies(),
-        supabaseApi.getUserPreferences(),
+        loadWithTimeout(supabaseApi.getGoals()),
+        loadWithTimeout(supabaseApi.getLifeAreas()),
+        loadWithTimeout(supabaseApi.getStrategies()),
+        loadWithTimeout(supabaseApi.getCurrencies()),
+        loadWithTimeout(supabaseApi.getUserPreferences()),
       ];
 
       if (editingGoalId) {
-        promises.push(supabaseApi.getGoalById(editingGoalId));
-        promises.push(supabaseApi.getAlarms());
+        promises.push(loadWithTimeout(supabaseApi.getGoalById(editingGoalId)));
+        promises.push(loadWithTimeout(supabaseApi.getAlarms()));
       }
 
       const results = await Promise.all(promises);
@@ -378,6 +388,8 @@ export default function CreateGoalScreen() {
     } catch (error: any) {
       console.error('[API] Error loading form data:', error);
       showError(error.message || 'Failed to load form data');
+      // CRITICAL FIX: Even on error, stop loading to prevent infinite spinner
+      setLoading(false);
     } finally {
       setLoading(false);
     }

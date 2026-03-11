@@ -635,6 +635,16 @@ export default function HomeScreen() {
 
       const dateStr = formatDateLocal(selectedDate);
 
+      // CRITICAL FIX: Load data with timeout to prevent infinite loading
+      const loadWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> => {
+        return Promise.race([
+          promise,
+          new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+          )
+        ]);
+      };
+
       const [
         goalsData,
         lifeAreasData,
@@ -645,14 +655,14 @@ export default function HomeScreen() {
         preferencesData,
         journalsData,
       ] = await Promise.all([
-        getGoalsWithDailyEntries(dateStr),
-        getLifeAreas(),
-        getCurrencies(),
-        getGainsLosses(),
-        getStrategies(),
-        getReflections(dateStr),
-        getUserPreferences(),
-        getJournals(dateStr),
+        loadWithTimeout(getGoalsWithDailyEntries(dateStr)),
+        loadWithTimeout(getLifeAreas()),
+        loadWithTimeout(getCurrencies()),
+        loadWithTimeout(getGainsLosses()),
+        loadWithTimeout(getStrategies()),
+        loadWithTimeout(getReflections(dateStr)),
+        loadWithTimeout(getUserPreferences()),
+        loadWithTimeout(getJournals(dateStr)),
       ]);
 
       console.log('HomeScreen: Data loaded successfully');
@@ -675,6 +685,8 @@ export default function HomeScreen() {
     } catch (error: any) {
       console.error('HomeScreen: Error loading data:', error);
       showError(error.message || 'Failed to load data');
+      // CRITICAL FIX: Even on error, stop loading to prevent infinite spinner
+      setLoading(false);
     } finally {
       setLoading(false);
     }
@@ -1588,7 +1600,8 @@ export default function HomeScreen() {
 
   const handleAppLogoPress = () => {
     console.log('HomeScreen: Opening Reflect page');
-    router.push('/(tabs)/reflect');
+    // CRITICAL FIX: Use replace instead of push to ensure navigation works on iOS
+    router.replace('/(tabs)/reflect');
   };
 
   const handleDatePickerConfirm = (date: Date) => {

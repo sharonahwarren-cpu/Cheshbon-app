@@ -222,6 +222,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     maxWidth: 400,
+    maxHeight: '80%', // CRITICAL FIX: Prevent modal from being too tall
     overflow: 'hidden',
   },
   header: {
