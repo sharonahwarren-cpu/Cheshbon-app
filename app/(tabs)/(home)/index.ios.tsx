@@ -166,8 +166,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: colors.card,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -175,36 +175,49 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     flex: 1,
   },
   headerCenter: {
     alignItems: 'center',
     justifyContent: 'center',
+    flex: 1,
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     flex: 1,
     justifyContent: 'flex-end',
   },
-  dateNavButton: {
-    padding: 4,
+  appLogoButton: {
+    padding: 2,
+  },
+  appLogo: {
+    width: 48,
+    height: 48,
+  },
+  calendarContainer: {
+    alignItems: 'center',
+    position: 'relative',
+  },
+  calendarNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 2,
+  },
+  smallNavButton: {
+    padding: 2,
   },
   calendarButton: {
-    padding: 4,
+    padding: 2,
     alignItems: 'center',
   },
   calendarDateLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.textSecondary,
-    marginTop: 2,
-    maxWidth: 80,
-  },
-  appLogo: {
-    width: 64,
-    height: 64,
+    marginTop: 1,
+    maxWidth: 100,
+    textAlign: 'center',
   },
   profileButton: {
     padding: 2,
@@ -1592,46 +1605,50 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        {/* Left: Previous Day + Calendar Icon with date label */}
+        {/* Left: App Logo - Opens Reflect page */}
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.dateNavButton} onPress={handlePreviousDay}>
-            <IconSymbol
-              ios_icon_name="chevron.left"
-              android_material_icon_name="chevron-left"
-              size={24}
-              color={colors.text}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.calendarButton} onPress={() => setShowDatePicker(true)}>
-            <IconSymbol
-              ios_icon_name="calendar"
-              android_material_icon_name="event"
-              size={24}
-              color={colors.text}
-            />
-            <Text style={styles.calendarDateLabel} numberOfLines={1}>
-              {isToday(selectedDate) ? 'Today' : formatDateDisplay(selectedDate)}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.dateNavButton} onPress={handleNextDay}>
-            <IconSymbol
-              ios_icon_name="chevron.right"
-              android_material_icon_name="chevron-right"
-              size={24}
-              color={colors.text}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Center: App Logo (bigger) - Opens Reflect page */}
-        <View style={styles.headerCenter}>
-          <TouchableOpacity onPress={handleAppLogoPress}>
+          <TouchableOpacity style={styles.appLogoButton} onPress={handleAppLogoPress}>
             <Image 
               source={require('@/assets/images/Chesbon_app_Logo Small.png')} 
               style={styles.appLogo}
               resizeMode="contain"
             />
           </TouchableOpacity>
+        </View>
+
+        {/* Center: Calendar with small navigation arrows above date label */}
+        <View style={styles.headerCenter}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.calendarNavRow}>
+              <TouchableOpacity style={styles.smallNavButton} onPress={handlePreviousDay}>
+                <IconSymbol
+                  ios_icon_name="chevron.left"
+                  android_material_icon_name="chevron-left"
+                  size={14}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.calendarButton} onPress={() => setShowDatePicker(true)}>
+                <IconSymbol
+                  ios_icon_name="calendar"
+                  android_material_icon_name="event"
+                  size={24}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.smallNavButton} onPress={handleNextDay}>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="chevron-right"
+                  size={14}
+                  color={colors.text}
+                />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.calendarDateLabel} numberOfLines={1}>
+              {isToday(selectedDate) ? 'Today' : formatDateDisplay(selectedDate)}
+            </Text>
+          </View>
         </View>
 
         {/* Right: Profile Icon */}
