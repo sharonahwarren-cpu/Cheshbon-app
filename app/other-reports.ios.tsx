@@ -8,13 +8,13 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import { authenticatedGet } from "@/utils/api";
 import React, { useState, useEffect, useCallback } from "react";
 import { colors } from "@/styles/commonStyles";
 import { IconSymbol } from "@/components/IconSymbol";
 import { Stack, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ReflectionListModal } from "@/components/ReflectionListModal";
+import { supabase } from "@/lib/supabase";
 
 interface WinsVsLosses {
   wins: number;
@@ -171,71 +171,147 @@ export default function OtherReportsScreen() {
       setLoading(true);
     }
     try {
-      const dateRange = getDateRangeForModal();
-      const params = new URLSearchParams();
-      
-      if (dateRange.startDate && dateRange.endDate) {
-        params.append('startDate', dateRange.startDate);
-        params.append('endDate', dateRange.endDate);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
       }
       
-      // CRITICAL: Exclude pure currency transactions from all Other Reports
-      // Pure currency transactions are identified by the backend flag (is_pure_currency_transaction)
-      // These are transactions where ONLY currency was claimed/paid with no other reflection data
-      params.append('excludePureCurrencyTransactions', 'true');
+      const dateRange = getDateRangeForModal();
       
-      const queryString = params.toString();
-      const dateParams = queryString ? `?${queryString}` : '';
+      console.log('[Other Reports] Fetching data for user:', user.id);
+      console.log('[Other Reports] Date range:', dateRange);
       
-      console.log('[Other Reports] Fetching with params:', dateParams);
+      // Build date filter for queries
+      let startDate = dateRange.startDate;
+      let endDate = dateRange.endDate;
       
-      const [
-        winsLossesRes,
-        successStrugglesRes,
-        reflectionStatsRes,
-        journalCountRes,
-        gainsLossesRes,
-        gainsLossesDistRes,
-        behaviorCountsRes,
-        topMotivationsByTypeRes,
-        topMotivationsByOutcomeRes,
-      ] = await Promise.all([
-        authenticatedGet(`/api/reports/wins-vs-losses${dateParams}`),
-        authenticatedGet(`/api/reports/success-vs-struggles${dateParams}`),
-        authenticatedGet(`/api/reports/reflection-stats${dateParams}`),
-        authenticatedGet(`/api/reports/journal-count${dateParams}`),
-        authenticatedGet(`/api/reports/gains-losses-summary${dateParams}`),
-        authenticatedGet(`/api/reports/gains-losses-distribution${dateParams}`),
-        authenticatedGet(`/api/reports/behavior-counts${dateParams}`),
-        authenticatedGet(`/api/reports/top-motivations-by-type${dateParams}`),
-        authenticatedGet(`/api/reports/top-motivations-by-outcome${dateParams}`),
-      ]);
-
-      const winsLossesData = winsLossesRes?.data || winsLossesRes || null;
-      const successStrugglesData = successStrugglesRes?.data || successStrugglesRes || null;
-      const reflectionStatsData = reflectionStatsRes?.data || reflectionStatsRes || null;
-      const journalCountData = journalCountRes?.data || journalCountRes || null;
-      const gainsLossesData = gainsLossesRes?.data || gainsLossesRes || null;
-      const gainsLossesDistData = gainsLossesDistRes?.data || gainsLossesDistRes || null;
-      const behaviorCountsData = behaviorCountsRes?.data || behaviorCountsRes || null;
-      const topMotivationsByTypeData = topMotivationsByTypeRes?.data || topMotivationsByTypeRes || null;
-      const topMotivationsByOutcomeData = topMotivationsByOutcomeRes?.data || topMotivationsByOutcomeRes || null;
-
-      setWinsVsLosses(winsLossesData);
-      setSuccessVsStruggles(successStrugglesData);
-      setReflectionStats(reflectionStatsData);
-      setJournalCount(journalCountData);
-      setGainsLossesSummary(gainsLossesData);
-      setGainsLossesDistribution(gainsLossesDistData);
-      setBehaviorCounts(behaviorCountsData);
-      setTopMotivationsByType(topMotivationsByTypeData);
-      setTopMotivationsByOutcome(topMotivationsByOutcomeData);
+      // Get reflections with date filter
+      let reflectionsQuery = supabase
+        .from('reflections')
+        .select('*')
+        .eq('user_id', user.id);
       
-      console.log('[Other Reports] Data loaded - Success vs Struggles:', successStrugglesData);
-      console.log('[Other Reports] Data loaded - Wins vs Losses:', winsLossesData);
-      console.log('[Other Reports] Data loaded - Reflection Stats:', reflectionStatsData);
-      console.log('[Other Reports] Data loaded - Behavior Counts:', behaviorCountsData);
-      console.log("Other reports data loaded successfully");
+      if (startDate && endDate) {
+        reflectionsQuery = reflectionsQuery
+          .gte('entry_date', startDate.split('T')[0])
+          .lte('entry_date', endDate.split('T')[0]);
+      }
+      
+      const { data: reflections, error: reflectionsError } = await reflectionsQuery;
+      
+      if (reflectionsError) {
+        console.error('[Other Reports] Error fetching reflections:', reflectionsError);
+        throw reflectionsError;
+      }
+      
+      console.log('[Other Reports] Fetched', reflections?.length || 0, 'reflections');
+      
+      // Calculate stats from reflections
+      const totalReflections = reflections?.length || 0;
+      const successes = reflections?.filter(r => r.outcome === 'success').length || 0;
+      const struggles = reflections?.filter(r => r.outcome === 'struggled').length || 0;
+      const wins = reflections?.filter(r => r.was_worth_it === true).length || 0;
+      const losses = reflections?.filter(r => r.was_worth_it === false).length || 0;
+      const totalRestraints = reflections?.filter(r => r.type === 'Restraint').length || 0;
+      const totalProactive = reflections?.filter(r => r.type === 'Proactive').length || 0;
+      const worthItCount = reflections?.filter(r => r.was_worth_it === true).length || 0;
+      const worthItPercentage = totalReflections > 0 ? (worthItCount / totalReflections) * 100 : 0;
+      
+      // Calculate behavior counts
+      const actionEntries = reflections?.filter(r => r.category === 'Action').length || 0;
+      const speechEntries = reflections?.filter(r => r.category === 'Speech').length || 0;
+      const thoughtEntries = reflections?.filter(r => r.category === 'Thought').length || 0;
+      
+      // Calculate gains/losses summary
+      const gainsMap = new Map<string, { id: string; name: string; count: number }>();
+      const lossesMap = new Map<string, { id: string; name: string; count: number }>();
+      
+      reflections?.forEach(r => {
+        r.gained_ids?.forEach((gainId: string) => {
+          const existing = gainsMap.get(gainId);
+          if (existing) {
+            existing.count++;
+          } else {
+            gainsMap.set(gainId, { id: gainId, name: 'Gain', count: 1 });
+          }
+        });
+        
+        r.lost_ids?.forEach((lossId: string) => {
+          const existing = lossesMap.get(lossId);
+          if (existing) {
+            existing.count++;
+          } else {
+            lossesMap.set(lossId, { id: lossId, name: 'Loss', count: 1 });
+          }
+        });
+      });
+      
+      const topGains = Array.from(gainsMap.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+      
+      const topLosses = Array.from(lossesMap.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+      
+      // Get journal count
+      let journalsQuery = supabase
+        .from('journals')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      
+      if (startDate && endDate) {
+        journalsQuery = journalsQuery
+          .gte('entry_date', startDate.split('T')[0])
+          .lte('entry_date', endDate.split('T')[0]);
+      }
+      
+      const { count: journalCount } = await journalsQuery;
+      
+      // Set all the data
+      setSuccessVsStruggles({
+        successes,
+        struggles,
+        total: totalReflections,
+      });
+      
+      setWinsVsLosses({
+        wins,
+        losses,
+        totalReflections,
+      });
+      
+      setReflectionStats({
+        totalReflections,
+        totalRestraints,
+        totalProactive,
+        worthItPercentage,
+      });
+      
+      setJournalCount({
+        count: journalCount || 0,
+      });
+      
+      setGainsLossesSummary({
+        totalGains: gainsMap.size,
+        totalLosses: lossesMap.size,
+        byCategory: [],
+        topGains,
+        topLosses,
+      });
+      
+      setBehaviorCounts({
+        actionEntries,
+        speechEntries,
+        thoughtEntries,
+      });
+      
+      // Set empty data for features not yet implemented
+      setGainsLossesDistribution(null);
+      setTopMotivationsByType(null);
+      setTopMotivationsByOutcome(null);
+      
+      console.log('[Other Reports] Data loaded successfully');
     } catch (error: any) {
       console.error("Error loading other reports data:", error);
     } finally {

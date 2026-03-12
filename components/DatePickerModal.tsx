@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     maxWidth: 400,
-    maxHeight: '70%', // CRITICAL FIX: Reduce height to prevent calendar cutoff
+    maxHeight: '80%', // CRITICAL FIX: Increase height to show full calendar
     overflow: 'visible', // CRITICAL FIX: Allow calendar to show fully
   },
   header: {

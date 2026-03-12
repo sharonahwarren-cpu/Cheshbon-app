@@ -1605,8 +1605,8 @@ export default function HomeScreen() {
 
   const handleAppLogoPress = () => {
     console.log('HomeScreen: Opening Reflect page');
-    // CRITICAL FIX: Use replace instead of push to ensure navigation works on iOS
-    router.replace('/(tabs)/reflect');
+    // CRITICAL FIX: Use push for proper navigation on iOS
+    router.push('/(tabs)/reflect');
   };
 
   const handleDatePickerConfirm = (date: Date) => {
