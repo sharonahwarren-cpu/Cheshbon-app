@@ -637,7 +637,7 @@ export default function HomeScreen() {
       const dateStr = formatDateLocal(selectedDate);
 
       // CRITICAL FIX: Load data with timeout to prevent infinite loading
-      const loadWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> => {
+      const loadWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 30000): Promise<T> => {
         return Promise.race([
           promise,
           new Promise<T>((_, reject) => 
@@ -685,10 +685,15 @@ export default function HomeScreen() {
       }
     } catch (error: any) {
       console.error('HomeScreen: Error loading data:', error);
-      showError(error.message || 'Failed to load data');
-      // CRITICAL FIX: Even on error, stop loading to prevent infinite spinner
-      setLoading(false);
+      // CRITICAL FIX: Don't show timeout errors to user - they're too technical
+      // Just log them and continue with empty data
+      if (error.message !== 'Request timeout') {
+        showError(error.message || 'Failed to load data');
+      } else {
+        console.log('HomeScreen: Request timed out, continuing with existing data');
+      }
     } finally {
+      // CRITICAL FIX: Always stop loading, even on error
       setLoading(false);
     }
   };

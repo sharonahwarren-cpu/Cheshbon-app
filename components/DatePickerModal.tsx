@@ -222,8 +222,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     width: '100%',
     maxWidth: 400,
-    maxHeight: '80%', // CRITICAL FIX: Prevent modal from being too tall
-    overflow: 'hidden',
+    maxHeight: '70%', // CRITICAL FIX: Reduce height to prevent calendar cutoff
+    overflow: 'visible', // CRITICAL FIX: Allow calendar to show fully
   },
   header: {
     flexDirection: 'row',
