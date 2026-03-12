@@ -162,6 +162,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.background,
   },
+  // Skeleton loading styles
+  skeletonBox: {
+    backgroundColor: colors.border,
+    borderRadius: 4,
+    opacity: 0.3,
+  },
+  skeletonCircle: {
+    backgroundColor: colors.border,
+    borderRadius: 999,
+    opacity: 0.3,
+  },
+  skeletonCard: {
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+  },
+  scrollView: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1591,11 +1611,39 @@ export default function HomeScreen() {
   const ungroupedGoals = getUngroupedGoals();
   const hasAnyGoals = goals.length > 0;
 
+  // PERFORMANCE FIX: Show skeleton loading instead of blank screen with spinner
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {/* Header Skeleton */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <View style={[styles.skeletonCircle, { width: 48, height: 48 }]} />
+          </View>
+          <View style={styles.headerCenter}>
+            <View style={[styles.skeletonBox, { width: 100, height: 20, marginBottom: 4 }]} />
+            <View style={[styles.skeletonBox, { width: 60, height: 14 }]} />
+          </View>
+          <View style={styles.headerRight}>
+            <View style={[styles.skeletonCircle, { width: 32, height: 32 }]} />
+          </View>
+        </View>
+
+        {/* Goal Cards Skeleton */}
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          {[1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.skeletonCard}>
+              <View style={[styles.skeletonBox, { width: '70%', height: 18, marginBottom: 8 }]} />
+              <View style={[styles.skeletonBox, { width: '50%', height: 14, marginBottom: 12 }]} />
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <View style={[styles.skeletonBox, { width: 40, height: 24 }]} />
+                <View style={[styles.skeletonBox, { width: 40, height: 24 }]} />
+                <View style={[styles.skeletonBox, { width: 40, height: 24 }]} />
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 

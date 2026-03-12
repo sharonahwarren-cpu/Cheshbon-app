@@ -24,17 +24,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     console.log('🔄 [SUPABASE AUTH] Initializing auth state...');
     
-    // Get initial session
+    // PERFORMANCE FIX: Don't block UI render while checking auth
+    // Show UI optimistically and update when session loads
+    let mounted = true;
+    
+    // Get initial session asynchronously
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      if (!mounted) return;
       console.log('🔄 [SUPABASE AUTH] Initial session:', initialSession ? 'YES' : 'NO');
       setSession(initialSession);
       setUser(initialSession?.user || null);
       setIsLoading(false);
+    }).catch((error) => {
+      console.error('❌ [SUPABASE AUTH] Error getting session:', error);
+      if (mounted) {
+        setIsLoading(false);
+      }
     });
 
     // Listen for auth changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
+        if (!mounted) return;
         console.log('🔄 [SUPABASE AUTH] Auth state changed:', event);
         setSession(currentSession);
         setUser(currentSession?.user || null);
@@ -43,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     return () => {
+      mounted = false;
       authListener.subscription.unsubscribe();
     };
   }, []);

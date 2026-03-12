@@ -305,11 +305,15 @@ export const deleteCurrency = async (id: string) => {
 export const getCurrencyBalances = async () => {
   const userId = await getCurrentUserId();
   
-  // Get all currency transactions
+  // PERFORMANCE FIX: Select only needed columns instead of *
+  // Get all currency transactions with related data in a single query
   const { data: transactions, error } = await supabase
     .from('currency_transactions')
     .select(`
-      *,
+      currency_id,
+      goal_id,
+      amount,
+      operation,
       currency:currencies(id, name, symbol),
       goal:goals(id, title)
     `)
@@ -394,10 +398,30 @@ export const getCurrencyTransactions = async (currencyId: string) => {
 export const getGoals = async () => {
   const userId = await getCurrentUserId();
   
+  // PERFORMANCE FIX: Select only needed columns instead of *
   const { data, error } = await supabase
     .from('goals')
     .select(`
-      *,
+      id,
+      title,
+      description,
+      type,
+      status,
+      behavior_categories,
+      tracking_type,
+      success_count,
+      struggle_count,
+      current_streak,
+      best_streak,
+      reward_currency_id,
+      reward_amount,
+      reward_successes,
+      consequence_currency_id,
+      consequence_amount,
+      consequence_failures,
+      schedule_config,
+      created_at,
+      updated_at,
       life_area:life_areas(id, name, parent_id, icon, color)
     `)
     .eq('user_id', userId)
@@ -538,11 +562,31 @@ export const deleteGoal = async (id: string) => {
 export const getGoalsWithDailyEntries = async (date: string) => {
   const userId = await getCurrentUserId();
   
-  // Get all active goals
+  // PERFORMANCE FIX: Select only needed columns instead of *
+  // Get all active goals with life area info in a single query
   const { data: goals, error: goalsError } = await supabase
     .from('goals')
     .select(`
-      *,
+      id,
+      title,
+      description,
+      type,
+      status,
+      behavior_categories,
+      tracking_type,
+      success_count,
+      struggle_count,
+      current_streak,
+      best_streak,
+      reward_currency_id,
+      reward_amount,
+      reward_successes,
+      consequence_currency_id,
+      consequence_amount,
+      consequence_failures,
+      schedule_config,
+      created_at,
+      updated_at,
       life_area:life_areas(id, name, parent_id, icon, color)
     `)
     .eq('user_id', userId)
@@ -550,12 +594,11 @@ export const getGoalsWithDailyEntries = async (date: string) => {
   
   handleError(goalsError, 'getGoalsWithDailyEntries');
   
-  // CRITICAL FIX: Instead of using daily_entries table (which can get out of sync),
-  // count reflections directly for the specified date
-  // This ensures the counts are always accurate and match what ReflectionListModal shows
+  // PERFORMANCE FIX: Select only needed columns for reflections
+  // Get reflections for the specified date in a single query
   const { data: reflections, error: reflectionsError } = await supabase
     .from('reflections')
-    .select('*')
+    .select('id, linked_goal_id, outcome, created_at')
     .eq('user_id', userId)
     .eq('entry_date', date);
   
@@ -962,10 +1005,26 @@ export const deleteReflectionMotivation = async (id: string) => {
 export const getReflections = async (date?: string) => {
   const userId = await getCurrentUserId();
   
+  // PERFORMANCE FIX: Select only needed columns instead of *
   let query = supabase
     .from('reflections')
     .select(`
-      *,
+      id,
+      entry_date,
+      category,
+      type,
+      description,
+      linked_goal_id,
+      outcome,
+      currency_change,
+      gained_ids,
+      lost_ids,
+      motivation_ids,
+      was_worth_it,
+      additional_thoughts,
+      strategy_effectiveness,
+      created_at,
+      updated_at,
       goal:goals(id, title)
     `)
     .eq('user_id', userId);
