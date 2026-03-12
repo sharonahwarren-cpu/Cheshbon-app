@@ -669,8 +669,6 @@ export function AddReflectionModal({
   const scrollViewRef = useRef<ScrollView>(null);
   const descriptionInputRef = useRef<TextInput>(null);
   const additionalThoughtsInputRef = useRef<TextInput>(null);
-  const strategyNameInputRef = useRef<TextInput>(null);
-  const strategyDescInputRef = useRef<TextInput>(null);
   
   // If prefilledGoalData is provided (from Goal screen), start at Step 3
   // Steps 1 and 2 are prefilled automatically
@@ -702,9 +700,7 @@ export function AddReflectionModal({
   const [futureStrategySearchQuery, setFutureStrategySearchQuery] = useState('');
   const [showCreateGainModal, setShowCreateGainModal] = useState(false);
   const [showCreateLossModal, setShowCreateLossModal] = useState(false);
-  const [showCreateStrategyModal, setShowCreateStrategyModal] = useState(false);
   const [newItemName, setNewItemName] = useState('');
-  const [newItemDescription, setNewItemDescription] = useState('');
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const categoriesEnabled = userPreferences.reflectionCategoriesEnabled !== false;
@@ -1215,9 +1211,35 @@ export function AddReflectionModal({
       reflectionDate: selectedDate.toISOString(),
     });
     
+    // CRITICAL FIX: Close modal first, then navigate after a short delay
+    // This ensures the modal is fully closed before navigation
     onClose();
     setTimeout(() => {
+      console.log('[AddReflectionModal] Navigating to create-goal with params:', params.toString());
       router.push(`/create-goal?${params.toString()}`);
+    }, 300);
+  };
+
+  // NEW: Handle creating Motivation - Navigate to Settings > Motivations
+  const handleCreateMotivation = () => {
+    console.log('[AddReflectionModal] Navigating to Settings > Motivations to create new motivation');
+    // Close modal first
+    onClose();
+    setTimeout(() => {
+      // Navigate to Settings with motivations section
+      router.push('/(tabs)/settings?section=motivations');
+    }, 300);
+  };
+
+  // CRITICAL FIX: Navigate to Settings > Strategies instead of using simple modal
+  // This allows users to fill in ALL strategy fields (name, description, difficulties, confidence rating, etc.)
+  const handleCreateStrategyNew = () => {
+    console.log('[AddReflectionModal] Navigating to Settings > Strategies to create new strategy');
+    // Close modal first
+    onClose();
+    setTimeout(() => {
+      // Navigate to Settings with strategies section
+      router.push('/(tabs)/settings?section=strategies');
     }, 300);
   };
 
@@ -1797,6 +1819,18 @@ export function AddReflectionModal({
                             );
                           })
                         )}
+                        <TouchableOpacity
+                          style={styles.createNewButton}
+                          onPress={handleCreateMotivation}
+                        >
+                          <IconSymbol
+                            ios_icon_name="plus.circle.fill"
+                            android_material_icon_name="add-circle"
+                            size={20}
+                            color={colors.primary}
+                          />
+                          <Text style={styles.createNewText}>Add New Motivation</Text>
+                        </TouchableOpacity>
                       </ScrollView>
                     </View>
                   )}
@@ -2121,7 +2155,7 @@ export function AddReflectionModal({
                         })}
                         <TouchableOpacity
                           style={styles.createNewButton}
-                          onPress={() => setShowCreateStrategyModal(true)}
+                          onPress={handleCreateStrategyNew}
                         >
                           <IconSymbol
                             ios_icon_name="plus.circle.fill"
@@ -2219,7 +2253,7 @@ export function AddReflectionModal({
                         })}
                         <TouchableOpacity
                           style={styles.createNewButton}
-                          onPress={() => setShowCreateStrategyModal(true)}
+                          onPress={handleCreateStrategyNew}
                         >
                           <IconSymbol
                             ios_icon_name="plus.circle.fill"
@@ -2370,68 +2404,6 @@ export function AddReflectionModal({
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal
-        visible={showCreateStrategyModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCreateStrategyModal(false)}
-      >
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.createItemModal}>
-            <Text style={styles.alertTitle}>Add New Strategy</Text>
-            <TextInput
-              ref={strategyNameInputRef}
-              style={styles.input}
-              value={newItemName}
-              onChangeText={setNewItemName}
-              placeholder="Strategy name..."
-              placeholderTextColor={colors.textSecondary}
-              blurOnSubmit={false}
-              autoFocus
-              returnKeyType="next"
-              onSubmitEditing={() => strategyDescInputRef.current?.focus()}
-            />
-            <TextInput
-              ref={strategyDescInputRef}
-              style={[styles.input, styles.textArea, { marginTop: 12 }]}
-              value={newItemDescription}
-              onChangeText={setNewItemDescription}
-              placeholder="Description (optional)..."
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              numberOfLines={3}
-              blurOnSubmit={false}
-              returnKeyType="done"
-            />
-            <View style={styles.alertButtons}>
-              <TouchableOpacity
-                style={[styles.alertButton, styles.alertButtonSecondary]}
-                onPress={() => {
-                  setNewItemName('');
-                  setNewItemDescription('');
-                  setShowCreateStrategyModal(false);
-                }}
-              >
-                <Text style={styles.alertButtonSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.alertButton}
-                onPress={handleCreateStrategy}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.alertButtonText}>Add</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </Modal>
   );
 }
