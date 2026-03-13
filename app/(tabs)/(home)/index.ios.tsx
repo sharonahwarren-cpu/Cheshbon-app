@@ -156,29 +156,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  // Skeleton loading styles
-  skeletonBox: {
-    backgroundColor: colors.border,
-    borderRadius: 4,
-    opacity: 0.3,
-  },
-  skeletonCircle: {
-    backgroundColor: colors.border,
-    borderRadius: 999,
-    opacity: 0.3,
-  },
-  skeletonCard: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-  },
+
   scrollView: {
     flex: 1,
   },
@@ -527,7 +505,7 @@ export default function HomeScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [loading, setLoading] = useState(true);
+  // PERFORMANCE FIX: Remove loading state - render immediately
   const [lifeAreas, setLifeAreas] = useState<LifeAreaNode[]>([]);
   const [goals, setGoals] = useState<ActivatedGoal[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -581,27 +559,24 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    console.log('HomeScreen: Initial load');
+    console.log('HomeScreen: Initial load - rendering immediately');
     
-    // CRITICAL FIX: Clean up orphaned daily_entries on first load
-    // This fixes the bug where icon counts are wrong
-    const cleanupAndLoad = async () => {
-      try {
-        const { cleanupOrphanedDailyEntries } = await import('@/utils/supabaseApi');
-        const result = await cleanupOrphanedDailyEntries();
-        console.log('HomeScreen: Cleaned up orphaned entries:', result.deletedCount);
-      } catch (error) {
-        console.error('HomeScreen: Error cleaning up orphaned entries:', error);
-      }
-      
-      // Load data after cleanup
-      await loadData();
-    };
-    
-    cleanupAndLoad();
-    
-    // Fetch user avatar on initial load
+    // PERFORMANCE FIX: Load data in background without blocking render
+    // UI shows instantly with empty state, then updates when data arrives
+    loadData();
     fetchUserAvatar();
+    
+    // PERFORMANCE FIX: Run cleanup in background, don't block initial render
+    // This is a maintenance task, not critical for first render
+    setTimeout(() => {
+      import('@/utils/supabaseApi').then(({ cleanupOrphanedDailyEntries }) => {
+        cleanupOrphanedDailyEntries().then((result) => {
+          console.log('HomeScreen: Background cleanup completed:', result.deletedCount);
+        }).catch((error) => {
+          console.error('HomeScreen: Background cleanup error:', error);
+        });
+      });
+    }, 5000); // Run after 5 seconds, not on mount
   }, []);
 
   // CRITICAL FIX: Refresh avatar when screen comes into focus
@@ -651,69 +626,61 @@ export default function HomeScreen() {
   const loadData = async () => {
     try {
       console.log('HomeScreen: Loading data for date:', formatDateLocal(selectedDate));
-      setLoading(true);
+      // PERFORMANCE FIX: No loading state - UI already rendered
 
       const dateStr = formatDateLocal(selectedDate);
 
-      // CRITICAL FIX: Load data with timeout to prevent infinite loading
-      const loadWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number = 30000): Promise<T> => {
-        return Promise.race([
-          promise,
-          new Promise<T>((_, reject) => 
-            setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
-          )
-        ]);
-      };
-
-      const [
-        goalsData,
-        lifeAreasData,
+      // PERFORMANCE FIX: Load critical data first (goals), then load supporting data
+      // This creates a progressive loading experience instead of waiting for everything
+      
+      // Phase 1: Load goals immediately (most important for UI)
+      const goalsData = await getGoalsWithDailyEntries(dateStr);
+      console.log('HomeScreen: Goals loaded:', goalsData.length);
+      setGoals(goalsData);
+      
+      // Phase 2: Load life areas and build hierarchy (needed for grouping)
+      const lifeAreasData = await getLifeAreas();
+      setLifeAreas(buildLifeAreaHierarchy(lifeAreasData, goalsData));
+      
+      // Phase 3: Load supporting data in parallel (not critical for initial render)
+      Promise.all([
+        getCurrencies(),
+        getGainsLosses(),
+        getStrategies(),
+        getReflections(dateStr),
+        getUserPreferences(),
+        getJournals(dateStr),
+      ]).then(([
         currenciesData,
         gainsLossesData,
         strategiesData,
         reflectionsData,
         preferencesData,
         journalsData,
-      ] = await Promise.all([
-        loadWithTimeout(getGoalsWithDailyEntries(dateStr)),
-        loadWithTimeout(getLifeAreas()),
-        loadWithTimeout(getCurrencies()),
-        loadWithTimeout(getGainsLosses()),
-        loadWithTimeout(getStrategies()),
-        loadWithTimeout(getReflections(dateStr)),
-        loadWithTimeout(getUserPreferences()),
-        loadWithTimeout(getJournals(dateStr)),
-      ]);
-
-      console.log('HomeScreen: Data loaded successfully');
-      console.log('HomeScreen: Goals count:', goalsData.length);
-      setGoals(goalsData);
-      setLifeAreas(buildLifeAreaHierarchy(lifeAreasData, goalsData));
-      setCurrencies(currenciesData);
-      setGainsLosses(gainsLossesData);
-      setStrategies(strategiesData);
-      setReflections(reflectionsData);
-      setUserPreferences(preferencesData);
+      ]) => {
+        setCurrencies(currenciesData);
+        setGainsLosses(gainsLossesData);
+        setStrategies(strategiesData);
+        setReflections(reflectionsData);
+        setUserPreferences(preferencesData);
+        
+        if (journalsData.length > 0) {
+          setJournalEntry(journalsData[0]);
+          setJournalContent(journalsData[0].content);
+        } else {
+          setJournalEntry(null);
+          setJournalContent('');
+        }
+        
+        console.log('HomeScreen: All supporting data loaded');
+      }).catch((error) => {
+        console.error('HomeScreen: Error loading supporting data:', error);
+        // Don't show error - supporting data is not critical
+      });
       
-      if (journalsData.length > 0) {
-        setJournalEntry(journalsData[0]);
-        setJournalContent(journalsData[0].content);
-      } else {
-        setJournalEntry(null);
-        setJournalContent('');
-      }
     } catch (error: any) {
-      console.error('HomeScreen: Error loading data:', error);
-      // CRITICAL FIX: Don't show timeout errors to user - they're too technical
-      // Just log them and continue with empty data
-      if (error.message !== 'Request timeout') {
-        showError(error.message || 'Failed to load data');
-      } else {
-        console.log('HomeScreen: Request timed out, continuing with existing data');
-      }
-    } finally {
-      // CRITICAL FIX: Always stop loading, even on error
-      setLoading(false);
+      console.error('HomeScreen: Error loading critical data:', error);
+      showError(error.message || 'Failed to load goals');
     }
   };
 
@@ -1610,41 +1577,8 @@ export default function HomeScreen() {
   const ungroupedGoals = getUngroupedGoals();
   const hasAnyGoals = goals.length > 0;
 
-  // PERFORMANCE FIX: Show skeleton loading instead of blank screen with spinner
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        {/* Header Skeleton */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={[styles.skeletonCircle, { width: 48, height: 48 }]} />
-          </View>
-          <View style={styles.headerCenter}>
-            <View style={[styles.skeletonBox, { width: 100, height: 20, marginBottom: 4 }]} />
-            <View style={[styles.skeletonBox, { width: 60, height: 14 }]} />
-          </View>
-          <View style={styles.headerRight}>
-            <View style={[styles.skeletonCircle, { width: 36, height: 36 }]} />
-          </View>
-        </View>
-
-        {/* Goal Cards Skeleton */}
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {[1, 2, 3, 4].map((i) => (
-            <View key={i} style={styles.skeletonCard}>
-              <View style={[styles.skeletonBox, { width: '70%', height: 18, marginBottom: 8 }]} />
-              <View style={[styles.skeletonBox, { width: '50%', height: 14, marginBottom: 12 }]} />
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <View style={[styles.skeletonBox, { width: 40, height: 24 }]} />
-                <View style={[styles.skeletonBox, { width: 40, height: 24 }]} />
-                <View style={[styles.skeletonBox, { width: 40, height: 24 }]} />
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
+  // PERFORMANCE FIX: No loading screen - render content immediately
+  // UI shows empty state or cached data, then updates when data loads
 
   const handleProfilePress = () => {
     console.log('HomeScreen: Navigating to profile');

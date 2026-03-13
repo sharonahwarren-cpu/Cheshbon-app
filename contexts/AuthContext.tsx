@@ -24,22 +24,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     console.log('🔄 [SUPABASE AUTH] Initializing auth state...');
     
-    // PERFORMANCE FIX: Don't block UI render while checking auth
-    // Show UI optimistically and update when session loads
+    // PERFORMANCE FIX: Render UI immediately, check auth in background
+    // Set isLoading to false immediately so UI can render
+    setIsLoading(false);
+    
     let mounted = true;
     
-    // Get initial session asynchronously
+    // Get initial session asynchronously (non-blocking)
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       if (!mounted) return;
       console.log('🔄 [SUPABASE AUTH] Initial session:', initialSession ? 'YES' : 'NO');
       setSession(initialSession);
       setUser(initialSession?.user || null);
-      setIsLoading(false);
     }).catch((error) => {
       console.error('❌ [SUPABASE AUTH] Error getting session:', error);
-      if (mounted) {
-        setIsLoading(false);
-      }
     });
 
     // Listen for auth changes
@@ -49,7 +47,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('🔄 [SUPABASE AUTH] Auth state changed:', event);
         setSession(currentSession);
         setUser(currentSession?.user || null);
-        setIsLoading(false);
       }
     );
 
