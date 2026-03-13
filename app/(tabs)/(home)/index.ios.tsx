@@ -628,37 +628,48 @@ export default function HomeScreen() {
     setShowSuccessModal(true);
   };
 
-  // CRITICAL FIX: Load cached data from AsyncStorage
-  // This ensures the UI shows previous goals instantly instead of empty state
+  // CRITICAL FIX: Load cached data from AsyncStorage with atomic enrichment
+  // This ensures the UI shows previous goals instantly with life areas already grouped
   const loadCachedData = async () => {
     try {
       console.log('HomeScreen: Loading cached data from AsyncStorage');
       
-      // Load cached goals
-      const cachedGoalsStr = await AsyncStorage.getItem('cached_goals');
+      // Load all cached data in parallel
+      const [cachedGoalsStr, cachedLifeAreasStr, cachedCurrenciesStr] = await Promise.all([
+        AsyncStorage.getItem('cached_goals'),
+        AsyncStorage.getItem('cached_life_areas'),
+        AsyncStorage.getItem('cached_currencies'),
+      ]);
+      
+      let cachedGoals: ActivatedGoal[] = [];
+      let cachedLifeAreas: any[] = [];
+      let cachedCurrencies: Currency[] = [];
+      
       if (cachedGoalsStr) {
-        const cachedGoals = JSON.parse(cachedGoalsStr);
+        cachedGoals = JSON.parse(cachedGoalsStr);
         console.log('HomeScreen: Found cached goals:', cachedGoals.length);
-        setGoals(cachedGoals);
       }
       
-      // Load cached life areas
-      const cachedLifeAreasStr = await AsyncStorage.getItem('cached_life_areas');
       if (cachedLifeAreasStr) {
-        const cachedLifeAreas = JSON.parse(cachedLifeAreasStr);
-        console.log('HomeScreen: Found cached life areas:', cachedLifeAreas.length);
+        cachedLifeAreas = JSON.parse(cachedLifeAreasStr);
+        console.log('HomeScreen: Found cached life areas (hierarchy):', cachedLifeAreas.length);
+        // Set life areas immediately - they're already in hierarchy format
         setLifeAreas(cachedLifeAreas);
       }
       
-      // Load cached currencies
-      const cachedCurrenciesStr = await AsyncStorage.getItem('cached_currencies');
       if (cachedCurrenciesStr) {
-        const cachedCurrencies = JSON.parse(cachedCurrenciesStr);
+        cachedCurrencies = JSON.parse(cachedCurrenciesStr);
         console.log('HomeScreen: Found cached currencies:', cachedCurrencies.length);
         setCurrencies(cachedCurrencies);
       }
       
-      console.log('HomeScreen: Cached data loaded successfully');
+      // CRITICAL FIX: Set goals after life areas are set
+      // This ensures the UI can immediately group goals by life areas
+      if (cachedGoals.length > 0) {
+        setGoals(cachedGoals);
+      }
+      
+      console.log('HomeScreen: Cached data loaded and enriched successfully');
     } catch (error) {
       console.error('HomeScreen: Error loading cached data:', error);
       // Don't show error to user - cached data is optional
