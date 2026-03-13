@@ -2301,13 +2301,9 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.button, styles.buttonPrimary]}
                 onPress={handleSaveItem}
-                disabled={loading || !formData.name}
+                disabled={!formData.name}
               >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.buttonPrimaryText}>Save</Text>
-                )}
+                <Text style={styles.buttonPrimaryText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2357,13 +2353,9 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.button, styles.buttonPrimary]}
                 onPress={handleSaveItem}
-                disabled={loading || !formData.name}
+                disabled={!formData.name}
               >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.buttonPrimaryText}>Save</Text>
-                )}
+                <Text style={styles.buttonPrimaryText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
