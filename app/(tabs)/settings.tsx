@@ -219,6 +219,9 @@ export default function SettingsScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState(new Date());
 
+  // Saving state for individual operations
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -425,7 +428,7 @@ export default function SettingsScreen() {
     if (!modalType) return;
 
     try {
-      // REMOVED: setLoading(true) - no need to block UI
+      setIsSaving(true);
       
       if (modalType === 'lifeArea') {
         if (editingItem) {
@@ -495,6 +498,8 @@ export default function SettingsScreen() {
     } catch (error) {
       console.error('[Settings] Error saving item:', error);
       showError('Failed to save item');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -2470,9 +2475,9 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.button, styles.buttonPrimary]}
                 onPress={handleSaveItem}
-                disabled={loading || !formData.name}
+                disabled={isSaving || !formData.name}
               >
-                {loading ? (
+                {isSaving ? (
                   <ActivityIndicator color={colors.background} />
                 ) : (
                   <Text style={styles.buttonPrimaryText}>Save</Text>
@@ -2585,9 +2590,9 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.button, styles.buttonPrimary]}
                 onPress={handleSaveItem}
-                disabled={loading || !formData.name}
+                disabled={isSaving || !formData.name}
               >
-                {loading ? (
+                {isSaving ? (
                   <ActivityIndicator color={colors.background} />
                 ) : (
                   <Text style={styles.buttonPrimaryText}>Save</Text>
