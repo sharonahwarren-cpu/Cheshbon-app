@@ -159,7 +159,8 @@ export default function SettingsScreen() {
   };
   
   const [currentSection, setCurrentSection] = useState<SettingsSection>(getInitialSection());
-  const [loading, setLoading] = useState(false);
+  // REMOVED: loading state - screens should render instantly
+  // const [loading, setLoading] = useState(false);
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
@@ -249,22 +250,17 @@ export default function SettingsScreen() {
   );
 
   const loadData = async () => {
-    console.log('[Settings Web] Loading settings data...');
-    setLoading(true);
+    console.log('[Settings] Loading settings data progressively...');
+    
+    // INSTANT RENDER: No loading state, data loads in background
     try {
-      const [goalsData, lifeAreasData, strategiesData, currenciesData, gainsLossesData, gainLossCategoriesData, prefsData, reflectionMotivationsData] = await Promise.all([
+      // Phase 1: Load critical data first (goals, life areas)
+      const [goalsData, lifeAreasData] = await Promise.all([
         supabaseApi.getGoals(),
         supabaseApi.getLifeAreas(),
-        supabaseApi.getStrategies(),
-        supabaseApi.getCurrencies(),
-        supabaseApi.getGainsLosses(),
-        supabaseApi.getGainLossCategories(),
-        supabaseApi.getUserPreferences(),
-        supabaseApi.getReflectionMotivations(),
       ]);
-
-      console.log('[Settings Web] Settings data loaded successfully');
-      console.log('[Settings Web] Life areas loaded:', lifeAreasData);
+      
+      console.log('[Settings] Phase 1 loaded: goals and life areas');
       
       // Goals already have success_count and struggle_count from Supabase
       const goalsWithDefaults = goalsData.map((goal: any) => ({
@@ -278,22 +274,43 @@ export default function SettingsScreen() {
       
       setGoals(goalsWithDefaults);
       setLifeAreas(lifeAreasData);
+      
+      // Phase 2: Load secondary data (strategies, currencies, preferences)
+      const [strategiesData, currenciesData, prefsData] = await Promise.all([
+        supabaseApi.getStrategies(),
+        supabaseApi.getCurrencies(),
+        supabaseApi.getUserPreferences(),
+      ]);
+      
+      console.log('[Settings] Phase 2 loaded: strategies, currencies, preferences');
+      
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
-      setGainsLosses(gainsLossesData);
-      setGainLossCategories(gainLossCategoriesData);
-      setReflectionMotivations(reflectionMotivationsData);
       setPreferences(prefsData);
+      
+      // Phase 3: Load supporting data in parallel (non-blocking)
+      Promise.all([
+        supabaseApi.getGainsLosses(),
+        supabaseApi.getGainLossCategories(),
+        supabaseApi.getReflectionMotivations(),
+      ]).then(([gainsLossesData, gainLossCategoriesData, reflectionMotivationsData]) => {
+        console.log('[Settings] Phase 3 loaded: gains/losses, categories, motivations');
+        setGainsLosses(gainsLossesData);
+        setGainLossCategories(gainLossCategoriesData);
+        setReflectionMotivations(reflectionMotivationsData);
+      }).catch(error => {
+        console.error('[Settings] Error loading Phase 3 data:', error);
+        // Don't show error for non-critical data
+      });
+      
     } catch (error) {
-      console.error('[Settings Web] Error loading settings data:', error);
+      console.error('[Settings] Error loading settings data:', error);
       showError('Failed to load settings data');
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadCurrencyBalances = async () => {
-    console.log('[Settings Web] Loading currency balances...');
+    console.log('[Settings] Loading currency balances...');
     try {
       const balancesData = await supabaseApi.getCurrencyBalances();
       
@@ -308,12 +325,12 @@ export default function SettingsScreen() {
       
       setCurrencyBalances(filteredBalances);
       
-      console.log('[Settings Web] Filtered currency balances:', {
+      console.log('[Settings] Filtered currency balances:', {
         total: balancesData.length,
         nonZero: filteredBalances.length,
       });
     } catch (error) {
-      console.error('[Settings Web] Error loading reports data:', error);
+      console.error('[Settings] Error loading reports data:', error);
       showError('Failed to load reports data');
     }
   };
@@ -408,7 +425,7 @@ export default function SettingsScreen() {
     if (!modalType) return;
 
     try {
-      setLoading(true);
+      // REMOVED: setLoading(true) - no need to block UI
       
       if (modalType === 'lifeArea') {
         if (editingItem) {
@@ -476,10 +493,8 @@ export default function SettingsScreen() {
       setShowModal(false);
       await loadData();
     } catch (error) {
-      console.error('[Settings Web] Error saving item:', error);
+      console.error('[Settings] Error saving item:', error);
       showError('Failed to save item');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -494,7 +509,6 @@ export default function SettingsScreen() {
     if (!deleteItemType || !deleteItemId) return;
 
     try {
-      setLoading(true);
       setShowConfirmDelete(false);
       
       if (deleteItemType === 'lifeArea') {
@@ -528,10 +542,9 @@ export default function SettingsScreen() {
 
       await loadData();
     } catch (error) {
-      console.error('[Settings Web] Error deleting item:', error);
+      console.error('[Settings] Error deleting item:', error);
       showError('Failed to delete item');
     } finally {
-      setLoading(false);
       setDeleteItemType(null);
       setDeleteItemId('');
       setDeleteItemName('');
@@ -540,8 +553,7 @@ export default function SettingsScreen() {
 
   const handleDeactivateGoal = async (id: string) => {
     try {
-      setLoading(true);
-      console.log(`[Settings Web] Toggling goal status for goal ${id}`);
+      console.log(`[Settings] Toggling goal status for goal ${id}`);
       
       // Get current goal status
       const goal = goals.find(g => g.id === id);
@@ -557,29 +569,24 @@ export default function SettingsScreen() {
       showSuccess('Goal status updated successfully');
       await loadData();
     } catch (error: any) {
-      console.error('[Settings Web] Error toggling goal status:', error);
+      console.error('[Settings] Error toggling goal status:', error);
       showError(error.message || 'Failed to update goal status');
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleSavePreferences = async () => {
     try {
-      setLoading(true);
       await supabaseApi.updateUserPreferences(preferences);
       showSuccess('Preferences saved successfully');
     } catch (error) {
-      console.error('[Settings Web] Error saving preferences:', error);
+      console.error('[Settings] Error saving preferences:', error);
       showError('Failed to save preferences');
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleLinkGoalToLifeArea = async (goalId: string, lifeAreaId: string) => {
     try {
-      console.log('[Settings Web] Linking goal to life area:', { goalId, lifeAreaId });
+      console.log('[Settings] Linking goal to life area:', { goalId, lifeAreaId });
       
       // Update the goal's life_area_id
       await supabaseApi.updateGoal(goalId, { life_area_id: lifeAreaId });
@@ -609,7 +616,7 @@ export default function SettingsScreen() {
       // Reload data in the background to ensure consistency
       await loadData();
     } catch (error) {
-      console.error('[Settings Web] Error linking goal to life area:', error);
+      console.error('[Settings] Error linking goal to life area:', error);
       showError('Failed to link goal to life area');
       // Reload data to revert optimistic update
       await loadData();
@@ -618,7 +625,7 @@ export default function SettingsScreen() {
 
   const handleUnlinkGoalFromLifeArea = async (goalId: string, lifeAreaId: string) => {
     try {
-      console.log('[Settings Web] Unlinking goal from life area:', { goalId, lifeAreaId });
+      console.log('[Settings] Unlinking goal from life area:', { goalId, lifeAreaId });
       
       // Set the goal's life_area_id to null
       await supabaseApi.updateGoal(goalId, { life_area_id: null });
@@ -634,7 +641,7 @@ export default function SettingsScreen() {
       // Reload data in the background to ensure consistency
       await loadData();
     } catch (error) {
-      console.error('[Settings Web] Error unlinking goal from life area:', error);
+      console.error('[Settings] Error unlinking goal from life area:', error);
       showError('Failed to unlink goal from life area');
       // Reload data to revert optimistic update
       await loadData();
@@ -644,13 +651,13 @@ export default function SettingsScreen() {
   const handleReorderLifeAreas = async (reorderedAreas: Array<LifeArea & { depth: number }>) => {
     // Guard clause: ensure data is valid
     if (!reorderedAreas || !Array.isArray(reorderedAreas) || reorderedAreas.length === 0) {
-      console.error('[Settings Web] Invalid data for reordering:', reorderedAreas);
+      console.error('[Settings] Invalid data for reordering:', reorderedAreas);
       showError('Invalid data for reordering');
       return;
     }
     
     try {
-      console.log('[Settings Web] Reordering life areas with re-nesting support, count:', reorderedAreas.length);
+      console.log('[Settings] Reordering life areas with re-nesting support, count:', reorderedAreas.length);
       
       // Build updates array with parentId and displayOrder based on depth changes
       const updates: Array<{ id: string; parentId: string | null; displayOrder: number }> = [];
@@ -694,18 +701,18 @@ export default function SettingsScreen() {
         });
       }
       
-      console.log('[Settings Web] Sending updates to Supabase:', updates);
+      console.log('[Settings] Sending updates to Supabase:', updates);
       
       // Send updates to Supabase
       await supabaseApi.reorderLifeAreas(updates);
-      console.log('[Settings Web] Life areas reordered successfully');
+      console.log('[Settings] Life areas reordered successfully');
       
       // Reload to get the correct structure from Supabase
       await loadData();
       // REMOVED: showSuccess('Life areas recorded successfully');
       // No success message shown after reordering
     } catch (error: any) {
-      console.error('[Settings Web] Error reordering life areas:', error);
+      console.error('[Settings] Error reordering life areas:', error);
       showError(error.message || 'Failed to reorder life areas');
       // Reload data to revert optimistic update
       await loadData();
@@ -803,7 +810,6 @@ export default function SettingsScreen() {
 
   const handleCurrencyAction = async () => {
     try {
-      setLoading(true);
       const amount = parseInt(currencyAmount);
       
       if (isNaN(amount) || amount <= 0) {
@@ -839,10 +845,8 @@ export default function SettingsScreen() {
         await loadCurrencyBalances();
       }
     } catch (error: any) {
-      console.error('[Settings Web] Error with currency action:', error);
+      console.error('[Settings] Error with currency action:', error);
       showError(error.message || 'Failed to process currency action');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -2070,24 +2074,17 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
       
-      {loading && currentSection === 'main' ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <>
-          {currentSection === 'main' && renderMainMenu()}
-          {currentSection === 'goals' && renderGoals()}
-          {currentSection === 'lifeAreas' && renderLifeAreas()}
-          {currentSection === 'strategies' && renderStrategies()}
-          {currentSection === 'currencies' && renderCurrencies()}
-          {currentSection === 'gainsLosses' && renderGainsLosses()}
-          {currentSection === 'gainLossCategories' && renderGainLossCategories()}
-          {currentSection === 'reflectionMotivations' && renderReflectionMotivations()}
-          {currentSection === 'notifications' && renderNotifications()}
-          {currentSection === 'reports' && renderReports()}
-        </>
-      )}
+      {/* INSTANT RENDER: No loading spinner, content appears immediately */}
+      {currentSection === 'main' && renderMainMenu()}
+      {currentSection === 'goals' && renderGoals()}
+      {currentSection === 'lifeAreas' && renderLifeAreas()}
+      {currentSection === 'strategies' && renderStrategies()}
+      {currentSection === 'currencies' && renderCurrencies()}
+      {currentSection === 'gainsLosses' && renderGainsLosses()}
+      {currentSection === 'gainLossCategories' && renderGainLossCategories()}
+      {currentSection === 'reflectionMotivations' && renderReflectionMotivations()}
+      {currentSection === 'notifications' && renderNotifications()}
+      {currentSection === 'reports' && renderReports()}
 
       {/* Currency Claim/Pay Modal */}
       <Modal

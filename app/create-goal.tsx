@@ -155,7 +155,8 @@ export default function CreateGoalScreen() {
   const [loadingScheduleSummary, setLoadingScheduleSummary] = useState(false);
 
   // UI state
-  const [loading, setLoading] = useState(false);
+  // REMOVED: loading state - screens should render instantly
+  // const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showParentGoalPicker, setShowParentGoalPicker] = useState(false);
   const [showLifeAreaPicker, setShowLifeAreaPicker] = useState(false);
@@ -254,39 +255,25 @@ export default function CreateGoalScreen() {
     React.useCallback(() => {
       // Only reload alarms on focus (not the full data load)
       // This handles the case when user returns from create alarm screen
-      if (editingGoalId && !loading) {
+      if (editingGoalId) {
         reloadGoalAlarms();
       }
       
       // CRITICAL: Reload data when returning from Settings screen after creating Life Area/Strategy/Currency
-      if (!editingGoalId && !loading) {
+      if (!editingGoalId) {
         console.log('[CreateGoal] Reloading data on focus (user may have created items in Settings)');
         loadData();
       }
-    }, [editingGoalId, loading, reloadGoalAlarms])
+    }, [editingGoalId, reloadGoalAlarms])
   );
 
   const loadData = async () => {
-    console.log('[CreateGoal] Loading form data for goal creation/editing');
-    setLoading(true);
+    console.log('[CreateGoal] Loading form data progressively...');
+    
+    // INSTANT RENDER: No loading state, data loads in background
     try {
-      const promises = [
-        supabaseApi.getGoals().catch(err => {
-          console.error('[CreateGoal] Error loading goals:', err);
-          return [];
-        }),
-        supabaseApi.getLifeAreas().catch(err => {
-          console.error('[CreateGoal] Error loading life areas:', err);
-          return [];
-        }),
-        supabaseApi.getStrategies().catch(err => {
-          console.error('[CreateGoal] Error loading strategies:', err);
-          return [];
-        }),
-        supabaseApi.getCurrencies().catch(err => {
-          console.error('[CreateGoal] Error loading currencies:', err);
-          return [];
-        }),
+      // Phase 1: Load critical data first (preferences, life areas)
+      const [preferencesData, lifeAreasData] = await Promise.all([
         supabaseApi.getUserPreferences().catch(err => {
           console.error('[CreateGoal] Error loading preferences:', err);
           return {
@@ -295,31 +282,13 @@ export default function CreateGoalScreen() {
             alternativeCalendar: 'gregorian',
           };
         }),
-      ];
-
-      if (editingGoalId) {
-        promises.push(
-          supabaseApi.getGoalById(editingGoalId).catch(err => {
-            console.error('[CreateGoal] Error loading goal details:', err);
-            return null;
-          })
-        );
-        promises.push(
-          supabaseApi.getAlarms().catch(err => {
-            console.error('[CreateGoal] Error loading alarms:', err);
-            return [];
-          })
-        );
-      }
-
-      const results = await Promise.all(promises);
-      const [goalsData, lifeAreasData, strategiesData, currenciesData, preferencesData, goalDetailsData, allAlarmsData] = results;
+        supabaseApi.getLifeAreas().catch(err => {
+          console.error('[CreateGoal] Error loading life areas:', err);
+          return [];
+        }),
+      ]);
       
-      console.log('[CreateGoal] Data loaded successfully');
-      console.log('[CreateGoal] Goals:', goalsData.length);
-      console.log('[CreateGoal] Life Areas:', lifeAreasData.length);
-      console.log('[CreateGoal] Strategies:', strategiesData.length);
-      console.log('[CreateGoal] Currencies:', currenciesData.length);
+      console.log('[CreateGoal] Phase 1 loaded: preferences and life areas');
       
       const preferences = preferencesData || {
         reflectionCategoriesEnabled: true,
@@ -336,91 +305,119 @@ export default function CreateGoalScreen() {
         }
       }
       
-      console.log('[CreateGoal] User preferences loaded:', preferences);
-      console.log('[CreateGoal] Reflection categories enabled:', preferences.reflectionCategoriesEnabled);
-      console.log('[CreateGoal] Available categories:', preferences.reflectionCategories);
+      setUserPreferences(preferences);
+      setLifeAreas(lifeAreasData);
+      
+      // Phase 2: Load secondary data (goals, strategies, currencies)
+      const [goalsData, strategiesData, currenciesData] = await Promise.all([
+        supabaseApi.getGoals().catch(err => {
+          console.error('[CreateGoal] Error loading goals:', err);
+          return [];
+        }),
+        supabaseApi.getStrategies().catch(err => {
+          console.error('[CreateGoal] Error loading strategies:', err);
+          return [];
+        }),
+        supabaseApi.getCurrencies().catch(err => {
+          console.error('[CreateGoal] Error loading currencies:', err);
+          return [];
+        }),
+      ]);
+      
+      console.log('[CreateGoal] Phase 2 loaded: goals, strategies, currencies');
       
       setGoals(goalsData);
-      setLifeAreas(lifeAreasData);
       setStrategies(strategiesData);
       setCurrencies(currenciesData);
-      setUserPreferences(preferences);
 
       if (preselectedLifeAreaId && !editingGoalId) {
         console.log('[CreateGoal] Pre-selecting life area:', preselectedLifeAreaId);
         setLifeAreaId(preselectedLifeAreaId);
       }
 
-      if (editingGoalId && goalDetailsData) {
-        const goalDetails = goalDetailsData;
-        console.log('[CreateGoal] Goal details loaded for editing:', JSON.stringify(goalDetails, null, 2));
+      // Phase 3: Load goal details if editing (non-blocking for new goals)
+      if (editingGoalId) {
+        const [goalDetailsData, allAlarmsData] = await Promise.all([
+          supabaseApi.getGoalById(editingGoalId).catch(err => {
+            console.error('[CreateGoal] Error loading goal details:', err);
+            return null;
+          }),
+          supabaseApi.getAlarms().catch(err => {
+            console.error('[CreateGoal] Error loading alarms:', err);
+            return [];
+          }),
+        ]);
         
-        setTitle(goalDetails.title || '');
-        setDescription(goalDetails.description || '');
-        setParentGoalId(goalDetails.parent_goal_id);
-        setLifeAreaId(goalDetails.life_area_id);
-        setBehaviorCategories(goalDetails.behavior_categories || []);
-        setType(goalDetails.type || 'Proactive');
-        setStrategyIds(goalDetails.strategy_ids || []);
+        console.log('[CreateGoal] Phase 3 loaded: goal details and alarms');
         
-        // Load tracking type
-        setTrackingType(goalDetails.tracking_type || 'once_per_day');
-        
-        // Load schedule config - Supabase stores it as a JSONB field
-        const scheduleConfigFromDb = goalDetails.schedule_config;
-        if (scheduleConfigFromDb) {
-          setScheduleConfig(scheduleConfigFromDb);
-        }
-        
-        // Load reward/consequence data
-        if (goalDetails.reward_currency_id) {
-          setRewardCurrencyId(goalDetails.reward_currency_id);
-          setRewardSuccesses(goalDetails.reward_successes?.toString() || '');
-          setRewardAmount(goalDetails.reward_amount?.toString() || '');
-        }
-        
-        if (goalDetails.consequence_currency_id) {
-          setConsequenceCurrencyId(goalDetails.consequence_currency_id);
-          setConsequenceFailures(goalDetails.consequence_failures?.toString() || '');
-          setConsequenceAmount(goalDetails.consequence_amount?.toString() || '');
-        }
-
-        // Load alarms for this goal
-        if (allAlarmsData) {
-          const goalAlarmsField = goalDetails.alarms;
-          let goalAlarmIds: string[] = [];
+        if (goalDetailsData) {
+          const goalDetails = goalDetailsData;
+          console.log('[CreateGoal] Goal details loaded for editing:', JSON.stringify(goalDetails, null, 2));
           
-          if (goalAlarmsField) {
-            const parsedAlarms = typeof goalAlarmsField === 'string' 
-              ? JSON.parse(goalAlarmsField) 
-              : goalAlarmsField;
-            
-            if (Array.isArray(parsedAlarms)) {
-              goalAlarmIds = parsedAlarms.map((a: any) => 
-                typeof a === 'string' ? a : a.id
-              ).filter(Boolean);
-            }
+          setTitle(goalDetails.title || '');
+          setDescription(goalDetails.description || '');
+          setParentGoalId(goalDetails.parent_goal_id);
+          setLifeAreaId(goalDetails.life_area_id);
+          setBehaviorCategories(goalDetails.behavior_categories || []);
+          setType(goalDetails.type || 'Proactive');
+          setStrategyIds(goalDetails.strategy_ids || []);
+          
+          // Load tracking type
+          setTrackingType(goalDetails.tracking_type || 'once_per_day');
+          
+          // Load schedule config - Supabase stores it as a JSONB field
+          const scheduleConfigFromDb = goalDetails.schedule_config;
+          if (scheduleConfigFromDb) {
+            setScheduleConfig(scheduleConfigFromDb);
           }
           
-          console.log('[CreateGoal] Goal alarm IDs from goal record:', goalAlarmIds);
+          // Load reward/consequence data
+          if (goalDetails.reward_currency_id) {
+            setRewardCurrencyId(goalDetails.reward_currency_id);
+            setRewardSuccesses(goalDetails.reward_successes?.toString() || '');
+            setRewardAmount(goalDetails.reward_amount?.toString() || '');
+          }
           
-          const filteredAlarms = goalAlarmIds.length > 0
-            ? allAlarmsData.filter((alarm: any) => goalAlarmIds.includes(alarm.id))
-            : [];
-          
-          console.log('[CreateGoal] Filtered alarms for goal:', filteredAlarms.length);
-          setGoalAlarms(filteredAlarms);
-          if (filteredAlarms.length > 0) {
-            setAlarmsEnabled(true);
+          if (goalDetails.consequence_currency_id) {
+            setConsequenceCurrencyId(goalDetails.consequence_currency_id);
+            setConsequenceFailures(goalDetails.consequence_failures?.toString() || '');
+            setConsequenceAmount(goalDetails.consequence_amount?.toString() || '');
+          }
+
+          // Load alarms for this goal
+          if (allAlarmsData) {
+            const goalAlarmsField = goalDetails.alarms;
+            let goalAlarmIds: string[] = [];
+            
+            if (goalAlarmsField) {
+              const parsedAlarms = typeof goalAlarmsField === 'string' 
+                ? JSON.parse(goalAlarmsField) 
+                : goalAlarmsField;
+              
+              if (Array.isArray(parsedAlarms)) {
+                goalAlarmIds = parsedAlarms.map((a: any) => 
+                  typeof a === 'string' ? a : a.id
+                ).filter(Boolean);
+              }
+            }
+            
+            console.log('[CreateGoal] Goal alarm IDs from goal record:', goalAlarmIds);
+            
+            const filteredAlarms = goalAlarmIds.length > 0
+              ? allAlarmsData.filter((alarm: any) => goalAlarmIds.includes(alarm.id))
+              : [];
+            
+            console.log('[CreateGoal] Filtered alarms for goal:', filteredAlarms.length);
+            setGoalAlarms(filteredAlarms);
+            if (filteredAlarms.length > 0) {
+              setAlarmsEnabled(true);
+            }
           }
         }
       }
     } catch (error: any) {
       console.error('[CreateGoal] Error loading form data:', error);
       showError(error.message || 'Failed to load form data');
-    } finally {
-      console.log('[CreateGoal] Loading complete');
-      setLoading(false);
     }
   };
 
@@ -691,7 +688,6 @@ export default function CreateGoalScreen() {
     }
 
     try {
-      setLoading(true);
       console.log('[CreateGoal] Creating strategy:', newItemName);
       const newStrategy = await supabaseApi.createStrategy({
         name: newItemName.trim(),
@@ -715,8 +711,6 @@ export default function CreateGoalScreen() {
     } catch (error: any) {
       console.error('[CreateGoal] Error creating strategy:', error);
       showError(error.message || 'Failed to create strategy');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -728,7 +722,6 @@ export default function CreateGoalScreen() {
     }
 
     try {
-      setLoading(true);
       console.log('[CreateGoal] Creating currency:', newItemName);
       const newCurrency = await supabaseApi.createCurrency({
         name: newItemName.trim(),
@@ -762,8 +755,6 @@ export default function CreateGoalScreen() {
     } catch (error: any) {
       console.error('[CreateGoal] Error creating currency:', error);
       showError(error.message || 'Failed to create currency');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -909,22 +900,7 @@ export default function CreateGoalScreen() {
     ? (userPreferences.reflectionCategories || ['Action', 'Speech', 'Thought'])
     : [];
 
-  if (loading && !editingGoalId) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Stack.Screen
-          options={{
-            title: screenTitle,
-            headerShown: true,
-          }}
-        />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // INSTANT RENDER: No loading spinner, form appears immediately
 
   return (
     <SafeAreaView style={styles.container}>
@@ -1856,13 +1832,8 @@ export default function CreateGoalScreen() {
               <TouchableOpacity
                 style={styles.alertButton}
                 onPress={handleCreateStrategy}
-                disabled={loading}
               >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.alertButtonText}>Create</Text>
-                )}
+                <Text style={styles.alertButtonText}>Create</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1911,13 +1882,8 @@ export default function CreateGoalScreen() {
               <TouchableOpacity
                 style={styles.alertButton}
                 onPress={handleCreateCurrency}
-                disabled={loading}
               >
-                {loading ? (
-                  <ActivityIndicator color={colors.background} />
-                ) : (
-                  <Text style={styles.alertButtonText}>Create</Text>
-                )}
+                <Text style={styles.alertButtonText}>Create</Text>
               </TouchableOpacity>
             </View>
           </View>
