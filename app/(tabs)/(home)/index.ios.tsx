@@ -21,6 +21,7 @@ import {
 import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCallback } from "react";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   getGoalsWithDailyEntries, 
   createDailyEntry, 
@@ -561,9 +562,13 @@ export default function HomeScreen() {
   useEffect(() => {
     console.log('HomeScreen: Initial load - rendering immediately');
     
-    // PERFORMANCE FIX: Load data in background without blocking render
-    // UI shows instantly with empty state, then updates when data arrives
-    loadData();
+    // CRITICAL FIX: Load cached data FIRST, then fetch fresh data
+    // This ensures the UI shows previous goals instantly instead of empty state
+    loadCachedData().then(() => {
+      console.log('HomeScreen: Cached data loaded, now fetching fresh data');
+      loadData();
+    });
+    
     fetchUserAvatar();
     
     // PERFORMANCE FIX: Run cleanup in background, don't block initial render
@@ -623,6 +628,43 @@ export default function HomeScreen() {
     setShowSuccessModal(true);
   };
 
+  // CRITICAL FIX: Load cached data from AsyncStorage
+  // This ensures the UI shows previous goals instantly instead of empty state
+  const loadCachedData = async () => {
+    try {
+      console.log('HomeScreen: Loading cached data from AsyncStorage');
+      
+      // Load cached goals
+      const cachedGoalsStr = await AsyncStorage.getItem('cached_goals');
+      if (cachedGoalsStr) {
+        const cachedGoals = JSON.parse(cachedGoalsStr);
+        console.log('HomeScreen: Found cached goals:', cachedGoals.length);
+        setGoals(cachedGoals);
+      }
+      
+      // Load cached life areas
+      const cachedLifeAreasStr = await AsyncStorage.getItem('cached_life_areas');
+      if (cachedLifeAreasStr) {
+        const cachedLifeAreas = JSON.parse(cachedLifeAreasStr);
+        console.log('HomeScreen: Found cached life areas:', cachedLifeAreas.length);
+        setLifeAreas(cachedLifeAreas);
+      }
+      
+      // Load cached currencies
+      const cachedCurrenciesStr = await AsyncStorage.getItem('cached_currencies');
+      if (cachedCurrenciesStr) {
+        const cachedCurrencies = JSON.parse(cachedCurrenciesStr);
+        console.log('HomeScreen: Found cached currencies:', cachedCurrencies.length);
+        setCurrencies(cachedCurrencies);
+      }
+      
+      console.log('HomeScreen: Cached data loaded successfully');
+    } catch (error) {
+      console.error('HomeScreen: Error loading cached data:', error);
+      // Don't show error to user - cached data is optional
+    }
+  };
+
   const loadData = async () => {
     try {
       console.log('HomeScreen: Loading data for date:', formatDateLocal(selectedDate));
@@ -638,9 +680,26 @@ export default function HomeScreen() {
       console.log('HomeScreen: Goals loaded:', goalsData.length);
       setGoals(goalsData);
       
+      // CRITICAL FIX: Cache goals data to AsyncStorage for instant loading next time
+      try {
+        await AsyncStorage.setItem('cached_goals', JSON.stringify(goalsData));
+        console.log('HomeScreen: Goals cached to AsyncStorage');
+      } catch (error) {
+        console.error('HomeScreen: Error caching goals:', error);
+      }
+      
       // Phase 2: Load life areas and build hierarchy (needed for grouping)
       const lifeAreasData = await getLifeAreas();
-      setLifeAreas(buildLifeAreaHierarchy(lifeAreasData, goalsData));
+      const hierarchy = buildLifeAreaHierarchy(lifeAreasData, goalsData);
+      setLifeAreas(hierarchy);
+      
+      // CRITICAL FIX: Cache life areas data to AsyncStorage
+      try {
+        await AsyncStorage.setItem('cached_life_areas', JSON.stringify(hierarchy));
+        console.log('HomeScreen: Life areas cached to AsyncStorage');
+      } catch (error) {
+        console.error('HomeScreen: Error caching life areas:', error);
+      }
       
       // Phase 3: Load supporting data in parallel (not critical for initial render)
       Promise.all([
@@ -663,6 +722,11 @@ export default function HomeScreen() {
         setStrategies(strategiesData);
         setReflections(reflectionsData);
         setUserPreferences(preferencesData);
+        
+        // CRITICAL FIX: Cache currencies data to AsyncStorage
+        AsyncStorage.setItem('cached_currencies', JSON.stringify(currenciesData)).catch(err => {
+          console.error('HomeScreen: Error caching currencies:', err);
+        });
         
         if (journalsData.length > 0) {
           setJournalEntry(journalsData[0]);
