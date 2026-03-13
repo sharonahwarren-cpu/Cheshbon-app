@@ -157,8 +157,8 @@ export default function SettingsScreen() {
   };
   
   const [currentSection, setCurrentSection] = useState<SettingsSection>(getInitialSection());
-  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const [goals, setGoals] = useState<Goal[]>([]);
   const [lifeAreas, setLifeAreas] = useState<LifeArea[]>([]);
@@ -217,8 +217,6 @@ export default function SettingsScreen() {
     console.log('[Settings iOS] Loading settings data...');
     if (isRefreshing) {
       setRefreshing(true);
-    } else {
-      setLoading(true);
     }
     try {
       const [goalsData, lifeAreasData, strategiesData, currenciesData, gainsLossesData, gainLossCategoriesData, prefsData, reflectionMotivationsData] = await Promise.all([
@@ -270,8 +268,6 @@ export default function SettingsScreen() {
     } finally {
       if (isRefreshing) {
         setRefreshing(false);
-      } else {
-        setLoading(false);
       }
     }
   }, []); // Empty dependency array ensures stable reference
@@ -417,7 +413,7 @@ export default function SettingsScreen() {
     if (!modalType) return;
 
     try {
-      setLoading(true);
+      setIsSaving(true);
       
       if (modalType === 'lifeArea') {
         if (editingItem) {
@@ -488,7 +484,7 @@ export default function SettingsScreen() {
       console.error('[Settings iOS] Error saving item:', error);
       showError('Failed to save item');
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -503,7 +499,7 @@ export default function SettingsScreen() {
     if (!deleteItemType || !deleteItemId) return;
 
     try {
-      setLoading(true);
+      setIsSaving(true);
       setShowConfirmDelete(false);
       
       if (deleteItemType === 'lifeArea') {
@@ -540,7 +536,7 @@ export default function SettingsScreen() {
       console.error('[Settings iOS] Error deleting item:', error);
       showError('Failed to delete item');
     } finally {
-      setLoading(false);
+      setIsSaving(false);
       setDeleteItemType(null);
       setDeleteItemId('');
       setDeleteItemName('');
@@ -549,7 +545,7 @@ export default function SettingsScreen() {
 
   const handleDeactivateGoal = async (id: string) => {
     try {
-      setLoading(true);
+      setIsSaving(true);
       console.log(`[Settings iOS] Toggling goal status for goal ${id}`);
       
       // Get current goal status
@@ -569,20 +565,20 @@ export default function SettingsScreen() {
       console.error('[Settings iOS] Error toggling goal status:', error);
       showError(error.message || 'Failed to update goal status');
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
 
   const handleSavePreferences = async () => {
     try {
-      setLoading(true);
+      setIsSaving(true);
       await supabaseApi.updateUserPreferences(preferences);
       showSuccess('Preferences saved successfully');
     } catch (error) {
       console.error('[Settings iOS] Error saving preferences:', error);
       showError('Failed to save preferences');
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -693,7 +689,7 @@ export default function SettingsScreen() {
 
   const handleCurrencyAction = async () => {
     try {
-      setLoading(true);
+      setIsSaving(true);
       const amount = parseInt(currencyAmount);
       
       if (isNaN(amount) || amount <= 0) {
@@ -732,7 +728,7 @@ export default function SettingsScreen() {
       console.error('[Settings iOS] Error with currency action:', error);
       showError(error.message || 'Failed to process currency action');
     } finally {
-      setLoading(false);
+      setIsSaving(false);
     }
   };
 
@@ -1853,11 +1849,8 @@ export default function SettingsScreen() {
         }} 
       />
       
-      {loading && currentSection === 'main' ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
+      {/* Main content renders immediately - no blocking loading state */}
+      {(
         <>
           {currentSection === 'main' && renderMainMenu()}
           {currentSection === 'goals' && renderGoals()}
@@ -2035,9 +2028,9 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.button, styles.buttonPrimary]}
                 onPress={handleSaveItem}
-                disabled={loading || !formData.name}
+                disabled={isSaving || !formData.name}
               >
-                {loading ? (
+                {isSaving ? (
                   <ActivityIndicator color={colors.background} />
                 ) : (
                   <Text style={styles.buttonPrimaryText}>Save</Text>
@@ -2156,9 +2149,9 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.button, styles.buttonPrimary]}
                 onPress={handleSaveItem}
-                disabled={loading || !formData.name}
+                disabled={isSaving || !formData.name}
               >
-                {loading ? (
+                {isSaving ? (
                   <ActivityIndicator color={colors.background} />
                 ) : (
                   <Text style={styles.buttonPrimaryText}>Save</Text>
@@ -2212,9 +2205,9 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.button, styles.buttonPrimary]}
                 onPress={handleSaveItem}
-                disabled={loading || !formData.name}
+                disabled={isSaving || !formData.name}
               >
-                {loading ? (
+                {isSaving ? (
                   <ActivityIndicator color={colors.background} />
                 ) : (
                   <Text style={styles.buttonPrimaryText}>Save</Text>
