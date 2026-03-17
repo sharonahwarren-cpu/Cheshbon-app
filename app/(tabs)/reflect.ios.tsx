@@ -245,8 +245,8 @@ export default function ReflectScreen() {
         id: c.id,
         name: c.name,
         symbol: c.symbol,
-        onSuccess: c.on_success,
-        onFailure: c.on_failure,
+        onSuccess: c.onSuccess ?? c.on_success,
+        onFailure: c.onFailure ?? c.on_failure,
       })));
       setUserPreferences({
         reflectionCategoriesEnabled: prefsData.reflection_categories_enabled,

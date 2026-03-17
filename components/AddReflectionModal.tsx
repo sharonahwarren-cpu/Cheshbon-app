@@ -975,7 +975,7 @@ export function AddReflectionModal({
     const amount = isSuccess ? selectedGoal.rewardAmount : selectedGoal.consequenceAmount;
     const threshold = isSuccess ? selectedGoal.rewardSuccesses : selectedGoal.consequenceFailures;
     
-    if (!currencyId || !amount) return null;
+    if (!currencyId || amount == null || amount === 0) return null;
     
     const currency = (currencies || []).find(c => c.id === currencyId);
     if (!currency) return null;
@@ -1151,7 +1151,7 @@ export function AddReflectionModal({
       const validStrategyEffectiveness = strategyEffectiveness.filter(se => se.worked !== null);
       
       const payload: any = {
-        date: dateString,
+        entryDate: dateString,
         type,
         description,
         linkedGoalId: linkedGoalId || undefined,
