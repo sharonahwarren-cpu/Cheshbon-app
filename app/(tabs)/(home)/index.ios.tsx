@@ -1339,6 +1339,8 @@ export default function HomeScreen() {
     }
   };
 
+  console.log('goals[0] currency fields:', goals[0]?.rewardCurrencyId, goals[0]?.reward_currency_id, goals[0]?.rewardAmount, goals[0]?.reward_amount);
+
   const renderConciseGoalCard = (goal: ActivatedGoal, lifeAreaColor?: string) => {
     const dailyTallies = calculateDailyCurrencyTallies(goal);
     const isOncePerDay = goal.trackingType === 'once_per_day';

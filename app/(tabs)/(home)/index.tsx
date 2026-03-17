@@ -729,6 +729,7 @@ export default function HomeScreen() {
         preferencesData,
         journalsData,
       ]) => {
+        console.log('[CURRENCY DEBUG] currencies loaded:', JSON.stringify(currenciesData?.slice(0, 2)));
         setCurrencies(currenciesData);
         setGainsLosses(gainsLossesData);
         setStrategies(strategiesData);
@@ -1339,6 +1340,8 @@ export default function HomeScreen() {
       handleGoalSuccess(goalId);
     }
   };
+
+  console.log('goals[0] currency fields:', goals[0]?.rewardCurrencyId, goals[0]?.reward_currency_id, goals[0]?.rewardAmount, goals[0]?.reward_amount);
 
   const renderConciseGoalCard = (goal: ActivatedGoal, lifeAreaColor?: string) => {
     const dailyTallies = calculateDailyCurrencyTallies(goal);

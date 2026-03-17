@@ -270,7 +270,21 @@ export function ReflectionListModal({
       ]);
 
       if (goalsResult.status === 'fulfilled') {
-        setGoals(goalsResult.value || []);
+        const mappedGoals = (goalsResult.value || []).map((g: any) => ({
+          id: g.id,
+          title: g.title,
+          behaviorCategories: g.behavior_categories,
+          rewardCurrencyId: g.reward_currency_id,
+          rewardAmount: g.reward_amount,
+          rewardSuccesses: g.reward_successes,
+          consequenceCurrencyId: g.consequence_currency_id,
+          consequenceAmount: g.consequence_amount,
+          consequenceFailures: g.consequence_failures,
+          successCount: g.success_count,
+          struggleCount: g.struggle_count,
+        }));
+        console.log('[ReflectionListModal] Goals mapped to camelCase, count:', mappedGoals.length);
+        setGoals(mappedGoals);
       } else {
         console.warn('[ReflectionListModal] Failed to load goals:', goalsResult.reason);
         setGoals([]);

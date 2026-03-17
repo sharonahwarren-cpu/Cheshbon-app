@@ -949,50 +949,44 @@ export function AddReflectionModal({
   const selectedGoal = (goals || []).find(g => g.id === linkedGoalId);
   
   const currencyBalanceInfo = (() => {
-    console.log('[AddReflectionModal] Currency calculation check:', {
-      linkedGoalId,
-      outcome,
-      selectedGoal: selectedGoal ? {
-        id: selectedGoal.id,
-        title: selectedGoal.title,
-        rewardCurrencyId: selectedGoal.rewardCurrencyId,
-        rewardAmount: selectedGoal.rewardAmount,
-        rewardSuccesses: selectedGoal.rewardSuccesses,
-        consequenceCurrencyId: selectedGoal.consequenceCurrencyId,
-        consequenceAmount: selectedGoal.consequenceAmount,
-        consequenceFailures: selectedGoal.consequenceFailures,
-        successCount: selectedGoal.successCount,
-        struggleCount: selectedGoal.struggleCount,
-      } : null,
-      currenciesCount: currencies.length,
-      sourceScreen,
-    });
-    
-    if (!linkedGoalId || !outcome || !selectedGoal) return null;
-    
+    if (!linkedGoalId || !outcome || !selectedGoal) {
+      console.log('[CURRENCY DEBUG] early return 1:', { linkedGoalId, outcome, hasGoal: !!selectedGoal });
+      return null;
+    }
     const isSuccess = outcome === 'success';
     const currencyId = isSuccess ? selectedGoal.rewardCurrencyId : selectedGoal.consequenceCurrencyId;
     const amount = isSuccess ? selectedGoal.rewardAmount : selectedGoal.consequenceAmount;
     const threshold = isSuccess ? selectedGoal.rewardSuccesses : selectedGoal.consequenceFailures;
-    
-    if (!currencyId || amount == null || amount === 0) return null;
-    
+    console.log('[CURRENCY DEBUG] step 2:', { currencyId, amount, threshold, currenciesCount: currencies?.length });
+    if (!currencyId) {
+      console.log('[CURRENCY DEBUG] early return 2a: missing currencyId', { currencyId });
+      return null;
+    }
+    if (amount == null) {
+      console.log('[CURRENCY DEBUG] early return 2b: amount is null/undefined', { amount });
+      return null;
+    }
+    // Do NOT return null for amount === 0, show it anyway
     const currency = (currencies || []).find(c => c.id === currencyId);
-    if (!currency) return null;
-    
-    const operation = isSuccess ? currency.onSuccess : currency.onFailure;
-    if (!operation || operation === 'NONE') return null;
+    console.log('[CURRENCY DEBUG] step 3 currency found:', currency);
+    if (!currency) {
+      console.log('[CURRENCY DEBUG] early return 3: currency not found in list', { currencyId, availableIds: (currencies || []).map(c => c.id) });
+      return null;
+    }
+    const operation = isSuccess ? (currency.onSuccess ?? (currency as any).on_success) : (currency.onFailure ?? (currency as any).on_failure);
+    const effectiveOperation = (!operation || operation === 'NONE') ? 'ADD' : operation;
+    console.log('[CURRENCY DEBUG] step 4 operation:', operation, '-> effectiveOperation:', effectiveOperation);
     
     const actionText = isSuccess 
-      ? (operation === 'ADD' ? 'earn' : 'lose')
-      : (operation === 'ADD' ? 'gain' : 'lose');
+      ? (effectiveOperation === 'ADD' ? 'earn' : 'lose')
+      : (effectiveOperation === 'ADD' ? 'gain' : 'lose');
     
     const displayAmount = amount;
     const displaySymbol = currency.symbol || '';
     const displayThreshold = threshold || 1;
     
     const result = {
-      operation: operation === 'ADD' ? 'add' : 'subtract',
+      operation: effectiveOperation === 'ADD' ? 'add' : 'subtract',
       amount: displayAmount,
       symbol: displaySymbol,
       name: currency.name,
