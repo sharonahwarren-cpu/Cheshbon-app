@@ -229,7 +229,16 @@ export const getCurrencies = async () => {
     .eq('user_id', userId);
   
   handleError(error, 'getCurrencies');
-  return data || [];
+
+  // Normalize snake_case DB fields to camelCase so all callers get consistent data
+  const normalized = (data || []).map((c: any) => ({
+    ...c,
+    onSuccess: c.onSuccess ?? c.on_success ?? 'NONE',
+    onFailure: c.onFailure ?? c.on_failure ?? 'NONE',
+  }));
+
+  console.log('[Supabase API] getCurrencies - normalized', normalized.length, 'currencies');
+  return normalized;
 };
 
 export const createCurrency = async (currency: any) => {
